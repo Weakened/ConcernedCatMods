@@ -225,19 +225,21 @@ public class PerformanceBudgetTests
     }
 
     /// <summary>Budget 9 (#447, as #393 did for persistence): comparing two
-    /// worst-case trips stays a linear pass with a small, size-proportional
-    /// allocation.
+    /// worst-case trips allocates an amount that grows at most linearly with
+    /// the trips, and stays small.
     ///
     /// <b>Why not a wall clock.</b> A 100 ms ceiling on a shared developer machine
-    /// failed the authoritative gate at 101 ms and 150 ms on branches that touched
-    /// no Teamster file, and passed on every rerun - which makes the only
+    /// failed the authoritative gate at 101 ms and 150 ms (issue #447) on branches
+    /// that touched no Teamster file, and passed on every rerun - which makes the only
     /// build-evidence gate pass after a retry (#360, #413). What the budget protects
     /// is that selecting a row does not do work that grows faster than the trips:
-    /// the comparison is five buckets over one pass of each trip. That is stated
-    /// directly here: the bytes it allocates grow at most linearly with the sample
-    /// count, with a small per-sample constant, and stay under a fixed ceiling at
-    /// the largest trip the recorder keeps. A quadratic or per-sample-copying
-    /// change fails both bounds whatever the machine is doing.</summary>
+    /// the comparison is five buckets over one pass of each trip. What this pins
+    /// is the allocation half of that: the bytes it allocates grow at most
+    /// linearly with the sample count, with a small per-sample constant, and stay
+    /// under a fixed ceiling at the largest trip the recorder keeps. A change that
+    /// allocates per sample quadratically, or copies the trips, fails whatever the
+    /// machine is doing. An allocation-free quadratic loop would NOT be caught -
+    /// CPU time is no longer gated, and that is the narrower claim.</summary>
     [Fact]
     public void TripComparisonPresenter_Present_WorstCaseTripSizes_StaysLinearAndAllocationBounded()
     {
@@ -247,7 +249,7 @@ public class PerformanceBudgetTests
         long smallBytes = ComparisonAllocation(small);
         long largeBytes = ComparisonAllocation(large);
 
-        // Measured at 5000 samples: about 84 KiB, about 16 bytes a sample.
+        // Measured at 5000 samples: about 82 KiB, about 16 bytes a sample.
         const long MostBytesAtMaxSize = 512 * 1024;
         const long MostBytesPerExtraSample = 64;
         long perExtraSample = (largeBytes - smallBytes) / (large - small);
