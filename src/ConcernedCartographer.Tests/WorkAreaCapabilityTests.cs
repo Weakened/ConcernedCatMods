@@ -345,7 +345,7 @@ public class WorkAreaCapabilityTests
         string[] lines =
         {
             WorkAreaCodec.Header,
-            "wa-" + new string('c', 32) + "	Quarry	stoneGathering	1	1	" + Square().ToWire(),
+            "wa-" + new string('c', 32) + "\tQuarry\tstoneGathering\t1\t1\t" + Square().ToWire(),
         };
 
         List<WorkArea> areas = WorkAreaCodec.Parse(lines, out int malformed, out bool unsupported, out int unknownPurpose);
@@ -565,7 +565,11 @@ public class WorkAreaCapabilityTests
         int guard = persistence.IndexOf("if (_readOnlyWorlds.Contains(worldUid))", saveMethod, StringComparison.Ordinal);
         int write = persistence.IndexOf("File.WriteAllLines(", saveMethod, StringComparison.Ordinal);
         Assert.True(saveMethod >= 0 && guard > saveMethod && write > guard, "Save must refuse a read-only world before writing");
-        Assert.Contains("out int unknownPurpose);", persistence, StringComparison.Ordinal);
+        int unknown = persistence.IndexOf("if (unknownPurpose > 0)", StringComparison.Ordinal);
+        int markReadOnly = persistence.IndexOf("_readOnlyWorlds.Add(worldUid);", unknown, StringComparison.Ordinal);
+        int unknownReturn = persistence.IndexOf("return new List<WorkArea>();", unknown, StringComparison.Ordinal);
+        Assert.True(unknown >= 0 && markReadOnly > unknown && unknownReturn > markReadOnly,
+            "a later build's areas must make the world read-only before anything is returned");
     }
 
     [Fact]
