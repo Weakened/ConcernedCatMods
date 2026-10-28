@@ -30,7 +30,11 @@ internal sealed class StewardAppearance
     private readonly Func<StewardLook> _look;
     private readonly Action<string>? _log;
 
-    private bool _complained;
+    // Each distinct complaint once, rather than the first complaint only: a
+    // body that is not player-style and a hair name that does not exist are
+    // two different things to fix.
+    private readonly System.Collections.Generic.HashSet<string> _complained =
+        new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
 
     internal StewardAppearance(Func<StewardLook> look, Action<string>? log = null)
     {
@@ -95,6 +99,20 @@ internal sealed class StewardAppearance
             return false;
         }
 
+        // #382, from the decompiled 1.0.14 VisEquipment: the model index, the
+        // hair, the beard and both colours are only ever drawn when the
+        // component is a player-style one (m_isPlayer). On any other base
+        // creature they are written and silently ignored, so the player is told
+        // once, in the log, that only the clothing will show - instead of being
+        // left to wonder why she is not blonde.
+        if (!IsPlayerStyle(vis))
+        {
+            Complain(
+                "The Steward's base creature is not a player-style body, so vanilla will not draw " +
+                "her model choice, hair or colouring; only her clothing shows. Choosing a different " +
+                "[Steward] BaseCreature is an owner decision and needs looking at in game.");
+        }
+
         bool applied = false;
         applied |= TrySetModel(vis, look.ModelIndex);
         applied |= TrySetHair(vis, look.HairItem);
@@ -134,9 +152,22 @@ internal sealed class StewardAppearance
             return false;
         }
 
+        // A "$customization_..." token is looked up among the game's own hair
+        // items (#382: the owner chose the style the character screen calls
+        // Matronly, which is $customization_hair12 in this build's own
+        // localization table). Anything else is taken as a prefab name and
+        // must exist. Either way a miss substitutes nothing.
+        string? prefab = ResolveHairPrefab(hair);
+        if (prefab == null)
+        {
+            Complain("'" + hair + "' is not hair this game build has, so the Steward's hair was " +
+                "left as it is. Check [Appearance] HairStyle.");
+            return false;
+        }
+
         try
         {
-            vis.SetHairItem(Hash(hair));
+            vis.SetHairItem(Hash(prefab));
             return true;
         }
         catch (Exception exception)
@@ -241,6 +272,62 @@ internal sealed class StewardAppearance
     /// invisible garment rather than an error.</summary>
     private static int Hash(string prefabName) => prefabName.GetStableHashCode();
 
+    private static bool IsPlayerStyle(VisEquipment vis)
+    {
+        try
+        {
+            return vis.m_isPlayer;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The prefab name for a hair setting: a customization token is
+    /// matched against the shared name of every customization item the game
+    /// has; a plain name must be an item the game has. Null when neither.
+    /// </summary>
+    private static string? ResolveHairPrefab(string hair)
+    {
+        try
+        {
+            ObjectDB? database = ObjectDB.instance;
+            if (database == null)
+            {
+                return null;
+            }
+
+            if (!hair.StartsWith("$", StringComparison.Ordinal))
+            {
+                return database.GetItemPrefab(hair) != null ? hair : null;
+            }
+
+            foreach (GameObject? item in database.m_items)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                ItemDrop? drop = item.GetComponent<ItemDrop>();
+                ItemDrop.ItemData.SharedData? shared = drop?.m_itemData?.m_shared;
+                if (shared != null
+                    && shared.m_itemType == ItemDrop.ItemData.ItemType.Customization
+                    && string.Equals(shared.m_name, hair, StringComparison.Ordinal))
+                {
+                    return item.name;
+                }
+            }
+
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     private static Vector3 ToVector(in LookColour colour) =>
         new Vector3(colour.Red, colour.Green, colour.Blue);
 
@@ -249,12 +336,11 @@ internal sealed class StewardAppearance
     /// line into a player's log for the length of the session.</summary>
     private void Complain(string message)
     {
-        if (_complained)
+        if (_complained.Count > 32 || !_complained.Add(message))
         {
             return;
         }
 
-        _complained = true;
         _log?.Invoke(message);
     }
 }
