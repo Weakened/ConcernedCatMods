@@ -18,6 +18,24 @@ A worker can rest as a presentation figure, under the same one-body rule (#295, 
 * This is an additive minor version that widens the public surface by two members. Every in-repository consumer pin
   moves with it, so no product can compile against one contract and install another.
 
+## 0.4.0
+
+The public surface gains the mint and the transfer recorder that Concerned Teamster's Gunnar deposit needs (#415, #374,
+D15; `7d0de3d`).
+
+* Four types become public:
+  * `NpcContainerPermit`: a permit to use one container. Its constructor stays **private**, and the static
+    `Issue(...)` is the only way to get one. `Issue` re-reads the container's own access, so a refused container
+    yields no permit.
+  * `NpcTransferPlan`: what a move intends.
+  * `ContainerMoveOutcome` and `ContainerMoveResult`: one recorder for a move, measured on both sides. Any
+    disagreement between the two sides is recorded as Uncertain.
+* The rule that a permit cannot be forged did not depend on these types being internal. It depends on the private
+  constructor and the single mint. A reflection test and the repository validator's D15 permit-mint audit both check
+  that.
+* Still withheld: `NpcContainerGate`, `NpcContainerPlace`, the permission book, the sighting and the assignment.
+* This is an additive minor version. Every in-repository consumer pin moves with it.
+
 ## 0.3.0
 
 The durable interruption machinery becomes an actual consumer API and Concerned Steward adopts it around its shipped
