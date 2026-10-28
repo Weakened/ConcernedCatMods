@@ -224,20 +224,58 @@ public class PerformanceBudgetTests
             "the hypothetical-mass field).");
     }
 
+    /// <summary>Budget 9 (#447, as #393 did for persistence): comparing two
+    /// worst-case trips stays a linear pass with a small, size-proportional
+    /// allocation.
+    ///
+    /// <b>Why not a wall clock.</b> A 100 ms ceiling on a shared developer machine
+    /// failed the authoritative gate at 101 ms and 150 ms on branches that touched
+    /// no Teamster file, and passed on every rerun - which makes the only
+    /// build-evidence gate pass after a retry (#360, #413). What the budget protects
+    /// is that selecting a row does not do work that grows faster than the trips:
+    /// the comparison is five buckets over one pass of each trip. That is stated
+    /// directly here: the bytes it allocates grow at most linearly with the sample
+    /// count, with a small per-sample constant, and stay under a fixed ceiling at
+    /// the largest trip the recorder keeps. A quadratic or per-sample-copying
+    /// change fails both bounds whatever the machine is doing.</summary>
     [Fact]
-    public void TripComparisonPresenter_Present_WorstCaseTripSizes_CompletesWithinBudget()
+    public void TripComparisonPresenter_Present_WorstCaseTripSizes_StaysLinearAndAllocationBounded()
     {
-        Trip tripA = BuildWorstCaseTrip(TripRecorderOptions.MaxMaxSamplesPerTrip, "1:1");
-        Trip tripB = BuildWorstCaseTrip(TripRecorderOptions.MaxMaxSamplesPerTrip, "1:2");
+        const int small = 50;
+        int large = TripRecorderOptions.MaxMaxSamplesPerTrip;
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        TripComparisonPresenter.Present(tripA, tripB);
-        stopwatch.Stop();
+        long smallBytes = ComparisonAllocation(small);
+        long largeBytes = ComparisonAllocation(large);
 
-        Assert.True(stopwatch.ElapsedMilliseconds < 100,
-            $"Comparing two {TripRecorderOptions.MaxMaxSamplesPerTrip}-sample trips took " +
-            $"{stopwatch.ElapsedMilliseconds} ms — budget is 100 ms (on-demand, but still user-facing " +
-            "latency on row select).");
+        // Measured at 5000 samples: about 84 KiB, about 16 bytes a sample.
+        const long MostBytesAtMaxSize = 512 * 1024;
+        const long MostBytesPerExtraSample = 64;
+        long perExtraSample = (largeBytes - smallBytes) / (large - small);
+
+        Assert.True(largeBytes <= MostBytesAtMaxSize,
+            $"Comparing two {large}-sample trips allocated {largeBytes} bytes; the ceiling is {MostBytesAtMaxSize}.");
+        Assert.True(perExtraSample <= MostBytesPerExtraSample,
+            $"Comparing trips allocates {perExtraSample} bytes per extra sample ({smallBytes} at {small}, " +
+            $"{largeBytes} at {large}); more than {MostBytesPerExtraSample} means work that grows faster than the trips.");
+
+        // Correctness, kept: a comparison of two real trips is a comparison, in
+        // five filled buckets.
+        TripComparisonPresenter.ViewModel model = TripComparisonPresenter.Present(
+            BuildWorstCaseTrip(large, "1:1"), BuildWorstCaseTrip(large, "1:2"));
+        Assert.True(model.HasComparison);
+        Assert.Equal(TripComparisonPresenter.BucketCount, model.BucketLines.Count);
+        Assert.All(model.BucketLines, line => Assert.False(string.IsNullOrWhiteSpace(line)));
+    }
+
+    private static long ComparisonAllocation(int samples)
+    {
+        Trip a = BuildWorstCaseTrip(samples, "1:1");
+        Trip b = BuildWorstCaseTrip(samples, "1:2");
+        TripComparisonPresenter.Present(a, b);
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        TripComparisonPresenter.Present(a, b);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 
     // -- CT-029 network input guard: sanitizes every network-derived field
