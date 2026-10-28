@@ -42,4 +42,26 @@ internal static class PinTombstoneRule
 
         return Verdict.KeepAndRebind;
     }
+
+    /// <summary>#419: the same decision, aware of WHO removed the pin. The
+    /// player's own delete paths (right-click, long touch, the gamepad
+    /// button) all go through Minimap.RemovePin(Vector3, float), the
+    /// "remove the pin I am pointing at" call; pointerInitiated is true only
+    /// inside it. A neighbour that removes pins it does not own straight
+    /// through RemovePin(PinData) — TheGreatestMap's tgm_clearlocal and
+    /// tgm_import — is not the player deleting a Cartographer marker, so
+    /// while such a neighbour is installed only a pointed-at removal may
+    /// tombstone; anything else keeps the marker and redraws it. Without
+    /// such a neighbour this is exactly the three-input rule, so another pin
+    /// mod's own delete UI still deletes as before.</summary>
+    public static Verdict Decide(
+        bool explicitVanillaDelete,
+        bool sessionBound,
+        bool alreadyDeleted,
+        bool pointerInitiated,
+        bool neighbourRemovesPinsWithoutPointing)
+    {
+        bool attributableToPlayer = pointerInitiated || !neighbourRemovesPinsWithoutPointing;
+        return Decide(explicitVanillaDelete && attributableToPlayer, sessionBound, alreadyDeleted);
+    }
 }

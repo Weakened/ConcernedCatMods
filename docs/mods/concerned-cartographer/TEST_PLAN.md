@@ -85,6 +85,8 @@ In `TCC-Compat`:
 - [ ] MapRoutes loads and its manual routes still render.
 - [ ] Concerned Cartographer overlays can be toggled.
 - [ ] No Harmony or UI conflict is visible in logs.
+- [ ] TheGreatestMap / HUDCompass / Round Minimap (#419): rows L1-L13 of
+  [GREATESTMAP_COMPATIBILITY.md](GREATESTMAP_COMPATIBILITY.md) §7. THIRD-PARTY LIVE TEST PENDING.
 
 ## Package installation
 

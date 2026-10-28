@@ -188,6 +188,14 @@ internal enum StopOutcome
 
     /// <summary>The round ended before she got there.</summary>
     NotReached = 4,
+
+    /// <summary>Reached, and she may not touch it: a ward that is not the
+    /// player's went up over it, or the game stopped letting this session own
+    /// it. <b>Not owed</b> - planning again would refuse it again - and
+    /// <b>not done</b> either: it is the one outcome a person has to look at,
+    /// so it keeps the round from being called complete and is said out loud
+    /// rather than folded into "needed nothing" (#382).</summary>
+    Refused = 5,
 }
 
 /// <summary>One stop's fate.</summary>
@@ -230,7 +238,8 @@ internal readonly struct RoundOutcome
         int leftForAnotherRound,
         int deferredForMaterial,
         RoundManifest outstanding,
-        RoundManifest surplus)
+        RoundManifest surplus,
+        int refused = 0)
     {
         Planned = planned;
         Serviced = serviced;
@@ -241,6 +250,7 @@ internal readonly struct RoundOutcome
         DeferredForMaterial = deferredForMaterial < 0 ? 0 : deferredForMaterial;
         Outstanding = outstanding;
         Surplus = surplus;
+        Refused = refused < 0 ? 0 : refused;
     }
 
     public int Planned { get; }
@@ -252,6 +262,10 @@ internal readonly struct RoundOutcome
     public int Failed { get; }
 
     public int NotReached { get; }
+
+    /// <summary>Stops she reached and may not touch. Needs a person; see
+    /// <see cref="StopOutcome.Refused"/>.</summary>
+    public int Refused { get; }
 
     /// <summary>Lights the plan never reached, because the plan was for part of
     /// the job. Handed in by whatever produced the plan; this type never guesses
@@ -275,7 +289,7 @@ internal readonly struct RoundOutcome
     /// questions, not one: did every stop of this plan come off, and did this
     /// plan cover the whole round.</summary>
     public bool IsComplete =>
-        Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty
+        Planned > 0 && Failed == 0 && NotReached == 0 && Refused == 0 && Outstanding.IsEmpty
         && LeftForAnotherRound == 0 && DeferredForMaterial == 0;
 
     /// <summary>Whether any of the settlement's lights are still owed something.
@@ -289,7 +303,7 @@ internal readonly struct RoundOutcome
     /// (The shared runtime arrived at the same split for the same reason -
     /// <c>docs/mods/concerned-npc/ARCHITECTURE.md</c> §7.)</summary>
     public bool HasUnfinishedWork =>
-        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0
+        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || Refused > 0
         || LeftForAnotherRound > 0 || DeferredForMaterial > 0;
 
     /// <summary>Whether going straight back out would achieve anything.
@@ -351,6 +365,13 @@ internal readonly struct RoundOutcome
             text.Append(" she did not reach");
         }
 
+        if (Refused > 0)
+        {
+            text.Append("; ");
+            text.Append(Refused.ToString(CultureInfo.InvariantCulture));
+            text.Append(" she may not touch");
+        }
+
         if (LeftForAnotherRound > 0)
         {
             text.Append(". ");
@@ -409,6 +430,7 @@ internal static class RoundReconciler
         int skipped = 0;
         int failed = 0;
         int notReached = 0;
+        int refused = 0;
         var owed = new List<LightNeed>();
         var used = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -443,6 +465,13 @@ internal static class RoundReconciler
                     owed.Add(stop);
                     break;
 
+                case StopOutcome.Refused:
+                    // Not owed: coming back with the same ward over it gives the
+                    // same answer. Counted on its own so the round cannot call
+                    // itself complete and the sentence can say why.
+                    refused++;
+                    break;
+
                 default:
                     notReached++;
                     owed.Add(stop);
@@ -468,7 +497,8 @@ internal static class RoundReconciler
             // wrongly. A number that makes a claim is not a caller's to default.
             plan.DeferredForMaterial,
             RoundManifestArithmetic.Total(owed),
-            RoundManifestArithmetic.Subtract(fetched, new RoundManifest(usedLines)));
+            RoundManifestArithmetic.Subtract(fetched, new RoundManifest(usedLines)),
+            refused);
     }
 
     /// <summary>Where the surplus goes.

@@ -21,8 +21,9 @@ bump to protect.
   picks up resin, they also find a flint and steel with runes carved into them,
   and there is one of it for the life of that world. It is a discovery the mod
   remembers and never an item put into an inventory: nothing is minted.
-- **A look.** A female model, light hair, and a leather tunic and leather pants,
-  applied to her own body through vanilla's own `VisEquipment`. A dress or robe
+- **A look.** A leather tunic and leather pants, plus a female model, light
+  hair and fair colouring where the base creature can show them (see Known
+  limits), applied to her own body through vanilla's own `VisEquipment`. A dress or robe
   can be named in the config and is tried first; nothing from another mod is
   included or depended on.
 - **A planned maintenance round.** Every fuel-burning light in the settlement is
@@ -36,6 +37,47 @@ bump to protect.
   it can pay for in full and counts the rest, so she never reports a settlement
   looked after when it is not. Surplus goes back to a container approved for
   deposits, and never to any other.
+
+- **She says it where you can see it.** The flint and steel, every beat of her
+  introduction, what fuel she needs ("I need 40 Resin"), lights burning low
+  that she may not touch, and why she stopped now appear on screen through
+  vanilla's own message display, not only in the log. Each subject is said at
+  most once every five minutes while it lasts. `[Steward] SpeakOnScreen` turns
+  it off.
+- **Configurable thresholds and carry.** `[Upkeep] RefuelBelowSeconds`,
+  `RefuelToSeconds`, `MostUnitsPerLight` and `CarryPerTrip`. A threshold that
+  would make her loop is refused with a log line and the shipped values apply.
+- **The round's books are closed.** At the end of every round each planned
+  light is accounted for — tended, skipped (filled by somebody else or
+  destroyed), refused (a ward that is not yours), failed, or left for another
+  round — and `cs_steward status` shows it. A refused light keeps the round
+  from being called complete.
+- **Her hair** is the style the character screen calls Matronly, looked up by
+  vanilla's own customization token.
+
+### Fixed
+
+- The round's fuel was chosen from whichever light held the least fuel, not
+  the one closest to going out, so a slow-burning hearth could starve a torch of
+  another fuel indefinitely. It is now the most urgent light's fuel.
+- A settlement whose lights burn something the chest does not hold reported
+  "nothing to tend"; it now says what she needs, and how many lights wait on it.
+- A light found under a ward when she arrived was reported as "no longer needs
+  service"; it is now reported as one she may not touch.
+- Five low campfires were five visits to the chest at the old ten-a-trip
+  carry; the shipped carry is now one vanilla stack (50).
+- She could be recruited into a body standing outside the settlement; she now
+  moves in only when you recruit her from inside it.
+
+### Known limits
+
+- One fuel kind per trip: a settlement with wood and resin lights is one trip
+  for each kind (the custody record carries one item; widening it is a save
+  format change left for its own issue).
+- Vanilla draws hair, colouring and the female model only on a player-style
+  body. On the default base creature she shows her clothing only; the log says
+  so. Choosing her body is an owner decision that needs looking at in game.
+- Nothing in this section has been observed in a running game.
 
 ### Changed
 

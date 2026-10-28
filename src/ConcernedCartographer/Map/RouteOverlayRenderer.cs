@@ -166,18 +166,7 @@ internal sealed class RouteOverlayRenderer
             // RC12 blocker 3: reuse one pixel buffer across redraws. A
             // 2048² texture is a 16 MB Color32[]; allocating it per redraw
             // made repeated style changes stutter through GC spikes.
-            Color32[] pixels;
-            if (_pixelBuffer is not null && _pixelBufferSize == size)
-            {
-                pixels = _pixelBuffer;
-                Array.Clear(pixels, 0, pixels.Length);
-            }
-            else
-            {
-                pixels = new Color32[size * size];
-                _pixelBuffer = pixels;
-                _pixelBufferSize = size;
-            }
+            Color32[] pixels = _pixelBuffer.Acquire(size);
 
             foreach (AtlasRoute route in routes.Living)
             {
@@ -246,8 +235,7 @@ internal sealed class RouteOverlayRenderer
     private readonly List<(float X, float Y)> _projected = new();
 
     // Reused full-texture pixel buffer (RC12 blocker 3).
-    private Color32[]? _pixelBuffer;
-    private int _pixelBufferSize;
+    private readonly Atlas.ReusableSquareBuffer<Color32> _pixelBuffer = new();
 
     private void ProjectPolyline(IReadOnlyList<RoadPoint> points, int size)
     {

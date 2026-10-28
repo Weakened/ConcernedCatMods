@@ -64,7 +64,9 @@ internal sealed class CartographerSettings
         ConfigEntry<string> companionChestPreset,
         ConfigEntry<string> companionLegsPreset,
         ConfigEntry<DoorAccessPolicy> companionDoorAccess,
-        ConfigEntry<KeyCode> companionDoorHotkey)
+        ConfigEntry<KeyCode> companionDoorHotkey,
+        ConfigEntry<Atlas.RoadLayerPosition> roadLayerPosition,
+        ConfigEntry<Atlas.ReshapedMinimapRoads> reshapedMinimapRoads)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -124,6 +126,8 @@ internal sealed class CartographerSettings
         CompanionLegsPreset = companionLegsPreset;
         CompanionDoorAccess = companionDoorAccess;
         CompanionDoorHotkey = companionDoorHotkey;
+        RoadLayerPosition = roadLayerPosition;
+        ReshapedMinimapRoads = reshapedMinimapRoads;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -224,6 +228,14 @@ internal sealed class CartographerSettings
     /// <summary>The key that, while looking at a door, lets companions use it
     /// or stops them. None hides the hint and disables the key.</summary>
     public ConfigEntry<KeyCode> CompanionDoorHotkey { get; }
+
+    /// <summary>#419: road and route ink below or above the pin icons on the
+    /// large map (high-precision layer).</summary>
+    public ConfigEntry<Atlas.RoadLayerPosition> RoadLayerPosition { get; }
+
+    /// <summary>#419: road and route ink on a minimap another mod has made
+    /// round and rotating.</summary>
+    public ConfigEntry<Atlas.ReshapedMinimapRoads> ReshapedMinimapRoads { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -357,6 +369,10 @@ internal sealed class CartographerSettings
             config.Bind("Companions", "DoorAccess", DoorAccessPolicy.OnlyAllowedDoors,
                 "Which doors companions may use to go in and out of buildings. OnlyAllowedDoors (default): a door is closed to them until you look at it and press DoorAccessHotkey - they never walk into a building through a door you have not opened to them, and never use it to leave one either. AllDoors: every door you could open yourself. Either way they only ever use a door you could open (no keys, guard stones respected) and close it behind them. Your choices are kept per world with the companion data, never in the world."),
             config.Bind("Companions", "DoorAccessHotkey", KeyCode.F8,
-                "While looking at a door, press this to let companions use it, or to stop them. The door's own prompt shows it. None disables the key and the prompt."));
+                "While looking at a door, press this to let companions use it, or to stop them. The door's own prompt shows it. None disables the key and the prompt."),
+            config.Bind("Map", "RoadLayerPosition", Atlas.RoadLayerPosition.BelowPins,
+                "Where road and route ink sits on the LARGE map. BelowPins (default): under every marker. AbovePins: over the marker icons, so roads stay readable on a busy map (marker names are expected to stay on top). Applies to the high-precision layer (Map/HighPrecisionLargeMapRoads); the minimap always draws ink under its markers."),
+            config.Bind("Map", "ReshapedMinimapRoads", Atlas.ReshapedMinimapRoads.Hide,
+                "Only matters with Round Minimap installed. Its round, rotating minimap turns the terrain and the markers, but the overlay layer road and route ink is drawn in keeps its square, north-up shape. Hide (default): leave the ink off the minimap while the round shape is on, rather than show it pointing the wrong way. Show: draw it anyway. The large map is never affected."));
     }
 }

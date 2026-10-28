@@ -113,6 +113,58 @@ internal readonly struct MaintenanceThresholds
         return wanted > maxFuel ? maxFuel : wanted;
     }
 
+    /// <summary>Thresholds from the player's settings, or the shipped values
+    /// and the reason when the settings describe a loop (#382).
+    ///
+    /// A configuration is never allowed to throw into the tick: a threshold
+    /// above its own top-up target is refused here, once, in words, and the
+    /// shipped values are used instead.</summary>
+    internal static MaintenanceThresholds FromSettings(
+        float refuelBelowSeconds,
+        float refuelToSeconds,
+        int mostUnitsPerLight,
+        out string? refusal,
+        int carryPerTrip = int.MaxValue)
+    {
+        string? why = null;
+        if (!(refuelBelowSeconds > 0f) || float.IsInfinity(refuelBelowSeconds))
+        {
+            why = "RefuelBelowSeconds must be a positive number of seconds";
+        }
+        else if (!(refuelToSeconds >= refuelBelowSeconds) || float.IsInfinity(refuelToSeconds))
+        {
+            why = "RefuelToSeconds must be at least RefuelBelowSeconds, or a light would want " +
+                "servicing again the moment it was serviced";
+        }
+        else if (mostUnitsPerLight < 1)
+        {
+            why = "MostUnitsPerLight must be at least 1";
+        }
+
+        if (why != null)
+        {
+            refusal = "The Steward's refuel thresholds were not used (" + why + "); the shipped " +
+                "values (" + Default + ") apply instead.";
+            return Default;
+        }
+
+        // One light may never need more than one trip carries: the planner
+        // refuses a target bigger than a trip outright, which would leave every
+        // such light untended for ever with nothing said. So the per-light
+        // ceiling is held to the carry, and the player is told.
+        refusal = null;
+        if (carryPerTrip >= 1 && mostUnitsPerLight > carryPerTrip)
+        {
+            refusal = "MostUnitsPerLight (" + mostUnitsPerLight.ToString(CultureInfo.InvariantCulture) +
+                ") is more than CarryPerTrip (" + carryPerTrip.ToString(CultureInfo.InvariantCulture) +
+                ") and no light may need more than one trip, so " +
+                carryPerTrip.ToString(CultureInfo.InvariantCulture) + " a light is used instead.";
+            mostUnitsPerLight = carryPerTrip;
+        }
+
+        return new MaintenanceThresholds(refuelBelowSeconds, refuelToSeconds, mostUnitsPerLight);
+    }
+
     /// <summary>The shipped values.
     ///
     /// Five minutes of light left is the point at which a player walking their
