@@ -35,6 +35,7 @@
     <Compile Include="..\ConcernedSteward\Runtime\StewardBody.cs" Link="Product\Runtime\StewardBody.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\StewardCensus.cs" Link="Product\Runtime\StewardCensus.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\StewardWorldFacts.cs" Link="Product\Runtime\StewardWorldFacts.cs" />
+    <Compile Include="..\ConcernedSteward\Runtime\StewardRetirementPort.cs" Link="Product\Runtime\StewardRetirementPort.cs" />
 
 
     <!-- CNPC-R3 (#382): the game-free half of the Concerned NPC library, linked

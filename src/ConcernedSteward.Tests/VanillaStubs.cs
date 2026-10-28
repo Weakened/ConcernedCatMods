@@ -394,6 +394,13 @@ public class ZNetView : MonoBehaviour
 
     public void ClaimOwnership() => Ownership = StubOwnership.Us;
 
+    /// <summary>How many times vanilla's own network-object removal was asked
+    /// for. The stub removes nothing; a test proves the call was or was not
+    /// made.</summary>
+    public int DestroyCalls { get; private set; }
+
+    public void Destroy() => DestroyCalls++;
+
     internal void Register(string name, Action handler) => _handlers[name] = handler;
 
     /// <summary>Vanilla's routed dispatch, as decompiled: run locally and

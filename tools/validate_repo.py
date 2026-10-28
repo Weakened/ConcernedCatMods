@@ -3278,6 +3278,166 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
     ]
 
 
+# ---------------------------------------------------------------------------
+# Concerned Steward S1 (owner decision 2026-10-28): Sunniva's own worker body
+# may leave the world through one guarded verb, and through nothing else.
+#
+# `docs/mods/concerned-steward/DECISIONS.md` S1 records the grant: a retire verb
+# that removes her OWN body, refused while she carries fuel or a round's plan is
+# open, with the removal in one file under a refusing guard. This rule is the
+# text half of that promise and says exactly what it establishes:
+#
+# 1. the POPULATION: every destruction-shaped call in src/ConcernedSteward is
+#    counted per file against STEWARD_DESTRUCTION_SITES, every one routed
+#    through an instance against STEWARD_ROUTED_DESTRUCTION_SITES, and every
+#    unambiguous body removal against STEWARD_BODY_REMOVAL_SITES - so a new
+#    destruction anywhere in the product fails until a person records it;
+# 2. the PORT: Runtime/StewardRetirementPort.cs keeps its one removal inside
+#    `Retire(...)`, below a `StewardRetirement.Decide(` and a refusing
+#    `if (!StewardRetirement.Allows(`, and the removal is the network object of
+#    the body handed in (`body.View`), never anything looked up;
+# 3. the CALLER: the port is called once in the product, from
+#    Runtime/StewardRuntime.cs.
+#
+# What it does NOT establish: that control flow obeys the refusal (that is
+# StewardRetirementTests), or anything about a destruction reached through a
+# delegate or a method group, which spells no `Destroy(` at all.
+#
+# - Runtime/StewardWorkerPrefab.cs: four `UnityEngine.Object.DestroyImmediate`
+#   calls on the INACTIVE prefab clone being built at start-up (the clone
+#   itself on failure, and the vanilla AI, tameable and drop components). No
+#   body in any world is ever touched there.
+# - Runtime/StewardRetirementPort.cs: `view.Destroy()`, her own body's network
+#   object, inside the guarded verb.
+STEWARD_RETIRE_PORT = ("Runtime", "StewardRetirementPort.cs")
+STEWARD_RETIRE_CALLER = "Runtime/StewardRuntime.cs"
+STEWARD_RETIRE_METHOD = re.compile(
+    r"internal\s+static\s+StewardRetireOutcome\s+Retire\s*\((.*?)\n    \}", re.DOTALL)
+STEWARD_RETIRE_DECIDES = "StewardRetirement.Decide("
+STEWARD_RETIRE_REFUSES = re.compile(r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(")
+STEWARD_RETIRE_OWN_VIEW = re.compile(r"ZNetView\?\s+view\s*=\s*body\s*\.\s*View\s*;")
+STEWARD_RETIRE_CALL = re.compile(r"StewardRetirementPort\s*\.\s*Retire\s*\(")
+STEWARD_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bDestroyZDO\s*\(")
+STEWARD_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
+STEWARD_DESTRUCTION_SITES = {
+    "Runtime/StewardWorkerPrefab.cs": 4,
+    "Runtime/StewardRetirementPort.cs": 1,
+}
+STEWARD_ROUTED_DESTRUCTION_SITES = {
+    "Runtime/StewardRetirementPort.cs": 1,
+}
+STEWARD_BODY_REMOVAL_SITES = {
+    "Runtime/StewardRetirementPort.cs": 1,
+}
+
+
+def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
+    """Fails when Concerned Steward can take a body out of the world anywhere but
+    the one guarded retire verb (owner decision S1, 2026-10-28)."""
+    label = "[steward] S1 retire audit"
+    steward_dir: Path = PRODUCTS["steward"]["project_dir"]  # type: ignore[assignment]
+    port = steward_dir.joinpath(*STEWARD_RETIRE_PORT)
+    if not port.is_file():
+        fail(f"{label}: missing {port.relative_to(ROOT)} - the one place her body may leave the "
+             "world has moved, and the pins below are keyed to where it was", errors)
+        return []
+
+    scanned = 0
+    total_destructions = 0
+    total_routed = 0
+    total_removals = 0
+    total_calls = 0
+    for path in sorted(steward_dir.rglob("*.cs")):
+        relative = path.relative_to(steward_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        key = relative.as_posix()
+        scanned += 1
+        text = _strip_cs_comments(path.read_text(encoding="utf-8"))
+
+        destructions = len(STEWARD_DESTRUCTION.findall(text))
+        total_destructions += destructions
+        if destructions != STEWARD_DESTRUCTION_SITES.get(key, 0):
+            fail(f"{label}: {path.relative_to(ROOT)} destroys something {destructions} time(s); this "
+                 f"rule expects {STEWARD_DESTRUCTION_SITES.get(key, 0)}. Her pack lives in her body and "
+                 "nothing is dropped, so a new destruction has to say what it destroys and what guards "
+                 "it, and be recorded in STEWARD_DESTRUCTION_SITES", errors)
+
+        routed = [receiver for receiver in
+                  (_destruction_receiver(text, found.start())
+                   for found in STEWARD_DESTRUCTION.finditer(text))
+                  if receiver not in TEAMSTER_STATIC_DESTROY_RECEIVERS]
+        total_routed += len(routed)
+        if len(routed) != STEWARD_ROUTED_DESTRUCTION_SITES.get(key, 0):
+            fail(f"{label}: {path.relative_to(ROOT)} routes a destruction through an instance "
+                 f"{len(routed)} time(s) ({', '.join(sorted(set(routed))) or 'none'}); this rule expects "
+                 f"{STEWARD_ROUTED_DESTRUCTION_SITES.get(key, 0)}. A routed destruction is how a networked "
+                 "body leaves the world, inventory and all", errors)
+
+        removals = len(STEWARD_BODY_REMOVAL.findall(text))
+        total_removals += removals
+        if removals != STEWARD_BODY_REMOVAL_SITES.get(key, 0):
+            fail(f"{label}: {path.relative_to(ROOT)} takes a body out of the world {removals} time(s); "
+                 f"this rule expects {STEWARD_BODY_REMOVAL_SITES.get(key, 0)}. Only the guarded retire "
+                 "verb in Runtime/StewardRetirementPort.cs may", errors)
+
+        calls = len(STEWARD_RETIRE_CALL.findall(text))
+        total_calls += calls
+        expected_calls = 1 if key == STEWARD_RETIRE_CALLER else 0
+        if calls != expected_calls:
+            fail(f"{label}: {path.relative_to(ROOT)} calls StewardRetirementPort.Retire {calls} time(s); "
+                 f"this rule expects {expected_calls}. The verb has one caller, the console's retire, "
+                 "which hands it every witness the body cannot see", errors)
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8"))
+    method = STEWARD_RETIRE_METHOD.search(code)
+    if method is None:
+        fail(f"{label}: could not read Retire(...) in {port.relative_to(ROOT)} - the removal must "
+             "stay inside a named method whose guard is reviewable", errors)
+        return []
+
+    body = method.group(1)
+    removals_in_file = len(STEWARD_BODY_REMOVAL.findall(code))
+    removal_offsets = _offsets_of_pattern(body, STEWARD_BODY_REMOVAL)
+    if removals_in_file != len(removal_offsets):
+        fail(f"{label}: {port.relative_to(ROOT)} removes a body {removals_in_file} time(s) but only "
+             f"{len(removal_offsets)} inside Retire(...) - a removal outside it is one the guard never "
+             "sees", errors)
+
+    decisions = _offsets_of(body, STEWARD_RETIRE_DECIDES)
+    guards = _offsets_of_pattern(body, STEWARD_RETIRE_REFUSES)
+    for index, removal in enumerate(removal_offsets):
+        if len([at for at in decisions if at < removal]) <= index:
+            fail(f"{label}: removal {index + 1} in Retire(...) has no {STEWARD_RETIRE_DECIDES} of its "
+                 "own above it - the body is removed without asking what it holds", errors)
+        if len([at for at in guards if at < removal]) <= index:
+            fail(f"{label}: removal {index + 1} in Retire(...) has no refusing "
+                 "`if (!StewardRetirement.Allows(...))` of its own above it - consulting the verdict "
+                 "without refusing on it is not a guard", errors)
+
+    own_view = STEWARD_RETIRE_OWN_VIEW.search(body)
+    if own_view is None:
+        fail(f"{label}: Retire(...) does not take the network object from the body it was handed "
+             "(`ZNetView? view = body.View;`) - the one removal granted is HER body's, never an object "
+             "looked up or passed in some other way", errors)
+    else:
+        for removal in removal_offsets:
+            receiver = _destruction_receiver(body, removal + body[removal:].index("Destroy"))
+            if removal < own_view.start() or receiver != "view":
+                fail(f"{label}: the removal in Retire(...) is not `view.Destroy()` on the view taken "
+                     "from her own body above it", errors)
+
+    return [
+        f"{label}: {scanned} Steward source(s) scanned (all of {steward_dir.relative_to(ROOT).as_posix()} "
+        f"less obj/ and bin/) holding {total_destructions} destruction(s), {total_routed} routed through "
+        f"an instance and {total_removals} body removal(s), each at a pinned site; the one removal is "
+        "her own body's `view.Destroy()` inside StewardRetirementPort.Retire, below a "
+        f"StewardRetirement.Decide and a refusing `if (!StewardRetirement.Allows(...))`, with "
+        f"{total_calls} caller(s). This text audit establishes where the refusal is written, not that "
+        "control flow obeys it (StewardRetirementTests), and it cannot see a destruction reached "
+        "through a delegate"
+    ]
+
 def _offsets_of_pattern(text: str, pattern: re.Pattern) -> list[int]:
     """Every offset a pattern matches at, in order."""
     return [match.start() for match in pattern.finditer(text)]
@@ -4867,6 +5027,7 @@ def main() -> int:
     report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
+    report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))
