@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
@@ -16,12 +17,17 @@ internal sealed class CompatibilityRegistry
 {
     public sealed class KnownMod
     {
-        public KnownMod(string guidFragment, string displayName, string behavior)
+        public KnownMod(string guidFragment, string displayName, string behavior, bool exact = false)
         {
             GuidFragment = guidFragment;
             DisplayName = displayName;
             Behavior = behavior;
+            Exact = exact;
         }
+
+        /// <summary>#419: the fragment is the whole GUID (verified), so a
+        /// similarly named mod is not reported as this one.</summary>
+        public bool Exact { get; }
 
         public string GuidFragment { get; }
         public string DisplayName { get; }
@@ -44,6 +50,14 @@ internal sealed class CompatibilityRegistry
             "Table mod detected: Concerned Cartographer sharing stays on its own cc_sync channel and never touches table data."),
         new KnownMod("onemap", "OneMap",
             "Shared-map mod detected: vanilla shared pins carry owner IDs and remain foreign/untouchable to Concerned Cartographer."),
+        // #419: exact GUIDs, verified against each mod (see
+        // GREATESTMAP_COMPATIBILITY.md); NeighborMapMods matches them exactly.
+        new KnownMod(NeighborMapMods.TheGreatestMapGuid.ToLowerInvariant(), "The Greatest Map", exact: true, behavior:
+            "Map mod detected: it owns hand-placed markers (it shares them), so Concerned Cartographer's palette and adopt prompts step aside and its own markers are made only from the CC toolbar, Quick Pin and survey. A Cartographer marker removed by tgm_clearlocal is kept and redrawn rather than deleted; delete it with a right-click or from the Pin Workbench. Avoid tgm_import while you have Cartographer markers: it adopts them as well, and two mods then claim the same marker."),
+        new KnownMod(NeighborMapMods.HudCompassGuid, "HUDCompass", exact: true, behavior:
+            "Compass mod detected: Cartographer markers are ordinary map pins, so they appear on its compass bar; hide them there with its own Ignore settings if you prefer. Its dynamic cart, ship and portal markers are its own and are never touched."),
+        new KnownMod(NeighborMapMods.RoundMinimapGuid, "Round Minimap", exact: true, behavior:
+            "Minimap mod detected: Cartographer markers turn with the round minimap. Road and route ink cannot (the overlay layer it is drawn in keeps its square, north-up shape), so it is left off the minimap while the round shape is on; Map/ReshapedMinimapRoads = Show draws it anyway. The large map is unaffected."),
     };
 
     private bool _evaluated;
@@ -54,6 +68,11 @@ internal sealed class CompatibilityRegistry
     /// workbench hotkey's adopt-prompt for unadopted vanilla pins into a
     /// read-only info panel (explicit cc_pins adopt still works).</summary>
     public bool PinManagerPresent { get; private set; }
+
+    /// <summary>#419: the map mods detected by exact GUID. Empty until
+    /// <see cref="Evaluate"/> has run.</summary>
+    public NeighborMapModPresence Neighbors { get; private set; } =
+        NeighborMapMods.Detect(null);
 
     public void Evaluate(ManualLogSource log)
     {
@@ -67,10 +86,13 @@ internal sealed class CompatibilityRegistry
         {
             foreach (KeyValuePair<string, BepInEx.PluginInfo> plugin in Chainloader.PluginInfos)
             {
-                string guid = plugin.Key.ToLowerInvariant();
+                string guid = plugin.Key.Trim().ToLowerInvariant();
                 foreach (KnownMod known in _knownMods)
                 {
-                    if (!known.Detected && guid.Contains(known.GuidFragment))
+                    bool matches = known.Exact
+                        ? string.Equals(guid, known.GuidFragment, StringComparison.Ordinal)
+                        : guid.Contains(known.GuidFragment);
+                    if (!known.Detected && matches)
                     {
                         known.Detected = true;
                         known.DetectedGuid = plugin.Key;
@@ -85,6 +107,14 @@ internal sealed class CompatibilityRegistry
                 {
                     PinManagerPresent = true;
                 }
+            }
+
+            Neighbors = NeighborMapMods.Detect(Chainloader.PluginInfos.Keys);
+            if (Neighbors.OwnsVanillaPinFlow)
+            {
+                // A mod that adopts hand-placed markers is a pin manager for
+                // this purpose: one pin, one owner.
+                PinManagerPresent = true;
             }
         }
         catch (Exception exception)

@@ -73,6 +73,12 @@ internal sealed class RoadOverlayRenderer
     /// drawing on the large map (feeds the `align live` C verdict).</summary>
     public bool VectorLayerActive => _vectorLayer.IsActive;
 
+    /// <summary>#419: set by the runtime while the texture ink must stay off
+    /// a minimap another mod has reshaped (MinimapReshapeRule). It joins
+    /// the vector suppression in the same one-presentation rule, so the
+    /// player's own layer switch and its checkbox are never touched.</summary>
+    public bool MinimapTextureHeld { get; set; }
+
     /// <summary>Route data changed; the shared vector layer rebakes on its
     /// debounce.</summary>
     public void MarkVectorDataDirty()
@@ -146,7 +152,7 @@ internal sealed class RoadOverlayRenderer
 
     private void ApplyTextureVisibility()
     {
-        bool suppress = _vectorLayer.IsActive;
+        bool suppress = _vectorLayer.IsActive || MinimapTextureHeld;
         SetTextureOverlayEnabled(
             RoadKind.Dirt, Atlas.OverlayVisibilityRule.EffectiveTexture(_userDirtEnabled, suppress));
         SetTextureOverlayEnabled(
