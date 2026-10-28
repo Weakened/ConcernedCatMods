@@ -322,7 +322,10 @@ How a file is read:
   under 16 m², and a boundary that crosses itself. Such a row is never loaded as
   any other shape.
 - A file whose header is not v1 loads as nothing, and it is not overwritten for
-  the rest of the session. An unreadable file is treated the same way.
+  the rest of the session. The same applies to an unreadable file, and to a v1
+  file with any row whose purpose this build does not know: that row is a later
+  build's area, so it must not be dropped on the next save.
+- The capability answers Unavailable for such a world rather than an empty list.
 - The support report shows only counts. It never shows names or geometry.
 
 ## Backups (v0.8+)

@@ -273,9 +273,10 @@ internal sealed class WorkAreaStore
 /// cannot. A freehand loop is hundreds of points; it is simplified
 /// (Ramer–Douglas–Peucker, deterministic) to at most
 /// <see cref="WorkAreaPolygon.MaxPoints"/> before validation, and the result is
-/// validated exactly as a consumer will validate it. A stroke that does not
-/// close is refused, never closed by a straight line across whatever lies
-/// between its ends.</summary>
+/// validated exactly as a consumer will validate it. A stroke must come back
+/// within <see cref="CloseToleranceMetres"/> of where it started; only that
+/// short gap is closed by a straight edge, and a stroke that ends further away
+/// is refused rather than bridged.</summary>
 internal static class WorkAreaDrafting
 {
     /// <summary>How near the stroke's end must come back to its start, in
@@ -296,15 +297,21 @@ internal static class WorkAreaDrafting
         var points = new List<WorkAreaPoint>(stroke.Count);
         foreach (RoadPoint point in stroke)
         {
+            if (float.IsNaN(point.X) || float.IsInfinity(point.X) || float.IsNaN(point.Z) || float.IsInfinity(point.Z))
+            {
+                shapeProblem = WorkAreaShapeProblem.NotFinite;
+                return WorkAreaRefusal.BadShape;
+            }
+
             points.Add(new WorkAreaPoint(point.X, point.Z));
         }
 
         WorkAreaPoint first = points[0];
         WorkAreaPoint last = points[points.Count - 1];
         double gap = Math.Sqrt(((double)last.X - first.X) * (last.X - first.X) + ((double)last.Z - first.Z) * (last.Z - first.Z));
-        if (double.IsNaN(gap) || gap > CloseToleranceMetres)
+        if (double.IsNaN(gap) || double.IsInfinity(gap) || gap > CloseToleranceMetres)
         {
-            if (double.IsNaN(gap))
+            if (double.IsNaN(gap) || double.IsInfinity(gap))
             {
                 shapeProblem = WorkAreaShapeProblem.NotFinite;
                 return WorkAreaRefusal.BadShape;
@@ -465,8 +472,19 @@ internal static class WorkAreaCodec
     /// read by guesswork, and the runtime must then not overwrite it.</summary>
     public static List<WorkArea> Parse(IEnumerable<string> lines, out int malformed, out bool unsupportedVersion)
     {
+        return Parse(lines, out malformed, out unsupportedVersion, out _);
+    }
+
+    /// <summary>As above, also counting rows whose only fault is a purpose
+    /// this build does not know. Those are a later build's areas, not damage:
+    /// the runtime then treats the file as read-only rather than dropping them
+    /// on the next save.</summary>
+    public static List<WorkArea> Parse(
+        IEnumerable<string> lines, out int malformed, out bool unsupportedVersion, out int unknownPurpose)
+    {
         malformed = 0;
         unsupportedVersion = false;
+        unknownPurpose = 0;
         var areas = new List<WorkArea>();
         bool sawHeader = false;
         foreach (string raw in lines)
@@ -499,6 +517,13 @@ internal static class WorkAreaCodec
             }
 
             string[] fields = raw.Split('\t');
+            if (fields.Length == 6 && !WorkAreaStore.IsKnownPurpose(fields[2]))
+            {
+                unknownPurpose++;
+                malformed++;
+                continue;
+            }
+
             if (fields.Length != 6 ||
                 !WorkAreaStore.IsValidId(fields[0]) ||
                 !WorkAreaStore.TryNormaliseName(fields[1], out string name) ||
@@ -543,6 +568,7 @@ internal static class WorkAreaCommands
         switch (subcommand)
         {
             case "":
+            case "status":
             case "list":
                 return List(store);
             case "fromroute":

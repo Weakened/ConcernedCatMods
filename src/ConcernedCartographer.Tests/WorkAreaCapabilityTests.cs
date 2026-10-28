@@ -121,7 +121,16 @@ public class WorkAreaCapabilityTests
         // same answer every time.
         Assert.True(square.Contains(0, 10));
         Assert.False(square.Contains(20, 10));
-        Assert.Equal(square.Contains(10, 0), square.Contains(10, 0));
+        Assert.True(square.Contains(10, 0));
+        Assert.False(square.Contains(10, 20));
+    }
+
+    [Fact]
+    public void AStraightRunThroughAMidSideVertexIsStillAValidSide()
+    {
+        Assert.Equal(WorkAreaShapeProblem.None, WorkAreaPolygon.TryCreate(
+            new[] { P(0, 0), P(10, 0), P(20, 0), P(20, 20), P(0, 20) }, out WorkAreaPolygon? polygon));
+        Assert.Equal(400f, polygon!.AreaSquareMetres, 3);
     }
 
     [Fact]
@@ -265,6 +274,15 @@ public class WorkAreaCapabilityTests
     }
 
     [Fact]
+    public void ANonFinitePointAnywhereInALongStrokeIsRefusedNotSimplifiedAway()
+    {
+        List<RoadPoint> loop = Circle(300, 30f);
+        loop[150] = new RoadPoint(float.NaN, 0f, 5f);
+        Assert.Equal(WorkAreaRefusal.BadShape, WorkAreaDrafting.FromStroke(loop, out _, out WorkAreaShapeProblem problem));
+        Assert.Equal(WorkAreaShapeProblem.NotFinite, problem);
+    }
+
+    [Fact]
     public void AFigureEightIsRefused()
     {
         var eight = new List<RoadPoint>
@@ -318,6 +336,22 @@ public class WorkAreaCapabilityTests
         Assert.Single(areas);
         Assert.Equal("Good", areas[0].Name);
         Assert.Equal(4, malformed);
+        Assert.False(unsupported);
+    }
+
+    [Fact]
+    public void AnUnknownPurposeIsCountedSoALaterBuildsAreasAreNotDropped()
+    {
+        string[] lines =
+        {
+            WorkAreaCodec.Header,
+            "wa-" + new string('c', 32) + "	Quarry	stoneGathering	1	1	" + Square().ToWire(),
+        };
+
+        List<WorkArea> areas = WorkAreaCodec.Parse(lines, out int malformed, out bool unsupported, out int unknownPurpose);
+        Assert.Empty(areas);
+        Assert.Equal(1, unknownPurpose);
+        Assert.Equal(1, malformed);
         Assert.False(unsupported);
     }
 
@@ -518,6 +552,28 @@ public class WorkAreaCapabilityTests
         Assert.True(save >= 0 && worldSwitch > save && load > worldSwitch,
             "a world switch must save the old world's areas before loading the new world's");
         Assert.Contains("return GuardConsoleCommand(\"cc_areas\", args, ExecuteAreaCommandCore);", runtime, StringComparison.Ordinal);
+
+        // An unreadable or newer file: Unavailable to other mods, and never
+        // written over.
+        int snapshot = runtime.IndexOf("internal (long WorldUid, IReadOnlyList<WorkArea> Areas)? WorkAreaSnapshot()", StringComparison.Ordinal);
+        int readOnly = runtime.IndexOf("if (_workAreaPersistence.IsReadOnly(uid))", snapshot, StringComparison.Ordinal);
+        int answer = runtime.IndexOf("return (uid, _workAreas.Areas);", snapshot, StringComparison.Ordinal);
+        Assert.True(snapshot >= 0 && readOnly > snapshot && answer > readOnly);
+
+        string persistence = Source("Persistence", "WorkAreaPersistence.cs");
+        int saveMethod = persistence.IndexOf("public bool Save(long worldUid, IEnumerable<WorkArea> areas)", StringComparison.Ordinal);
+        int guard = persistence.IndexOf("if (_readOnlyWorlds.Contains(worldUid))", saveMethod, StringComparison.Ordinal);
+        int write = persistence.IndexOf("File.WriteAllLines(", saveMethod, StringComparison.Ordinal);
+        Assert.True(saveMethod >= 0 && guard > saveMethod && write > guard, "Save must refuse a read-only world before writing");
+        Assert.Contains("out int unknownPurpose);", persistence, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABareCommandLists()
+    {
+        // ConsoleArguments maps no arguments to "status".
+        var store = new WorkAreaStore();
+        Assert.StartsWith("No work areas", WorkAreaCommands.Execute(store, Array.Empty<AtlasRoute>(), "status", "", Guid.NewGuid(), Now));
     }
 
     private static string Source(params string[] parts)

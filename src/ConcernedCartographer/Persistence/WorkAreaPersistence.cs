@@ -38,7 +38,18 @@ internal sealed class WorkAreaPersistence
 
         try
         {
-            List<WorkArea> areas = WorkAreaCodec.Parse(File.ReadLines(path), out int malformed, out bool unsupported);
+            List<WorkArea> areas = WorkAreaCodec.Parse(
+                File.ReadLines(path), out int malformed, out bool unsupported, out int unknownPurpose);
+            if (unknownPurpose > 0)
+            {
+                // A later build's areas under the same header: keep the file
+                // exactly as it is rather than dropping them on the next save.
+                _readOnlyWorlds.Add(worldUid);
+                _log.LogWarning(
+                    $"This world's work-area file has {unknownPurpose} area(s) with a purpose this version does not know; the file is left untouched this session.");
+                return new List<WorkArea>();
+            }
+
             if (unsupported)
             {
                 _readOnlyWorlds.Add(worldUid);

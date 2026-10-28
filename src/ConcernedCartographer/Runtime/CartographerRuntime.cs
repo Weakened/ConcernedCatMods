@@ -2255,6 +2255,7 @@ internal sealed class CartographerRuntime : IDisposable
         SaveIfDirty();
         SavePinsSnapshot();
         _savedViewPersistence.Save(_savedViews);
+        SaveWorkAreasIfDirty();
     }
 
     /// <summary>Backs the `cc_atlas` console command: the scriptable drawer.
@@ -2715,15 +2716,22 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
-    private void SaveWorkAreasIfDirty()
+    /// <summary>False only when there was something to save and it could
+    /// not be written; autosave retries.</summary>
+    private bool SaveWorkAreasIfDirty()
     {
         if (_workAreas.IsDirty && _worldUid is long uid)
         {
             if (_workAreaPersistence.Save(uid, _workAreas.Areas))
             {
                 _workAreas.MarkClean();
+                return true;
             }
+
+            return false;
         }
+
+        return true;
     }
 
     /// <summary>#296: what <c>concernedcat.workarea/1</c> answers from. Null
@@ -2732,6 +2740,14 @@ internal sealed class CartographerRuntime : IDisposable
     internal (long WorldUid, IReadOnlyList<WorkArea> Areas)? WorkAreaSnapshot()
     {
         if (_disposed || !_mapReady || _worldUid is not long uid)
+        {
+            return null;
+        }
+
+        // A file this build could not read (or a newer build wrote) is not
+        // "no areas": the player may have drawn some. Unavailable, never an
+        // empty list.
+        if (_workAreaPersistence.IsReadOnly(uid))
         {
             return null;
         }
@@ -2765,7 +2781,11 @@ internal sealed class CartographerRuntime : IDisposable
 
         string reply = WorkAreaCommands.Execute(
             _workAreas, _routeStore.Living, subcommand, ConsoleArguments.Remainder(args), Guid.NewGuid(), DateTime.UtcNow);
-        SaveWorkAreasIfDirty();
+        if (!SaveWorkAreasIfDirty())
+        {
+            reply += "\nNot yet written to disk (see the log); it will be retried, but a restart before then loses this change.";
+        }
+
         return reply;
     }
 

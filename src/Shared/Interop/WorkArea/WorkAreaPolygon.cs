@@ -49,8 +49,11 @@ internal readonly struct WorkAreaPoint : IEquatable<WorkAreaPoint>
 /// is a refusal, never a repair: a self-intersecting, oversized, degenerate or
 /// non-finite boundary is not quietly turned into "the whole region" or a
 /// smaller one. Containment is deterministic (even-odd, a fixed half-open edge
-/// rule), and the revision is derived from the geometry alone, so two
-/// sessions, two machines and two products agree on it.</summary>
+/// rule), and the revision is derived from the stored vertices alone, so two
+/// sessions and two products on the same runtime agree on it. It is computed
+/// from round-trip float text, which differs between .NET runtimes, so a
+/// consumer compares revisions it received, never one it computed elsewhere.
+/// </summary>
 internal sealed class WorkAreaPolygon
 {
     /// <summary>Fewest vertices a closed region can have.</summary>
@@ -109,7 +112,7 @@ internal sealed class WorkAreaPolygon
     public float CenterZ => (MinZ + MaxZ) * 0.5f;
 
     /// <summary>A stable 16-hex-digit fingerprint of the stored vertices.
-    /// The same vertices always give the same revision, on any machine;
+    /// The same vertices always give the same revision on the same runtime;
     /// an edited boundary gives a new one, which is
     /// how a consumer knows the area behind an accepted job changed.</summary>
     public string Revision { get; }

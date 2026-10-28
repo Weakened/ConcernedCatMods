@@ -17,7 +17,8 @@ namespace TheConcernedCat.Interop.WorkArea;
 ///
 /// Only mscorlib types cross, like every capability (see
 /// <see cref="CapabilityMap"/>): each product compiles this file into its own
-/// assembly.</summary>
+/// assembly. Call it from Unity's main thread, like every capability; the
+/// provider reads its live state.</summary>
 internal static class WorkAreaContract
 {
     public const string Id = "concernedcat.workarea";
