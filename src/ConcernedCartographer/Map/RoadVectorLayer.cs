@@ -29,6 +29,7 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 internal sealed class RoadVectorLayer
 {
     private const string ContainerName = "CcRoadVectorLayer";
+    private const string FrameName = "CcRoadVectorFrame";
 
     /// <summary>Target on-screen ink width for roads AND routes (RC10
     /// feedback 5: 2× the RC8 value of 3). Constant by design: the layer
@@ -60,6 +61,12 @@ internal sealed class RoadVectorLayer
     // undrawn.
     private readonly VectorBakeScheduler _scheduler = new();
 
+    // #419: the frame covers exactly the map image's rect and clips to it
+    // (a map another mod has resized or moved must not have ink spilling
+    // past its edge); the container inside it carries the pan/zoom
+    // transform, unchanged from before the frame existed.
+    private RectTransform? _frame;
+    private Atlas.RoadLayerParent _frameParent;
     private RectTransform? _container;
     private RoadVectorGraphic? _dirtGraphic;
     private RoadVectorGraphic? _pavedGraphic;
@@ -175,10 +182,21 @@ internal sealed class RoadVectorLayer
                 return;
             }
 
-            EnsureCreated(image);
-            if (_container == null || _dirtGraphic == null || _pavedGraphic == null)
+            MinimapReflection.GetLargeMapProtectedRoots(out RectTransform? pinRoot, out _, out _);
+            Atlas.RoadLayerParent placement = Atlas.RoadLayerPlacement.Resolve(
+                _settings.RoadLayerPosition.Value,
+                pinRootAvailable: pinRoot != null,
+                pinRootParentInsideLargeMap: pinRoot != null && pinRoot.parent != null &&
+                    pinRoot.parent.IsChildOf(minimap.m_largeRoot.transform));
+            EnsureCreated(image, placement, pinRoot);
+            if (_frame == null || _container == null || _dirtGraphic == null || _pavedGraphic == null)
             {
                 return;
+            }
+
+            if (_frameParent == Atlas.RoadLayerParent.AfterPinRoot)
+            {
+                KeepFrameOverImage(image.rectTransform, pinRoot!);
             }
 
             // Exact vanilla placement for the current pan/zoom window.
@@ -216,21 +234,49 @@ internal sealed class RoadVectorLayer
         }
     }
 
-    private void EnsureCreated(RawImage image)
+    private void EnsureCreated(RawImage image, Atlas.RoadLayerParent placement, RectTransform? pinRoot)
     {
-        if (_container != null && _container.parent == image.rectTransform)
+        Transform wantedParent = placement == Atlas.RoadLayerParent.AfterPinRoot
+            ? pinRoot!.parent
+            : image.rectTransform;
+        if (_frame != null && _container != null && _frameParent == placement && _frame.parent == wantedParent)
         {
             return;
         }
 
         DestroyContainer();
 
+        var frameObject = new GameObject(FrameName, typeof(RectTransform));
+        _frame = (RectTransform)frameObject.transform;
+        _frame.SetParent(wantedParent, worldPositionStays: false);
+        _frameParent = placement;
+        if (placement == Atlas.RoadLayerParent.AfterPinRoot)
+        {
+            // Directly after the pin icons' root: drawn over every pin icon,
+            // under anything later in the map (the pin names).
+            _frame.SetSiblingIndex(pinRoot!.GetSiblingIndex() + 1);
+            KeepFrameOverImage(image.rectTransform, pinRoot);
+        }
+        else
+        {
+            // Above Jötunn's overlay (the image's FIRST child); pins and the
+            // player marker live in later sibling subtrees and stay on top.
+            _frame.SetAsLastSibling();
+            _frame.anchorMin = Vector2.zero;
+            _frame.anchorMax = Vector2.one;
+            _frame.pivot = new Vector2(0.5f, 0.5f);
+            _frame.offsetMin = Vector2.zero;
+            _frame.offsetMax = Vector2.zero;
+        }
+
+        // Clips to the frame's rect, i.e. to the map image. The graphics
+        // keep their whole-extent rects (RC11 feedback 3), so the culling
+        // half of the clipper never drops them.
+        frameObject.AddComponent<RectMask2D>();
+
         var containerObject = new GameObject(ContainerName, typeof(RectTransform));
         _container = (RectTransform)containerObject.transform;
-        _container.SetParent(image.rectTransform, worldPositionStays: false);
-        // Above Jötunn's overlay (the image's FIRST child); pins and the
-        // player marker live in later sibling subtrees and stay on top.
-        _container.SetAsLastSibling();
+        _container.SetParent(_frame, worldPositionStays: false);
         _container.anchorMin = Vector2.zero;
         _container.anchorMax = Vector2.zero;
         _container.pivot = Vector2.zero;
@@ -244,6 +290,72 @@ internal sealed class RoadVectorLayer
         _pavedGraphic = CreateGraphic("CcRoadVectorPaved", _container, featherTexture);
         _routeGraphic = CreateGraphic("CcRouteVector", _container, featherTexture: null);
         _scheduler.Invalidate();
+    }
+
+    /// <summary>#419 AbovePins: the frame is a sibling of the pin root, not
+    /// a child of the map image, so each frame it is laid exactly over the
+    /// image (same world pivot position, rotation and scale, same rect
+    /// size). The container inside then reproduces vanilla's own pin
+    /// placement, ((m - uvMin)/uvSize)*rectSize from the image's bottom-left,
+    /// exactly as it does under the image. It also stays directly after the
+    /// pin root, which vanilla never reorders but another mod might.</summary>
+    private void KeepFrameOverImage(RectTransform image, RectTransform pinRoot)
+    {
+        RectTransform frame = _frame!;
+        Transform? parent = frame.parent;
+        int pinIndex = pinRoot.GetSiblingIndex();
+        int frameIndex = frame.GetSiblingIndex();
+        if (frameIndex != pinIndex + 1)
+        {
+            // SetSiblingIndex names the final position: from before the pin
+            // root that is the pin root's current index (it shifts down by
+            // one), from anywhere after it the slot right behind it. This
+            // also holds when the pin root is the last child.
+            frame.SetSiblingIndex(frameIndex < pinIndex ? pinIndex : pinIndex + 1);
+        }
+
+        var center = new Vector2(0.5f, 0.5f);
+        if (frame.anchorMin != center)
+        {
+            frame.anchorMin = center;
+        }
+
+        if (frame.anchorMax != center)
+        {
+            frame.anchorMax = center;
+        }
+
+        if (frame.pivot != image.pivot)
+        {
+            frame.pivot = image.pivot;
+        }
+
+        Vector2 size = image.rect.size;
+        if (frame.sizeDelta != size)
+        {
+            frame.sizeDelta = size;
+        }
+
+        Vector3 imageLossy = image.lossyScale;
+        Vector3 parentLossy = parent != null ? parent.lossyScale : Vector3.one;
+        var scale = new Vector3(
+            Atlas.RoadLayerPlacement.FrameScale(imageLossy.x, parentLossy.x),
+            Atlas.RoadLayerPlacement.FrameScale(imageLossy.y, parentLossy.y),
+            1f);
+        if (frame.localScale != scale)
+        {
+            frame.localScale = scale;
+        }
+
+        if (frame.rotation != image.rotation)
+        {
+            frame.rotation = image.rotation;
+        }
+
+        if (frame.position != image.position)
+        {
+            frame.position = image.position;
+        }
     }
 
     /// <summary>The shared 1×64 alpha column sampled across every road
@@ -598,6 +710,7 @@ internal sealed class RoadVectorLayer
 
     private void ReleaseDeadReferences()
     {
+        _frame = null;
         _container = null;
         _dirtGraphic = null;
         _pavedGraphic = null;
@@ -606,7 +719,12 @@ internal sealed class RoadVectorLayer
 
     private void DestroyContainer()
     {
-        if (_container != null)
+        if (_frame != null)
+        {
+            // The container and graphics are children of the frame.
+            UnityEngine.Object.Destroy(_frame.gameObject);
+        }
+        else if (_container != null)
         {
             UnityEngine.Object.Destroy(_container.gameObject);
         }

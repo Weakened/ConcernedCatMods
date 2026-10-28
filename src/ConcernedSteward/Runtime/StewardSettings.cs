@@ -28,7 +28,13 @@ internal sealed class StewardSettings
         ConfigEntry<int> modelIndex,
         ConfigEntry<string> garment,
         ConfigEntry<string> garmentLegs,
-        ConfigEntry<string> hairColour)
+        ConfigEntry<string> hairColour,
+        ConfigEntry<string> hairStyle,
+        ConfigEntry<bool> speakOnScreen,
+        ConfigEntry<float> refuelBelowSeconds,
+        ConfigEntry<float> refuelToSeconds,
+        ConfigEntry<int> mostUnitsPerLight,
+        ConfigEntry<int> carryPerTrip)
     {
         RuntimeEnabled = runtimeEnabled;
         TendFiresEnabled = tendFiresEnabled;
@@ -39,6 +45,12 @@ internal sealed class StewardSettings
         Garment = garment;
         GarmentLegs = garmentLegs;
         HairColour = hairColour;
+        HairStyle = hairStyle;
+        SpeakOnScreen = speakOnScreen;
+        RefuelBelowSeconds = refuelBelowSeconds;
+        RefuelToSeconds = refuelToSeconds;
+        MostUnitsPerLight = mostUnitsPerLight;
+        CarryPerTrip = carryPerTrip;
     }
 
     /// <summary>The master switch. False by default. With it false the Steward
@@ -111,6 +123,25 @@ internal sealed class StewardSettings
     /// blonde by default. Anything that cannot be read leaves the base
     /// creature's own colouring alone rather than turning her black.</summary>
     public ConfigEntry<string> HairColour { get; }
+
+    /// <summary>#382: her hair, by the game's own customization token.</summary>
+    public ConfigEntry<string> HairStyle { get; }
+
+    /// <summary>#382: whether what she says reaches the screen as well as the
+    /// log.</summary>
+    public ConfigEntry<bool> SpeakOnScreen { get; }
+
+    /// <summary>#382: a light with less burning time than this is a stop.</summary>
+    public ConfigEntry<float> RefuelBelowSeconds { get; }
+
+    /// <summary>#382: what a serviced light is topped up to, in burning time.</summary>
+    public ConfigEntry<float> RefuelToSeconds { get; }
+
+    /// <summary>#382: the most one light is given in one round.</summary>
+    public ConfigEntry<int> MostUnitsPerLight { get; }
+
+    /// <summary>#382: how much fuel she carries in one trip. Read at start-up.</summary>
+    public ConfigEntry<int> CarryPerTrip { get; }
 
     public static StewardSettings Bind(ConfigFile config)
     {
@@ -190,7 +221,57 @@ internal sealed class StewardSettings
             "blonde by default. Anything that cannot be read leaves the base creature's own " +
             "colouring alone.");
 
+        ConfigEntry<string> hairStyle = config.Bind(
+            "Appearance",
+            "HairStyle",
+            StewardLooks.DefaultHairStyle,
+            "Her hair, as the game's own customization name. The default is the style the " +
+            "character screen calls Matronly. It is looked up among the game's own hair items at " +
+            "run time; a name this build does not have is reported and no hair is substituted. " +
+            "Note: vanilla only draws hair, hair colour, skin colour and the model choice on a " +
+            "player-style body, so on a base creature that is not one these settings have no " +
+            "visible effect and the log says so.");
+
+        ConfigEntry<bool> speak = config.Bind(
+            "Steward",
+            "SpeakOnScreen",
+            true,
+            "Show what Sunniva says on screen: the flint and steel, her introduction, what fuel " +
+            "she needs, lights she may not touch, and why she stopped. Everything is written to " +
+            "the log either way.");
+
+        ConfigEntry<float> below = config.Bind(
+            "Upkeep",
+            "RefuelBelowSeconds",
+            Domain.Upkeep.Round.MaintenanceThresholds.Default.RefuelBelowSeconds,
+            "A light with less burning time left than this many seconds is due for fuel. Lights " +
+            "closest to going out are tended first. Measured in time, not fuel, because pieces " +
+            "burn at different rates.");
+
+        ConfigEntry<float> to = config.Bind(
+            "Upkeep",
+            "RefuelToSeconds",
+            Domain.Upkeep.Round.MaintenanceThresholds.Default.RefuelToSeconds,
+            "How many seconds of burning time a tended light is topped up to, never past its own " +
+            "capacity. Must be at least RefuelBelowSeconds; a setting that would make her loop is " +
+            "refused, logged, and the shipped values are used.");
+
+        ConfigEntry<int> most = config.Bind(
+            "Upkeep",
+            "MostUnitsPerLight",
+            Domain.Upkeep.Round.MaintenanceThresholds.Default.MostUnitsPerLight,
+            "The most fuel one light is given in one round.");
+
+        ConfigEntry<int> carry = config.Bind(
+            "Upkeep",
+            "CarryPerTrip",
+            Domain.Upkeep.UpkeepLimits.ShippedCarryPerTrip,
+            "How much fuel she takes from the chest in one trip, for the whole round. Fifty is one " +
+            "vanilla stack, so five low lights are one visit to the chest rather than five. " +
+            "Clamped to 1-500. Read when the game starts.");
+
         return new StewardSettings(
-            runtime, tend, debug, creature, questItem, model, garment, garmentLegs, hairColour);
+            runtime, tend, debug, creature, questItem, model, garment, garmentLegs, hairColour,
+            hairStyle, speak, below, to, most, carry);
     }
 }
