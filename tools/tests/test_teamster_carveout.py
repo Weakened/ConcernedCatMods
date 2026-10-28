@@ -1063,6 +1063,10 @@ class DeathDropIsNarrow(CarveOutFixture):
         self.assert_refused("a damage call in Domain/ passed", contains="'.Damage('")
 
     def test_nothing_may_send_vanillas_damage_message(self):
+        # The one plant here that was NOT an escape before this change: outside
+        # Adapters/Workers, CT-026's authority audit already refuses the
+        # InvokeRPC it needs. Kept as a regression guard for the new
+        # 'RPC_Damage' token, which also covers the name sent any other way.
         self.plant_file(os.path.join(ADAPTERS, "ZzRpc.cs"),
                         "        ((dynamic)who).InvokeRPC(\"RPC_Damage\", cart);")
         self.assert_refused("a damage message outside the worker folder passed", contains="'RPC_Damage'")
