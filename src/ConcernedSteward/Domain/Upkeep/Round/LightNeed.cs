@@ -192,6 +192,64 @@ internal static class LightNeeds
         return stops;
     }
 
+    /// <summary>How many lights she would have walked to if she were allowed
+    /// to touch them.
+    ///
+    /// <b>Why this is counted at all (#382).</b> A light under a ward that is
+    /// not the player's, or one this session does not own, is refused before
+    /// its fuel is ever judged - correctly, because that refusal outranks every
+    /// question about need. But "refused" alone would let a light burn out in
+    /// the middle of a settlement she says she looks after while she reports
+    /// nothing to tend. So the refused lights are judged on their burning time
+    /// as well, and the ones that are actually low are counted, so she can say
+    /// so instead of falling silent.
+    ///
+    /// Only the two permission refusals count. A light outside the marked area,
+    /// switched off, burning nothing or already full is not hers to worry
+    /// about, and a stale key names nothing.</summary>
+    internal static int LowButUntouchable(
+        IReadOnlyList<LightNeed>? judged, Designation? settlement, in MaintenanceThresholds thresholds)
+    {
+        if (judged == null || settlement == null)
+        {
+            return 0;
+        }
+
+        int count = 0;
+        foreach (LightNeed need in judged)
+        {
+            if (need.Status != FuelTargetStatus.AccessDenied
+                && need.Status != FuelTargetStatus.NotOwnedHere)
+            {
+                continue;
+            }
+
+            FuelTargetObservation light = need.Light;
+
+            // The permission refusals are decided before containment, so a
+            // warded light just outside the marked circle arrives here too.
+            // Outside is not hers, warded or not.
+            if (!settlement.Contains(light.Position))
+            {
+                continue;
+            }
+
+            if (!light.IsLit || light.InfiniteFuel || !light.CanRefill
+                || !(light.SecondsPerUnit > 0f)
+                || !FuelMath.AcceptsOneUnit(light.Fuel, light.MaxFuel))
+            {
+                continue;
+            }
+
+            if (SecondsLeftOf(light) < thresholds.RefuelBelowSeconds)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static int PriorityFor(float secondsLeft, in MaintenanceThresholds thresholds)
     {
         float under = thresholds.RefuelBelowSeconds - secondsLeft;

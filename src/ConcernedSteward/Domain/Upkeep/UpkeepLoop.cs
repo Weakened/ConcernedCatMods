@@ -6,6 +6,7 @@ using TheConcernedCat.ConcernedNPC.Planning;
 using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
+using TheConcernedCat.ConcernedSteward.Domain.Speech;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Identity;
@@ -66,7 +67,8 @@ internal readonly struct UpkeepTick
         IItemStorePort depot,
         IItemStorePort carrier,
         IStewardMotionPort motion,
-        NpcWorldEpoch planWorld = default)
+        NpcWorldEpoch planWorld = default,
+        MaintenanceThresholds? thresholds = null)
     {
         Now = now;
         TendingEnabled = tendingEnabled;
@@ -77,7 +79,18 @@ internal readonly struct UpkeepTick
         Carrier = carrier;
         Motion = motion;
         PlanWorld = planWorld;
+        _thresholds = thresholds ?? MaintenanceThresholds.Default;
     }
+
+    private readonly MaintenanceThresholds _thresholds;
+
+    /// <summary>When a light is due and how far it is filled, as the player
+    /// configured it (#382). Read per tick so a changed setting applies to the
+    /// next round; a round already being walked keeps the thresholds it was
+    /// planned with. A tick nobody constructed answers the shipped defaults
+    /// rather than the zeros a defaulted struct would hold.</summary>
+    public MaintenanceThresholds Thresholds =>
+        _thresholds.MostUnitsPerLight < 1 ? MaintenanceThresholds.Default : _thresholds;
 
     public float Now { get; }
 
@@ -180,6 +193,22 @@ internal sealed class UpkeepLoop
     private int _driverRoundResultObserved;
     private int _driverSkipsDurablyResolved;
 
+    // #382: the round as it was planned when the job started, what became of
+    // each of its stops, and what was fetched for it. Reconciled once, when the
+    // shared driver says the job is finished, by RoundReconciler - which is
+    // what turns "the driver ran out of steps" into a sentence a player can
+    // trust and into the decision about whether to go straight back out.
+    private readonly StewardVoice? _voice;
+    private RoundPlan _jobRound;
+    private MaintenanceThresholds _roundThresholds = MaintenanceThresholds.Default;
+    private readonly Dictionary<string, StopResult> _stopResults =
+        new Dictionary<string, StopResult>(StringComparer.Ordinal);
+    private int _stepUnitsFed;
+    private int _jobFetched;
+    private string _attention = string.Empty;
+    private float _now;
+    private string _shortSubject = string.Empty;
+
     /// <summary>Builds the loop.
     ///
     /// <b>It no longer takes an actor-mode owner, and that is the Concerned NPC
@@ -203,18 +232,24 @@ internal sealed class UpkeepLoop
         IUpkeepJournal journal,
         Action<string>? report = null,
         StewardMaintenancePlan? plan = null,
-        StewardNpcAdoption? npc = null)
+        StewardNpcAdoption? npc = null,
+        StewardVoice? voice = null)
     {
         _limits = limits;
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         _report = report;
         _plan = plan;
         _npc = npc;
+        _voice = voice;
         _throttle = new AttentionThrottle(limits.ScanIntervalSeconds * 2f);
         _retry = new BoundedRetry(limits.MaxFailuresPerPhase, limits.ScanIntervalSeconds, limits.ScanIntervalSeconds * 4f);
     }
 
     public UpkeepPhase Phase => _phase;
+
+    /// <summary>The limits this loop was built with, so a caller can hold its
+    /// own settings to the same carry.</summary>
+    public UpkeepLimits Limits => _limits;
 
     /// <summary>What he is doing, or the reason he is not. Always a sentence a
     /// player can act on: a Steward standing still without an explanation and a
@@ -239,9 +274,20 @@ internal sealed class UpkeepLoop
 
     public bool IsWorking => _phase != UpkeepPhase.Idle && _phase != UpkeepPhase.NeedsAttention;
 
+    /// <summary>Something in the settlement a person should know about that is
+    /// not a stop - lights burning low that she may not touch. Empty when there
+    /// is nothing. Unlike <see cref="UpkeepPhase.NeedsAttention"/> it does not
+    /// stop her: the rest of the settlement is still hers to look after.</summary>
+    public string Attention => _attention;
+
+    /// <summary>How the last finished maintenance round came out, reconciled
+    /// stop by stop. Null until a round has finished.</summary>
+    public RoundOutcome? LastOutcome { get; private set; }
+
     /// <summary>Advances the trip by at most one step.</summary>
     public void Tick(in UpkeepTick tick)
     {
+        _now = tick.Now;
         if (_phase == UpkeepPhase.NeedsAttention)
         {
             return;
@@ -564,34 +610,74 @@ internal sealed class UpkeepLoop
             }
         }
 
+        // The one approved container, the marked depot, for both taking and
+        // putting back. Nothing else is offered to the round, so nothing else
+        // can be drawn from or deposited into.
         var source = new SupplySighting(
             tick.Scope.DepotKey,
             tick.Depot.Describe,
             tick.Scope.DepotPoint,
             SupplyAccess.Both,
             lines);
-        FuelTargetObservation? chosen = LastScan.Next;
-        if (chosen == null)
+
+        // #382: the WHOLE settlement is judged once, every fuel together,
+        // before anything is chosen. That is what lets a shortage be said
+        // ("she needs forty resin") instead of read as "nothing to tend", and
+        // what lets the round's fuel be the one the most urgent light burns
+        // rather than whichever light happened to hold the least.
+        MaintenanceThresholds thresholds = tick.Thresholds;
+        RoundPlan whole = MaintenanceRound.Prepare(
+            offered,
+            tick.Scope.Settlement,
+            new[] { source },
+            tick.Scope.Epoch,
+            thresholds);
+        NoticeUntouchable(tick, whole, thresholds);
+
+        if (!whole.Shortfall.IsEmpty)
         {
-            _explanation = DescribeNothingToDo(LastScan);
+            SayShort(tick, whole);
+        }
+        else if (_shortSubject.Length != 0)
+        {
+            // The shortage has been met. Forget the subject that was actually
+            // said, so if it comes back it is said at once.
+            _voice?.Forget(_shortSubject);
+            _shortSubject = string.Empty;
+        }
+
+        if (!whole.IsActionable)
+        {
+            // Nothing to do, nothing marked, or nothing she can pay for at all
+            // - each with its own sentence, and the shortage already said.
+            _explanation = WithAttention(whole.Describe());
             return;
         }
 
-        _roundFuelItemName = chosen.Value.FuelItemName;
+        // One fuel per provisioning trip: the custody ledger and the durable
+        // plan record carry one item, and changing that is a save-format
+        // change this leaf does not make. The fuel is the most urgent
+        // affordable light's, so no kind of light can starve another.
+        _roundFuelItemName = whole.Stops[0].Item;
+        _roundThresholds = thresholds;
         offered = OnlyFuel(offered, _roundFuelItemName);
         _round = MaintenanceRound.Prepare(
             offered,
             tick.Scope.Settlement,
             new[] { source },
             tick.Scope.Epoch,
-            MaintenanceThresholds.Default);
+            thresholds);
         _roundNeedsRefresh = false;
         if (!_round.IsActionable)
         {
-            _explanation = _round.Describe();
+            _explanation = WithAttention(_round.Describe());
             return;
         }
 
+        _jobRound = _round;
+        _stopResults.Clear();
+        _stepUnitsFed = 0;
+        _jobFetched = 0;
         _driverRoundResultObserved = 0;
         _driverSkipsDurablyResolved = 0;
         _driver = MaintenanceJobRole.DriverFor(
@@ -604,9 +690,50 @@ internal sealed class UpkeepLoop
             LookDriven,
             () => _liveScope.Settlement,
             () => _liveScope.Epoch,
-            MaintenanceThresholds.Default);
+            thresholds);
         AdvanceDriver(tick);
     }
+
+    /// <summary>"No free fuel", said out loud: what the settlement's lights
+    /// want that no approved chest holds, and how many lights are waiting on
+    /// it. Throttled by the fuel, not the number, so a shortage that grows as
+    /// the fires burn is one sentence and not a sentence a scan.</summary>
+    private void SayShort(in UpkeepTick tick, in RoundPlan whole)
+    {
+        string line = UpkeepSpeech.Short(whole.Shortfall, whole.DeferredForMaterial);
+        string subject = UpkeepSpeech.ShortSubject(whole.Shortfall);
+        if (_shortSubject.Length != 0 && !string.Equals(_shortSubject, subject, StringComparison.Ordinal))
+        {
+            _voice?.Forget(_shortSubject);
+        }
+
+        _shortSubject = subject;
+        _voice?.Say(subject, line, tick.Now);
+        if (_throttle.ShouldNotify("short", tick.Now))
+        {
+            _report?.Invoke(line);
+        }
+    }
+
+    /// <summary>Counts the lights that are low and that she may not touch, and
+    /// says so - once per occasion - rather than falling silent about them.
+    /// </summary>
+    private void NoticeUntouchable(in UpkeepTick tick, in RoundPlan whole, in MaintenanceThresholds thresholds)
+    {
+        int untouchable = LightNeeds.LowButUntouchable(whole.Judged, tick.Scope.Settlement, thresholds);
+        if (untouchable < 1)
+        {
+            _attention = string.Empty;
+            _voice?.Forget(UpkeepSpeech.UntouchableSubject);
+            return;
+        }
+
+        _attention = UpkeepSpeech.UntouchableStatus(untouchable);
+        _voice?.Say(UpkeepSpeech.UntouchableSubject, UpkeepSpeech.Untouchable(untouchable), tick.Now);
+    }
+
+    private string WithAttention(string explanation) =>
+        _attention.Length == 0 ? explanation : explanation + " " + _attention;
 
     private static IReadOnlyList<FuelTargetObservation> OnlyFuel(
         IReadOnlyList<FuelTargetObservation> offered,
@@ -674,7 +801,7 @@ internal sealed class UpkeepLoop
                         lines),
                 },
                 _liveScope.Epoch,
-                MaintenanceThresholds.Default);
+                _roundThresholds);
             _roundNeedsRefresh = false;
         }
         catch (Exception)
@@ -714,7 +841,15 @@ internal sealed class UpkeepLoop
 
                 _driverRoundResultObserved = _driver.CompletedRounds;
                 _driverSkipsDurablyResolved = 0;
-                StopDrivenJob(tick, reason);
+
+                // The round did finish - with a stop that turned out not to
+                // need her, or one she may not touch - so its books are closed
+                // here too, and the sentence says which rather than calling a
+                // warded fire one that "no longer needed service".
+                RoundOutcome closed = CloseJobBooks(tick);
+                StopDrivenJob(
+                    tick,
+                    closed.Describe() + " The measured remainder goes back before she plans again.");
                 return;
             }
 
@@ -774,8 +909,9 @@ internal sealed class UpkeepLoop
         return false;
     }
 
-    private void ContinueDrivenAfterSkip(in UpkeepTick tick)
+    private void ContinueDrivenAfterSkip(in UpkeepTick tick, StopOutcome outcome)
     {
+        RecordActiveStop(outcome);
         _roundNeedsRefresh = true;
         _driver!.Skipped();
         _driverSkipsDurablyResolved = _driver.SkippedThisRound;
@@ -896,6 +1032,7 @@ internal sealed class UpkeepLoop
 
     private void StartDrivenService(in UpkeepTick tick, in PlannedStep step)
     {
+        _stepUnitsFed = 0;
         FuelTargetKey key = KeyFor(step.Step.Subject);
         if (key.IsEmpty || step.Step.Units < 1)
         {
@@ -905,7 +1042,7 @@ internal sealed class UpkeepLoop
 
         if (_custody.Carried < step.Step.Units)
         {
-            _driver!.Failed();
+            DriverFailed();
             StopDrivenJob(tick,
                 "The Steward carried less fuel than the planned fire stop requires.");
             return;
@@ -915,7 +1052,7 @@ internal sealed class UpkeepLoop
         if (_reservation.Take(key, StewardRole.UpkeepJobId, step.Step.Units)
             != ReservationOutcome.Taken)
         {
-            _driver!.Failed();
+            DriverFailed();
             StopDrivenJob(tick, "The Steward could not record the next planned fire.");
             return;
         }
@@ -940,29 +1077,179 @@ internal sealed class UpkeepLoop
             }
         }
 
+        // The live round is re-planned as stops are done, so a stop the job
+        // was started for may have left it; the job's own round still names it.
+        foreach (LightNeed stop in _jobRound.Stops)
+        {
+            if (string.Equals(stop.Light.Key.Value, subject, StringComparison.Ordinal))
+            {
+                return stop.Light.Key;
+            }
+        }
+
         return default;
     }
 
     private void FinishDrivenJob(in UpkeepTick tick, string reason)
     {
-        int left = _driver == null
-            ? 0
-            : _driver.LeftForAnotherRound + _driver.LastRound.LeftForAnotherRound
-                + _round.DeferredForMaterial;
+        // #382: the reconcile step. Every stop the job was planned for is
+        // accounted for - serviced, skipped, refused, failed or left for
+        // another round - against the round as it stood when the job began,
+        // because the live round is re-planned as stops are done and would
+        // forget the ones already serviced.
+        RoundOutcome outcome = CloseJobBooks(tick);
+
         _driver = null;
         _hasActiveStep = false;
         _stepUnitsRemaining = 0;
         _roundFuelItemName = string.Empty;
         _driverRoundResultObserved = 0;
         _driverSkipsDurablyResolved = 0;
-        FinishTrip(tick, reason);
-        if (left > 0 && _phase == UpkeepPhase.Idle)
+        _stopResults.Clear();
+        _jobFetched = 0;
+        _jobRound = default;
+        FinishTrip(
+            tick,
+            outcome.Planned > 0 || outcome.LeftForAnotherRound > 0 ? outcome.Describe() : reason);
+
+        // Whether to go straight back out is the outcome's decision and not the
+        // bare fact that work is left: a settlement short of resin has work
+        // left for as long as it is short, and going straight back out would
+        // re-read the same chest every tick (ARCHITECTURE §7, and
+        // A_round_that_ran_out_of_material_waits_instead_of_spinning).
+        if (outcome.AnotherRoundWouldHelp && _phase == UpkeepPhase.Idle)
         {
             _nextScanAt = tick.Now;
-            _explanation = left.ToString(CultureInfo.InvariantCulture)
-                + " fire(s) remain for another capacity-aware round.";
         }
     }
+
+    /// <summary>Closes the job's books through <see cref="RoundReconciler"/>.
+    ///
+    /// A stop the shared driver dropped before dispatching it - because its own
+    /// revalidation said it was done, gone or refused - never reaches this
+    /// loop, so it has no reported result. Rather than call it "not reached",
+    /// which would be untrue, it is looked at once more, now, with the same
+    /// revalidation the driver used.</summary>
+    private RoundOutcome CloseJobBooks(in UpkeepTick tick)
+    {
+        RoundOutcome outcome = ReconcileJob();
+        LastOutcome = outcome;
+        if (outcome.Refused > 0)
+        {
+            _voice?.Say(
+                UpkeepSpeech.UntouchableSubject, UpkeepSpeech.Untouchable(outcome.Refused), tick.Now);
+        }
+
+        return outcome;
+    }
+
+    private RoundOutcome ReconcileJob()
+    {
+        var results = new List<StopResult>(_stopResults.Values);
+        var decided = new List<LightNeed>();
+        int leftForAnotherRound = 0;
+        foreach (LightNeed stop in _jobRound.Stops)
+        {
+            if (_stopResults.ContainsKey(stop.Light.Key.Value))
+            {
+                decided.Add(stop);
+                continue;
+            }
+
+            LightVerdict verdict;
+            FuelTargetObservation? seen = null;
+            try
+            {
+                seen = LookDriven(stop.Light.Key);
+                verdict = LightRevalidation.Look(
+                    stop, seen, _liveScope.Settlement, _liveScope.Epoch, _roundThresholds);
+            }
+            catch (Exception)
+            {
+                verdict = LightVerdict.Unreadable;
+            }
+
+            if (LightRevalidation.IsSettled(verdict))
+            {
+                decided.Add(stop);
+                results.Add(new StopResult(stop.Light.Key, StopOutcome.Skipped, 0));
+            }
+            else if (verdict == LightVerdict.Refused)
+            {
+                // The revalidation's "refused" also covers a light that left
+                // the area or changed fuel. Only a permission refusal is one she
+                // "may not touch"; the rest are skips, exactly as the arrival
+                // path classes them, so one light gets one sentence whichever
+                // side noticed it.
+                FuelTargetStatus why = seen == null
+                    ? FuelTargetStatus.Unavailable
+                    : LightNeeds.Assess(
+                        seen.Value, _liveScope.Settlement, _liveScope.Epoch, _roundThresholds).Status;
+                decided.Add(stop);
+                results.Add(new StopResult(stop.Light.Key, OutcomeFor(why), 0));
+            }
+            else
+            {
+                // Still wanting fuel and never dispatched: the plan could not
+                // fit it into this job (a trip's capacity, or a chest limit),
+                // or it could not be read just now. Either way it is left for
+                // another round - which is a reason to go straight back out -
+                // and it is not a stop she failed to reach.
+                leftForAnotherRound++;
+            }
+        }
+
+        // Reconciled over the stops the job actually decided, so a light left
+        // for another round is counted once, as that, and not also as a stop
+        // she "did not reach".
+        var books = new RoundPlan(
+            _jobRound.Verdict,
+            _jobRound.Judged,
+            decided,
+            _jobRound.Sources,
+            RoundManifestArithmetic.Total(decided),
+            _jobRound.Shortfall,
+            string.Empty,
+            _jobRound.DeferredForMaterial);
+        RoundManifest fetched = _jobFetched > 0 && _roundFuelItemName.Length != 0
+            ? new RoundManifest(new[] { new RoundManifestLine(_roundFuelItemName, _jobFetched) })
+            : RoundManifest.Empty;
+        return RoundReconciler.Close(books, results, fetched, leftForAnotherRound);
+    }
+
+    /// <summary>Records what became of the stop being worked, if it is a stop.
+    /// A provisioning step is not a stop and is never recorded.</summary>
+    private void RecordActiveStop(StopOutcome outcome)
+    {
+        if (_driver == null || !_hasActiveStep || _activeStep.IsCollect)
+        {
+            return;
+        }
+
+        FuelTargetKey key = KeyFor(_activeStep.Step.Subject);
+        if (key.IsEmpty)
+        {
+            return;
+        }
+
+        _stopResults[key.Value] = new StopResult(key, outcome, _stepUnitsFed);
+    }
+
+    /// <summary>Tells the driver the current step failed, recording the stop
+    /// first when it is one.</summary>
+    private void DriverFailed()
+    {
+        RecordActiveStop(StopOutcome.Failed);
+        _driver?.Failed();
+    }
+
+    /// <summary>A stop found, on arrival, to be one she may not touch is
+    /// refused - a person's matter - and not "needed nothing". Everything else
+    /// that ends a stop on arrival is a skip.</summary>
+    private static StopOutcome OutcomeFor(FuelTargetStatus status) =>
+        status == FuelTargetStatus.AccessDenied || status == FuelTargetStatus.NotOwnedHere
+            ? StopOutcome.Refused
+            : StopOutcome.Skipped;
 
     private void StopDrivenJob(in UpkeepTick tick, string reason)
     {
@@ -1104,7 +1391,7 @@ internal sealed class UpkeepLoop
                 + " she is carrying back to the chest.";
             if (_driver != null)
             {
-                _driver.Failed();
+                DriverFailed();
                 StopDrivenJob(tick, explanation);
                 return;
             }
@@ -1176,7 +1463,7 @@ internal sealed class UpkeepLoop
                 {
                     if (measurement.Moved != planned)
                     {
-                        _driver.Failed();
+                        DriverFailed();
                         StopDrivenJob(
                             tick,
                             "The supply chest provided only "
@@ -1186,6 +1473,7 @@ internal sealed class UpkeepLoop
                         return;
                     }
 
+                    _jobFetched += measurement.Moved;
                     _roundNeedsRefresh = true;
                     _driver.Done();
                     _reservation.Release(StewardRole.UpkeepJobId);
@@ -1236,7 +1524,7 @@ internal sealed class UpkeepLoop
         {
             if (_driver != null)
             {
-                _driver.Failed();
+                DriverFailed();
                 StopDrivenJob(
                     tick,
                     "The planned fire stop had no measured fuel left to carry.");
@@ -1264,7 +1552,7 @@ internal sealed class UpkeepLoop
                 + "), so the Steward is taking the wood back.";
             if (_driver != null)
             {
-                _driver.Failed();
+                DriverFailed();
                 StopDrivenJob(tick, reason);
                 return;
             }
@@ -1284,7 +1572,7 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
-                ContinueDrivenAfterSkip(tick);
+                ContinueDrivenAfterSkip(tick, StopOutcome.Skipped);
                 return;
             }
 
@@ -1308,7 +1596,7 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
-                ContinueDrivenAfterSkip(tick);
+                ContinueDrivenAfterSkip(tick, OutcomeFor(status));
                 return;
             }
 
@@ -1345,7 +1633,7 @@ internal sealed class UpkeepLoop
                 + "and is taking the wood back.";
             if (_driver != null)
             {
-                _driver.Failed();
+                DriverFailed();
                 StopDrivenJob(tick, reason);
                 return;
             }
@@ -1428,8 +1716,10 @@ internal sealed class UpkeepLoop
                 if (_driver != null && _hasActiveStep)
                 {
                     _stepUnitsRemaining--;
+                    _stepUnitsFed++;
                     if (_stepUnitsRemaining == 0)
                     {
+                        RecordActiveStop(StopOutcome.Serviced);
                         _roundNeedsRefresh = true;
                         _driver.Done();
                         _reservation.Release(StewardRole.UpkeepJobId);
@@ -1454,7 +1744,10 @@ internal sealed class UpkeepLoop
 
                 if (_driver != null && _hasActiveStep)
                 {
-                    ContinueDrivenAfterSkip(tick);
+                    // A fire that stops accepting part way was still serviced
+                    // with what it took; one that took nothing needed nothing.
+                    ContinueDrivenAfterSkip(
+                        tick, _stepUnitsFed > 0 ? StopOutcome.Serviced : StopOutcome.Skipped);
                     return;
                 }
 
@@ -1755,6 +2048,12 @@ internal sealed class UpkeepLoop
         _driverSkipsDurablyResolved = 0;
         _liveFires = null;
         _liveDepot = null;
+        _stopResults.Clear();
+        _jobRound = default;
+        _jobFetched = 0;
+        _attention = string.Empty;
+        _shortSubject = string.Empty;
+        LastOutcome = null;
         _reservation.Release(StewardRole.UpkeepJobId);
         _nextScanAt = 0f;
         _retry.Reset();
@@ -1864,6 +2163,7 @@ internal sealed class UpkeepLoop
 
         string had = _custody.Describe();
         _custody.AcknowledgeLoss();
+        _voice?.Forget(UpkeepSpeech.StoppedSubject);
         _phase = UpkeepPhase.Idle;
         _explanation = "Waiting.";
         _nextScanAt = 0f;
@@ -2039,9 +2339,18 @@ internal sealed class UpkeepLoop
         _stepUnitsRemaining = 0;
         _reservation.Release(StewardRole.UpkeepJobId);
         _plan?.NeedsAttention(reason);
+        bool already = _phase == UpkeepPhase.NeedsAttention;
         _phase = UpkeepPhase.NeedsAttention;
         _explanation = reason;
         _report?.Invoke(reason);
+
+        // Said to the player as well as logged: she will not move again until
+        // somebody runs "cs_steward resolve", and a stop nobody hears about is
+        // indistinguishable from a broken mod.
+        if (!already)
+        {
+            _voice?.Say(UpkeepSpeech.StoppedSubject, UpkeepSpeech.Stopped(reason), _now);
+        }
     }
 
     /// <summary>Stops immediately for an external custody event such as the

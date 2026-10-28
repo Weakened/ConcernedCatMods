@@ -30,9 +30,13 @@ public sealed class StewardMaintenancePlanTests
             ProductSources.Product, "Domain", "Upkeep", "UpkeepLoop.cs"));
 
         Assert.Contains("new StewardMaintenancePlan(recordRoot, _npc.Registry, _npc.Identity)", runtime);
-        Assert.Contains("new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan, _npc)", runtime);
+        Assert.Contains("new UpkeepLoop(", runtime);
+        Assert.Contains(
+            "UpkeepLimits.WithCarry(_settings.CarryPerTrip.Value), _journal, Report, _plan, _npc, _voice)",
+            runtime);
         Assert.Contains("_plan.OnWorldLoaded(scope.Value, planEvidence, _pack, _carryingName)", runtime);
-        Assert.Contains("_npc.World));", runtime);
+        Assert.Contains("_npc.World,", runtime);
+        Assert.Contains("CurrentThresholds()));", runtime);
         Assert.Contains("_loop.RequireAttention(", runtime);
 
         Assert.Contains("_plan.TryBegin(", loop);

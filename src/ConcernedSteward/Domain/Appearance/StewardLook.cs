@@ -251,4 +251,12 @@ internal static class StewardLooks
     /// Warm rather than white, so she reads as fair in firelight, which is the
     /// only light anybody will see her in.</summary>
     internal const string DefaultHairColour = "0.93,0.86,0.62";
+
+    /// <summary>The owner's choice for her hair (#382, locked 2026-09-20): the
+    /// style vanilla's character screen calls "Matronly". This is the game's own
+    /// customization token for it, read from the installed 1.0.14 build's
+    /// localization table (<c>customization_hair12</c> = "Matronly"), not a
+    /// guessed prefab name; the prefab is found by this token at run time.
+    /// </summary>
+    internal const string DefaultHairStyle = "$customization_hair12";
 }
