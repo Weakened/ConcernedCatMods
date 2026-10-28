@@ -93,6 +93,11 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SurveyScanner _surveyScanner;
     private readonly SurveyRulePersistence _surveyRulePersistence;
     private readonly SurveyRejectedPersistence _surveyRejectedPersistence;
+
+    // #296: the player's drawn work areas for the current world, published
+    // read-only as concernedcat.workarea/1.
+    private readonly WorkAreaPersistence _workAreaPersistence;
+    private readonly WorkAreaStore _workAreas = new();
     private readonly RoutePersistence _routePersistence;
     private readonly RouteOverlayRenderer _routeRenderer;
     private readonly OverlayPanelRelabel _overlayRelabel;
@@ -333,6 +338,7 @@ internal sealed class CartographerRuntime : IDisposable
         _quickPinCapture = new QuickPinCapture(settings, log);
         _surveyRulePersistence = new SurveyRulePersistence(log);
         _surveyRejectedPersistence = new SurveyRejectedPersistence(log);
+        _workAreaPersistence = new WorkAreaPersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
         _surveyScanner = new SurveyScanner(settings, log);
         _routePersistence = new RoutePersistence(log);
@@ -1213,6 +1219,7 @@ internal sealed class CartographerRuntime : IDisposable
             _pinAdapter.Reset();
             SaveIfDirty();
             SavePinsSnapshot();
+            SaveWorkAreasIfDirty();
             return;
         }
 
@@ -1299,6 +1306,7 @@ internal sealed class CartographerRuntime : IDisposable
             _pinPersistence.FlushJournal();
             _routePersistence.FlushJournal();
             SaveRejectedIfDirty();
+            SaveWorkAreasIfDirty();
         }
     }
 
@@ -2707,6 +2715,60 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    private void SaveWorkAreasIfDirty()
+    {
+        if (_workAreas.IsDirty && _worldUid is long uid)
+        {
+            if (_workAreaPersistence.Save(uid, _workAreas.Areas))
+            {
+                _workAreas.MarkClean();
+            }
+        }
+    }
+
+    /// <summary>#296: what <c>concernedcat.workarea/1</c> answers from. Null
+    /// while no world is bound, which the contract reports as Unavailable,
+    /// never as an empty list.</summary>
+    internal (long WorldUid, IReadOnlyList<WorkArea> Areas)? WorkAreaSnapshot()
+    {
+        if (_disposed || !_mapReady || _worldUid is not long uid)
+        {
+            return null;
+        }
+
+        return (uid, _workAreas.Areas);
+    }
+
+    /// <summary>Backs the `cc_areas` console command (#296). Guarded by
+    /// <see cref="GuardConsoleCommand"/> (#389).</summary>
+    internal string ExecuteAreaCommand(string[] args)
+    {
+        return GuardConsoleCommand("cc_areas", args, ExecuteAreaCommandCore);
+    }
+
+    private string ExecuteAreaCommandCore(string[] args, string subcommand)
+    {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
+        if (_disposed || !_mapReady || _worldUid is null)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        if (_workAreaPersistence.IsReadOnly(_worldUid.Value))
+        {
+            return "This world's work areas could not be read (or were written by a newer version), so they are left untouched this session.";
+        }
+
+        string reply = WorkAreaCommands.Execute(
+            _workAreas, _routeStore.Living, subcommand, ConsoleArguments.Remainder(args), Guid.NewGuid(), DateTime.UtcNow);
+        SaveWorkAreasIfDirty();
+        return reply;
+    }
+
     private void SaveRejectedIfDirty()
     {
         if (_surveyEngine.RejectedDirty && _worldUid is long uid)
@@ -3258,6 +3320,7 @@ internal sealed class CartographerRuntime : IDisposable
         SaveIfDirty();
         SavePinsSnapshot();
         SaveRejectedIfDirty();
+        SaveWorkAreasIfDirty();
         _pipeline?.EndAllStrokes();
         _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
@@ -3474,10 +3537,12 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         SaveRejectedIfDirty();
+        SaveWorkAreasIfDirty();
         SaveIfDirty();
         SavePinsSnapshot();
 
         _worldUid = uid;
+        _workAreas.Load(_workAreaPersistence.Load(uid));
         _atlas = _persistence.Load(uid);
         _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);

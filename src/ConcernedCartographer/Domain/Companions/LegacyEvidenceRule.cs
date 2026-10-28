@@ -89,6 +89,9 @@ internal static class CartographerWorldSidecars
         ".routes-atlas.tsv",
         ".survey-rejected.tsv",
         ".terrain-intent.tsv",
+
+        // #296: the work areas the player drew in this world.
+        ".work-areas.tsv",
     };
 }
 

@@ -33,6 +33,7 @@
          compiling it here would put a contract in a DLL that never speaks it. -->
     <Compile Include="..\Shared\Interop\CapabilityMap.cs" Link="Interop/CapabilityMap.cs" />
     <Compile Include="..\Shared\Interop\Presence\**\*.cs" LinkBase="Interop/Presence" />
+    <Compile Include="..\Shared\Interop\WorkArea\**\*.cs" LinkBase="Interop/WorkArea" />
   </ItemGroup>
 
   <ItemGroup>

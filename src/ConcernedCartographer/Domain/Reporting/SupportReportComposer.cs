@@ -72,6 +72,7 @@ internal static class SupportReportComposer
             ".routes-atlas.tsv" => Describe(RouteCodec.Parse(contentLines)),
             ".survey-rejected.tsv" => DescribeRejected(contentLines),
             ".terrain-intent.tsv" => DescribeTerrainIntent(contentLines),
+            ".work-areas.tsv" => DescribeWorkAreas(contentLines),
             _ => DescribeRows(contentLines),
         };
 
@@ -136,6 +137,16 @@ internal static class SupportReportComposer
     {
         var entries = SurveyRejectedCodec.Parse(contentLines, out int malformedRows);
         return $"{entries.Count} rejected, {malformedRows} malformed";
+    }
+
+    /// <summary>#296: counts only. An area's name is the player's own words
+    /// and its boundary is a place in their world; neither belongs in a
+    /// report.</summary>
+    private static string DescribeWorkAreas(IReadOnlyList<string> contentLines)
+    {
+        List<WorkArea> areas = WorkAreaCodec.Parse(contentLines, out int malformedRows, out bool unsupported);
+        string version = unsupported ? ", unsupported version" : "";
+        return $"{areas.Count} areas, {malformedRows} malformed{version}";
     }
 
     private static string DescribeTerrainIntent(IReadOnlyList<string> contentLines)

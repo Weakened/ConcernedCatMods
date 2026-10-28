@@ -22,12 +22,15 @@ public sealed class Plugin : BaseUnityPlugin
     private CartographerRuntime? _runtime;
     private CrashReportingHub? _crashHub;
     private PresenceCapabilityPublisher? _presenceCapability;
+    private WorkAreaCapabilityPublisher? _workAreaCapability;
+    private IReadOnlyDictionary<string, object> _capabilities = NoCapabilities;
 
-    /// <summary>What other Concerned Cat mods can call at runtime (#317). Read
-    /// by GUID and by name, never by reference: no product references another
-    /// at compile time, and only mscorlib types cross.</summary>
-    public IReadOnlyDictionary<string, object> ConcernedCatCapabilities =>
-        _presenceCapability?.Capabilities ?? NoCapabilities;
+    /// <summary>What other Concerned Cat mods can call at runtime (#317,
+    /// #296). Read by GUID and by name, never by reference: no product
+    /// references another at compile time, and only mscorlib types cross.
+    /// Each capability is published independently: one failing to build
+    /// leaves the others in place.</summary>
+    public IReadOnlyDictionary<string, object> ConcernedCatCapabilities => _capabilities;
 
     private void Awake()
     {
@@ -72,6 +75,22 @@ public sealed class Plugin : BaseUnityPlugin
                 $"Presence capability not published this session; other mods will survey solo: {SafeLogText.Brief(exception)}");
         }
 
+        // #296: publish the work areas the player drew, read-only. A consumer
+        // treats them as intent and validates every order itself.
+        try
+        {
+            _workAreaCapability = new WorkAreaCapabilityPublisher(
+                () => _runtime?.WorkAreaSnapshot(), PluginVersion, Logger);
+        }
+        catch (System.Exception exception)
+        {
+            _workAreaCapability = null;
+            Logger.LogWarning(
+                $"Work-area capability not published this session; other mods will use their own areas: {SafeLogText.Brief(exception)}");
+        }
+
+        _capabilities = ComposeCapabilities(_presenceCapability, _workAreaCapability);
+
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
         // RC15: vanilla loads the character's saved map AFTER Minimap.Start
         // (LoadMapData → SetMapData → ClearPins + re-AddPin), destroying
@@ -87,6 +106,26 @@ public sealed class Plugin : BaseUnityPlugin
         RegisterConsoleCommands();
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
+    }
+
+    private static IReadOnlyDictionary<string, object> ComposeCapabilities(
+        PresenceCapabilityPublisher? presence, WorkAreaCapabilityPublisher? workAreas)
+    {
+        var all = new Dictionary<string, object>(System.StringComparer.Ordinal);
+        if (presence != null)
+        {
+            foreach (KeyValuePair<string, object> entry in presence.Capabilities)
+            {
+                all[entry.Key] = entry.Value;
+            }
+        }
+
+        if (workAreas != null)
+        {
+            all[WorkAreaCapabilityPublisher.Key] = workAreas.Endpoint;
+        }
+
+        return all.Count == 0 ? NoCapabilities : new ReadOnlyDictionary<string, object>(all);
     }
 
     /// <summary>Adds every console command to the game's own command table.
@@ -108,6 +147,7 @@ public sealed class Plugin : BaseUnityPlugin
             new RouteToolsCommand(_runtime!),
             new SyncToolsCommand(_runtime!),
             new CompanionToolsCommand(_runtime!),
+            new AreaToolsCommand(_runtime!),
         };
 
         var names = new string[commands.Length];
@@ -309,6 +349,7 @@ public sealed class Plugin : BaseUnityPlugin
         MinimapManager.OnVanillaMapAvailable -= HandleMapAvailable;
         MinimapManager.OnVanillaMapDataLoaded -= HandleMapDataLoaded;
         _presenceCapability?.Shutdown();
+        _workAreaCapability?.Shutdown();
         _presenceCapability = null;
         _runtime?.Dispose();
         _runtime = null;
