@@ -25,7 +25,7 @@ internal enum LadderUseOutcome
 /// that could be got wrong is here where a test can hold it:
 ///
 /// <list type="bullet">
-/// <item><b><c>Ladders/Enabled = false</c> is vanilla.</b> Not "vanilla-ish":
+/// <item><b><c>Ladders/PlayerClimbing = false</c> is vanilla.</b> Not "vanilla-ish":
 /// the prefix hands the method straight back, and at load with the feature off
 /// the patch is never installed at all.</item>
 /// <item><b><c>Ladders/UseTeleport = true</c> is vanilla too</b>, in every

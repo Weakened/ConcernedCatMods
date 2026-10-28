@@ -8,10 +8,11 @@ namespace TheConcernedCat.Ladders;
 /// The settings file belongs to another workstream (LADDERS.md §10: CF-LAD-004
 /// owns settings, the lead owns the settings file), so this is deliberately a
 /// plain object with the spec's defaults rather than anything bound to BepInEx.
-/// Whoever binds `Ladders/Enabled`, `AutoMount`, `ClimbSpeed`, `StaminaCost` and
-/// `UseTeleport` writes into an instance of this; until then the defaults are
-/// exactly the table in LADDERS.md §8, so the default experience needs no
-/// configuration.
+/// Whoever binds the product's switches (Foreman: `Ladders/PlayerClimbing`,
+/// `AutoMount`, `ClimbSpeed`, `StaminaCost` and `UseTeleport`) writes into an
+/// instance of this before anything reads it. The defaults here are the climb's
+/// own, not a product's: Foreman's switch is off by default since #436 and
+/// overwrites <see cref="Enabled"/> before installing anything.
 ///
 /// Values are read once per decision rather than copied into the climb, so
 /// switching ladders off ends a climb in progress on the next frame instead of
