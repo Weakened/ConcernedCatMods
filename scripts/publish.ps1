@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
-    [ValidateSet("ConcernedCartographer", "ConcernedTeamster")]
+    [ValidateSet("ConcernedCartographer", "ConcernedTeamster", "ConcernedSteward", "ConcernedNPC")]
     [string]$Product = "ConcernedCartographer"
 )
 
@@ -22,6 +22,8 @@ if ([string]::IsNullOrWhiteSpace($env:TCLI_AUTH_TOKEN)) {
 $productSlug = @{
     ConcernedCartographer = "cartographer"
     ConcernedTeamster     = "teamster"
+    ConcernedSteward      = "steward"
+    ConcernedNPC          = "concernednpc"
 }[$Product]
 
 Push-Location $root
@@ -42,6 +44,8 @@ try {
     $tagPrefix = @{
         ConcernedCartographer = "concerned-cartographer"
         ConcernedTeamster     = "concerned-teamster"
+        ConcernedSteward      = "concerned-steward"
+        ConcernedNPC          = "concerned-npc"
     }[$Product]
     Write-Host "Published $Product $Version. Create the tag $tagPrefix/v$Version after verifying the listing."
 }

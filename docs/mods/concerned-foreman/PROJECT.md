@@ -33,6 +33,16 @@ DLL by one `<Compile Include>` line.
 
 ---
 
+## Ladders: superseded for players by Concerned Ladders (#436)
+
+Player ladder climbing is owned by **Concerned Ladders** (published 1.0.0, 2026-10-27). Foreman's own player climb
+(#325–#328, built in #331/#332/#335/#369) is superseded and is **off by default** under `Ladders/PlayerClimbing`, because
+Concerned Ladders refuses to run while Foreman's motor is installed. With the switch off Foreman patches no ladder.
+Foreman keeps only the worker-traversal seam that #334 may use later. No compile-time reference to Concerned Ladders
+exists or is permitted. Details and the config-migration decision: `LADDERS.md` (top).
+
+---
+
 ## What it does
 
 ### Causal building diagnostics (the differentiator)

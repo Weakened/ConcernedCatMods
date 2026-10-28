@@ -28,9 +28,10 @@ namespace TheConcernedCat.ConcernedForeman;
 /// which touches no world state until a person turns it on — and ladder
 /// climbing (#326, #328).
 ///
-/// Ladder climbing is the one thing here that patches the game at load, and
-/// only ever the local player's own motor and the ladder's own Use: with
-/// `Ladders/Enabled = false` nothing is patched at all. Nothing in this plugin
+/// Ladder climbing is the one thing here that can patch the game at load, and
+/// only ever the local player's own motor and the ladder's own Use. It is off by
+/// default since #436 — player climbing belongs to Concerned Ladders — and with
+/// `Ladders/PlayerClimbing = false` nothing is patched at all. Nothing in this plugin
 /// creates, moves, damages or writes to a piece, and no ladder is changed by
 /// climbing it.</summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
@@ -310,7 +311,8 @@ public sealed class Plugin : BaseUnityPlugin
     /// vanilla: if the game's own motor cannot be bound, nothing is patched,
     /// ladders keep teleporting, and the reason is logged once.
     ///
-    /// With `Ladders/Enabled = false` at startup <b>no patch is installed at
+    /// With `Ladders/PlayerClimbing = false` at startup — the default since
+    /// #436 — <b>no patch is installed at
     /// all</b> — not the motor's two, not the interaction's one — and the game
     /// behaves as if Concerned Foreman were not here.</summary>
     private void InstallLadders()
@@ -322,9 +324,17 @@ public sealed class Plugin : BaseUnityPlugin
         _ladders = new ClimbController(options, message => Logger.LogInfo(message));
         if (!options.Enabled)
         {
-            Logger.LogInfo("Ladder climbing is off in the config; ladders behave exactly as the game ships them.");
+            Logger.LogInfo(
+                "Foreman's ladder climbing is off (Ladders/PlayerClimbing, the default); Foreman patches no ladder. " +
+                "Player ladder climbing is provided by the separate Concerned Ladders mod.");
             return;
         }
+
+        // Opted in deliberately. Say once what that costs, because the other
+        // product's refusal is shown by the other product.
+        Logger.LogInfo(
+            "Foreman's ladder climbing is on (Ladders/PlayerClimbing = true). Concerned Ladders, if installed, " +
+            "will not run while this motor is installed.");
 
         if (!_ladders.Install(PluginGuid + ".ladders"))
         {

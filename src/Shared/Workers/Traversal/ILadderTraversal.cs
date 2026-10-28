@@ -169,7 +169,7 @@ internal readonly struct TraversalRequest
     /// <summary>Where the actor's feet are.</summary>
     public WorkPoint Standing { get; }
 
-    /// <summary>The feature switch: <c>Ladders/Enabled</c> for a player.</summary>
+    /// <summary>The feature switch: <c>Ladders/PlayerClimbing</c> for a player (off by default since #436).</summary>
     public bool FeatureEnabled { get; }
 
     /// <summary>The worker-authority verdict this peer computed just now.
