@@ -2,7 +2,7 @@
 param(
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
-    [ValidateSet("ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman", "ConcernedSteward", "ConcernedNPC")]
+    [ValidateSet("ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman", "ConcernedSteward", "ConcernedNPC", "ConcernedLadders")]
     [string]$Product = "ConcernedCartographer"
 )
 
@@ -22,6 +22,7 @@ $productSlug = @{
     ConcernedForeman      = "foreman"
     ConcernedSteward      = "steward"
     ConcernedNPC          = "concernednpc"
+    ConcernedLadders      = "ladders"
 }[$Product]
 # Under Set-StrictMode a missing key yields $null, PowerShell drops the null
 # argument entirely, and validate_repo.py then fails on a confusing argparse
