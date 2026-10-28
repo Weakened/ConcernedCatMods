@@ -287,7 +287,10 @@ PROVIDER_FLOORS = {
 }
 PROVIDER_FLOOR_DECLARATION = re.compile(
     r"\bFloorVersion\s*=\s*new\s+(?:System\s*\.\s*)?Version\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)")
-PROVIDER_FLOOR_ANY = re.compile(r"\bFloorVersion\s*=(?![=>])")
+# Any declaration of a FloorVersion, in any form: a field or property initialiser,
+# an expression body, or an auto-property. A floor written as `=> new Version(9, 0, 0)`
+# in an unlisted file is a floor nobody compares, exactly like one written with `=`.
+PROVIDER_FLOOR_ANY = re.compile(r"(?<![.\w])FloorVersion\s*(?:=(?!=)|\{\s*get\s*;)")
 PROVIDER_SHIPPED_VERSION = re.compile(r'^versionNumber\s*=\s*"(\d+)\.(\d+)\.(\d+)"', re.MULTILINE)
 
 
@@ -300,7 +303,9 @@ def check_provider_floors_are_shipped(errors: list[str]) -> list[str]:
     seen: set[str] = set()
     for found in sorted(src.rglob("*.cs")):
         rel = found.relative_to(src).as_posix()
-        if any(part in ("obj", "bin") for part in found.relative_to(src).parts):
+        parts = found.relative_to(src).parts
+        if any(part in ("obj", "bin") for part in parts) or parts[0].endswith(".Tests"):
+            # Test projects echo a floor to assert on it; they gate nothing.
             continue
         code = _strip_cs_comments(found.read_text(encoding="utf-8-sig"))
         if not PROVIDER_FLOOR_ANY.search(code):

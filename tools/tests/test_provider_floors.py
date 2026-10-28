@@ -72,6 +72,7 @@ class ProviderFloorsAreShipped(unittest.TestCase):
     def test_teamster_shipping_below_the_floor_is_refused(self):
         # All three spellings move together, so the package check stays green and
         # only the floor rule can see it - the shape #369 actually had.
+        swapped = 0
         for rel in (("ConcernedTeamster.csproj",), ("Package", "thunderstore.toml"), ("Plugin.cs",)):
             path = os.path.join(TEAMSTER, *rel)
             with open(path, encoding="utf-8-sig", newline="") as handle:
@@ -79,7 +80,11 @@ class ProviderFloorsAreShipped(unittest.TestCase):
             for old in ("<Version>1.0.5</Version>", 'versionNumber = "1.0.5"', 'PluginVersion = "1.0.5"'):
                 if old in text:
                     self.swap(path, old, old.replace("1.0.5", "1.0.4"))
+                    swapped += 1
                     break
+        # All three, or the package check would refuse the plant for a
+        # different reason and this would prove nothing about the floor rule.
+        self.assertEqual(3, swapped, "Teamster's version did not move in all three places")
         self.assert_refused("Teamster shipping below the haul floor passed", contains="ships 1.0.4")
 
     def test_the_restock_floor_is_held_to_the_same_rule(self):
@@ -106,6 +111,22 @@ class ProviderFloorsAreShipped(unittest.TestCase):
                          "    public static readonly System.Version FloorVersion = new System.Version(99, 0, 0);\n}\n")
         self._planted.append(path)
         self.assert_refused("an unlisted floor passed", contains="does not know")
+
+    def test_a_new_unlisted_floor_with_an_expression_body_is_refused(self):
+        path = os.path.join(TEAMSTER, "Domain", "ZzArrowFloor.cs")
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write("namespace Zz;\ninternal static class ZzArrowGate\n{\n"
+                         "    public static System.Version FloorVersion => new System.Version(99, 0, 0);\n}\n")
+        self._planted.append(path)
+        self.assert_refused("an unlisted expression-bodied floor passed", contains="does not know")
+
+    def test_a_new_unlisted_floor_as_an_auto_property_is_refused(self):
+        path = os.path.join(TEAMSTER, "Domain", "ZzAutoFloor.cs")
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write("namespace Zz;\ninternal static class ZzAutoGate\n{\n"
+                         "    public static System.Version FloorVersion { get; } = new System.Version(99, 0, 0);\n}\n")
+        self._planted.append(path)
+        self.assert_refused("an unlisted auto-property floor passed", contains="does not know")
 
     def test_a_floor_spelled_so_it_cannot_be_read_is_refused(self):
         # Four components, or a parse, would leave the number unread - and an
