@@ -928,9 +928,9 @@ class CollectionTourIsBounded(CarveOutFixture):
         # every loaded network object, so a container is one GetComponent away.
         self.swap_in(
             SURVEY,
-            "            Vector3 position = view.transform.position;",
-            "            Container? found = view.GetComponent<Container>();\n"
-            "            Vector3 position = view.transform.position;")
+            "            judged++;",
+            "            judged++;\n"
+            "            Container? found = view.GetComponent<Container>();")
         self.assert_refused("the survey reached a container out of the scene", marker="#381 destination audit",
                             contains="reaches a container")
 

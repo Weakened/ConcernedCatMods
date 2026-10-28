@@ -813,10 +813,11 @@ game's. Every unreadable number is a load of nothing, and a tour that would carr
 - **A load is at most 24 sources.** The driver orders at most `StopSequencer.MostStopsPerRound` (24) stops a round
   and keeps the rest for the next round, which numbers its loads from zero again - so a load bigger than that is walked
   as 24, taken to the chest, and the rest is the next load. Still a batch, never one source a trip; with vanilla's
-  numbers (225 units a load, one unit a source) this cap, not the weight, is usually what sizes a trip. The driver's
-  round cap (8) bounds one tour at about 8 x 24 sources, after which it stops and says so; `start` again carries on.
+  numbers (225 units a load, one unit a source) this cap, not the weight, is usually what sizes a trip. A tour's job
+  gets enough rounds (14) to walk a whole look, so a look cut short at the ceiling really is followed by the next look.
 - **Asking again is throttled.** When the driver says "wait", the tour asks again after a second, not every tick
-  (each ask is a fresh look at the area), and gives up after two minutes without a step, saying why.
+  (each ask is a fresh look at the area), and gives up after two minutes without a step, saying why - taking what it
+  collected to the chest first, like any other end of a tour.
 - **A mixed load holds a slot back** for every material after the first, so a load of stone and wood is never sized
   to more stacks than he has room for.
 - **The chest's position is read once, at start.** A chest is a fixed piece; one that is moved or rebuilt is

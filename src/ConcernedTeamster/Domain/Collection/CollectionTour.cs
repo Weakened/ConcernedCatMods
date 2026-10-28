@@ -465,9 +465,20 @@ internal sealed class CollectionTour
             }
             else if (now - _waitingSince >= _limits.MostWaitingSeconds)
             {
-                Stop("he waited too long for the job to give him something to do" +
+                // Through End, not Stop: a load collected before the wait still
+                // makes its trip to the chest.
+                _waitingSince = float.NaN;
+                try
+                {
+                    _pump.Abandon();
+                }
+                catch (Exception)
+                {
+                    // The job is being given up either way.
+                }
+
+                return End(standingAt, now, "he waited too long for the job to give him something to do" +
                     (advance.Reason.Length == 0 ? "" : " (" + advance.Reason + ")"));
-                return TourInstruction.Nothing;
             }
 
             _askAfter = now + _limits.WaitRetrySeconds;

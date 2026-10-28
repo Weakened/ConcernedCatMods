@@ -2823,7 +2823,8 @@ TEAMSTER_WARD_QUERY = re.compile(r"\bPrivateArea\s*\.\s*CheckAccess\s*\(")
 # The two spellings that would hide a ward query from the rule above: calling it
 # unqualified through `using static PrivateArea;`, or through an alias. Neither
 # is needed for anything, so both are refused outright.
-TEAMSTER_WARD_HIDDEN = re.compile(r"\busing\s+static\s+PrivateArea\b|\busing\s+\w+\s*=\s*PrivateArea\s*;")
+TEAMSTER_WARD_HIDDEN = re.compile(
+    r"\busing\s+static\s+(?:global\s*::\s*)?PrivateArea\b|\busing\s+\w+\s*=\s*(?:global\s*::\s*)?PrivateArea\s*;")
 TEAMSTER_WARD_QUIET = re.compile(r"\bflash\s*:\s*false\b")
 
 
@@ -2899,9 +2900,12 @@ TEAMSTER_CONTAINER_REACH = re.compile(
     r"<\s*Container\s*>|\btypeof\s*\(\s*Container\s*\)|"
     # Every scene-wide search Unity offers, "...All" and "...ByType" included.
     r"\bFind(?:Any|First)?Objects?(?:OfType|ByType)(?:All)?\b|"
-    # A container reached by a cast, a type test, a string, or an alias.
+    # A container reached by a cast, a type test, or an alias. And no component
+    # is looked up by NAME anywhere in Teamster - a string-named GetComponent is
+    # refused whatever it names, as a policy, because a name is invisible to
+    # every type-shaped rule here.
     r"\bas\s+Container\b|\bis\s+Container\b|\bGetComponent\w*\s*\(\s*\"|"
-    r"\busing\s+\w+\s*=\s*Container\s*;")
+    r"\busing\s+\w+\s*=\s*(?:global\s*::\s*)?Container\s*;")
 TEAMSTER_CONTAINER_REACH_SITES = (
     ("Adapters/Workers/ContainerPermissionRuntime.cs",
      re.compile(r"\bhovered\s*\.\s*GetComponentInParent\s*<\s*Container\s*>\s*\(\s*\)"), 1),

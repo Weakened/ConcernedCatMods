@@ -408,6 +408,48 @@ public sealed class CollectionTourTests
     }
 
     [Fact]
+    public void A_tour_that_waits_too_long_still_takes_its_load_to_the_chest()
+    {
+        var pump = new ThenWaitPump(Stop("a", 0, 10f));
+        var tour = new CollectionTour(pump, Limits, Chest, startWithDeposit: false);
+
+        var orders = new List<string>();
+        CollectionPoint at = new CollectionPoint(0f, 0f, 0f);
+        for (float now = 0f; now < 400f && !tour.IsOver; now += 0.5f)
+        {
+            TourInstruction instruction = tour.Tick(at, now);
+            if (instruction.Order == TourOrder.Walk) { at = instruction.Target; }
+            if (instruction.Order == TourOrder.Pick) { orders.Add("pick"); tour.PickEnded(TourPickEnd.Took, 1); }
+            if (instruction.Order == TourOrder.Deposit) { orders.Add("deposit"); tour.DepositEnded(TourDepositEnd.Emptied, ""); }
+        }
+
+        Assert.Equal(new[] { "pick", "deposit" }, orders.ToArray());
+        Assert.Equal(TourPhase.Stopped, tour.Phase);
+        Assert.Contains("waited too long", tour.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>Hands out one step, then says "wait" for ever.</summary>
+    private sealed class ThenWaitPump : ITourPump
+    {
+        private readonly TourStep _step;
+        private bool _done;
+
+        public ThenWaitPump(TourStep step) => _step = step;
+
+        public TourAdvance Next(CollectionPoint standingAt) =>
+            !_done ? new TourAdvance(TourProgress.Do, _step, true, string.Empty)
+                   : new TourAdvance(TourProgress.Waiting, default, false, "nothing yet");
+
+        public void Done() => _done = true;
+
+        public void Skipped() => _done = true;
+
+        public void Failed() => _done = true;
+
+        public void Abandon() { }
+    }
+
+    [Fact]
     public void The_step_cap_stops_a_tour_that_never_ends()
     {
         var steps = new List<TourStep>();

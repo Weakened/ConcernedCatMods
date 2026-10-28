@@ -66,6 +66,13 @@ internal sealed partial class GunnarCollectionRuntime
     /// with room to spare, rather than exactly at the library's default.</summary>
     private static readonly int TourAllowance = (4 * CollectionLimits.Default.MostCandidatesPerSurvey) + 128;
 
+    /// <summary>Enough rounds to walk a whole look: the driver orders at most 24
+    /// stops a round, so a look of MostCandidatesPerSurvey sources needs that
+    /// many rounds and a few to spare - otherwise the round cap, not the end of
+    /// the look, would end every big tour, and the "look again" path would
+    /// never be reached.</summary>
+    private static readonly int TourRounds = (CollectionLimits.Default.MostCandidatesPerSurvey / 24) + 4;
+
     private Func<bool> _cartHeld = () => true;
 
     /// <summary>Whether a tour is running. The ordered pick and deposit refuse
@@ -530,6 +537,7 @@ internal sealed partial class GunnarCollectionRuntime
                     world,
                     new NpcCarryCapacity(capacity),
                     new JobStepActions("take", "pick"),
+                    rounds: TourRounds,
                     allowance: TourAllowance),
                 job,
                 NpcRoleRegistry.Shared);
@@ -551,6 +559,13 @@ internal sealed partial class GunnarCollectionRuntime
 
             Vector3 chest = _destination!.transform.position;
             _tourBody = BodyOf(worker);
+            if (_tourBody == ZDOID.None)
+            {
+                pump.Abandon();
+                _lease.Release();
+                return "Gunnar's body has no network record this client can name, so no tour starts.";
+            }
+
             _lastDriveAt = Time.time;
             _tourPump = pump;
             _tour = new CollectionTour(
