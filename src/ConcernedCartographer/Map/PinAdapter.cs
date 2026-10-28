@@ -405,7 +405,8 @@ internal sealed class PinAdapter
     /// session (reconcile completed for the current map generation) and
     /// tombstones an entity at most once; anything else just unlinks the
     /// rendering and lets the next reconcile repair it.</summary>
-    public void HandleExplicitVanillaDelete(PinStore store, Minimap.PinData pin)
+    public void HandleExplicitVanillaDelete(
+        PinStore store, Minimap.PinData pin, bool pointerInitiated, bool neighbourRemovesPinsWithoutPointing)
     {
         if (_disabledForSession || pin is null)
         {
@@ -422,7 +423,10 @@ internal sealed class PinAdapter
             if (PinTombstoneRule.Decide(
                     explicitVanillaDelete: true,
                     sessionBound: _sessionBound,
-                    alreadyDeleted: managed.Deleted) == PinTombstoneRule.Verdict.Tombstone)
+                    alreadyDeleted: managed.Deleted,
+                    pointerInitiated: pointerInitiated,
+                    neighbourRemovesPinsWithoutPointing: neighbourRemovesPinsWithoutPointing)
+                == PinTombstoneRule.Verdict.Tombstone)
             {
                 store.Delete(id);
                 ForgetRendering(pin);
@@ -431,12 +435,16 @@ internal sealed class PinAdapter
             }
             else
             {
-                // Unbound session (mid-reconstruction) or already deleted:
-                // drop the link only; the next reconcile decides rendering.
+                // Unbound session (mid-reconstruction), already deleted, or
+                // (#419) removed by a neighbouring mod without the player
+                // pointing at it: drop the link only; the next reconcile
+                // decides rendering.
                 ForgetRendering(pin);
                 NeedsRebind = true;
                 _log.LogInfo(
-                    "Pin lifecycle: vanilla delete observed outside a bound map session; kept the atlas entry and will rebind.");
+                    !pointerInitiated && neighbourRemovesPinsWithoutPointing && _sessionBound
+                        ? "Pin lifecycle: a managed marker was removed without being pointed at while a mod that clears other mods' pins is installed; kept the atlas entry and will redraw it."
+                        : "Pin lifecycle: vanilla delete observed outside a bound map session; kept the atlas entry and will rebind.");
             }
         }
         catch (Exception exception)
