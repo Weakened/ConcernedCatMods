@@ -63,6 +63,11 @@ $runCommit = (& git -C $root rev-parse --short HEAD 2>$null)
 if ($LASTEXITCODE -ne 0) { $runCommit = "unknown" }
 $runDirectory = Join-Path $root ("artifacts/verify/{0:yyyyMMdd-HHmmss}-{1}-{2}" -f $started, $runCommit, $PID)
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
+# About 8 MB a run, almost all TRX. Keep the newest 30 runs of this worktree;
+# artifacts/ is git-ignored and nothing else is ever written under verify/.
+Get-ChildItem -LiteralPath (Split-Path $runDirectory) -Directory |
+    Sort-Object Name -Descending | Select-Object -Skip 30 |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
 Write-Host "[verify] This run's full output is kept in $runDirectory" -ForegroundColor Cyan
 $steps = [System.Collections.Generic.List[object]]::new()
 
@@ -106,7 +111,7 @@ try {
         if ($testExit -ne 0) {
             # Name what failed on the first sighting, from the console lines and
             # from the TRX files, so a rerun is never needed just to find out.
-            $failedLines = @($testLog | Where-Object { "$_" -match '^\s*Failed\s+\S|\[FAIL\]|error\s+\w*\d+:' })
+            $failedLines = @($testLog | Where-Object { "$_" -match '^\s*Failed!?\s+\S|\[FAIL\]|error\s+\w*\d+:|aborted|crashed' })
             $failedTrx = @()
             # -LiteralPath: the logger names files "...net10.0[1].trx", and
             # brackets are wildcards to -Path. Reading a TRX is best effort and
@@ -146,7 +151,20 @@ try {
     # --- 3. Everything a compiler cannot see ---------------------------------
     Write-Host "[verify] Validating the repository." -ForegroundColor Cyan
     $python = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { "python3" }
-    $validatorLog = & $python (Join-Path $root "tools/validate_repo.py") 2>&1
+    # Captured rather than printed straight to the console, Python would encode
+    # as the ANSI code page: dashes arrive mangled and the first character
+    # outside it (an arrow, say) would crash the validator into a false red.
+    $priorPythonEncoding = $env:PYTHONIOENCODING
+    $priorConsoleEncoding = [Console]::OutputEncoding
+    try {
+        $env:PYTHONIOENCODING = "utf-8"
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+        $validatorLog = & $python (Join-Path $root "tools/validate_repo.py") 2>&1
+    }
+    finally {
+        $env:PYTHONIOENCODING = $priorPythonEncoding
+        [Console]::OutputEncoding = $priorConsoleEncoding
+    }
     $validatorExit = $LASTEXITCODE
     $validatorLog | Set-Content -Path (Join-Path $runDirectory "validator.log") -Encoding utf8
     $validatorLog | ForEach-Object { Write-Host $_ }
