@@ -1,5 +1,137 @@
 # Changelog
 
+## Unreleased
+
+Everything below is on `main` and in no published build. 1.3.0 and 1.3.1 were
+cut from release branches, so their notes are copied here exactly as published.
+
+Added
+
+- **Living beside TheGreatestMap, HUDCompass and Round Minimap** (#419). With
+  any of them installed, Concerned Cartographer recognises it and changes only
+  its own behaviour; it does not need any of them.
+  - With TheGreatestMap installed, markers you place by hand are TheGreatestMap's
+    to share and filter. Cartographer's pin palette and adopt prompts step aside,
+    and Valheim's own map buttons stay visible.
+  - Cartographer markers that TheGreatestMap's `tgm_clearlocal` removes are now
+    kept and redrawn instead of being deleted for good. Right-clicking one still
+    deletes it. `tgm_import` adopts Cartographer markers as well, so avoid it
+    while you have Cartographer markers.
+  - New setting `Map/RoadLayerPosition`: roads and routes below the markers on
+    the large map (`BelowPins`, the default and the look you know) or over the
+    marker icons (`AbovePins`).
+  - Road and route lines on the large map now stay inside the map's frame when
+    another mod resizes or moves it.
+  - New setting `Map/ReshapedMinimapRoads`, which only matters with Round Minimap
+    installed. Its round minimap turns, but the layer road and route lines are
+    drawn in cannot turn with it. By default (`Hide`) the lines are left off the
+    round minimap rather than shown pointing the wrong way. `Show` draws them
+    anyway. The large map is never affected.
+  - HUDCompass needed no changes. Cartographer markers appear on its compass bar
+    like any map pin, and its own Ignore settings can hide them.
+
+Fixed
+
+- **The out-of-memory fix from 1.3.1 is now on `main` as well** (#434). The
+  route layer also stops holding its old buffer while it allocates a new one
+  when the map size changes.
+- **A returning player is no longer greeted as new after the survey-rules
+  upgrade** (#366). Bringing an untouched rules file up to date reset its date,
+  and that date is how the mod tells a returning player from a new one. The
+  upgrade now puts the original date back.
+- **The atlas maintenance commands** (#367):
+  - `cc_atlas support` says where the report was written before it says what
+    the report leaves out.
+  - It works even when the data folder is missing.
+  - Backup and restore cover all five per-world files, under folder names that
+    no longer depend on your system's language.
+- **No console command prints your user name when it fails** (#389). Every
+  `cc_*` command now names what failed and scrubs file paths out of the reply.
+- **Paths with spaces, network and relative paths are scrubbed properly**
+  (#388, #410, #411). Crash and support text used to stop scrubbing a path at
+  its first space, which could leave a profile name or a surname in it.
+- **Hulgi no longer gets up and down every time something changes in camp**
+  (#306). He still looks for a better seat at most twice a minute, and at once
+  when you summon him or change which doors he may use.
+
+Known
+
+- None of the #419 behaviour has been tested in game with those mods yet. The
+  checklist is in `docs/mods/concerned-cartographer/GREATESTMAP_COMPATIBILITY.md`.
+
+## 1.3.1 - An out-of-memory crash while the map redrew its roads
+
+Fixed
+
+- **Redrawing the roads on the map no longer runs the game out of memory.**
+  Every full redraw of the road layer set aside two fresh 16 MB blocks of
+  memory and let them go again. Over a long session, or with many redraws, the
+  game's memory became too broken up to find another block that size, and the
+  redraw failed with an out-of-memory error (reported to us automatically). The
+  road layer now keeps one block and reuses it for dirt paths and paved roads in
+  turn, the way the route layer already did. Roads look exactly as before.
+
+Known
+
+- This is confirmed from the crash reports and the code, not reproduced in game.
+  If you still see an out-of-memory error, please send the support report.
+
+## 1.3.0 - The mines another mod adds, and the report you send us
+
+Added
+
+- **The mines from blacks7ar's OreMines are surveyed and offered as pins**
+  (#385). They are ordinary places in the world, like a crypt or a troll cave,
+  so the survey already walked past them - there was simply no rule saying what
+  they were. There is now, for all eight: flint, copper, tin, coal, iron,
+  silver, black metal and flametal. They arrive as "Resources", and like other
+  fixed places they are only offered once within 80 m and stop being offered
+  after eight hours. Nothing here needs OreMines to be installed; without it
+  these lines match nothing and change nothing.
+- **Your survey rules file is brought up to date, unless you have touched it.**
+  If the file is still exactly the one the mod wrote for you, it is rewritten
+  with the new mine lines. If you have changed anything in it at all - disabled
+  one rule, reordered it, added your own - it is left alone, character for
+  character, and you can add the lines yourself from
+  `docs/mods/concerned-cartographer/SURVEY_LOCATION_COMPATIBILITY.md`.
+
+Fixed
+
+- **The support report stops being offered as a setting to edit** (#304). It
+  was `support-report.txt` and is now `support-report.log`. It is still written
+  in the same place, so a profile export still carries it and you can still find
+  it and send it to us; a configuration editor just no longer lists it as
+  something to fill in. The old `.txt` is removed once the new one has been
+  written - never before, and never if the write failed. Nothing in it is lost:
+  every line is regenerated from scratch each time.
+
+Corrected
+
+- **1.2.2 credited the wrong change, and this is what we now know.** That entry
+  said `author-id.txt` stopped being listed for editing because it moved into a
+  `state` folder. 1.2.2 made two changes at once - the move, and a rename to
+  `author-id.dat` - and we have since measured which one did the work. It was
+  the rename. A configuration editor is rooted at the whole profile and
+  descends into every folder inside it, so a subfolder hides nothing from it and
+  never did; what it goes by is the file's extension, and `.dat` is not on its
+  list. The `state` folder still earns its place - it keeps the mod's own
+  bookkeeping out of a listing the mod uses to tell a new player from a
+  returning one - but it is not what fixed #304. Nothing you see in game changed
+  between 1.2.2 and this note; only our account of why.
+
+Known
+
+- **This was measured in one mod manager, and not in Gale.** Everything above
+  about which files a configuration editor lists comes from reading the
+  installed Thunderstore Mod Manager / r2modman bundle (1.124.2, core 3.2.18),
+  which picks files by extension from a list that has `.cfg`, `.txt`, `.json`,
+  `.yml`, `.yaml` and `.ini` on it and neither `.dat` nor `.log`. Gale is a
+  separate program written by other people, it was not installed here, and we
+  have not looked at it at all - so we do not know what it lists. #304 was
+  reported from Gale. If Gale still offers you `author-id.dat` or
+  `support-report.log`, please say so on #304.
+
+
 ## 1.2.2 - Two files move out of your settings folder
 
 Fixed
