@@ -56,6 +56,9 @@ internal sealed class CartographerRuntime : IDisposable
     private bool _consentPromptChecked;
     private readonly PinPalettePanel _palettePanel;
     private readonly RoutesPanel _routesPanel;
+    private readonly WorkAreasPanel _areasPanel;
+    private readonly WorkAreaEditor _areaEditor;
+    private long _areaStampDrawn = -1;
     private readonly SurveyPanel _surveyPanel;
     private readonly SharePanel _sharePanel;
     private readonly SettingsPanel _settingsPanel;
@@ -63,6 +66,7 @@ internal sealed class CartographerRuntime : IDisposable
     private int _drawerToken;
     private int _paletteToken;
     private int _routesToken;
+    private int _areasToken;
     private int _surveyToken;
     private int _shareToken;
     private int _settingsToken;
@@ -178,6 +182,17 @@ internal sealed class CartographerRuntime : IDisposable
         _consentPanel = new CrashConsentPanel(log, settings);
         _palettePanel = new PinPalettePanel(log);
         _routesPanel = new RoutesPanel(log, () => _routeCommands, settings);
+        // #296 slice 2: the visible work-area editor over the same store as
+        // cc_areas. The panel gets no editor while no world is bound or the
+        // world's area file is read-only, so it can never write over areas
+        // this build could not read.
+        _areaEditor = new WorkAreaEditor(_workAreas, Guid.NewGuid, () => DateTime.UtcNow);
+        _areasPanel = new WorkAreasPanel(
+            log,
+            WritableAreaEditor,
+            () => _renderer.VectorLayerActive,
+            AfterAreaEdit);
+        _renderer.SetWorkAreaSource(() => WorkAreaOutlines.Collect(_workAreas, _areaEditor));
         _surveyPanel = new SurveyPanel(
             log, settings, ExecuteSurveyCommand,
             () => _surveyEngine.Observations,
@@ -209,6 +224,7 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerToken = _mapUi.RegisterSurface(() => _drawerPanel.IsVisible, _drawerPanel.Hide);
         _paletteToken = _mapUi.RegisterSurface(() => _palettePanel.IsVisible, _palettePanel.Hide);
         _routesToken = _mapUi.RegisterSurface(() => _routesPanel.IsVisible, _routesPanel.Hide);
+        _areasToken = _mapUi.RegisterSurface(() => _areasPanel.IsVisible, _areasPanel.Hide);
         _surveyToken = _mapUi.RegisterSurface(() => _surveyPanel.IsVisible, _surveyPanel.Hide);
         _shareToken = _mapUi.RegisterSurface(() => _sharePanel.IsVisible, _sharePanel.Hide);
         _settingsToken = _mapUi.RegisterSurface(() => _settingsPanel.IsVisible, _settingsPanel.Hide);
@@ -247,6 +263,22 @@ internal sealed class CartographerRuntime : IDisposable
             {
                 OpenSidePanel(_routesToken, _routesPanel);
             }
+        };
+        _mapUi.AreasClicked = () =>
+        {
+            if (!AllowFeature(CartographerFeature.Atlas))
+            {
+                return;
+            }
+
+            if (AreaFileReadOnly())
+            {
+                VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft,
+                    AtlasStrings.Get("areas.readOnly"));
+                return;
+            }
+
+            OpenSidePanel(_areasToken, _areasPanel);
         };
         _mapUi.SurveyClicked = () =>
         {
@@ -949,6 +981,7 @@ internal sealed class CartographerRuntime : IDisposable
         _storyPanel.HandleFrame();
         _consentPanel.HandleFrame();
         _routesPanel.HandleFrame();
+        _areasPanel.HandleFrame();
         _surveyPanel.HandleFrame();
         _sharePanel.HandleFrame();
         _settingsPanel.HandleFrame();
@@ -1156,14 +1189,37 @@ internal sealed class CartographerRuntime : IDisposable
             bool uiRouteMode = _routeCommands is not null &&
                 _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
                 _routeCommands.UiModeOwned;
-            MapInputGate.ConsumeClicks = uiRouteMode;
-            if (uiRouteMode)
+            // #296 slice 2: the work-area draw mode is UI-owned the same way.
+            bool uiAreaMode = _areasPanel.IsVisible && _areasPanel.ModeActive && WritableAreaEditor() is not null;
+            MapInputGate.ConsumeClicks = uiRouteMode || uiAreaMode;
+            if (uiRouteMode || uiAreaMode)
             {
                 MinimapReflection.TrySuppressMapDragThisFrame();
             }
 
+            if (uiAreaMode && MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 areaCursor))
+            {
+                // As for routes: a pointer over CC UI is "not held", which
+                // ends the stroke rather than drawing under the panel.
+                bool overUi = Map.MapPointerGuard.IsPointerOverCcUi(Input.mousePosition);
+                string? areaMessage = _areaEditor.HandleMapFrame(
+                    Input.GetMouseButton(0) && !overUi,
+                    new RoadPoint(areaCursor.x, areaCursor.y, areaCursor.z));
+                if (areaMessage != null)
+                {
+                    _areasPanel.Report(areaMessage);
+                    AfterAreaEdit();
+                }
+            }
+
+            if (_areaEditor.ChangeStamp != _areaStampDrawn)
+            {
+                _areaStampDrawn = _areaEditor.ChangeStamp;
+                _renderer.MarkVectorDataDirty();
+            }
+
             if (_routeCommands is not null && _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
-                (uiRouteMode || Input.GetKey(_settings.RouteDrawModifier.Value)) &&
+                (uiRouteMode || (!uiAreaMode && Input.GetKey(_settings.RouteDrawModifier.Value))) &&
                 MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld))
             {
                 // RC8-9: a pointer over any CC panel/control never adds
@@ -2755,6 +2811,32 @@ internal sealed class CartographerRuntime : IDisposable
         return (uid, _workAreas.Areas);
     }
 
+    private bool AreaFileReadOnly() => _worldUid is long uid && _workAreaPersistence.IsReadOnly(uid);
+
+    /// <summary>#296 slice 2: the editor the Work Areas panel may use, or null
+    /// while no world is bound or this world's area file is read-only.</summary>
+    private WorkAreaEditor? WritableAreaEditor()
+    {
+        if (_disposed || !_mapReady || _worldUid is not long uid || _workAreaPersistence.IsReadOnly(uid))
+        {
+            return null;
+        }
+
+        return _areaEditor;
+    }
+
+    /// <summary>After a panel edit: write the sidecar now (an edit the player
+    /// made is not left to a later save) and redraw the outlines.</summary>
+    private void AfterAreaEdit()
+    {
+        if (!SaveWorkAreasIfDirty())
+        {
+            _areasPanel.AppendNote(AtlasStrings.Get("areas.saveFailed"));
+        }
+
+        _renderer.MarkVectorDataDirty();
+    }
+
     /// <summary>Backs the `cc_areas` console command (#296). Guarded by
     /// <see cref="GuardConsoleCommand"/> (#389).</summary>
     internal string ExecuteAreaCommand(string[] args)
@@ -2781,6 +2863,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         string reply = WorkAreaCommands.Execute(
             _workAreas, _routeStore.Living, subcommand, ConsoleArguments.Remainder(args), Guid.NewGuid(), DateTime.UtcNow);
+        _renderer.MarkVectorDataDirty();
         if (!SaveWorkAreasIfDirty())
         {
             reply += "\nNot yet written to disk (see the log); it will be retried, but a restart before then loses this change.";
@@ -3562,7 +3645,9 @@ internal sealed class CartographerRuntime : IDisposable
         SavePinsSnapshot();
 
         _worldUid = uid;
+        _areaEditor.CancelDraw();
         _workAreas.Load(_workAreaPersistence.Load(uid));
+        _renderer.MarkVectorDataDirty();
         _atlas = _persistence.Load(uid);
         _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);

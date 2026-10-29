@@ -7,6 +7,18 @@ cut from release branches, so their notes are copied here exactly as published.
 
 Added
 
+- **Work Areas** (#296). The large map's new **Areas** button opens a panel
+  where you name an area and draw its boundary as one closed loop.
+  - Areas are listed, can be renamed or deleted, and are outlined on the large
+    map, with the selected one highlighted. Outlines need
+    `Map/HighPrecisionLargeMapRoads`, which is on by default.
+  - A loop that does not close, crosses itself, or is wider than 256 m is
+    refused with the reason, and you can draw again.
+  - Areas are saved per world in `.work-areas.tsv`, which backups include.
+    Other Concerned mods can read them through `concernedcat.workarea/1`.
+  - `cc_areas` does the same from the console.
+  - Drawing or saving an area never starts any work. Giving an area to a
+    worker comes later.
 - **Living beside TheGreatestMap, HUDCompass and Round Minimap** (#419). With
   any of them installed, Concerned Cartographer recognises it and changes only
   its own behaviour; it does not need any of them.
