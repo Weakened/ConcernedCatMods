@@ -94,7 +94,7 @@ item, count)` is pinned verbatim and once in `Adapters/Workers/GunnarDeathDropPo
 everywhere else in the product (vanilla's static `ItemDrop.DropItem`, which would build an item from data this
 product chose, included), and the handler is named only by its subscription. It runs only when both switches are on,
 the probe verified it, the work-authority rule grants and the body had read its own inventory; otherwise what he
-carried is recorded unresolved. The cart detaches first through the hauling runtime's own D4 teardown, and if a joint
+carried is recorded unresolved - a narrowing of D16 the owner confirmed on 2026-10-28. The cart detaches first through the hauling runtime's own D4 teardown, and if a joint
 still holds him nothing is dropped. Exactly what the body holds, once, measured per stack; nothing is recreated from
 a name; every death - dropped, refused or interrupted - is appended to a per-world death record beside Teamster's
 sidecars as durable reconciliation evidence.

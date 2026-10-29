@@ -2,7 +2,7 @@
 
 Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
-death door named in `GUNNAR_COLLECTION.md` §6c).
+death door named in `GUNNAR_COLLECTION.md` §6c). D16's fail-closed reading was confirmed by the owner on 2026-10-28.
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -401,7 +401,9 @@ The planted escapes in `tools/tests/test_teamster_carveout.py`'s `DeathDropIsNar
 validator from before this change, are refused.
 
 **How the paragraphs above were read where they leave a choice**, so a reader can disagree with the reading rather
-than discover it:
+than discover it. **The owner confirmed this reading on 2026-10-28**, asked directly by the lead: D16 stays
+fail-closed exactly as built, and every gate below that leaves material unresolved instead of dropping it is the
+intended narrowing, not a defect to be widened later.
 
 - *Gates.* The drop runs only when Teamster's master switch and the collection switch are on, the start-up probe
   verified every member it binds, the shared work-authority rule grants (D3), and the body had read its own stored
