@@ -1,24 +1,29 @@
 using UnityEngine;
 
-namespace TheConcernedCat.ConcernedForeman.Runtime.Presentation;
+namespace TheConcernedCat.ConcernedNPC.Body.Dressing;
 
-/// <summary>Every engine write the Thorstein figure makes, in one file, so the
-/// repository's runtime audit (#400) can pin each one by its exact spelling.
+/// <summary>Every engine write that dresses, stands or takes down a
+/// presentation figure, in one file, so the repository's audit can pin each
+/// one by its exact spelling (lifted from Concerned Foreman's
+/// <c>FigureParts</c>, #295, so that no product keeps a copy).
 ///
-/// <b>All of it is local.</b> Each object touched here is either a piece of the
+/// <b>Internal, and that is the confinement across assemblies.</b> These
+/// helpers take any object or transform. A consumer cannot reach them at all:
+/// the only public way in is <see cref="NpcFigureDresser"/>, whose members take
+/// the figure handle the extraction returned, never an arbitrary object. Inside
+/// this package the validator confines who may call them.
+///
+/// <b>All of it is local.</b> Each object touched here is a piece of a
 /// presentation figure, which is never networked or saved, or an inactive
 /// holder that exists for the length of one method. Nothing here reaches a
-/// vanilla object in the world, a player, a piece or a network view. The
-/// figure itself is extracted by Concerned NPC (<c>NpcPresentationBody</c>),
-/// which instantiates the game's character under an inactive holder and
-/// destroys everything it does not keep before it returns.</summary>
-internal static class FigureParts
+/// vanilla object in the world, a player, a piece or a network view.</summary>
+internal static class NpcFigureParts
 {
     /// <summary>An inactive holder. Anything instantiated under it stays dark
     /// until it is deliberately moved into the live figure.</summary>
-    internal static GameObject Holder()
+    internal static GameObject Holder(string name)
     {
-        var holder = new GameObject("CF_ThorsteinHarvest");
+        var holder = new GameObject(name);
         holder.SetActive(false);
         return holder;
     }
@@ -74,12 +79,21 @@ internal static class FigureParts
         attached.localRotation *= offset.rotation;
     }
 
-    /// <summary>Stands the finished figure at home. The figure has no collider
-    /// and no rigidbody, so this is a picture being hung, not a body being
+    /// <summary>Stands the finished figure. The figure has no collider and no
+    /// rigidbody, so this is a picture being hung, not a body being
     /// moved.</summary>
     internal static void Place(Transform figure, Vector3 spot, Quaternion facing)
     {
         figure.position = spot;
         figure.rotation = facing;
+    }
+
+    /// <summary>Gives the figure's own body renderer the source character's
+    /// other body, the way the game's equipment component does when the
+    /// character screen's toggle changes. The renderer is the figure's own
+    /// extracted copy; the mesh is an asset and is not written.</summary>
+    internal static void Reshape(SkinnedMeshRenderer body, Mesh mesh)
+    {
+        body.sharedMesh = mesh;
     }
 }

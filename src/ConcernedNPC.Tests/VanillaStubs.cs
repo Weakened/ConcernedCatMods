@@ -380,6 +380,18 @@ public class VisEquipment : MonoBehaviour
     public Transform? m_rightHand;
 
     public SkinnedMeshRenderer? m_bodyModel;
+
+    /// <summary>The selectable bodies, as the installed build declares them:
+    /// one mesh and one base material each, chosen by the character screen's
+    /// index (the female toggle selects 1).</summary>
+    public PlayerModel[] m_models = Array.Empty<PlayerModel>();
+
+    public class PlayerModel
+    {
+        public Mesh? m_mesh;
+
+        public Material? m_baseMaterial;
+    }
 }
 
 public class Character : MonoBehaviour

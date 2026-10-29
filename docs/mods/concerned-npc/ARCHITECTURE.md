@@ -115,6 +115,14 @@ monotonic unlock policy, door geometry and permissions, camp sensing, residency 
 setbacks, dialogue rotation, designations and work scope, the custody ledger and transfer executor, the journal, the
 worker prefab factory, the body AI, body inventory, the census, presentation extraction, and console registration.
 
+**Moved (#295 lift, inside the unpublished 0.5.0):** the figure dresser - Thorstein's, from Concerned Foreman - as
+`Body/Dressing/NpcFigureDresser` with the game-free `Appearance/` beside it (`NpcLookSpec`, `NpcLookPlan`,
+`NpcLookColour`). A role supplies its look as data and gets the body, hair, beard, colouring and garments applied.
+Its engine writes are in one internal file, `NpcFigureParts`. `validate_repo.py`'s "NPC figure-parts audit" pins
+every creation, destruction, re-parenting, pose write and mesh swap in the whole library, and confines the helpers to
+the dresser. The "#295 one-dresser audit" refuses a consumer that grows its own copy. Hulgi's dresser in Concerned
+Cartographer predates the library, so it stays and is exempted by name.
+
 **Stays in its product, deliberately:** the cart hitch seam, pull calibration and cart routing, because
 `validate_repo.py` confines `AttachTo`/`Detach`, mass writes and ZDO writes to Teamster's own folder and proves it
 with a mutation check - moving them would move a shipped safety property out of the product audited for it. Also: the
