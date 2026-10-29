@@ -1,3 +1,5 @@
+using TheConcernedCat.Companions.Quest;
+
 namespace TheConcernedCat.ConcernedForeman.Domain.Npc;
 
 /// <summary>What the flow needs from a running game, and nothing more. The
@@ -93,10 +95,12 @@ internal static class ToolsOfTheTradeFlow
             return string.Empty;
         }
 
-        // The completion line belongs to the moment he took the tools. A worker
-        // who was on the roster before this story existed, or was taken on by
-        // another character, gets the record without the speech.
-        if (facts.AxeHeld && facts.HammerHeld)
+        // The completion line belongs to the moment he took the tools from THIS
+        // character: their introduction was open and both tools are his. A
+        // worker on the roster before this story existed, or taken on by
+        // another character, gets the record without the speech. The facts are
+        // the ones read before the welcome, so this sees the story as it was.
+        if (facts.Quest == QuestState.IntroPending && facts.AxeHeld && facts.HammerHeld)
         {
             return "\nThorstein: \"" + ThorsteinLines.Completion + "\"\nThorstein joined your settlement. " +
                 "Give him a work order when you are ready; nothing starts on its own.";
@@ -106,7 +110,7 @@ internal static class ToolsOfTheTradeFlow
     }
 
     private static string Unsaved(string? notice) =>
-        "\nThorstein is on the roster for this session, but the settlement record could not be saved, so his " +
-        "story is not recorded yet and a reload would lose him. Nothing else changed." +
+        "\nThe settlement record has unsaved changes and could not be saved, so Thorstein's story is not " +
+        "recorded yet; it waits until the record is written. Nothing else changed." +
         (notice == null ? string.Empty : " " + notice);
 }

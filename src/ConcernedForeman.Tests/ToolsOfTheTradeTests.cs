@@ -342,4 +342,26 @@ public sealed class ToolsOfTheTradeTests
         Assert.Equal(string.Empty, again);
         Assert.Equal(1, ports.Writes.FindAll(write => write == "recruit").Count);
     }
+
+    [Fact]
+    public void Another_characters_first_look_records_the_story_without_the_speech()
+    {
+        // Thorstein holds both tools (the ledger is per world), but this
+        // character never opened the introduction.
+        var ports = new FakePorts { Quest = QuestState.Unstarted, EmployedInMemory = true, EmployedOnDisk = true };
+
+        string said = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.Equal(QuestState.Recruited, ports.Quest);
+        Assert.DoesNotContain(ThorsteinLines.Completion, said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_unsaved_roster_is_not_reported_as_recruited()
+    {
+        Assert.Equal(
+            ThorsteinQuestStage.WaitingForTools,
+            ToolsOfTheTrade.Stage(Facts(QuestState.IntroPending, employed: true, axe: true, hammer: true,
+                rosterSaved: false)));
+    }
 }

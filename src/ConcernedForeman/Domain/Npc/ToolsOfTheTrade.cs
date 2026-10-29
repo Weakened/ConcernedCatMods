@@ -153,7 +153,7 @@ internal static class ToolsOfTheTrade
 
     internal static ThorsteinQuestStage Stage(in ToolsOfTheTradeFacts facts)
     {
-        if (facts.Employed || QuestStateMachine.IsComplete(facts.Quest))
+        if (QuestStateMachine.IsComplete(facts.Quest) || (facts.Employed && facts.RosterSaved))
         {
             return ThorsteinQuestStage.Recruited;
         }
@@ -253,8 +253,8 @@ internal static class ToolsOfTheTrade
             case ToolsOfTheTradeWait.NoAuthority:
                 return "He has both tools, but only the host with the settlement runtime on can take him on.";
             case ToolsOfTheTradeWait.RecordsUnsaved:
-                return "He is on the roster for this session, but the settlement record could not be saved; his " +
-                    "story waits until it is. See cf_settle status.";
+                return "The settlement record has unsaved changes and could not be saved; his story waits until " +
+                    "it is. See cf_settle status.";
             case ToolsOfTheTradeWait.HandoverUncertain:
                 return "He has both tools on record, but one handover is unresolved. Run cf_settle reconcile " +
                     "first; he is not taken on over a guess.";
