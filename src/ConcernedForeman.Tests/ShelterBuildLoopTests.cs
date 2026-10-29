@@ -334,12 +334,26 @@ public sealed class ShelterBuildLoopTests
             Assert.Equal(hide, world.Total("DeerHide"));
         }
 
-        Assert.Equal(BuildStep.Waiting, loop.Step);
+        // The round's outcome, not Step: on a draw-retry tick Step still reads
+        // Provisioning while the round is a wait.
+        Assert.Equal(RoundOutcome.Waiting, loop.Round.Outcome);
         Assert.Contains("Wood", loop.Reason);
         Assert.Contains("not in any container", loop.Reason);
 
-        // What he held still went up: waiting is not stopping.
-        Assert.True(world.Placer.Placed.Count > placedBefore, "the wood he already held should still have been placed");
+        // He finished the phase he had drawn - every Foundation piece went up and
+        // he holds no wood - then waited: waiting is not stopping.
+        int foundation = 0;
+        foreach (CostedPiece piece in world.Plan.Pieces)
+            if (piece.Phase == BuildPhase.Foundation) foundation++;
+        Assert.Equal(0, placedBefore);
+        Assert.Equal(foundation, world.Placer.Placed.Count);
+        foreach (string key in world.Placer.Placed)
+        {
+            Assert.True(world.Plan.TryFind(key, out CostedPiece placed));
+            Assert.Equal(BuildPhase.Foundation, placed.Phase);
+        }
+
+        Assert.Equal(0, world.Carrying("Wood"));
         Assert.Equal(0, world.InChest("Wood"));
     }
 
