@@ -82,4 +82,17 @@ untouched; `cs_steward recruit` brings her body back.
 - `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which
   she is retired nothing can adopt the body that is going.
 
+**Known limits of this text audit.** Ten successive independent reviews each found another spelling of the same
+destruction that a text audit could not see, and each was closed with a refusal and a plant. That does not converge,
+so - as for Teamster's audits in `CLAUDE.md` - the remaining limits are stated rather than chased:
+
+- it establishes where the refusal is written, not that control flow obeys it; that is `StewardRetirementTests`, which
+  run on net10.0 only, so code that branches on the runtime it runs on is a reviewer's job;
+- it does not follow data flow: the values the facts are built from are proved by the port tests, one witness at a time;
+- it cannot see a destruction reached through a delegate, a method group or reflection;
+- it reads names as text, so a Unicode formatting character (category Cf, e.g. a soft hyphen U+00AD or U+200B) written
+  raw inside an identifier - which C# ignores when comparing names - would spell `Destroy` or a second `view` that no
+  pattern here matches (found by the final review of `15eda77`; not refused, recorded here);
+- its scope is `src/ConcernedSteward`; the Concerned NPC library and shared sources it builds on are not scanned.
+
 **Still owner go-around pending:** the retire and re-recruit round trip in a running game.
