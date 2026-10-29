@@ -2,9 +2,10 @@
 
 **1.0.0 is live on Thunderstore** (`TheConcernedCat/ConcernedLadders`, uploaded by the owner 2026-10-27
 17:12 UTC). The store's download is byte-identical to the package below (ZIP SHA256 `0727ddb5…f880`, 378,052 B; DLL
-`0dbc03f5…897f`), checked by downloading it the same day. Released source is `4cb5e56` on this branch: no release
-tag exists and nothing is merged to `main` yet. Merge with a merge commit, not a squash, and keep `4cb5e56` and
-`48a6c59` reachable: the published README loads its GIFs from `48a6c59`. Updated 2026-10-27.
+`0dbc03f5…897f`), checked by downloading it the same day. Released source is `4cb5e56`, merged to `main` with a
+merge commit by PR #433 (`127bd4f`), so `4cb5e56` and `48a6c59` (which the published README loads its GIFs from) stay
+reachable. No release tag exists. Issues #430-#432 are closed; the remaining owner and hardware rows are on the owner
+playtest checklist, #470. Updated 2026-10-29.
 
 | Item | 1.0.0 |
 |---|---|
@@ -193,6 +194,9 @@ teleport and aim, read-only state, and setting skill level and stamina. It patch
 | A02 / A07 | tools at `e400292` | Python suite: 138 tests, 2 skipped, clean checkout. The profile generator is byte-identical across two runs. | `a02-python-suite-e400292.log`, `*.r2z` |
 
 ## Open rows
+
+> This table predates the 1.0.0 release matrix above, which supersedes it where they disagree (for example, Drop is
+> PASS there). Kept as history; the live list is #470.
 
 | Row(s) | State | Reason and next action |
 |---|---|---|
