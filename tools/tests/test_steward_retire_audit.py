@@ -8,8 +8,8 @@ verified to pass the validator that lacked this rule (origin/main d72b397)
 before being added here. The plants found by successive reviews were also each
 verified to pass the validator of the head they were found against (d0d559e:
 five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two, 80c3f3a:
-four), whose rule they got past; the last six were checked against origin/main
-0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
+four, 8144fbd: three), whose rule they got past; the last nine were checked
+against origin/main 0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
 pass the merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
 re-runs that check, expecting every plant to get through it.
 """
@@ -29,6 +29,8 @@ RUNTIME = os.path.join(STEWARD, "Runtime", "StewardRuntime.cs")
 COMMAND = os.path.join(STEWARD, "Runtime", "StewardCommand.cs")
 DOMAIN = os.path.join(STEWARD, "Domain", "Retirement", "StewardRetirement.cs")
 DECIDE_OPEN = "    public static StewardRetireVerdict Decide(in StewardRetireFacts facts)\n    {\n"
+ALLOWS = ("    public static bool Allows(StewardRetireVerdict verdict) => "
+          "verdict == StewardRetireVerdict.MayRetire;\n")
 LABEL = "[steward] S1 retire audit"
 
 PORT_GUARD = """        StewardRetireVerdict verdict = StewardRetirement.Decide(facts);
@@ -322,6 +324,29 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      "            return StewardRetireOutcome.Retired;\n        }\n\n" + PORT_DECIDE)
         self.assert_refused("the runtime was told she had left while her body still stood")
 
+    # The three below each kept every pin of 8144fbd's rule green (review of
+    # that head): the directive check read comment-stripped text with a narrow
+    # idea of whitespace, and [Conditional] splits the builds without one. Each
+    # was verified to pass 8144fbd's validator as well as origin/main 0171cf6's.
+
+    def test_a_directive_hidden_behind_a_region_comment_opener_is_refused(self):
+        self.swap_in(DOMAIN, ALLOWS,
+                     "#region Allows /*\n#if NETFRAMEWORK\n"
+                     "    public static bool Allows(StewardRetireVerdict verdict) => true;\n#else\n"
+                     + ALLOWS + "#endif\n#endregion */\n")
+        self.assert_refused("`#region x /*` made the comment stripper blank the `#if` below it")
+
+    def test_a_directive_after_a_form_feed_is_refused(self):
+        self.swap_in(DOMAIN, DECIDE_OPEN,
+                     DECIDE_OPEN + "\f#if NETFRAMEWORK\n        return StewardRetireVerdict.MayRetire;\n\f#endif\n")
+        self.assert_refused("C# reads a form feed as whitespace in front of a directive")
+
+    def test_a_conditional_attribute_is_refused(self):
+        self.swap_in(DOMAIN, ALLOWS,
+                     ALLOWS + "\n    [System.Diagnostics.Conditional(\"NET\")]\n"
+                     "    private static void OnlyInTheTests() { }\n")
+        self.assert_refused("a [Conditional] method's calls exist in one build and not the other")
+
     def test_a_guard_wrapped_in_a_condition_is_refused(self):
         self.swap_in(PORT, PORT_GUARD,
                      "        if (ledger.UnresolvedSteps >= 0)\n        {\n" + PORT_GUARD + "        }\n")
@@ -338,7 +363,9 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
         with open(RUNTIME, encoding="utf-8-sig") as handle:
             self.assertEqual(1, handle.read().count(RUNTIME_MARKER))
         with open(DOMAIN, encoding="utf-8-sig") as handle:
-            self.assertEqual(1, handle.read().count(DECIDE_OPEN))
+            domain = handle.read()
+        self.assertEqual(1, domain.count(DECIDE_OPEN))
+        self.assertEqual(1, domain.count(ALLOWS))
 
 
 if __name__ == "__main__":

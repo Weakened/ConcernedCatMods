@@ -3754,7 +3754,27 @@ STEWARD_RETIRE_STATEMENT_START = re.compile(r"(?:^|[;{}])\s*$")
 # blanks, so Retire(...) holds none; with that, every token pin reads the
 # masked text, so a sentence that says "view" is not miscounted. Retired is
 # said once, last, so the runtime is never told she left while she stands.
-STEWARD_PREPROCESSOR = re.compile(r"(?m)^[ \t]*#[ \t]*(?:if|elif|else|endif|define|undef|line)\b")
+# Review of 8144fbd: the directive check ran on comment-stripped text, and the
+# stripper does not know directive lines - `#region x /*` blanked an `#if`
+# below it - and `^[ \t]*#` missed the other whitespace and line ends C#
+# accepts (\f, \v, no-break space, U+FEFF, a lone \r, U+2028...). So the raw
+# text is split on every C# line terminator and any line whose first
+# non-whitespace character is `#` is refused: no directive of any kind,
+# #region, #pragma and #nullable included. `[Conditional(...)]` drops calls
+# from one build only in the same way, so it is refused too.
+STEWARD_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
+STEWARD_CONDITIONAL = re.compile(r"\bConditional(?:Attribute)?\b")
+
+
+def _steward_directive_line(raw: str) -> str:
+    """The first line of raw C# whose first non-blank character is `#`, or ''."""
+    for line in STEWARD_LINE_TERMINATOR.split(raw):
+        lead = line
+        while lead and (lead[0].isspace() or lead[0] in "\ufeff\x1a"):
+            lead = lead[1:]
+        if lead.startswith("#"):
+            return line.strip()[:60] or "#"
+    return ""
 STEWARD_RETIRE_RETIRED = re.compile(r"\breturn\s+StewardRetireOutcome\s*\.\s*Retired\s*;")
 STEWARD_RETIRE_VERDICT_TOKEN = re.compile(r"(?<![\w.])verdict\b")
 STEWARD_RETIRE_VERDICT_TOKENS = 3
@@ -3807,13 +3827,20 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
             continue
         key = relative.as_posix()
         scanned += 1
-        text = _strip_cs_comments(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
+        text = _strip_cs_comments(raw)
 
-        directive = STEWARD_PREPROCESSOR.search(text)
-        if directive is not None:
-            fail(f"{label}: {path.relative_to(ROOT)} uses `{directive.group(0).strip()}` - the plugin "
+        directive = _steward_directive_line(raw)
+        if directive:
+            fail(f"{label}: {path.relative_to(ROOT)} has the directive line `{directive}` - the plugin "
                  "(net48) and the tests (net10.0) compile the same source, so conditional compilation "
-                 "can ship a guard the audit and the tests both see but the game does not", errors)
+                 "can ship a guard the audit and the tests both see but the game does not, and a "
+                 "directive line is also where this audit's comment stripping goes wrong", errors)
+        conditional = STEWARD_CONDITIONAL.search(raw)
+        if conditional is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} names `{conditional.group(0)}` - a [Conditional] "
+                 "method's calls vanish from one build and not the other, the same split as `#if`",
+                 errors)
 
         destructions = len(STEWARD_DESTRUCTION.findall(text))
         total_destructions += destructions
@@ -3976,7 +4003,8 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         "group) at "
         f"{total_calls} call site(s), in {STEWARD_RETIRE_CALLER}, and no file imports it by `using`. "
         "This text audit establishes where the refusal is written, not that control flow obeys it "
-        "(StewardRetirementTests), and it cannot see a destruction reached through a delegate, a "
+        "(StewardRetirementTests, which run on net10.0 only, so code that branches on the runtime it is "
+        "running on is a reviewer's job), and it cannot see a destruction reached through a delegate, a "
         "method group or reflection"
     ]
 
