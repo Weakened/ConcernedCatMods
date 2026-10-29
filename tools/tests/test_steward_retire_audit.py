@@ -8,8 +8,8 @@ verified to pass the validator that lacked this rule (origin/main d72b397)
 before being added here. The plants found by successive reviews were also each
 verified to pass the validator of the head they were found against (d0d559e:
 five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two, 80c3f3a:
-four, 8144fbd: three), whose rule they got past; the last nine were checked
-against origin/main 0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
+four, 8144fbd: three, 3b23929: one), whose rule they got past; the last ten
+were checked against origin/main 0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
 pass the merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
 re-runs that check, expecting every plant to get through it.
 """
@@ -346,6 +346,16 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      ALLOWS + "\n    [System.Diagnostics.Conditional(\"NET\")]\n"
                      "    private static void OnlyInTheTests() { }\n")
         self.assert_refused("a [Conditional] method's calls exist in one build and not the other")
+        # (An uncalled method: this pins the token rather than demonstrating a
+        # whole escape; any call to it would vanish from one build only.)
+
+    # Review of 3b23929: verified to pass 3b23929's validator as well as
+    # origin/main 0171cf6's.
+
+    def test_code_after_a_unicode_line_separator_in_a_comment_is_refused(self):
+        self.swap_in(RUNTIME, RUNTIME_MARKER,
+                     RUNTIME_MARKER + "            // tidy\u2028UnityEngine.Object.Destroy(_census.Live!.gameObject);\n")
+        self.assert_refused("C# ended the comment at U+2028 and compiled the destruction the stripper hid")
 
     def test_a_guard_wrapped_in_a_condition_is_refused(self):
         self.swap_in(PORT, PORT_GUARD,

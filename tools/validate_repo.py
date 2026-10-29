@@ -3764,6 +3764,12 @@ STEWARD_RETIRE_STATEMENT_START = re.compile(r"(?:^|[;{}])\s*$")
 # from one build only in the same way, so it is refused too.
 STEWARD_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
 STEWARD_CONDITIONAL = re.compile(r"\bConditional(?:Attribute)?\b")
+# Review of 3b23929: C# also ends a `//` comment at U+0085, U+2028 and U+2029,
+# while the shared comment stripper every pin here reads only ends one at CR
+# or LF - so `// tidy<U+2028>Object.Destroy(...)` was code to the compiler and
+# comment to every count. Those three characters have no use in this product's
+# source, so they are refused outright.
+STEWARD_EXOTIC_LINE_END = re.compile("[\u0085\u2028\u2029]")
 
 
 def _steward_directive_line(raw: str) -> str:
@@ -3836,6 +3842,11 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
                  "(net48) and the tests (net10.0) compile the same source, so conditional compilation "
                  "can ship a guard the audit and the tests both see but the game does not, and a "
                  "directive line is also where this audit's comment stripping goes wrong", errors)
+        exotic = STEWARD_EXOTIC_LINE_END.search(raw)
+        if exotic is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} holds U+{ord(exotic.group(0)):04X} at offset "
+                 f"{exotic.start()} - C# ends a line there and this audit's comment stripping does not, "
+                 "so code after it would be invisible to every count here", errors)
         conditional = STEWARD_CONDITIONAL.search(raw)
         if conditional is not None:
             fail(f"{label}: {path.relative_to(ROOT)} names `{conditional.group(0)}` - a [Conditional] "
