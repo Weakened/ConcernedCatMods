@@ -343,6 +343,12 @@ public class RouteFollowMathTests
         Assert.Equal(0f, sample.LookAheadPoint.Z, 3);
     }
 
+    /// <summary>#463: same isolation as the sailing controller's steady-state
+    /// test: a non-parallel collection and a no-GC window, bound still zero.
+    /// </summary>
+    [Collection(ExactAllocationCollection.Name)]
+    public class HotPath
+    {
     [Fact]
     public void SamplingHotPath_AllocatesNothing()
     {
@@ -365,6 +371,7 @@ public class RouteFollowMathTests
         Assert.True(scenario.Success);
         Assert.True(scenario.Result.RemainingMeters > 0f);
         Assert.Equal(0, allocated);
+    }
     }
 
     private static long MeasureSteadyStateAllocations(
@@ -410,9 +417,7 @@ public class RouteFollowMathTests
 
     private static long Measure(Action action, int iterations)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        Run(action, iterations);
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        return ExactAllocations.Measure(() => Run(action, iterations));
     }
 
     private sealed class AllocationScenario
