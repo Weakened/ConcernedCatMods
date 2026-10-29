@@ -283,6 +283,101 @@ def validate_product(key: str, errors: list[str], require_binary: bool,
     ]
 
 
+# #390: a capability consumer refuses a provider older than its FloorVersion. The
+# floor and the provider's own shipped version are two numbers in two products,
+# and nothing compared them - which is exactly how every cooperative order was
+# silently refused in #369/#370: the haul floor said 1.0.5 while Teamster shipped
+# 1.0.4, so Foreman hid the cooperative order with no error and no log line.
+#
+# Every `FloorVersion = new System.Version(a, b, c)` in src/ is listed here with
+# the product whose shipped version it gates, and the provider's shipped version
+# (its thunderstore.toml `versionNumber`, which the package check already holds
+# equal to the csproj and Plugin.cs) must be at or above it. A floor that is not
+# in this table fails too, so a new consumer cannot add an unchecked floor.
+PROVIDER_FLOORS = {
+    # file under src/                                                consumer gate              provider
+    "Shared/Settlement/Collection/Cooperation/HaulProviderGate.cs": ("HaulProviderGate", "teamster"),
+    "ConcernedSteward/Domain/Interop/RestockProviderGate.cs": ("RestockProviderGate", "teamster"),
+    "Shared/Settlement/Collection/Cooperation/CompanionPresenceClient.cs": ("PresenceProviderGate", "cartographer"),
+    "ConcernedTeamster/Domain/Cartographer/CartographerContract.cs": ("CartographerContract", "cartographer"),
+}
+PROVIDER_FLOOR_DECLARATION = re.compile(
+    r"\bFloorVersion\s*=\s*new\s+(?:System\s*\.\s*)?Version\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)")
+# Any declaration of a FloorVersion, in any form: a field or property initialiser,
+# an expression body, or an auto-property. A floor written as `=> new Version(9, 0, 0)`
+# in an unlisted file is a floor nobody compares, exactly like one written with `=`.
+PROVIDER_FLOOR_ANY = re.compile(r"(?<![.\w])FloorVersion\s*(?:=(?!=)|\{\s*get\s*;)")
+PROVIDER_SHIPPED_VERSION = re.compile(r'^versionNumber\s*=\s*"(\d+)\.(\d+)\.(\d+)"', re.MULTILINE)
+
+
+def check_provider_floors_are_shipped(errors: list[str]) -> list[str]:
+    """Fails when a consumer's FloorVersion is above the version its provider
+    actually ships, or when a floor exists that nobody checks (#390)."""
+    label = "[interop] #390 provider-floor audit"
+    src = ROOT / "src"
+    hits = 0
+    seen: set[str] = set()
+    for found in sorted(src.rglob("*.cs")):
+        rel = found.relative_to(src).as_posix()
+        parts = found.relative_to(src).parts
+        if any(part in ("obj", "bin") for part in parts) or parts[0].endswith(".Tests"):
+            # Test projects echo a floor to assert on it; they gate nothing.
+            continue
+        code = _strip_cs_comments(found.read_text(encoding="utf-8-sig"))
+        if not PROVIDER_FLOOR_ANY.search(code):
+            continue
+        if rel not in PROVIDER_FLOORS:
+            hits += 1
+            fail(f"{label}: src/{rel} declares a FloorVersion this audit does not know; add it to "
+                 "PROVIDER_FLOORS with the product whose shipped version it gates", errors)
+            continue
+        seen.add(rel)
+
+    shipped: dict[str, tuple[tuple[int, int, int], str]] = {}
+    for key in sorted({provider for _gate, provider in PROVIDER_FLOORS.values()}):
+        toml = PRODUCTS[key]["project_dir"] / "Package" / "thunderstore.toml"  # type: ignore[operator]
+        match = PROVIDER_SHIPPED_VERSION.search(toml.read_text(encoding="utf-8")) if toml.is_file() else None
+        if match is None:
+            hits += 1
+            fail(f"{label}: could not read the shipped version from {toml.relative_to(ROOT)}", errors)
+            continue
+        shipped[key] = (tuple(int(part) for part in match.groups()), toml.relative_to(ROOT).as_posix())  # type: ignore[assignment]
+
+    checked = []
+    for rel, (gate, provider) in sorted(PROVIDER_FLOORS.items()):
+        source = src / rel
+        if rel not in seen or not source.is_file():
+            hits += 1
+            fail(f"{label}: src/{rel} no longer declares {gate}.FloorVersion; point the table at where the "
+                 "floor went rather than leaving it unchecked", errors)
+            continue
+        code = _strip_cs_comments(source.read_text(encoding="utf-8-sig"))
+        anchor = re.search(r"\b(?:class|struct)\s+" + re.escape(gate) + r"\b", code)
+        declaration = PROVIDER_FLOOR_DECLARATION.search(code, anchor.end() if anchor else 0)
+        if anchor is None or declaration is None:
+            hits += 1
+            fail(f"{label}: could not read {gate}.FloorVersion as `new System.Version(a, b, c)` in src/{rel}; "
+                 "a floor this audit cannot read is a floor nobody is comparing", errors)
+            continue
+        floor = tuple(int(part) for part in declaration.groups())
+        if provider not in shipped:
+            continue
+        version, toml_rel = shipped[provider]
+        floor_text = ".".join(str(part) for part in floor)
+        version_text = ".".join(str(part) for part in version)
+        if version < floor:
+            hits += 1
+            fail(f"{label}: {gate}.FloorVersion is {floor_text} (src/{rel}) but "
+                 f"{PRODUCTS[provider]['package_name']} ships {version_text} ({toml_rel}) - every consumer "
+                 "behind that gate would refuse the provider it was built to talk to, silently", errors)
+        checked.append(f"{gate} {floor_text} <= {PRODUCTS[provider]['package_name']} {version_text}")
+
+    return [
+        f"{label}: {len(checked)} provider floor(s) at or below the version their provider ships "
+        f"({'; '.join(checked)}); every FloorVersion in src/ is listed ({hits} violations)",
+    ]
+
+
 # CT-002 architecture rule: only src/ConcernedTeamster/Adapters/ may name
 # Valheim types. The tokens are unambiguous Valheim identifiers; generic
 # names (Container, Inventory, Player, Character, Version) are excluded to
@@ -5020,6 +5115,7 @@ def main() -> int:
         ))
 
     report.extend(check_solution_integrity(errors))
+    report.extend(check_provider_floors_are_shipped(errors))
     report.extend(check_no_mojibake(errors))
     report.extend(check_product_data_roots_have_one_owner(errors))
     report.extend(check_cartographer_editor_extensions_agree(errors))

@@ -18,7 +18,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 /// it asks <see cref="ClimbController.TryMountByUse"/>, which is that
 /// workstream's own seam for exactly this, and does what it says.
 ///
-/// <b>With the feature off there is no patch.</b> <c>Ladders/Enabled = false</c>
+/// <b>With the feature off there is no patch.</b> <c>Ladders/PlayerClimbing = false</c>
 /// when the game starts means <see cref="Install"/> is never called, so
 /// <c>Ladder.Interact</c> is untouched IL and the game is the game. Switched off
 /// later, or with <c>Ladders/UseTeleport = true</c>, the prefix reads one bool

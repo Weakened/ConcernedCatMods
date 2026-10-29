@@ -11,10 +11,14 @@ namespace TheConcernedCat.ConcernedForeman.Domain.Ladders;
 /// silly one, and how they reach the climb lives here, where it can be tested
 /// without the game.
 ///
-/// <b>The defaults are the spec's table.</b> A player who never opens the
-/// config file gets climbable ladders, auto-mount on, the tuned speed, no
-/// stamina cost, no teleport, and no NPC climbing — that is the whole point of
-/// the row of defaults, and a test holds it to them.
+/// <b>Player climbing is off by default (#436).</b> Player ladder climbing is
+/// owned by Concerned Ladders, published separately, which refuses to run while
+/// this motor is installed. A player who never opens the config file therefore
+/// gets vanilla ladders from Concerned Foreman — nothing patched at all — and
+/// Concerned Ladders' ladders keep working beside it. The rest of the row is
+/// the spec's table (auto-mount on, the tuned speed, no stamina cost, no
+/// teleport, no NPC climbing) and only matters to somebody who opts in. A test
+/// holds every default, and fails if <see cref="Enabled"/> is ever flipped back.
 ///
 /// Four of the six map onto <see cref="ClimbOptions"/>, which the climb reads
 /// live. The other two have no home there and must not be given one:
@@ -39,6 +43,38 @@ internal readonly struct LadderSettingValues
     /// it; it exists so the range is stated rather than assumed.</summary>
     internal const float MaximumStaminaCost = 10f;
 
+    /// <summary>The config section every ladder setting is bound under.</summary>
+    internal const string Section = "Ladders";
+
+    /// <summary>The key the player-climb switch is bound under (#436).
+    ///
+    /// It is deliberately <b>not</b> <see cref="RetiredEnabledKey"/>. Every
+    /// development build before #436 wrote <c>Ladders/Enabled = true</c> into
+    /// its profile's config file simply because that was the default; nobody
+    /// chose it. Reading the switch from a new key means that stale line never
+    /// turns the climb on, so a profile that ran an old build is off like a new one
+    /// instead of silently keeping a motor that disables Concerned Ladders.
+    /// A player who really wants Foreman's climb sets this key, on purpose.
+    /// The old key is still read, as a veto only (<see cref="Effective"/>).</summary>
+    internal const string PlayerClimbingKey = "PlayerClimbing";
+
+    /// <summary>The key the switch used to live under. It is still bound, but
+    /// only as a veto (<see cref="Effective"/>): a <c>true</c> in it never turns
+    /// the climb on.</summary>
+    internal const string RetiredEnabledKey = "Enabled";
+
+    /// <summary>Whether Foreman's player climb runs: only when
+    /// <c>PlayerClimbing</c> is on AND the old <c>Enabled</c> key has not been
+    /// set to false.
+    ///
+    /// The second half exists for one reason. Concerned Ladders 1.0.0 is
+    /// published, and when it finds Foreman's motor it tells the player to
+    /// "disable Foreman's Ladders/Enabled and restart". That text cannot be
+    /// changed in the published package, so the key it names must still
+    /// switch the climb off. It can never switch it on: the dev builds that
+    /// wrote <c>Enabled = true</c> as a default must stay off.</summary>
+    internal static bool Effective(bool playerClimbing, bool legacyEnabled) => playerClimbing && legacyEnabled;
+
     internal LadderSettingValues(
         bool enabled,
         bool autoMount,
@@ -55,8 +91,9 @@ internal readonly struct LadderSettingValues
         NpcClimbing = npcClimbing;
     }
 
-    /// <summary>Climb ladders instead of teleporting up them. False restores
-    /// vanilla.</summary>
+    /// <summary>Climb ladders instead of teleporting up them (bound as
+    /// <c>Ladders/PlayerClimbing</c>). False restores vanilla, and false is the
+    /// default.</summary>
     internal bool Enabled { get; }
 
     /// <summary>Walking into a ladder climbs it. False means Use only.</summary>
@@ -76,9 +113,10 @@ internal readonly struct LadderSettingValues
     /// Off, and nothing reads it yet.</summary>
     internal bool NpcClimbing { get; }
 
-    /// <summary>Exactly the table in LADDERS.md §8.</summary>
+    /// <summary>Exactly the table in LADDERS.md §8. <c>enabled</c> is false
+    /// since #436: Concerned Ladders owns player climbing.</summary>
     internal static LadderSettingValues Defaults => new LadderSettingValues(
-        enabled: true,
+        enabled: false,
         autoMount: true,
         climbSpeed: 1f,
         staminaCost: 0f,

@@ -12,7 +12,15 @@ value. #393 removed the sidecar I/O stopwatch assertions after the same parse
 took 531 ms under host load and 83 ms on the immediate unchanged rerun: that
 assertion measured the machine. The max-retention sidecar is guarded by managed
 allocation and file-size ceilings instead. Allocation count does not vary with
-clock speed or disk contention the way wall-clock does.
+clock speed or disk contention the way wall-clock does. #447 did the same for the
+trip comparison presenter (budget 9): its 100 ms ceiling failed the gate at 101 ms
+and 150 ms (recorded in issue #447) and 104 ms (`docs/mods/concerned-ladders/STATUS.md`)
+under shared-machine load, and passed on every rerun. It now bounds **allocation**:
+what the comparison allocates grows at most linearly with the trips (a small
+per-sample amount) and stays under a fixed ceiling at the largest trip. That is
+narrower than the old latency budget, and the gap is stated: a quadratic change
+that allocates per sample fails it, but an allocation-free quadratic loop would
+not be caught by this test.
 
 ## How to read "long-run"
 
@@ -44,7 +52,7 @@ not an adjective.
 | 6 | Brake lifecycle `EvaluateTick`, engaged steady state | due tick (0.5 s) → 200k ticks ≈ 27.8 h | 0 B/call | 0 B / 200,000 calls | Met | `PerformanceBudgetTests.BrakeLifecycle_EvaluateTick_LongRun_AllocatesNothing` (new) |
 | 7 | Trip recorder feed→detach→drain, many finished trips | per haul (49 samples × 1.1 s spacing + debounce ≈ 58 s/cycle) → 100 cycles/window ≈ 1.6 h/window | allocation flat across two equal windows | window 1: 832,800 B; window 2: 832,800 B (identical) | Met | `PerformanceBudgetTests.TripRecorder_FeedDetachDrainOverManyTripCycles_AllocationStaysFlat` (new) |
 | 8 | Route bottleneck presenter, worst-case trip (5,000 samples, `MaxMaxSamplesPerTrip`) | per keystroke in the hypothetical-mass field | < 50 ms | **1 ms** | Met | `PerformanceBudgetTests.RouteBottleneckPresenter_Present_WorstCaseTripSize_CompletesWithinBudget` (new) |
-| 9 | Trip comparison presenter, two worst-case trips | on row select | < 100 ms | **10 ms** | Met | `PerformanceBudgetTests.TripComparisonPresenter_Present_WorstCaseTripSizes_CompletesWithinBudget` (new) |
+| 9 | Trip comparison presenter, two worst-case trips | on row select | allocation, linear: ≤ 64 B allocated per extra sample, ≤ 512 KiB at 5000 samples (was < 100 ms wall clock until #447; CPU time is no longer gated) | **~16 B/sample, ~82 KiB** | Met | `PerformanceBudgetTests.TripComparisonPresenter_Present_WorstCaseTripSizes_StaysLinearAndAllocationBounded` |
 | 10 | Cargo manifest, many distinct items (200 synthetic, stress input) | on cargo change | < 500 ms | < 1 ms | Met | `CargoManifestTests.Create_ManyDistinctEntries_StaysCorrectAndFast` (pre-existing) |
 | 11 | Network input guard (`Mass`/`MassFactor`/`Speed`/`Grade`), every sanitize branch | rides sampler due-tick cadence → 50k×4 calls ≈ 6.9 h | 0 B/call | 0 B / 200,000 calls | Met | `PerformanceBudgetTests.NetworkInputGuard_AllGuards_LongRun_AllocateNothing` (new) |
 | 12 | Sidecar compose+write at max retention (500 trips × 20 samples) | once per finished trip (early-return otherwise) | < 8 MiB managed allocation | ~3.8 MiB on the #393 correction run; historical CT-040 timing 23 ms remains measurement, not a CI gate | Met | `TripPersistenceTests.Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndAllocationBounded` |
