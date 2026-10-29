@@ -2,7 +2,8 @@
 
 Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
-death door named in `GUNNAR_COLLECTION.md` §6c).
+death door named in `GUNNAR_COLLECTION.md` §6c) and **C6** (2026-10-28, D17 - the collection tour's walking and
+load size).
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -393,3 +394,33 @@ fails closed and keeps its evidence.
 like D15's, with the death predicate and the verb it may be called from both audited. The pin is authored with the
 implementation, in the same change. Until then the behaviour is simply absent: **a Gunnar who dies today still loses
 what he is carrying**, exactly as `GUNNAR_COLLECTION.md` §6c says.
+
+## D17. Gunnar's on-foot collection tour walks his own body; a load is 225 units, any size, at most 24 sources
+
+Status: **accepted** (contract revision **C6**, owner decision 2026-10-28, asked directly by the lead on #381's
+collection tour, PR #445). It answers the owner questions `GUNNAR_COLLECTION.md` §6f listed and decided none of
+itself.
+
+**Walking.** D14.2's "pathfind **his own body**", written for the hauling runtime, **covers the on-foot collection
+tour**: Gunnar may walk his own body between the loose sources the survey found and to the chest the player chose,
+under exactly D14.2's terms - his own body only, through the vanilla motor, never a teleport or a portal, work
+authority per D3 (opted in, the host, not dedicated, nobody else connected), and off by default behind the
+collection runtime's own switch (`Workers/GunnarCollectionEnabled`), not hauling's. It is **on foot**: nothing here
+lets a tour use a cart, and a cart-assisted round, which would put items into a cart's container, still needs its own
+grant.
+
+**Load size.** A load is sized like a vanilla player wearing Megingjord - **225 units** - whatever Gunnar wears, as
+#381 states. Vanilla does not weigh a non-player down, so this remains the product's own discipline; the slot limit is
+still the game's.
+
+**The 24-source trip.** `StopSequencer.MostStopsPerRound` (24) capping a load at 24 sources is accepted **as a
+planning limit**: the rest of a larger look is the next load, never dropped and never walked one source a trip.
+
+**Any load size.** A load is not refused for being small. A tour that would carry **nothing** still does not start -
+that is an empty order, not a size judgement - but one or two units are walked to the chest like any other load.
+
+**What is not granted:** no cart use on a tour, no felling (`TreeBase.Damage`), no idle gesture
+(`ZSyncAnimation.SetTrigger`), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
+change to D15's deposit or D16's death drop. Each of those still needs its own owner decision.
+
+**Never observed in game.** The tour's rows in `GUNNAR_COLLECTION.md` §10 are OWNER GO-AROUND PENDING.

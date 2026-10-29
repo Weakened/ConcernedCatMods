@@ -237,6 +237,40 @@ $requirements = @(
     @("Humanoid", "game", "Pickup DESTROYS the item and answers true for a character with no network record", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*if \(m_nview\.GetZDO\(\) == null\) \{ UnityEngine\.Object\.Destroy\(go\); return true; \}'),
     @("Character", "game", "Character.m_nview", 'protected ZNetView m_nview;'),
 
+    # The collection tour (#381): the survey's reads, the carry limit, the
+    # inventory room, and the ward and location queries - each pinned so a game
+    # update that renames one fails here rather than in a player's world. The
+    # FlashShield row is the fact the validator's ward-query audit depends on.
+    @("ZNetScene", "game", "ZNetScene.m_instances, the table the survey walks", 'private readonly Dictionary<ZDO, ZNetView> m_instances'),
+    @("ZDO", "game", "ZDO.GetPrefab()", 'public int GetPrefab\(\)'),
+    @("ZDO", "game", "ZDO.GetLong(int, long)", 'public long GetLong\(int hash, long defaultValue = 0L\)'),
+    @("ZDOVars", "game", "ZDOVars.s_creator", 'public static readonly int s_creator\b'),
+    @("ZDOID", "game", "ZDOID.UserID", 'public long UserID =>'),
+    @("ZDOID", "game", "ZDOID.ID", 'public uint ID \{ get; private set; \}'),
+    @("ZDOID", "game", "ZDOID.None, the tour's 'no body' identity", 'public static readonly ZDOID None = new ZDOID\(0L, 0u\);'),
+    @("Pickable", "game", "Pickable.m_extraDrops", 'public DropTable m_extraDrops = new DropTable\(\);'),
+    @("Pickable", "game", "Pickable.m_respawnTimeMinutes", 'public float m_respawnTimeMinutes;'),
+    @("Pickable", "game", "Pickable.m_hideWhenPicked", 'public GameObject m_hideWhenPicked;'),
+    @("Pickable", "game", "Pickable.GetPicked()", 'public bool GetPicked\(\)'),
+    @("Pickable", "game", "Pickable.GetEnabled", 'public int GetEnabled => m_enabled;'),
+    @("DropTable", "game", "DropTable.IsEmpty()", 'public bool IsEmpty\(\)'),
+    @("ItemDrop", "game", "ItemData.SharedData.m_food", 'public float m_food;'),
+    @("ItemDrop", "game", "ItemData.SharedData.m_weight", 'public float m_weight = 1f;'),
+    @("ItemDrop", "game", "ItemData.SharedData.m_maxStackSize", 'public int m_maxStackSize = 1;'),
+    @("ItemDrop", "game", "ItemData.SharedData.m_equipStatusEffect", 'public StatusEffect m_equipStatusEffect;'),
+    @("ItemDrop", "game", "ItemData.GetWeight(int)", 'public float GetWeight\(int stackOverride = -1\)'),
+    @("SE_Stats", "game", "SE_Stats.m_addMaxCarryWeight (Megingjord's bonus)", 'public float m_addMaxCarryWeight;'),
+    @("Player", "game", "Player.m_maxCarryWeight (the base carry limit)", 'public float m_maxCarryWeight = 300f;'),
+    @("ObjectDB", "game", "ObjectDB.GetItemPrefab(string)", 'public GameObject GetItemPrefab\(string name\)'),
+    @("Inventory", "game", "Inventory.GetEmptySlots()", 'public int GetEmptySlots\(\)'),
+    @("PrivateArea", "game", "PrivateArea.CheckAccess(Vector3, float, bool, bool) - flash DEFAULTS TO TRUE", 'public static bool CheckAccess\(Vector3 point, float radius = 0f, bool flash = true, bool wardCheck = false\)'),
+    @("PrivateArea", "game", "a flashing ward query sends an RPC to everybody, which is why Teamster asks with flash: false", 'private void FlashShield\(bool flashConnected\) \{ if \(!m_flashAvailable\) \{ return; \} m_flashAvailable = false; m_nview\.InvokeRPC\(ZNetView\.Everybody, "FlashShield"\);'),
+    @("Location", "game", "Location.IsInsideLocation(Vector3, float)", 'public static bool IsInsideLocation\(Vector3 point, float distance\)'),
+    @("ZoneSystem", "game", "ZoneSystem.m_locationInstances", 'public Dictionary<Vector2s, LocationInstance> m_locationInstances'),
+    @("ZoneSystem", "game", "ZoneSystem.GetZone(Vector3)", 'public static Vector2s GetZone\(Vector3 point\)'),
+    @("ZoneSystem", "game", "ZoneSystem.LocationInstance.m_location", 'public ZoneLocation m_location;'),
+    @("ZoneSystem", "game", "ZoneSystem.ZoneLocation.m_exteriorRadius", 'public float m_exteriorRadius;'),
+
     # Jotunn: registering the worker prefab for every session.
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.OnVanillaPrefabsAvailable", 'public static event Action OnVanillaPrefabsAvailable;'),
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.CreateClonedPrefab(string, GameObject)", 'public GameObject CreateClonedPrefab\(string name, GameObject prefab\)'),

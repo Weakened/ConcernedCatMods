@@ -242,13 +242,18 @@ internal static class JobSnapshotBuilder
                 AreaSample sample = Sample(probe, candidate.At);
                 if (sample.Verdict == AreaSampleVerdict.Standable)
                 {
+                    // Moved onto the ground the probe found, and nothing else
+                    // about it changes - including what it leaves him carrying,
+                    // which a six-argument rebuild silently dropped back to
+                    // nothing and with it the whole of 0.5.0's load planning.
                     kept.Add(new JobTarget(
                         candidate.Key,
                         candidate.Epoch,
                         sample.Ground,
                         candidate.Action,
                         candidate.Priority,
-                        candidate.Needs));
+                        candidate.Needs,
+                        candidate.Carries));
                     continue;
                 }
 
