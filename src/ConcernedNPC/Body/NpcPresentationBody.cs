@@ -121,9 +121,24 @@ public static class NpcPresentationBody
             Transform? helmet = null;
             Transform? rightHand = null;
             SkinnedMeshRenderer? body = null;
+            Mesh?[]? modelMeshes = null;
+            Material?[]? modelMaterials = null;
             VisEquipment equipment = clone.GetComponentInChildren<VisEquipment>(includeInactive: true);
             if (equipment != null)
             {
+                try
+                {
+                    ReadModels(equipment, out modelMeshes, out modelMaterials);
+                }
+                catch (Exception)
+                {
+                    // On a build that lacks or renamed the body list, the fault is
+                    // raised when ReadModels is compiled, so it surfaces HERE rather
+                    // than inside it. Caught here, it costs only the second body
+                    // and never refuses a figure that did not ask for one.
+                    modelMeshes = null;
+                    modelMaterials = null;
+                }
                 helmet = InsideOrNull(equipment.m_helmet, visual);
                 rightHand = InsideOrNull(equipment.m_rightHand, visual);
                 body = equipment.m_bodyModel != null
@@ -174,7 +189,8 @@ public static class NpcPresentationBody
 
             GameObject built = root;
             root = null;
-            return NpcPresentationFigure.Built(built, animator, helmet, rightHand, body, quieted, quietedNames);
+            return NpcPresentationFigure.Built(
+                built, animator, helmet, rightHand, body, quieted, quietedNames, modelMeshes, modelMaterials);
         }
         catch (Exception exception)
         {
@@ -196,6 +212,51 @@ public static class NpcPresentationBody
             }
 
             UnityEngine.Object.DestroyImmediate(holder);
+        }
+    }
+
+    /// <summary>Copies the source's body list out of its equipment component:
+    /// the game keeps one mesh and one base material per selectable body, and
+    /// the character screen chooses between them by index. Read only, and read
+    /// before the component is destroyed; the references are to assets, which
+    /// outlive the clone. A build without the list, or one where reading it
+    /// faults, leaves both arrays null and the figure is built as before: a
+    /// fault while it runs is caught inside, and a missing field or type -
+    /// which the runtime raises when this method is compiled, at the call -
+    /// is caught at the call. Kept out of line so that compile happens at
+    /// that call and not inside the extraction's own frame.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ReadModels(VisEquipment equipment, out Mesh?[]? meshes, out Material?[]? materials)
+    {
+        meshes = null;
+        materials = null;
+        try
+        {
+            VisEquipment.PlayerModel[]? models = equipment.m_models;
+            if (models == null || models.Length == 0)
+            {
+                return;
+            }
+
+            var readMeshes = new Mesh?[models.Length];
+            var readMaterials = new Material?[models.Length];
+            for (int index = 0; index < models.Length; index++)
+            {
+                VisEquipment.PlayerModel? model = models[index];
+                readMeshes[index] = model?.m_mesh;
+                readMaterials[index] = model?.m_baseMaterial;
+            }
+
+            meshes = readMeshes;
+            materials = readMaterials;
+        }
+        catch (Exception)
+        {
+            // A build that renamed the list costs only the second body. It must
+            // never refuse a figure that did not ask for one.
+            meshes = null;
+            materials = null;
         }
     }
 

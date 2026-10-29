@@ -36,12 +36,15 @@ public sealed class BodyInstantiationAuditTests
         "new GameObject(",
     };
 
-    /// <summary>The two files allowed to create anything, and the reason each
-    /// one is.
+    /// <summary>The files allowed to create anything, and the reason each one
+    /// is: the two body factories, and - since the #295 lift - the dresser's
+    /// harvest helper, which creates no body.
     ///
-    /// <b>Asserted to be exactly these two.</b> Adding a third is how this rule
+    /// <b>Asserted to be exactly these three.</b> The third was added by the
+    /// #295 lift, with its reason, in the same change that removed the Foreman
+    /// copy it replaces. Adding a fourth is how this rule
     /// gets weakened one quiet entry at a time, so the list itself is pinned by
-    /// <see cref="The_allowed_list_is_exactly_the_two_factories"/> and a new
+    /// <see cref="The_allowed_list_is_exactly_the_two_factories_and_the_harvest"/> and a new
     /// entry is a visible edit with a reason attached rather than a line in a
     /// diff.</summary>
     private static IReadOnlyDictionary<string, string> Allowed =>
@@ -53,6 +56,11 @@ public sealed class BodyInstantiationAuditTests
             ["NpcPresentationBody.cs"] =
                 "the presentation extraction: it instantiates a game prefab under an INACTIVE holder "
                 + "so nothing wakes, and destroys every part of it again before it returns",
+            ["NpcFigureParts.cs"] =
+                "the figure dresser's engine writes (#295 lift): it clones one item's attach child - "
+                + "never the item - under an INACTIVE holder so it can be inspected before it wakes, "
+                + "and the holder is destroyed in the same method. Not a body, and nothing it makes is "
+                + "networked or saved; tools/validate_repo.py pins each spelling and every caller",
         };
 
     [Fact]
@@ -78,10 +86,10 @@ public sealed class BodyInstantiationAuditTests
     }
 
     [Fact]
-    public void The_allowed_list_is_exactly_the_two_factories()
+    public void The_allowed_list_is_exactly_the_two_factories_and_the_harvest()
     {
         Assert.Equal(
-            new[] { "NpcPresentationBody.cs", "NpcWorkerPrefabFactory.cs" },
+            new[] { "NpcFigureParts.cs", "NpcPresentationBody.cs", "NpcWorkerPrefabFactory.cs" },
             Allowed.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray());
 
         foreach (KeyValuePair<string, string> allowed in Allowed)

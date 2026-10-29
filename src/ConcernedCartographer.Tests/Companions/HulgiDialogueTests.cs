@@ -20,6 +20,17 @@ public sealed class HulgiDialogueTests
         return new DialogueContext(biomes);
     }
 
+    /// <summary>The authored English text of a key, or the key itself when it has
+    /// none (the same fallback <c>AtlasStrings.Get</c> uses). Read from the English
+    /// catalog rather than through <c>AtlasStrings.Get</c>: these tests are about the
+    /// authored content, and the only way to make <c>Get</c> mean English is to reset
+    /// the process-wide overrides, which raced <c>AtlasStringsTests</c> running in
+    /// parallel (#453).</summary>
+    private static string English(string key)
+    {
+        return AtlasStrings.Defaults.TryGetValue(key, out string? text) ? text : key;
+    }
+
     // ------------------------------------------------------------------
     // The catalogue itself
     // ------------------------------------------------------------------
@@ -54,12 +65,11 @@ public sealed class HulgiDialogueTests
     [Fact]
     public void Catalogue_EveryLineHasRealAuthoredText()
     {
-        // AtlasStrings.Get falls back to the key itself for an unknown key, so
+        // English() falls back to the key itself for an unknown key, so
         // "the text equals the key" is exactly the missing-content failure.
-        AtlasStrings.LoadOverrides(new Dictionary<string, string>());
         foreach (DialogueLine line in Catalog.Lines)
         {
-            string text = AtlasStrings.Get(line.Key);
+            string text = English(line.Key);
             Assert.False(
                 text == line.Key,
                 $"Dialogue line {line.Key} has no English text in AtlasStrings.");
@@ -72,11 +82,10 @@ public sealed class HulgiDialogueTests
     {
         // The brief asks for short lines, not cinematic ones, and they are
         // delivered as a HUD message rather than a panel.
-        AtlasStrings.LoadOverrides(new Dictionary<string, string>());
         foreach (DialogueLine line in Catalog.Lines)
         {
             Assert.True(
-                AtlasStrings.Get(line.Key).Length <= 160,
+                English(line.Key).Length <= 160,
                 $"Dialogue line {line.Key} is too long for a HUD message.");
         }
     }
@@ -103,7 +112,6 @@ public sealed class HulgiDialogueTests
         // The one content rule with no recovery: a spoiler cannot be taken
         // back. Nothing in the catalogue may name a boss or tell the player
         // what to bring.
-        AtlasStrings.LoadOverrides(new Dictionary<string, string>());
         string[] forbidden =
         {
             "eikthyr", "elder", "bonemass", "moder", "yagluth", "queen", "fader",
@@ -112,7 +120,7 @@ public sealed class HulgiDialogueTests
 
         foreach (DialogueLine line in Catalog.Lines)
         {
-            string text = AtlasStrings.Get(line.Key).ToLowerInvariant();
+            string text = English(line.Key).ToLowerInvariant();
             foreach (string word in forbidden)
             {
                 Assert.False(

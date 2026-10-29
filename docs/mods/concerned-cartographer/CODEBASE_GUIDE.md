@@ -1284,6 +1284,31 @@ Jötunn shell for `cc_sync` (status/share/inbox/preview/apply mine|theirs/clear)
 
 Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol version 1). Receive path enforces, in order: protocol version, sanitized author strings, self-echo filter, declared-length cap (320 KB compressed), declared-vs-actual length verification, **bounded** decompression (4 MB via `AtlasCompression`), row cap (20k), then the malformed-skipping codecs — and delivers only into `SyncInbox`. Failures disable the transport for the session rather than crashing.
 
+### Work areas (#296, slice 1)
+
+- `src/Shared/Interop/WorkArea/` holds `concernedcat.workarea/1`. It is
+  game-free, and both the provider and any consumer compile it.
+  - `WorkAreaPolygon` validates a boundary, answers containment (even-odd,
+    half-open edges) and gives a revision derived from the geometry.
+  - `WorkAreaContract` defines the ops `hello`, `listAreas` and
+    `describeArea`. All of them read only: no op assigns, starts or edits
+    anything.
+  - `WorkAreaResponder` holds the whole protocol.
+- `Domain/Atlas/WorkAreas.cs` has four parts:
+  - `WorkAreaStore`: the named areas in one world.
+  - `WorkAreaDrafting`: turns a closed route stroke into a boundary, simplified
+    with Ramer–Douglas–Peucker. An open stroke is refused.
+  - `WorkAreaCodec`: reads and writes the sidecar.
+  - `WorkAreaCommands`: the `cc_areas` development command.
+- `Persistence/WorkAreaPersistence.cs` stores the `.work-areas.tsv` sidecar,
+  which is part of `CartographerWorldSidecars`.
+- `Runtime/Interop/WorkAreaCapabilityPublisher.cs` publishes the capability next
+  to presence in `Plugin.ConcernedCatCapabilities`.
+- Not yet built:
+  - the visible map editor (slice 2);
+  - "Assign Thorstein" and the Foreman consumer (Lane D2, after #295);
+  - the ConcernedNPC provider registry (#375).
+
 ### `Runtime/CompatibilityRegistry.cs` (v0.8)
 
 Detects known neighbor mods by BepInEx GUID and applies coexistence policies (e.g. with another pin manager present the workbench hotkey never prompts adoption). Backs `cc_atlas compat`.

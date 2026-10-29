@@ -2755,24 +2755,15 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("UnityEngine.Object.Instantiate", re.compile(
         r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
-        # #295: one attachment mesh (an item's attach child, never the item) cloned
-        # under an INACTIVE holder for Thorstein's local presentation figure.
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
     )),
     ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*tameable\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*drop\s*\)"), 1),
-        # #295: the figure's own dark parts - an inactive holder, a refused
-        # piece, or a component on a piece that has never woken.
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
     )),
     ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
         ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
-        # #295: the local figure, a misfitting piece of it, or its material
-        # instance. Never a network view: the figure has none.
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
     )),
     ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
@@ -2795,15 +2786,6 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
-        # #295: Thorstein's local presentation figure, which has no collider, no
-        # rigidbody and no network view: seating a preset or garment piece on a
-        # joint, the game's equipoffset nudge, and standing the figure at home.
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localPosition\s*\+=\s*offset\s*\.\s*position\s*;"), 1),
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localRotation\s*\*=\s*offset\s*\.\s*rotation\s*;"), 1),
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
-        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
     )),
 )
 
@@ -2866,81 +2848,338 @@ def _strip_foreman_cs_comments(text: str) -> str:
     return "".join(out)
 
 
-# #295: Thorstein's presentation figure keeps every engine write it makes in
-# Runtime/Presentation/FigureParts.cs, where #400 pins each one. Those pins
-# match a call INSIDE a helper, and the helpers take any UnityEngine.Object or
-# Transform - so without this rule any Foreman file could destroy a network
-# view or move the player through FigureParts.Drop/Place and spell no audited
-# token at all (the "lift it into a helper" escape). The helpers are therefore
-# confined: the type may be named only in its own file and in the two files
-# that build and dress the figure, only as `FigureParts.<Helper>`, and each
-# helper's population in each file is pinned.
-FOREMAN_FIGURE_PARTS_FILE = "Runtime/Presentation/FigureParts.cs"
-FOREMAN_FIGURE_PARTS_USES = {
-    ("Runtime/Presentation/ThorsteinDresser.cs", "Discard"): 8,
-    ("Runtime/Presentation/ThorsteinDresser.cs", "Drop"): 2,
-    ("Runtime/Presentation/ThorsteinDresser.cs", "Harvest"): 2,
-    ("Runtime/Presentation/ThorsteinDresser.cs", "Holder"): 2,
-    ("Runtime/Presentation/ThorsteinDresser.cs", "Offset"): 1,
-    ("Runtime/Presentation/ThorsteinDresser.cs", "Seat"): 4,
-    ("Runtime/Presentation/ThorsteinPresentation.cs", "Drop"): 1,
-    ("Runtime/Presentation/ThorsteinPresentation.cs", "Place"): 1,
+# #295 lift: the figure dresser lives ONCE, in Concerned NPC
+# (src/ConcernedNPC/Body/Dressing), and Thorstein, Sunniva and Gunnar all use
+# it. Before the lift it was Foreman's Runtime/Presentation/FigureParts.cs, which
+# #400 pinned site by site and the old "#295 figure-parts audit" confined. Both
+# halves move here rather than being dropped:
+#
+# 1. ENGINE-WRITE CENSUS of the whole library. Every creation, destruction,
+#    re-parenting, pose write and mesh swap anywhere in src/ConcernedNPC is
+#    pinned by path relative to the library, exact whitespace-tolerant spelling
+#    and population - the body factories' and the extraction's sites as well as
+#    the dresser's, because a census that skipped the files that already had
+#    them would be the place the next one went. A new call that merely uses the
+#    same API in the same file is a different program and fails.
+# 2. CONFINEMENT of the helpers. NpcFigureParts takes any object or transform,
+#    so it may be named only in its own file and in NpcFigureDresser.cs, only as
+#    `NpcFigureParts.<Helper>(`, with each helper's population pinned. Across
+#    assemblies the confinement is the compiler's: the type is internal, which
+#    this rule also requires.
+# 3. THE DOOR CONSUMERS USE. Body/Dressing's public types are exactly the
+#    dresser and the palette, and no public member of the dresser takes an engine
+#    object - it acts on the figure it was built for and the pieces it put there.
+#    That is what keeps a consumer's own pinned audit (Foreman's #400) honest: a
+#    library member that destroyed or moved whatever it was handed would be a way
+#    round it that spells no audited token.
+#
+# Limits, stated: this is a source-text audit with comments stripped. It does
+# not follow a delegate or a method group to an engine call that spells no
+# `Destroy…(`, and it does not prove control flow.
+NPC_FIGURE_PARTS_FILE = "Body/Dressing/NpcFigureParts.cs"
+NPC_FIGURE_DRESSER_FILE = "Body/Dressing/NpcFigureDresser.cs"
+NPC_DRESSING_DIR = "Body/Dressing/"
+NPC_DRESSING_PUBLIC_TYPES = frozenset({"NpcFigureDresser", "NpcCustomizationPalette"})
+NPC_FIGURE_PARTS_USES = {
+    "Discard": 8,
+    "Drop": 3,
+    "Harvest": 2,
+    "Holder": 2,
+    "Offset": 1,
+    "Place": 1,
+    "Reshape": 1,
+    "Seat": 4,
 }
 
 
-def check_foreman_figure_parts_confined(errors: list[str]) -> list[str]:
-    """Confines Thorstein's figure helpers to the files that own the figure."""
-    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
-    if not (foreman_dir / FOREMAN_FIGURE_PARTS_FILE).is_file():
-        fail(f"[foreman] #295 figure-parts audit: {FOREMAN_FIGURE_PARTS_FILE} is missing; point the "
-             "audit at the helpers' new home rather than leaving it green", errors)
+def _npc_exact(pattern: str) -> re.Pattern:
+    return re.compile(pattern)
+
+
+# label, broad spelling, ((path under src/ConcernedNPC, exact spelling, count), ...)
+NPC_ENGINE_WRITES = (
+    ("Instantiate", re.compile(r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*!\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
+    )),
+    ("new GameObject", re.compile(r"\bnew\s+GameObject\s*\("), (
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bnew\s+GameObject\s*\(\s*holderName\s*\)"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bnew\s+GameObject\s*\(\s*figureName\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bnew\s+GameObject\s*\(\s*name\s*\)"), 1),
+    )),
+    ("DestroyImmediate", re.compile(r"\bDestroyImmediate\s*\("), (
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*root\s*\)"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*holder\s*\)"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*collider\s*\)"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*body\s*\)"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*script\s*\)"), 1),
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*component\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
+    )),
+    ("Destroy", re.compile(r"(?<![A-Za-z0-9_])Destroy\s*\("), (
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*instance\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
+    )),
+    ("SetParent", re.compile(r"\bSetParent\s*\("), (
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*root\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpiece\s*\.\s*SetParent\s*\(\s*parent\s*\)"), 1),
+    )),
+    # Never in the library at all, so nothing is pinned: a figure has no
+    # rigidbody, and a body moves only through the game's own motor.
+    ("velocity or direct movement", re.compile(
+        r"(?:\.\s*(?:velocity|linearVelocity|angularVelocity|useGravity|isKinematic)\s*[-+*/|&^]?=(?!=)"
+        r"|\.\s*(?:SetPositionAndRotation|SetPositionAndRotations|Translate|Rotate|RotateAround|LookAt|MovePosition|"
+        r"MoveRotation|AddForce|AddTorque|AddRelativeForce|AddForceAtPosition|AddExplosionForce)\s*\()"), ()),
+    ("pose or mesh write", re.compile(
+        r"\.\s*(?:position|localPosition|rotation|localRotation|localScale|parent|sharedMesh)\s*[-+*/]?=(?!=)"), (
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpiece\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpiece\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\battached\s*\.\s*localPosition\s*\+=\s*offset\s*\.\s*position\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\battached\s*\.\s*localRotation\s*\*=\s*offset\s*\.\s*rotation\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bbody\s*\.\s*sharedMesh\s*=\s*mesh\s*;"), 1),
+    )),
+)
+
+# The ONLY parameter types a public member of the dresser may take. An allowlist
+# rather than a list of engine types to refuse, because a denylist misses the
+# array, the generic, `object`, and every game type it did not think to name
+# (review of the lift). Whitespace and a trailing `?` are ignored.
+NPC_DRESSER_PARAMETER_TYPES = frozenset({
+    "NpcPresentationFigure", "NpcLookSpec", "string", "Action<string>", "Vector3", "Quaternion",
+})
+
+
+def _npc_parameter_types(parameters: str) -> list[str]:
+    """The declared type of each parameter in `(…)`, modifiers and defaults removed."""
+    inner = parameters.strip()
+    if inner.startswith("("):
+        inner = inner[1:]
+    if inner.endswith(")"):
+        inner = inner[:-1]
+    pieces: list[str] = []
+    depth = 0
+    current = ""
+    for char in inner:
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth -= 1
+        if char == "," and depth == 0:
+            pieces.append(current)
+            current = ""
+            continue
+        current += char
+    if current.strip():
+        pieces.append(current)
+    types: list[str] = []
+    for piece in pieces:
+        declaration = piece.split("=", 1)[0].strip()
+        declaration = re.sub(r"^(?:(?:in|ref|out|params|this|scoped)\s+)+", "", declaration)
+        match = re.match(r"^(.*\S)\s+[A-Za-z_][A-Za-z0-9_]*$", declaration, re.S)
+        declared = match.group(1) if match else declaration
+        types.append(re.sub(r"\s+", "", declared).rstrip("?"))
+    return types
+
+
+def _npc_public_signatures(code: str) -> list[tuple[int, str]]:
+    """Each `public` member's parameter list in a comment-stripped file."""
+    found: list[tuple[int, str]] = []
+    for match in re.finditer(r"\bpublic\b[^;{=]*?\(", code):
+        depth = 0
+        index = match.end() - 1
+        while index < len(code):
+            if code[index] == "(":
+                depth += 1
+            elif code[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        found.append((code.count("\n", 0, match.start()) + 1, code[match.end():index + 1]))
+    return found
+
+
+def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
+    """Pins the library's engine writes and confines the figure dresser's helpers."""
+    label = "[concernednpc] NPC figure-parts audit"
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        fail(f"{label}: the Concerned NPC library is not declared, so nothing was audited", errors)
+        return []
+    lib_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    if not (lib_dir / NPC_FIGURE_PARTS_FILE).is_file() or not (lib_dir / NPC_FIGURE_DRESSER_FILE).is_file():
+        fail(f"{label}: {NPC_FIGURE_PARTS_FILE} or {NPC_FIGURE_DRESSER_FILE} is missing; point the audit at "
+             "the dresser's new home rather than leaving it green", errors)
         return []
 
-    allowed_files = {path for path, _ in FOREMAN_FIGURE_PARTS_USES}
-    any_name = re.compile(r"\bFigureParts\b")
-    member = re.compile(r"\bFigureParts\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-    found: dict[tuple[str, str], int] = {}
+    sources: dict[str, str] = {}
+    for path in sorted(lib_dir.rglob("*.cs")):
+        parts = path.relative_to(lib_dir).parts
+        if any(part in ("obj", "bin") for part in parts):
+            continue
+        sources[path.relative_to(lib_dir).as_posix()] = _strip_foreman_cs_comments(
+            path.read_text(encoding="utf-8-sig"))
+
     violations = 0
-    for path in sorted(foreman_dir.rglob("*.cs")):
-        rel_parts = path.relative_to(foreman_dir).parts
-        if any(part in ("obj", "bin") for part in rel_parts):
+
+    # 1. The census.
+    pinned = 0
+    for what, broad, allowances in NPC_ENGINE_WRITES:
+        allowed_spans: dict[str, list[tuple[int, int]]] = {}
+        for rel, exact, expected in allowances:
+            code = sources.get(rel)
+            if code is None:
+                violations += 1
+                fail(f"{label}: pinned file src/ConcernedNPC/{rel} for {what} is missing", errors)
+                continue
+            matches = list(exact.finditer(code))
+            if len(matches) != expected:
+                violations += 1
+                fail(f"{label}: src/ConcernedNPC/{rel} has {len(matches)} exact {what} site(s); the pinned "
+                     f"population is {expected}", errors)
+            else:
+                pinned += expected
+            allowed_spans.setdefault(rel, []).extend((m.start(), m.end()) for m in matches)
+        for rel, code in sources.items():
+            spans = allowed_spans.get(rel, ())
+            for match in broad.finditer(code):
+                if any(start <= match.start() < end for start, end in spans):
+                    continue
+                violations += 1
+                fail(f"{label}: unpinned {what} in src/ConcernedNPC/{rel}:"
+                     f"{code.count(chr(10), 0, match.start()) + 1}", errors)
+
+    # 2. The helpers' confinement.
+    parts_code = sources[NPC_FIGURE_PARTS_FILE]
+    if not re.search(r"\binternal\s+static\s+class\s+NpcFigureParts\b", parts_code):
+        violations += 1
+        fail(f"{label}: NpcFigureParts must be an internal static class; public, it would hand every consumer "
+             "a helper that destroys and moves any object", errors)
+    any_name = re.compile(r"\bNpcFigureParts\b")
+    member = re.compile(r"\bNpcFigureParts\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+    found: dict[str, int] = {}
+    for rel, code in sources.items():
+        if rel == NPC_FIGURE_PARTS_FILE:
             continue
-        rel = path.relative_to(foreman_dir).as_posix()
-        if rel == FOREMAN_FIGURE_PARTS_FILE:
-            continue
-        code = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
         names = list(any_name.finditer(code))
         if not names:
             continue
-        if rel not in allowed_files:
+        if rel != NPC_FIGURE_DRESSER_FILE:
             for match in names:
                 violations += 1
-                fail(f"[foreman] #295 figure-parts audit: FigureParts named in src/ConcernedForeman/{rel}:"
-                     f"{code.count(chr(10), 0, match.start()) + 1}; its helpers destroy and move any "
-                     "object, so only the figure's own two files may call them", errors)
+                fail(f"{label}: NpcFigureParts named in src/ConcernedNPC/{rel}:"
+                     f"{code.count(chr(10), 0, match.start()) + 1}; its helpers destroy and move any object, so "
+                     f"only {NPC_FIGURE_DRESSER_FILE} may call them", errors)
             continue
         calls = list(member.finditer(code))
         if len(calls) != len(names):
             violations += 1
-            fail(f"[foreman] #295 figure-parts audit: src/ConcernedForeman/{rel} names FigureParts "
-                 f"{len(names)} time(s) but calls a helper {len(calls)} time(s); an alias, a method group "
-                 "or a static import would carry a helper out of this audit", errors)
+            fail(f"{label}: src/ConcernedNPC/{rel} names NpcFigureParts {len(names)} time(s) but calls a helper "
+                 f"{len(calls)} time(s); an alias, a method group or a static import would carry a helper out "
+                 "of this audit", errors)
         for call in calls:
-            key = (rel, call.group(1))
-            found[key] = found.get(key, 0) + 1
-
-    for key in sorted(set(found) | set(FOREMAN_FIGURE_PARTS_USES)):
-        expected = FOREMAN_FIGURE_PARTS_USES.get(key, 0)
-        actual = found.get(key, 0)
+            found[call.group(1)] = found.get(call.group(1), 0) + 1
+    for helper in sorted(set(found) | set(NPC_FIGURE_PARTS_USES)):
+        expected = NPC_FIGURE_PARTS_USES.get(helper, 0)
+        actual = found.get(helper, 0)
         if actual != expected:
             violations += 1
-            fail(f"[foreman] #295 figure-parts audit: src/ConcernedForeman/{key[0]} calls FigureParts."
-                 f"{key[1]} {actual} time(s); the pinned population is {expected}", errors)
+            fail(f"{label}: {NPC_FIGURE_DRESSER_FILE} calls NpcFigureParts.{helper} {actual} time(s); the "
+                 f"pinned population is {expected}", errors)
+
+    # 3. The door consumers use.
+    public_types: set[str] = set()
+    for rel, code in sources.items():
+        if not rel.startswith(NPC_DRESSING_DIR):
+            continue
+        for match in re.finditer(
+                r"\bpublic\s+(?:(?:static|sealed|readonly|abstract|partial)\s+)*"
+                r"(?:class|struct|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)", code):
+            public_types.add(match.group(1))
+    if public_types != NPC_DRESSING_PUBLIC_TYPES:
+        violations += 1
+        fail(f"{label}: {NPC_DRESSING_DIR}'s public types are {sorted(public_types)}; the pinned surface is "
+             f"{sorted(NPC_DRESSING_PUBLIC_TYPES)}. This folder is not compiled into ConcernedNPC.Tests, so "
+             "PublicSurfaceTests cannot see it and this is where its surface is written down", errors)
+    for line, parameters in _npc_public_signatures(sources[NPC_FIGURE_DRESSER_FILE]):
+        for declared in _npc_parameter_types(parameters):
+            if declared in NPC_DRESSER_PARAMETER_TYPES:
+                continue
+            violations += 1
+            fail(f"{label}: a public member of NpcFigureDresser takes a {declared} at "
+                 f"{NPC_FIGURE_DRESSER_FILE}:{line}; the allowed parameter types are "
+                 f"{', '.join(sorted(NPC_DRESSER_PARAMETER_TYPES))}. The dresser acts only on the figure it was "
+                 "built for; a member that acted on whatever it was handed would let a consumer destroy or move "
+                 "anything without spelling an audited token", errors)
 
     return [
-        f"[foreman] #295 figure-parts audit: the figure's {len({k[1] for k in FOREMAN_FIGURE_PARTS_USES})} "
-        f"engine-write helper(s) are called only from {len(allowed_files)} file(s), each population pinned, "
-        f"and named nowhere else in src/ConcernedForeman ({violations} violations)",
+        f"{label}: {len(sources)} library source(s); {pinned} engine creation, destruction, parenting, "
+        "position/rotation/scale and mesh-swap site(s) pinned by path and exact spelling, and no velocity, "
+        "gravity, force or direct-movement call anywhere; the dresser's "
+        f"{len(NPC_FIGURE_PARTS_USES)} helpers are "
+        f"internal and called only from {NPC_FIGURE_DRESSER_FILE}, each population pinned; "
+        f"{NPC_DRESSING_DIR} exports exactly {', '.join(sorted(NPC_DRESSING_PUBLIC_TYPES))} and a public "
+        "dresser member takes only an allowlisted parameter type. A source-text audit with comments stripped: "
+        "it does not cover material and renderer writes, and it does not "
+        f"follow indirection or prove control flow ({violations} violations)",
+    ]
+
+
+# #295 lift, the other half of "no third copy": once the dresser is in the
+# library, a product that consumes it must not grow its own. These spellings are
+# the dresser's fingerprints - reading the character screen's palette, painting
+# a garment's armour material, choosing a skinned attachment, tinting through the
+# skin colour property - and outside the library they are refused in every
+# consumer of Concerned NPC. Concerned Cartographer is exempt by name: Hulgi's
+# own copy predates the library, ships in a published product that does not
+# consume it, and is where this pattern was first seen working.
+FIGURE_DRESSING_FINGERPRINTS = (
+    ("the character screen's palette", re.compile(r"\bPlayerCustomizaton\b")),
+    ("a garment's armour material", re.compile(r"\bm_armorMaterial\b")),
+    ("a skinned attachment child", re.compile(r"\"attach_skin\"")),
+    ("the skin colour property", re.compile(r"\"_SkinColor\"")),
+)
+FIGURE_DRESSING_EXEMPT_PRODUCTS = frozenset({"cartographer"})
+
+
+def check_figure_dressing_has_one_home(errors: list[str]) -> list[str]:
+    """Refuses a product-side copy of the library's figure dresser."""
+    label = "[interop] #295 one-dresser audit"
+    library = LIBRARIES.get("concernednpc")
+    lib_name = str(library["package_name"]) if library else "ConcernedNPC"
+    scanned = 0
+    products = 0
+    violations = 0
+    for product_key, spec in PRODUCTS.items():
+        if product_key in FIGURE_DRESSING_EXEMPT_PRODUCTS:
+            continue
+        project_dir: Path = spec["project_dir"]  # type: ignore[assignment]
+        if not project_dir.is_dir():
+            continue
+        products += 1
+        for path in sorted(project_dir.rglob("*.cs")):
+            if any(part in ("obj", "bin") for part in path.relative_to(project_dir).parts):
+                continue
+            scanned += 1
+            code = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
+            for what, pattern in FIGURE_DRESSING_FINGERPRINTS:
+                for match in pattern.finditer(code):
+                    violations += 1
+                    fail(f"{label}: {path.relative_to(ROOT).as_posix()}:"
+                         f"{code.count(chr(10), 0, match.start()) + 1} reaches for {what}, which is the figure "
+                         f"dresser's job. Dress a figure through {lib_name}'s NpcFigureDresser with an "
+                         "NpcLookSpec instead of keeping a copy", errors)
+    return [
+        f"{label}: {products} product(s), {scanned} source(s) - none keeps its own figure dresser (Concerned "
+        f"Cartographer's pre-library Hulgi copy exempt by name) ({violations} violations)",
     ]
 
 
@@ -5481,7 +5720,8 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
-    report.extend(check_foreman_figure_parts_confined(errors))
+    report.extend(check_npc_figure_parts_confined(errors))
+    report.extend(check_figure_dressing_has_one_home(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))

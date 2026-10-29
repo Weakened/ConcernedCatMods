@@ -114,6 +114,21 @@ public class PublicSurfaceTests
     /// their books and executors remain private. The consuming role still owns
     /// every path, row tag and schema number.
     ///
+    /// <b>Dressing a figure (#295 lift, inside the unpublished 0.5.0).</b>
+    /// <c>Appearance/</c>: what a role asks a figure to look like
+    /// (<c>NpcLookSpec</c>, <c>NpcLookRequest</c>, <c>NpcBodyModel</c>), the
+    /// rule that resolves it against a build (<c>NpcLookPlan</c>,
+    /// <c>NpcLookOption</c>, <c>NpcLookChoice</c>, <c>NpcLookMatch</c>) and the
+    /// game's slider-to-colour conversion (<c>NpcLookColour</c>,
+    /// <c>NpcLookPalette</c>, <c>NpcLookRgb</c>). The roles are Foreman's
+    /// Thorstein, which used to carry a copy, Steward's Sunniva and Teamster's
+    /// Gunnar - the copy that would otherwise have been the third. The adapter
+    /// that applies it, <c>Body.Dressing.NpcFigureDresser</c> with
+    /// <c>NpcCustomizationPalette</c>, is public too but is not compiled into
+    /// this assembly (see the project file), so it is pinned by the validator's
+    /// NPC figure-parts audit instead of by this list. The fit tolerances, the
+    /// skin-binding rule and the engine-write helpers stay internal.
+    ///
     /// <b>What is still internal, and why that is not an oversight.</b> The
     /// arbiter, the mode owner, the slug rules, the build gate, the key
     /// composition, the prefab-to-contract table, the sidecar and the atomic
@@ -135,6 +150,16 @@ public class PublicSurfaceTests
     /// discovering it one at a time is three bumps.</summary>
     private static readonly string[] Expected =
     {
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookColour",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookPlan",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb",
+        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec",
         "TheConcernedCat.ConcernedNPC.Bodies.ActorMode",
         "TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome",
         "TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner",
@@ -254,7 +279,7 @@ public class PublicSurfaceTests
             "Humanoid+RandomItem", "Inventory", "ItemDrop", "ItemDrop+ItemData",
             "ItemDrop+ItemData+SharedData", "NpcTalk", "Pathfinding", "Pathfinding+AgentType", "Player",
             "Procreation", "Sadle", "StubOwnership", "Tameable", "VisEquipment", "ZDO", "ZDOID", "ZDOMan",
-            "ZNetScene", "ZNetView", "ZPackage", "ZSyncAnimation", "ZoneSystem",
+            "VisEquipment+PlayerModel", "ZNetScene", "ZNetView", "ZPackage", "ZSyncAnimation", "ZoneSystem",
         };
 
         string[] global = typeof(NpcRoleRegistry).Assembly
