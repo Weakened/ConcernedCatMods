@@ -3994,6 +3994,11 @@ STEWARD_CONDITIONAL = re.compile(r"\bConditional(?:Attribute)?\b")
 # comment to every count. Those three characters have no use in this product's
 # source, so they are refused outright.
 STEWARD_EXOTIC_LINE_END = re.compile("[\u0085\u2028\u2029]")
+# Review of 785606f: C# accepts a Unicode escape inside an identifier, so
+# `Destr\u006Fy(` is a call to Destroy that spells no `Destroy(`. Refused
+# anywhere in the product's raw text (a string literal that needs one can use
+# the character itself).
+STEWARD_UNICODE_ESCAPE = re.compile(r"\\[uU][0-9A-Fa-f]")
 
 
 def _steward_directive_line(raw: str) -> str:
@@ -4071,6 +4076,11 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
             fail(f"{label}: {path.relative_to(ROOT)} holds U+{ord(exotic.group(0)):04X} at offset "
                  f"{exotic.start()} - C# ends a line there and this audit's comment stripping does not, "
                  "so code after it would be invisible to every count here", errors)
+        escape = STEWARD_UNICODE_ESCAPE.search(raw)
+        if escape is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} holds the Unicode escape `{escape.group(0)}` at offset "
+                 f"{escape.start()} - in an identifier it spells a name (`Destr\\u006Fy`) that no count "
+                 "here can see", errors)
         conditional = STEWARD_CONDITIONAL.search(raw)
         if conditional is not None:
             fail(f"{label}: {path.relative_to(ROOT)} names `{conditional.group(0)}` - a [Conditional] "

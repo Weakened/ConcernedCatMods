@@ -8,9 +8,11 @@ verified to pass the validator that lacked this rule (origin/main d72b397)
 before being added here. The plants found by successive reviews were also each
 verified to pass the validator of the head they were found against (d0d559e:
 five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two, 80c3f3a:
-four, 8144fbd: three, 3b23929: one, 3252bcd: one, 21b6c73: one), whose rule they got past;
-the last twelve were checked against origin/main 0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
-pass the merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
+four, 8144fbd: three, 3b23929: one, 3252bcd: one, 21b6c73: one, 785606f: one),
+whose rule they got past. Once main moved on, d72b397's own rules stopped
+passing the merged tree, so the rule-less check for the twelve from 75d837d to
+21b6c73 used origin/main 0171cf6, and for the last one origin/main 7900862.
+Setting STEWARD_PLANT_VALIDATOR to another validator's path
 re-runs that check, expecting every plant to get through it.
 """
 import os
@@ -261,6 +263,11 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
         self.swap_in(PORT, PORT_VIEW, "        decided:\n" + PORT_VIEW)
         self.assert_refused("a goto jumped from above the decision to below the refusal")
 
+    def test_a_guard_wrapped_in_a_condition_is_refused(self):
+        self.swap_in(PORT, PORT_GUARD,
+                     "        if (ledger.UnresolvedSteps >= 0)\n        {\n" + PORT_GUARD + "        }\n")
+        self.assert_refused("the decision and its refusal ran only when a condition held")
+
     # The four below each kept every pin of 2103c58's rule green (review of
     # that head): depth counted braces only, and the guard's verdict could be
     # overwritten. Each was verified to pass 2103c58's validator as well as
@@ -375,10 +382,13 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      "UnityEngine.Object.Destroy(_census.Live!.gameObject);\n")
         self.assert_refused("`@\"\"\"x\"` was read as a raw string and the next one's `//` hid the destruction")
 
-    def test_a_guard_wrapped_in_a_condition_is_refused(self):
-        self.swap_in(PORT, PORT_GUARD,
-                     "        if (ledger.UnresolvedSteps >= 0)\n        {\n" + PORT_GUARD + "        }\n")
-        self.assert_refused("the decision and its refusal ran only when a condition held")
+    # Review of 785606f: verified to pass 785606f's validator as well as
+    # origin/main 7900862's (0171cf6's own rules no longer pass the merged tree).
+
+    def test_a_unicode_escape_spelling_destroy_is_refused(self):
+        self.swap_in(RUNTIME, RUNTIME_MARKER,
+                     RUNTIME_MARKER + "            UnityEngine.Object.Destr\\u006Fy(_census.Live!.gameObject);\n")
+        self.assert_refused("C# read `Destr\\u006Fy` as Destroy; no count spelled it")
 
     def test_this_suite_is_not_vacuous(self):
         # Not a plant: the guard text every plant above edits is still where

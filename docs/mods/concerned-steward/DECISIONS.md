@@ -44,7 +44,8 @@ untouched; `cs_steward recruit` brings her body back.
 - `tools/validate_repo.py` "[steward] S1 retire audit" — pins every destruction in the product by file, every routed
   one and every body removal; refuses, in the raw text of every product source, any line whose first non-blank character
   is `#` (every directive, `#region` and `#pragma` included, whatever whitespace or line ending C# accepts in front of
-  it), any `Conditional` attribute, and any U+0085, U+2028 or U+2029 (C# ends a `//` comment there and the audit's
+  it), any `Conditional` attribute, any `\u`/`\U` escape (C# reads one inside an identifier as the letter it
+  names), and any U+0085, U+2028 or U+2029 (C# ends a `//` comment there and the audit's
   comment stripping does not), since the plugin (net48) and the tests (net10.0) compile the same source - this
   covers `src/ConcernedSteward` only; the Concerned NPC library and shared sources it builds on are not scanned; pins the port's `Retire(...)` as a method whose braces balance, with no lambda, local
   function, delegate, interpolated string, `goto` or deconstruction, that says Retired once, as its last statement, where each of these appears once, whole, as its own statement at the
@@ -59,9 +60,10 @@ untouched; `cs_steward recruit` brings her body back.
   port tests, one witness at a time, not by the audit; and it cannot see a destruction reached through a delegate, a
   method group or reflection.
 - `src/ConcernedSteward.Tests/StewardRetirementTests.cs` — control flow over the stubbed game.
-- `tools/tests/test_steward_retire_audit.py` — thirty-nine plants, each a way a body could leave the world outside
-  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last twelve) and to be
-  refused with it. Twenty-eight
+- `tools/tests/test_steward_retire_audit.py` — forty plants, each a way a body could leave the world outside
+  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the twelve after it,
+  main `7900862` for the last) and to be
+  refused with it. Twenty-nine
   of them were found by successive independent reviews, each getting past the version of the rule it was found against
   and added with the fix that closes it: a reassigned view, a swapped body, a `using static`, a `using` alias and a
   method group; a local function or lambda whose own parameter is `view` (two shapes) and a deconstruction into
@@ -73,7 +75,8 @@ untouched; `cs_steward recruit` brings her body back.
   `[Conditional]` attribute; code after a U+2028 inside a `//` comment; a `List<int?>` in an
   interpolation that made the shared comment stripper read the format colon as code (fixed in the stripper, which
   the Teamster audits share; a Teamster plant was added too); a verbatim string opening with an escaped quote that
-  the same stripper read as a raw string (likewise fixed there, with a Teamster plant).
+  the same stripper read as a raw string (likewise fixed there, with a Teamster plant); a
+  `\u` escape spelling `Destroy` inside an identifier.
 - The port reads her pack from the body itself; a pack the caller states in the ledger can only add a reason to
   refuse (more held, or unreadable), never remove one.
 - `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which
