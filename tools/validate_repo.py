@@ -2755,15 +2755,24 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("UnityEngine.Object.Instantiate", re.compile(
         r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+        # #295: one attachment mesh (an item's attach child, never the item) cloned
+        # under an INACTIVE holder for Thorstein's local presentation figure.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
     )),
     ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*tameable\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*drop\s*\)"), 1),
+        # #295: the figure's own dark parts - an inactive holder, a refused
+        # piece, or a component on a piece that has never woken.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
     )),
     ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
         ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+        # #295: the local figure, a misfitting piece of it, or its material
+        # instance. Never a network view: the figure has none.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
     )),
     ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
@@ -2786,6 +2795,15 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+        # #295: Thorstein's local presentation figure, which has no collider, no
+        # rigidbody and no network view: seating a preset or garment piece on a
+        # joint, the game's equipoffset nudge, and standing the figure at home.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localPosition\s*\+=\s*offset\s*\.\s*position\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localRotation\s*\*=\s*offset\s*\.\s*rotation\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
     )),
 )
 
@@ -2846,6 +2864,84 @@ def _strip_foreman_cs_comments(text: str) -> str:
         out.append(char)
         index += 1
     return "".join(out)
+
+
+# #295: Thorstein's presentation figure keeps every engine write it makes in
+# Runtime/Presentation/FigureParts.cs, where #400 pins each one. Those pins
+# match a call INSIDE a helper, and the helpers take any UnityEngine.Object or
+# Transform - so without this rule any Foreman file could destroy a network
+# view or move the player through FigureParts.Drop/Place and spell no audited
+# token at all (the "lift it into a helper" escape). The helpers are therefore
+# confined: the type may be named only in its own file and in the two files
+# that build and dress the figure, only as `FigureParts.<Helper>`, and each
+# helper's population in each file is pinned.
+FOREMAN_FIGURE_PARTS_FILE = "Runtime/Presentation/FigureParts.cs"
+FOREMAN_FIGURE_PARTS_USES = {
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Discard"): 8,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Drop"): 2,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Harvest"): 2,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Holder"): 2,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Offset"): 1,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Seat"): 4,
+    ("Runtime/Presentation/ThorsteinPresentation.cs", "Drop"): 1,
+    ("Runtime/Presentation/ThorsteinPresentation.cs", "Place"): 1,
+}
+
+
+def check_foreman_figure_parts_confined(errors: list[str]) -> list[str]:
+    """Confines Thorstein's figure helpers to the files that own the figure."""
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    if not (foreman_dir / FOREMAN_FIGURE_PARTS_FILE).is_file():
+        fail(f"[foreman] #295 figure-parts audit: {FOREMAN_FIGURE_PARTS_FILE} is missing; point the "
+             "audit at the helpers' new home rather than leaving it green", errors)
+        return []
+
+    allowed_files = {path for path, _ in FOREMAN_FIGURE_PARTS_USES}
+    any_name = re.compile(r"\bFigureParts\b")
+    member = re.compile(r"\bFigureParts\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+    found: dict[tuple[str, str], int] = {}
+    violations = 0
+    for path in sorted(foreman_dir.rglob("*.cs")):
+        rel_parts = path.relative_to(foreman_dir).parts
+        if any(part in ("obj", "bin") for part in rel_parts):
+            continue
+        rel = path.relative_to(foreman_dir).as_posix()
+        if rel == FOREMAN_FIGURE_PARTS_FILE:
+            continue
+        code = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
+        names = list(any_name.finditer(code))
+        if not names:
+            continue
+        if rel not in allowed_files:
+            for match in names:
+                violations += 1
+                fail(f"[foreman] #295 figure-parts audit: FigureParts named in src/ConcernedForeman/{rel}:"
+                     f"{code.count(chr(10), 0, match.start()) + 1}; its helpers destroy and move any "
+                     "object, so only the figure's own two files may call them", errors)
+            continue
+        calls = list(member.finditer(code))
+        if len(calls) != len(names):
+            violations += 1
+            fail(f"[foreman] #295 figure-parts audit: src/ConcernedForeman/{rel} names FigureParts "
+                 f"{len(names)} time(s) but calls a helper {len(calls)} time(s); an alias, a method group "
+                 "or a static import would carry a helper out of this audit", errors)
+        for call in calls:
+            key = (rel, call.group(1))
+            found[key] = found.get(key, 0) + 1
+
+    for key in sorted(set(found) | set(FOREMAN_FIGURE_PARTS_USES)):
+        expected = FOREMAN_FIGURE_PARTS_USES.get(key, 0)
+        actual = found.get(key, 0)
+        if actual != expected:
+            violations += 1
+            fail(f"[foreman] #295 figure-parts audit: src/ConcernedForeman/{key[0]} calls FigureParts."
+                 f"{key[1]} {actual} time(s); the pinned population is {expected}", errors)
+
+    return [
+        f"[foreman] #295 figure-parts audit: the figure's {len({k[1] for k in FOREMAN_FIGURE_PARTS_USES})} "
+        f"engine-write helper(s) are called only from {len(allowed_files)} file(s), each population pinned, "
+        f"and named nowhere else in src/ConcernedForeman ({violations} violations)",
+    ]
 
 
 def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
@@ -3178,6 +3274,186 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
         "refused by the #313 token pin), so no retire, cancel, unload or teardown verb can reach it or cause "
         "the death that does. A source-text audit: it does not follow delegates or prove control flow "
         f"({hits} violations)",
+    ]
+
+
+# #381: asking whether a ward allows a place is a READ only when it is asked with
+# `flash: false`. Vanilla's `PrivateArea.CheckAccess` defaults `flash` to TRUE,
+# and a flashing query runs `FlashShield`, which sends
+# `m_nview.InvokeRPC(ZNetView.Everybody, "FlashShield")` - a routed message to
+# every peer, from a product that sends no RPC of its own. The collection tour
+# asks the question once per surveyed source; the deposit once per move. One
+# dropped argument would turn a survey of an area into a burst of messages to
+# everybody near a guard stone, and the Release build would not mind.
+#
+# So every `PrivateArea.CheckAccess(` in Teamster must say `flash: false` in its
+# own argument list, by name. A positional `false` is refused too: the third
+# position meaning `flash` is a fact about one game version's signature, and a
+# named argument is the only spelling that cannot drift onto another parameter.
+TEAMSTER_WARD_QUERY = re.compile(r"\bPrivateArea\s*\.\s*CheckAccess\s*\(")
+# The two spellings that would hide a ward query from the rule above: calling it
+# unqualified through `using static PrivateArea;`, or through an alias. Neither
+# is needed for anything, so both are refused outright.
+TEAMSTER_WARD_HIDDEN = re.compile(
+    r"\busing\s+static\s+(?:global\s*::\s*)?PrivateArea\b|\busing\s+\w+\s*=\s*(?:global\s*::\s*)?PrivateArea\s*;")
+TEAMSTER_WARD_QUIET = re.compile(r"\bflash\s*:\s*false\b")
+
+
+def _teamster_call_arguments(code: str, open_paren: int) -> str:
+    """The text between a call's parentheses, nesting respected. Empty when the
+    call is not closed, which the caller treats as a refusal."""
+    depth = 0
+    for index in range(open_paren, len(code)):
+        char = code[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return code[open_paren + 1:index]
+    return ""
+
+
+def check_teamster_ward_queries_are_quiet(errors: list[str]) -> list[str]:
+    """Fails when a Teamster ward query could flash a guard stone - an RPC to
+    every peer sent from inside vanilla on this product's behalf (#381)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = "[interop] #381 ward-query audit"
+    queries = 0
+    hits = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        parts = path.relative_to(teamster_dir).parts
+        if parts[0] in ("obj", "bin"):
+            continue
+        code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+        for hidden in TEAMSTER_WARD_HIDDEN.finditer(code):
+            hits += 1
+            fail(
+                f"{label}: src/ConcernedTeamster/{path.relative_to(teamster_dir).as_posix()}:"
+                f"{code.count(chr(10), 0, hidden.start()) + 1} spells '{hidden.group(0)}', which would let a ward "
+                "query be written so this rule cannot see it", errors)
+        for match in TEAMSTER_WARD_QUERY.finditer(code):
+            queries += 1
+            arguments = _teamster_call_arguments(code, match.end() - 1)
+            if not TEAMSTER_WARD_QUIET.search(arguments):
+                hits += 1
+                line = code.count(chr(10), 0, match.start()) + 1
+                fail(
+                    f"{label}: PrivateArea.CheckAccess in src/ConcernedTeamster/"
+                    f"{path.relative_to(teamster_dir).as_posix()}:{line} does not say `flash: false` by name - "
+                    "vanilla defaults it to true, and a flashing query sends FlashShield to every peer", errors)
+
+    return [
+        f"{label}: {queries} PrivateArea.CheckAccess call(s) in src/ConcernedTeamster, every one asked with "
+        f"`flash: false` by name, so asking about a ward never lights one up or messages anybody ({hits} violations)",
+    ]
+
+
+# #381 / D15: the chest Gunnar deposits into is the one the player POINTED AT.
+# "No nearest-chest inference anywhere in the path" was true because nothing in
+# Teamster could find a container any other way - and the collection tour now
+# walks a survey over every loaded network object, which is exactly where a
+# "helpful" nearest-chest fallback would be one line long. So it is pinned:
+#
+# - a `Container` is reached ONLY through `GetComponentInParent<Container>()` on
+#   the object the player is hovering, in the two places that need one (marking
+#   a chest, and choosing the destination), plus the survey's refusal check that
+#   a source is not itself a container;
+# - no `typeof(Container)`, no scene-wide object search, and no
+#   Nearest/Closest/FindContainer-shaped name anywhere in Teamster;
+# - the runtime's `_destination` is assigned in exactly two places: the pointed
+#   chest in `Designate`, and null in `Forget`.
+#
+# A text audit, so a container reached through a cast of something else or a
+# delegate is invisible to it; what it does establish is that the obvious
+# fallback cannot be written without editing this rule.
+TEAMSTER_CONTAINER_REACH = re.compile(
+    r"<\s*Container\s*>|\btypeof\s*\(\s*Container\s*\)|"
+    # Every scene-wide search Unity offers, "...All" and "...ByType" included.
+    r"\bFind(?:Any|First)?Objects?(?:OfType|ByType)(?:All)?\b|"
+    # A container reached by a cast, a type test, or an alias. And no component
+    # is looked up by NAME anywhere in Teamster - a string-named GetComponent is
+    # refused whatever it names, as a policy, because a name is invisible to
+    # every type-shaped rule here.
+    r"\bas\s+Container\b|\bis\s+Container\b|\bGetComponent\w*\s*\(\s*\"|"
+    r"\busing\s+\w+\s*=\s*(?:global\s*::\s*)?Container\s*;")
+TEAMSTER_CONTAINER_REACH_SITES = (
+    ("Adapters/Workers/ContainerPermissionRuntime.cs",
+     re.compile(r"\bhovered\s*\.\s*GetComponentInParent\s*<\s*Container\s*>\s*\(\s*\)"), 1),
+    ("Adapters/Workers/GunnarCollectionRuntime.cs",
+     re.compile(r"\bhover\s*\.\s*GetComponentInParent\s*<\s*Container\s*>\s*\(\s*\)"), 1),
+    ("Adapters/Workers/GunnarCollectionSurvey.cs",
+     re.compile(r"\bCheck\s*<\s*Container\s*>\s*\(\s*\"a container\"\s*\)"), 1),
+)
+TEAMSTER_CHEST_SEARCH_NAME = re.compile(r"\b\w*(?:Nearest|Closest|FindContainer|BestContainer|AnyContainer)\w*\b")
+TEAMSTER_DESTINATION_FILE = "Adapters/Workers/GunnarCollectionRuntime.cs"
+TEAMSTER_DESTINATION_WRITE = re.compile(r"\b_destination\s*(?:\?\?)?=(?!=)")
+TEAMSTER_DESTINATION_WRITES = (
+    re.compile(r"\b_destination\s*=\s*chest\s*;"),
+    re.compile(r"\b_destination\s*=\s*null\s*;"),
+)
+
+
+def check_teamster_destination_is_pointed_at(errors: list[str]) -> list[str]:
+    """Fails when Teamster could reach a container other than by the player
+    pointing at it - the shape a nearest-chest fallback would take (#381, D15)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = "[interop] #381 destination audit"
+    hits = 0
+    sources: dict[str, str] = {}
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        parts = path.relative_to(teamster_dir).parts
+        if parts[0] in ("obj", "bin"):
+            continue
+        sources[path.relative_to(teamster_dir).as_posix()] = _strip_cs_comments(
+            path.read_text(encoding="utf-8-sig"))
+
+    allowed: dict[str, list[tuple[int, int]]] = {}
+    for rel, exact, expected in TEAMSTER_CONTAINER_REACH_SITES:
+        found = list(exact.finditer(sources.get(rel, "")))
+        if len(found) != expected:
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{rel} has {len(found)} pinned container reach(es); "
+                 f"expected {expected}", errors)
+        allowed.setdefault(rel, []).extend((m.start(), m.end()) for m in found)
+
+    for rel, code in sources.items():
+        spans = allowed.get(rel, ())
+        for match in TEAMSTER_CONTAINER_REACH.finditer(code):
+            if any(start <= match.start() < end for start, end in spans):
+                continue
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{rel}:{code.count(chr(10), 0, match.start()) + 1} reaches a "
+                 f"container ('{match.group(0)}') other than the one the player is pointing at - the "
+                 "destination is chosen by pointing, never found", errors)
+        for match in TEAMSTER_CHEST_SEARCH_NAME.finditer(code):
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{rel}:{code.count(chr(10), 0, match.start()) + 1} names "
+                 f"'{match.group(0)}' - there is no nearest-chest search in Teamster, by name or otherwise",
+                 errors)
+
+    runtime = sources.get(TEAMSTER_DESTINATION_FILE, "")
+    writes = len(TEAMSTER_DESTINATION_WRITE.findall(runtime))
+    pinned = sum(len(pattern.findall(runtime)) for pattern in TEAMSTER_DESTINATION_WRITES)
+    if writes != len(TEAMSTER_DESTINATION_WRITES) or pinned != len(TEAMSTER_DESTINATION_WRITES):
+        hits += 1
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_DESTINATION_FILE} assigns _destination {writes} time(s) "
+             f"({pinned} pinned); the chosen chest is set from the pointed-at chest once and cleared once", errors)
+    # The runtime is a partial class, so any file declaring a part of it can
+    # reach the field - whatever that file is called. Other classes' own
+    # `_destination` fields (a haul's target point) are not it.
+    runtime_part = re.compile(r"\bpartial\s+class\s+GunnarCollectionRuntime\b")
+    for rel, code in sources.items():
+        if rel != TEAMSTER_DESTINATION_FILE and runtime_part.search(code) and TEAMSTER_DESTINATION_WRITE.search(code):
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{rel} assigns the runtime's _destination - the chosen chest "
+                 f"is set in {TEAMSTER_DESTINATION_FILE} alone", errors)
+
+    return [
+        f"{label}: a Container is reached in src/ConcernedTeamster only by GetComponentInParent on the hovered "
+        "object (marking, choosing) and by the survey's is-it-a-container refusal; no typeof(Container), no "
+        "scene-wide object search, no Nearest/Closest-shaped name, and _destination is set from the pointed-at "
+        f"chest once and cleared once. A text audit; it does not follow casts or delegates ({hits} violations)",
     ]
 
 
@@ -5205,9 +5481,12 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
+    report.extend(check_foreman_figure_parts_confined(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
+    report.extend(check_teamster_ward_queries_are_quiet(errors))
+    report.extend(check_teamster_destination_is_pointed_at(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))

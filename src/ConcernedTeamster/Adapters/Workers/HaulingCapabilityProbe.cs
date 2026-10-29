@@ -43,6 +43,16 @@ internal static class HaulingCapabilityProbe
             Type? liquidType = Game("LiquidType", missingTypes);
             Type? heightmap = Game("Heightmap", missingTypes);
             Type? game = Game("Game", missingTypes);
+            Type? dropTable = Game("DropTable", missingTypes);
+            Type? sharedData = Game("ItemDrop+ItemData+SharedData", missingTypes);
+            Type? statusEffect = Game("StatusEffect", missingTypes);
+            Type? seStats = Game("SE_Stats", missingTypes);
+            Type? objectDb = Game("ObjectDB", missingTypes);
+            Type? privateArea = Game("PrivateArea", missingTypes);
+            Type? location = Game("Location", missingTypes);
+            Type? locationInstance = Game("ZoneSystem+LocationInstance", missingTypes);
+            Type? zoneLocation = Game("ZoneSystem+ZoneLocation", missingTypes);
+            Type? vector2s = Game("Vector2s", missingTypes);
             Game("Catapult", missingTypes);
             Game("SiegeMachine", missingTypes);
             Type? gameObject = Engine("UnityEngine.GameObject, UnityEngine.CoreModule", missingTypes);
@@ -58,6 +68,8 @@ internal static class HaulingCapabilityProbe
             }
 
             Type vagonList = typeof(List<>).MakeGenericType(vagon!);
+            Type sceneTable = typeof(Dictionary<,>).MakeGenericType(zdo!, netView!);
+            Type locationTable = typeof(Dictionary<,>).MakeGenericType(vector2s!, locationInstance!);
             Type zdoList = typeof(List<>).MakeGenericType(zdo!);
             Type peerList = typeof(List<>).MakeGenericType(znetPeer!);
             Type byRefInt = typeof(int).MakeByRefType();
@@ -186,12 +198,51 @@ internal static class HaulingCapabilityProbe
                 // vanilla's own drop, from vanilla's own death callback. Verified
                 // here so a changed game refuses the drop (and says so) rather
                 // than throwing inside the game's death path.
+                // Inventory.GetAllItems and ItemData.m_dropPrefab, which it also
+                // reads, are verified once in the collection-tour block below.
                 new("Character", character, "m_onDeath", GameMemberKind.InstanceField, typeof(Action)),
                 new("Humanoid", humanoid, "DropItem", GameMemberKind.InstanceMethod, typeof(bool),
                     new[] { inventory!, itemData!, typeof(int) }),
+
+                // The collection tour (#381): the survey reads, the carry limit
+                // and the inventory room. All reads; a changed game turns the
+                // tour off with the rest of the worker runtime rather than
+                // throwing out of a worker tick.
+                new("ZNetScene", znetScene, "m_instances", GameMemberKind.InstanceField, sceneTable),
+                new("ZDO", zdo, "GetPrefab", GameMemberKind.InstanceMethod, typeof(int)),
+                new("ZDO", zdo, "GetLong", GameMemberKind.InstanceMethod, typeof(long), new[] { typeof(int), typeof(long) }),
+                new("ZDOVars", zdoVars, "s_creator", GameMemberKind.StaticField, typeof(int)),
+                new("ZDOID", zdoId, "UserID", GameMemberKind.InstanceProperty, typeof(long)),
+                new("ZDOID", zdoId, "ID", GameMemberKind.InstanceProperty, typeof(uint)),
+                new("ZDOID", zdoId, "None", GameMemberKind.StaticField, zdoId),
+                new("Pickable", pickable, "m_extraDrops", GameMemberKind.InstanceField, dropTable),
+                new("DropTable", dropTable, "IsEmpty", GameMemberKind.InstanceMethod, typeof(bool)),
+                new("Pickable", pickable, "m_respawnTimeMinutes", GameMemberKind.InstanceField, typeof(float)),
+                new("Pickable", pickable, "m_hideWhenPicked", GameMemberKind.InstanceField, gameObject),
+                new("Pickable", pickable, "GetPicked", GameMemberKind.InstanceMethod, typeof(bool)),
+                new("Pickable", pickable, "GetEnabled", GameMemberKind.InstanceProperty, typeof(int)),
+                new("ItemDrop+ItemData", itemData, "m_shared", GameMemberKind.InstanceField, sharedData),
+                new("ItemDrop+ItemData", itemData, "m_dropPrefab", GameMemberKind.InstanceField, gameObject),
+                new("ItemDrop+ItemData", itemData, "GetWeight", GameMemberKind.InstanceMethod, typeof(float), new[] { typeof(int) }),
+                new("ItemDrop+ItemData+SharedData", sharedData, "m_food", GameMemberKind.InstanceField, typeof(float)),
+                new("ItemDrop+ItemData+SharedData", sharedData, "m_weight", GameMemberKind.InstanceField, typeof(float)),
+                new("ItemDrop+ItemData+SharedData", sharedData, "m_maxStackSize", GameMemberKind.InstanceField, typeof(int)),
+                new("ItemDrop+ItemData+SharedData", sharedData, "m_equipStatusEffect", GameMemberKind.InstanceField, statusEffect),
+                new("SE_Stats", seStats, "m_addMaxCarryWeight", GameMemberKind.InstanceField, typeof(float)),
+                new("Player", player, "m_maxCarryWeight", GameMemberKind.InstanceField, typeof(float)),
+                new("ObjectDB", objectDb, "GetItemPrefab", GameMemberKind.InstanceMethod, gameObject, new[] { typeof(string) }),
+                new("Inventory", inventory, "GetEmptySlots", GameMemberKind.InstanceMethod, typeof(int)),
                 new("Inventory", inventory, "GetAllItems", GameMemberKind.InstanceMethod,
                     typeof(List<>).MakeGenericType(itemData!)),
-                new("ItemDrop+ItemData", itemData, "m_dropPrefab", GameMemberKind.InstanceField, gameObject),
+                new("PrivateArea", privateArea, "CheckAccess", GameMemberKind.StaticMethod, typeof(bool),
+                    new[] { vector3!, typeof(float), typeof(bool), typeof(bool) }),
+                new("Location", location, "IsInsideLocation", GameMemberKind.StaticMethod, typeof(bool),
+                    new[] { vector3!, typeof(float) }),
+                new("ZoneSystem", zoneSystem, "m_locationInstances", GameMemberKind.InstanceField, locationTable),
+                new("ZoneSystem", zoneSystem, "GetZone", GameMemberKind.StaticMethod, vector2s, new[] { vector3! }),
+                new("ZoneSystem+LocationInstance", locationInstance, "m_location", GameMemberKind.InstanceField, zoneLocation),
+                new("ZoneSystem+LocationInstance", locationInstance, "m_position", GameMemberKind.InstanceField, vector3),
+                new("ZoneSystem+ZoneLocation", zoneLocation, "m_exteriorRadius", GameMemberKind.InstanceField, typeof(float)),
 
                 // Engine members the joint and body checks read.
                 new("Joint", joint, "connectedBody", GameMemberKind.InstanceProperty, rigidbody),

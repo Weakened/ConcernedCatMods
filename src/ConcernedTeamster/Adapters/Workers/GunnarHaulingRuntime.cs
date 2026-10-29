@@ -85,6 +85,25 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// into the seam itself.</summary>
     internal bool SeamAvailable => _seam != null && _seam.IsAvailable;
 
+    /// <summary>Whether a cart is assigned to Gunnar or hitched to him. A
+    /// collection tour is on foot and never starts, or keeps going, while this
+    /// is true. No executor answers false: no world, no lease.</summary>
+    internal bool HoldsACart
+    {
+        get
+        {
+            HaulExecutor? executor = _executor;
+            return executor != null && (executor.ActiveLease != null || executor.Attached);
+        }
+    }
+
+    /// <summary>The collection runtime's tour, handed the bound body's 20 Hz
+    /// tick (#381). It answers true while it drives him, and the haul executor
+    /// is not ticked then - so the two never steer him in the same tick. It is
+    /// only ever consulted when no cart is assigned or hitched: a lease or a
+    /// joint always goes to the executor.</summary>
+    internal Func<TeamsterWorkerAI, bool>? CollectionDrive { get; set; }
+
     /// <summary>Gunnar's bound body as a character, or null when no single
     /// unambiguous body is loaded.
     ///
@@ -380,6 +399,12 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     private void OnWorkerTick(TeamsterWorkerAI ai)
     {
         if (_faulted || _executor == null || ai != _body.Bound)
+        {
+            return;
+        }
+
+        Func<TeamsterWorkerAI, bool>? drive = CollectionDrive;
+        if (drive != null && !HoldsACart && drive(ai))
         {
             return;
         }

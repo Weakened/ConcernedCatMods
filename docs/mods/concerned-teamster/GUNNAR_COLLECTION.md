@@ -7,12 +7,14 @@ unload, logout and reload (§6c). **Death is closed too, by `DECISIONS.md` D16**
 ground through vanilla's own drop when he genuinely dies, and every death is recorded. **One door still loses
 material and is named rather than left to be found: the one change whose write to the network object failed**
 (§6c). The
-automatic survey-driven job is still unwired. A player can now mark which chests Gunnar may use, and those marks
+automatic survey-driven job is **now wired** (§6f): survey a bounded area, plan the whole job in loads he can carry,
+walk each load, take it to the chosen chest in one trip, measure it in, next load. A player can now mark which chests Gunnar may use, and those marks
 persist per world (§6d, #374), and **a deposit now consumes one** (§6e, `DECISIONS.md` D15): `ct_collect destination`
 chooses the chest by pointing at it and `ct_collect deposit` moves what he carries into it, measured on both sides.
 The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
-Teamster stays at **1.0.5** and ConcernedNPC moves to **0.4.0** - the deposit needed the permit mint and the
-measured-move recorder, which were `internal` and reachable by no product. Nothing is published, tagged or
+Teamster stays at **1.0.5**. ConcernedNPC moved to **0.4.0** for the deposit - which needed the permit mint and the
+measured-move recorder, which were `internal` and reachable by no product - and then to **0.5.0** for the tour's
+`JobTarget` `carries` (§6f). Nothing is published, tagged or
 released.
 
 ## 1. What this is
@@ -307,7 +309,9 @@ one refuses on its own while every other Teamster feature keeps working:
 **What a player can actually do: order one pick.** `ct_collect pick` picks up the loose stone or fallen branch they
 are pointing at, if Gunnar is standing next to it. `ct_collect status` and `ct_collect cancel` are the other two
 subcommands. There is no survey, no route, no batching and **nothing that moves Gunnar** — an order he cannot reach
-from where he stands is refused rather than turned into movement nobody authorized. `GunnarCollectionJob`,
+from where he stands is refused rather than turned into movement nobody authorized. (That paragraph is about the
+*ordered* pick and is still true of it; the automatic tour of §6f is the survey, the route and the batching, and it
+walks him.) `GunnarCollectionJob`,
 `CollectionSurvey` and `GunnarTargetPredicate` are still unwired; that automatic path is its own work, and it is
 where wards, locations, creators and work areas start to matter, because they are the questions that only arise
 once something other than a person is choosing.
@@ -797,6 +801,125 @@ tested is the decision, the per-stack classification, the ledger and the record 
 and what is pinned is the shape. A body that dies while inert, or while a cart cannot be released, still
 loses what it carries - recorded rather than silent. §10 rows 27-30 are the go-around.
 
+## 6f. The tour: survey, loads, one trip per load (#381's automatic workflow)
+
+**This is §1's automatic workflow, and it is the first time it is reachable.** Until this, the only way material
+reached Gunnar was a pick a player pointed at, and the only way it left was a deposit a player ordered. The survey,
+the eligibility rules and the job role were written and tested and had no caller. Now:
+
+```
+ct_collect destination    (looking at the chest he should use - marked Deposit or Both)
+ct_collect area [radius]  (standing in the middle of where he should collect; 4-48 m, default 20)
+ct_collect start
+ct_collect stop           (or cancel)
+```
+
+### What happens, in order
+
+1. **Survey a bounded area.** `GunnarCollectionSurvey` walks the scene's own instance table
+   (`ZNetScene.m_instances` - every loaded network object, picked or not, which a physics query cannot say) for the
+   two allowlisted network prefabs, inside the circle the player stood in, **nearest the centre first**. At most
+   `CollectionLimits.MostCandidatesPerSurvey` **takeable** sources are kept per look (warded, temple and foreign
+   stones do not crowd them out) and at most four times that many are judged at all. A look cut short at either
+   ceiling is `Truncated`, and when that job finishes the tour **looks again** for the rest (up to 16 looks) rather
+   than reporting the area done; a circle that reaches into unloaded ground is `NotLoaded`, and a job planned from
+   such a look ends **Stopped** with that reason, never "finished".
+2. **Classify.** Every source goes through `GunnarTargetPredicate` - identity, shape, food, yield, provenance,
+   state - and its site: owned here, inside the area, **not inside a location** (the world's own location registry,
+   because a location's component can appear a frame after its stones), **not denied by a ward** (asked with
+   `flash: false`; see below), and not heavier than a whole load. Unknown refuses, as everywhere else.
+3. **Construct the whole job and split it into loads.** The eligible sources go to the shared runtime's job
+   driver as targets that each **carry** their yield (`JobTarget.Carries`, new in ConcernedNPC 0.5.0). The driver's
+   partitioner fills a load with that exactly as it fills a trip with what a trip fetches: the fewest loads he can
+   carry, filled until the next source genuinely will not fit, coherent by place (a load starts nearest where he
+   stands and keeps taking the nearest source that fits), never one source a trip. Before 0.5.0 a collecting target
+   cost a trip nothing, so a whole area came back as **one** load whatever he could carry - the gap that kept this
+   unwired.
+4. **Route each load.** The driver orders the stops of a load with its own stop sequencer and revalidates each
+   stop on the way to it - through `GunnarCollectionSurvey.Observe`, read live, so a stone the player took meanwhile
+   is `AlreadyDone`, one that vanished is `Gone`, and one another machine now owns is `Refused`.
+5. **Collect.** At each stop he picks through the same pinned port the ordered pick uses - `Pickable.Interact` and
+   `Humanoid.Pickup`, re-reading every precondition from its own frame, measured into his own persisted inventory,
+   recorded in the ledger by name.
+6. **One trip to the chest per load.** He walks to the chosen chest only when the **next stop belongs to a different
+   load** (or the job is over) **and** he collected something since the last trip. `CollectionTour` decides that,
+   game-free; `CollectionTourTests` counts trips to the chest over many shapes of job and holds the count to the
+   number of loads.
+7. **Exact, measured deposit.** The same nine-gate, both-sides-measured, one-material-one-permit path as
+   `ct_collect deposit` (§6e). Whether the trip **emptied** him is decided by measuring what he still holds
+   afterwards, never by the legs' own answers.
+8. **Reconcile, next load.** The driver reconciles each round and plans the next from where he is; a load that
+   collected nothing costs no walk.
+
+### What it never does
+
+| Never | Because |
+|---|---|
+| chooses a chest | the destination is the one the player pointed at. `validate_repo.py`'s `#381 destination audit` pins that a `Container` is reached in Teamster only by `GetComponentInParent` on the hovered object (and by the survey's is-it-a-container refusal), refuses `typeof(Container)`, scene-wide object searches and any `Nearest`/`Closest`-shaped name, and pins the two places the chosen chest is set and cleared |
+| keeps going at a full chest | a deposit that moved some and left some stops the tour, the rest on him: walking another load to a full chest is the one-stone-per-trip loop by another route |
+| retries an uncertain deposit | stopped, nothing assumed, a person decides (§6e) |
+| reverses a deposit, mints a partial stack, takes from a chest | the deposit port's pins are unchanged; a plan step that would take from a chest is refused by the pump and ends the tour |
+| walks him away from a cart | a tour refuses to start, and stops, while any cart is assigned to him or hitched to him. Moving material into a cart's container is not an authorized call, and the container permissions refuse a container that moves, so the tour is on foot and a load is what **he** carries |
+| teleports, portals | every movement is his own body walking through the vanilla motor - the pathfinding of his own body the Teamster carve-out allows. A walk that stops getting closer for 12 s is given up: a source is reported failed (still owed - the driver decides), an unreachable chest stops the tour with the load still on him |
+| runs two jobs | one tour at a time; the identity lease refuses a haul and a tour together; the ordered pick and deposit refuse while a tour runs, and so do choosing another chest or another area |
+| keeps picking into a body it cannot trust | the §6c containment holds for a tour too: a body whose last change did not reach its record, or that never read it, ends the tour at once (checked by name, every tick and every frame), and he is handed nothing more |
+| holds Gunnar after his body is gone | the tour remembers the body it began with (its network id) and ends when the bound body is another, when it is dead, or when no worker tick has come for 5 s - a body that unloaded or died produces no tick to end it from |
+| loses material on a reload | what he carries is persisted in his own body (§6c). A reload ends the tour (the world verb runs); after the chest and the area are chosen again in the new world load, the next `start` begins by taking what he carries to the chest |
+| lights a guard stone | vanilla's `PrivateArea.CheckAccess` defaults `flash` to **true**, and a flashing query sends `FlashShield` to every peer. Every ward query in Teamster says `flash: false` by name, pinned by the `#381 ward-query audit`; the hauling API audit pins the fact that a flash is an RPC |
+
+### Capacity
+
+One load is the smaller of two numbers (`CollectionCapacity.UnitsPerLoad`): what a vanilla player wearing
+Megingjord could carry - `Player.m_maxCarryWeight` plus the belt's own `SE_Stats.m_addMaxCarryWeight`, read from the
+game, less whatever he holds that is not going in the chest - divided by the heavier of Stone and Wood; and his
+inventory's free slots (counting the ones his collected stacks will free) times the smaller of their stack sizes.
+Vanilla does not weigh a non-player down, so the weight limit is this product's discipline; the slot limit is the
+game's. Every unreadable number is a load of nothing, and a tour that would carry nothing does not start.
+
+### The known limits, stated
+
+- **One unit a source.** The expected yield handed to the port is the source's own `m_amount`, the same as the
+  ordered pick. A world modifier that scales drops up leaves the extra on the ground rather than counted: the port
+  gathers single-unit stacks up to what the pick expected (§6), so a pick can be short, never generous.
+- **A load is at most 24 sources.** The driver orders at most `StopSequencer.MostStopsPerRound` (24) stops a round
+  and keeps the rest for the next round, which numbers its loads from zero again - so a load bigger than that is walked
+  as 24, taken to the chest, and the rest is the next load. Still a batch, never one source a trip; with vanilla's
+  numbers (225 units a load, one unit a source) this cap, not the weight, is usually what sizes a trip. A tour's job
+  gets enough rounds (14) to walk a whole look, so a look cut short at the ceiling really is followed by the next look.
+- **Asking again is throttled.** When the driver says "wait", the tour asks again after a second, not every tick
+  (each ask is a fresh look at the area), and gives up after two minutes without a step, saying why - taking what it
+  collected to the chest first, like any other end of a tour.
+- **A mixed load holds a slot back** for every material after the first, so a load of stone and wood is never sized
+  to more stacks than he has room for.
+- **The chest's position is read once, at start.** A chest is a fixed piece; one that is moved or rebuilt is
+  refused at the deposit (`NotThisContainer`), never followed.
+- **No cart.** Above.
+- **A tour needs the hauling runtime's bound body** (`GunnarHaulingEnabled` on, Gunnar spawned), exactly as the
+  ordered pick does: collection never finds or builds a body of its own.
+- **Owner decisions, settled 2026-10-28 (`DECISIONS.md` D17):** the Teamster carve-out's "pathfind his own body"
+  covers walking him for collection, on foot only (a cart-assisted round still needs its own grant); a load is sized
+  like a vanilla player wearing Megingjord (225 units) regardless of what he wears; the 24-source trip is accepted as a
+  planning limit; and no load is refused for being small - one or two units are walked like any other load.
+- **Nothing here has been observed in a running game.** §10's tour rows are OWNER GO-AROUND PENDING.
+
+### Tested and pinned
+
+- `CollectingJobTests` (ConcernedNPC): a collecting job is partitioned into the fewest loads that fit, coherently,
+  a source bigger than a load is refused rather than split, the old constructor carries nothing, and - through the
+  real driver - a seven-source job is walked load by load (`0,0,0,1,1,1,2`) and finishes. A revert of the
+  partitioner is caught by `Without_a_load_the_whole_collecting_job_was_one_trip`.
+- `CollectionTourTests`: trips to the chest equal loads over every shape tried; a new round starting again at load
+  zero is still a new load; empty loads cost no walk; a full, refused or uncertain chest stops the tour once and is
+  never retried; an unreachable source is owed and an unreachable chest stops with the load on him; no instruction
+  ever places him anywhere.
+- `CollectionTourGateTests`: every start clause refuses on its own, a defaulted request refuses, the record states
+  never read as "not here", and the load and the area arithmetic.
+- `tools/tests/test_teamster_carveout.py` `CollectionTourIsBounded`: plants against the two new audits - the
+  flashing ward query in each spelling, `using static`/alias, a nearest-chest search, the survey reaching a container,
+  a cast, a string-named `GetComponent`, every scene-wide search, the destination set or `??=`-filled from anything
+  but the pointed chest, a runtime part under another file name - each verified to pass the validator from before
+  this change and refused by this one.
+
 ## 7. No portals
 
 He walks. There is no branch anywhere in this work that changes where he is standing other than by asking the
@@ -969,6 +1092,38 @@ claim that nobody who has not opted in is affected, and step 17 is the one that 
     Nothing drops; the log and the death record say it is unresolved because collection is off.
 30. **Retire is not death.** `ct_haul retire force` a carrying Gunnar: the message still says what he carried was
     destroyed, nothing drops, and **no** death row is written.
+
+### The tour (§6f)
+
+These are the rows the automatic workflow needs. **None has been run.** Disposable world, `GunnarCollectionEnabled`
+and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
+
+31. **One trip per load.** Scatter a dozen loose stones and branches inside a 20 m area, mark a chest `Deposit`,
+    `ct_collect destination` at it, stand in the middle and `ct_collect area`, then `ct_collect start`. Expect him to
+    walk a route picking several, then walk to the chest **once**, then the next batch - never a trip to the chest per
+    stone. Count the trips; the log's `trip(s) to the chest` must equal the loads.
+32. **Exact deposit.** Before and after, count the chest: every Stone and Wood he picked is in it, nothing more,
+    nothing left on the ground near the chest.
+33. **Capacity.** The start sentence names the load size. With vanilla's numbers (300 kg base, Megingjord's 150,
+    2 kg a Stone or Wood) that is **225**; a trip is also at most 24 sources (§6f). Record the number it says; an area
+    with more than 24 eligible sources must take more than one trip, each of 24 except the last.
+34. **What he refuses.** Inside the area: a hoe-placed stone, a dropped stack of stone, a raspberry bush, a chest, a
+    stone inside the start temple's ring, and a stone inside somebody else's ward. None may be collected.
+35. **No guard stone flashes.** Put the area next to a ward you do not have access to. No shield flash, no sound.
+36. **A full chest.** Use a nearly full chest. He must stop at it with the rest on him, say the chest is full, and
+    not walk another load.
+37. **The chest unmarked mid-tour.** Unmark the chest while he walks a load. At the chest he must refuse, keep
+    everything, and stop - never choose another chest.
+38. **Stop and cancel.** `ct_collect stop` mid-load: he stops where he is, holding what he picked; nothing drops.
+    `ct_collect start` again: he takes what he holds to the chest first.
+39. **A peer connects.** Open the world to a second player mid-tour: the tour must end with the authority sentence
+    and he must stop moving.
+40. **A cart is assigned.** `ct_haul assign`+`confirm` a cart mid-tour: the tour stops. With a cart assigned,
+    `ct_collect start` must refuse and name the cart.
+41. **Unreachable source.** Put a stone across water with no walkable approach inside the area: after about 12 s
+    he gives it up and carries on with the rest; he never jumps or teleports.
+42. **Reload mid-tour.** Save and quit mid-load, reload: the tour is gone, the stones he picked are still in him
+    (§6c), and after `destination` and `area` again, `start` takes them to the chest first.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

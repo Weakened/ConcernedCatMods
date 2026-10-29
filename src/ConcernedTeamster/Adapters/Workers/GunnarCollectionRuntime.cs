@@ -38,7 +38,7 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// re-opens the mint the port exists to close, so the decision lives somewhere a
 /// test can drive rather than in a <c>MonoBehaviour</c> no test here can
 /// load.</summary>
-internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropHost
+internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropHost
 {
     private readonly GunnarCollectionPort _port = new GunnarCollectionPort();
     private readonly GunnarDepositPort _deposit = new GunnarDepositPort();
@@ -94,6 +94,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
         Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
         Func<Humanoid?, bool> releaseCartFromDyingBody,
+        Func<bool> cartHeld,
         ContainerPermissionRuntime? containers,
         ManualLogSource log)
     {
@@ -102,6 +103,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
         runtime._containers = containers;
         runtime._releaseCartFromDyingBody = releaseCartFromDyingBody
             ?? throw new ArgumentNullException(nameof(releaseCartFromDyingBody));
+        runtime._cartHeld = cartHeld ?? throw new ArgumentNullException(nameof(cartHeld));
 
         // D16: the runtime that can have put anything in him is the one a death
         // reports to. Installed with it, removed with it.
@@ -168,6 +170,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
             {
                 // A faulted runtime is an order that has ended, not a world that
                 // has gone: the sources it touched still exist.
+                CancelTour("the collection runtime faulted");
                 EndOrder("the collection runtime faulted");
             }
             catch
@@ -198,12 +201,31 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
 
         if (_lifecycle.ObserveWorld(worldUp) == PickForget.World)
         {
+            DropTourForWorld();
             _lease.Release();
             _ordered = false;
             _orderedSource = string.Empty;
             _log?.LogInfo(
                 "Gunnar's collection: the world went away, so the pick in flight and every " +
                 "unconfirmed source went with it.");
+        }
+
+        if (worldUp && _tour != null)
+        {
+            WatchTourFromFrame();
+        }
+
+        if (worldUp && _tour != null)
+        {
+            WorkAuthorityVerdict tourAuthority = Authority();
+            if (tourAuthority != WorkAuthorityVerdict.Granted)
+            {
+                CancelTour(WorkAuthorityPolicy.Describe(tourAuthority));
+            }
+            else if (CartHeld())
+            {
+                CancelTour("a cart was assigned to him while he was on the tour");
+            }
         }
 
         if (!worldUp || !_ordered)
@@ -291,6 +313,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
 
         _ordered = false;
         _orderedSource = string.Empty;
+        DropTourForWorld();
         if (_lifecycle != null)
         {
             try { _lifecycle.Shutdown(); }
@@ -345,8 +368,8 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
     }
 
     /// <summary>The ledger, the durable record and the log, in that order, each
-    /// on its own so one failing cannot cost the others. An order in flight ends
-    /// with the job verb: the source he was picking still exists.</summary>
+    /// on its own so one failing cannot cost the others. An order or a tour in
+    /// flight ends with the job verb: the source he was picking still exists.</summary>
     void IGunnarDeathDropHost.Died(DeathDropReport report, Vector3 where)
     {
         try
@@ -363,6 +386,13 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
             if (_ordered)
             {
                 EndOrder("Gunnar died");
+            }
+
+            // A tour would also end on the next frame, when the watcher sees the
+            // dead body; ending it here says why, with the same job verb.
+            if (_tour != null)
+            {
+                CancelTour("Gunnar died");
             }
         }
         catch (Exception exception)
@@ -423,6 +453,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
                 return Designate();
             case "deposit":
                 return Deposit();
+            case "area":
+                return SetArea(args);
+            case "start":
+                return StartTour();
+            case "stop":
+                return StopTour();
             case "chest":
                 // #374: the containers a player has opened to him. A diagnostic;
                 // the key while looking at a chest is the player-facing surface.
@@ -432,6 +468,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
             default:
                 return "ct_collect: status, pick (the thing you are pointing at), cancel, "
                     + "destination (the chest you are pointing at), deposit, "
+                    + "area [radius] (around where you stand), start (a tour of the area), stop, "
                     + "chest [status|list|clear].";
         }
     }
@@ -455,7 +492,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
                 ? "is here but has not been able to read what he is carrying, so he is inert; the "
                     + "log says what could not be read"
                 : worker == null ? "is not here" : worker.IsDead() ? "is down" : "is here") +
-            "; " + (_ordered ? "picking " + _orderedSource : "idle") +
+            "; " + (_ordered ? "picking " + _orderedSource : TourStatus()) +
             " (phase " + _port.Phase + ")" +
             "; chest " + (_destination == null ? "NOT CHOSEN - he never looks for the nearest one"
                 : "chosen") +
@@ -466,6 +503,11 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
 
     private string Cancel()
     {
+        if (_tour != null)
+        {
+            return StopTour();
+        }
+
         if (!_ordered)
         {
             return "He is not picking anything up.";
@@ -498,7 +540,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
             workerPresent: worker != null && !worker.IsDead(),
             workerRecordUnwritable: _recordUnwritable(),
             workerRecordUnreadable: _recordUnreadable(),
-            pickInFlight: _ordered || _port.Phase == PickPhase.Gathering,
+            pickInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering,
             pointedAtASource: source != null,
             sourceObjectName: sourceName,
             yieldItemPrefabName: yieldName,
@@ -563,6 +605,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
     /// because between now and then they can change it.</summary>
     private string Designate()
     {
+        if (TourRunning)
+        {
+            return "He is on a tour to the chest you chose. Stop it first (ct_collect stop) - the chest is " +
+                "never changed under a tour that is walking to it.";
+        }
+
         Player? player = Player.m_localPlayer;
         GameObject? hover = player != null ? player.GetHoverObject() : null;
         Container? chest = hover != null ? hover.GetComponentInParent<Container>() : null;
@@ -622,7 +670,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
             workerPresent: worker != null && !worker.IsDead(),
             workerRecordUnwritable: _recordUnwritable(),
             workerRecordUnreadable: _recordUnreadable(),
-            transferInFlight: _ordered || _port.Phase == PickPhase.Gathering,
+            transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering,
             carryingSomething: carried.Count > 0,
             destinationDesignated: _destination != null && _destinationKey.Length != 0,
             carriedIsReadable: readable);
@@ -651,41 +699,9 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
         }
 
         var said = new System.Text.StringBuilder();
-        int legs = 0;
         try
         {
-            for (int index = 0; index < carried.Count; index++)
-            {
-                KeyValuePair<string, int> material = carried[index];
-                DepositResult result = _deposit.DepositOne(
-                    worker,
-                    _destination,
-                    _destinationKey,
-                    material.Key,
-                    material.Value,
-                    _destinationEpoch,
-                    world,
-                    Allowance,
-                    WorkerPosition,
-                    _limits.PickupReachMetres,
-                    out NpcContainerRefusal why);
-
-                // Refused and uncertain both move nothing in the ledger: he
-                // still has it, or nobody knows, and writing either down as
-                // fact is how material is lost or invented.
-                _account.RecordDeposit(NextStep("deposit"), result);
-                legs++;
-
-                said.Append(legs == 1 ? string.Empty : " ")
-                    .Append(Describe(material.Key, result, why));
-
-                if (result.Outcome == DepositOutcome.Uncertain)
-                {
-                    said.Append(" Nothing after this was attempted, and nothing is put right " +
-                        "automatically - a person decides.");
-                    break;
-                }
-            }
+            DepositLegs(worker, carried, said);
         }
         finally
         {
@@ -693,6 +709,105 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
         }
 
         return said.Length == 0 ? "He is not carrying anything." : said.ToString();
+    }
+
+    /// <summary>What a run of deposit legs came to, for a caller that has to
+    /// decide what happens next.</summary>
+    private readonly struct DepositTally
+    {
+        public DepositTally(int legs, int moved, bool uncertain, string refused, bool anyPartial = false, bool anyRefused = false)
+        {
+            Legs = legs;
+            Moved = moved;
+            Uncertain = uncertain;
+            Refused = refused ?? string.Empty;
+            AnyPartial = anyPartial;
+            AnyRefused = anyRefused;
+        }
+
+        /// <summary>A leg moved some and the chest would take no more.</summary>
+        public bool AnyPartial { get; }
+
+        /// <summary>A leg moved nothing because the chest refused.</summary>
+        public bool AnyRefused { get; }
+
+        /// <summary>How many legs were attempted.</summary>
+        public int Legs { get; }
+
+        /// <summary>How many units were measured arriving, across every leg.
+        /// </summary>
+        public int Moved { get; }
+
+        /// <summary>A leg came back uncertain, so the run stopped there.</summary>
+        public bool Uncertain { get; }
+
+        /// <summary>Why nothing could be attempted at all, or empty.</summary>
+        public string Refused { get; }
+    }
+
+    /// <summary>One material, one permit, one measured leg, through the pinned
+    /// deposit port, with every D15 gate re-asked by the port in the frame of the
+    /// move. An uncertain leg stops the run where it stands.</summary>
+    private DepositTally DepositLegs(
+        Humanoid? worker, IReadOnlyList<KeyValuePair<string, int>> carried, System.Text.StringBuilder said)
+    {
+        NpcWorldEpoch world = CurrentEpoch();
+        if (world.IsUnknown || !world.Matches(_destinationEpoch))
+        {
+            Forget("the world has been loaded again since you chose that chest");
+            string why = "That chest was chosen in a different world load, so the name no longer means " +
+                "the same object. Choose it again.";
+            said.Append(why);
+            return new DepositTally(0, 0, false, why);
+        }
+
+        int legs = 0;
+        int moved = 0;
+        bool anyPartial = false;
+        bool anyRefused = false;
+        for (int index = 0; index < carried.Count; index++)
+        {
+            KeyValuePair<string, int> material = carried[index];
+            DepositResult result = _deposit.DepositOne(
+                worker,
+                _destination,
+                _destinationKey,
+                material.Key,
+                material.Value,
+                _destinationEpoch,
+                world,
+                Allowance,
+                WorkerPosition,
+                _limits.PickupReachMetres,
+                out NpcContainerRefusal why);
+
+            // Refused and uncertain both move nothing in the ledger: he
+            // still has it, or nobody knows, and writing either down as
+            // fact is how material is lost or invented.
+            _account.RecordDeposit(NextStep("deposit"), result);
+            legs++;
+            anyPartial |= result.Outcome == DepositOutcome.PartlyDeposited;
+            anyRefused |= result.Outcome == DepositOutcome.Refused;
+            if (result.Outcome == DepositOutcome.Deposited || result.Outcome == DepositOutcome.PartlyDeposited)
+            {
+                for (int part = 0; part < result.Moved.Count; part++)
+                {
+                    moved += result.Moved[part].Value > 0 ? result.Moved[part].Value : 0;
+                }
+            }
+
+            said.Append(legs == 1 ? string.Empty : " ")
+                .Append(Describe(material.Key, result, why));
+
+            if (result.Outcome == DepositOutcome.Uncertain)
+            {
+                said.Append(" Nothing after this was attempted, and nothing is put right " +
+                    "automatically - a person decides.");
+                return new DepositTally(legs, moved, true, string.Empty, anyPartial, anyRefused);
+            }
+        }
+
+        return new DepositTally(legs, moved, false, string.Empty, anyPartial, anyRefused);
     }
 
     private static string Describe(string material, DepositResult result, NpcContainerRefusal why)

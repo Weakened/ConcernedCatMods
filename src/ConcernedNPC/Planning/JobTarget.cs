@@ -36,6 +36,33 @@ public readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
         string? action,
         int priority,
         JobManifest needs)
+        : this(key, epoch, at, action, priority, needs, 0)
+    {
+    }
+
+    /// <summary>A target that also leaves the NPC carrying something once it is
+    /// done - a loose stone picked up, a branch gathered - in the role's own
+    /// units.
+    ///
+    /// <b>Additive, as of 0.5.0.</b> A trip's capacity used to be spent only on
+    /// what a trip fetches; a collecting role's targets fetch nothing, so a whole
+    /// job of them fitted in one trip whatever the NPC could carry, and the
+    /// planner could not say "this is one load". <paramref name="carries"/> is
+    /// that load, and <see cref="TourPartitioner"/> fills a trip with it exactly
+    /// as it fills one with what a trip fetches - so a collecting job comes back
+    /// as the fewest loads that fit, never as one target per trip. What the
+    /// NPC does with the load at the end of each trip is the role's: this library
+    /// never learns what was gathered or where it goes.</summary>
+    /// <param name="carries">Units doing this leaves him carrying. Negative is
+    /// read as nothing.</param>
+    public JobTarget(
+        string? key,
+        NpcWorldEpoch epoch,
+        NpcPoint at,
+        string? action,
+        int priority,
+        JobManifest needs,
+        int carries)
     {
         Key = key ?? string.Empty;
         Epoch = epoch;
@@ -43,6 +70,7 @@ public readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
         Action = action ?? string.Empty;
         Priority = priority;
         Needs = needs;
+        Carries = carries > 0 ? carries : 0;
     }
 
     /// <summary>The role's token for this target. Stable for as long as the
@@ -76,6 +104,24 @@ public readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
 
     /// <summary>How many units of material this one target takes.</summary>
     public int Units => Needs.TotalUnits;
+
+    /// <summary>How many units doing this one leaves him carrying. Zero for a
+    /// target that yields nothing to carry, which is every target a role
+    /// constructed without saying otherwise.</summary>
+    public int Carries { get; }
+
+    /// <summary>What this target costs a trip's capacity: what it takes plus
+    /// what it leaves him carrying. Bounded by <see cref="int.MaxValue"/>, so a
+    /// pathological target is too large for any trip rather than wrapping
+    /// negative and fitting every one.</summary>
+    internal int TripLoad
+    {
+        get
+        {
+            long load = (long)Units + Carries;
+            return load > int.MaxValue ? int.MaxValue : (int)load;
+        }
+    }
 
     /// <summary>The same target as far as the route is concerned: a name, a
     /// place, its priority, and reachable until something says otherwise.

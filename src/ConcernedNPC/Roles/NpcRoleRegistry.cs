@@ -236,7 +236,7 @@ public sealed class NpcRoleRegistry
         // unreachable today and is exactly why the result is checked rather
         // than discarded: it stops being unreachable the moment somebody
         // reorders the guards.
-        if (!_arbiter.Track(identity, body.Kind))
+        if (!_arbiter.Track(identity, body))
         {
             return new RoleRegistration(RoleRegistrationStatus.DuplicateIdentity, identity,
                 "the arbiter is already tracking this identity");

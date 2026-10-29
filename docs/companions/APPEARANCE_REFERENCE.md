@@ -14,11 +14,11 @@ by the #298 sweep; nothing below was rewritten.
 | Character | Product | State |
 |---|---|---|
 | Hulgi | Concerned Cartographer | **Applied.** `AppearancePlan` resolves `Long Braid` and `Handlebar` through the installed game's own localization, not a hardcoded prefab id |
-| Thorstein | Concerned Foreman | **Not applied**, and not currently possible: his body is a worker clone of `Dverger`, which has no hair or beard slot |
+| Thorstein | Concerned Foreman | **Applied to his presentation body** (#295 step 1, 2026-10-27): `ThorsteinLookPlan` resolves `Mullet` and `Mustache` by the installed game's own label and then by `Hair32`/`Beard22`, and his colours go through the character screen's palette. The figure is shown at home only while he has no worker body. His worker body is still the `Dverger` clone and cannot wear them. **Not observed in game.** See `docs/mods/concerned-foreman/PROJECT.md` |
 | Gunnar | Concerned Teamster | **Not applied**, same reason |
 
-Thorstein and Gunnar have no presentation body. Giving them one is the owner
-decision written up on #295, and this table is what that decision unblocks.
+Gunnar has no presentation body yet (#297). Thorstein has had one since #295 step 1,
+shown only while he has no worker body; the two never coexist.
 
 ---
 
