@@ -312,9 +312,9 @@ subcommands. There is no survey, no route, no batching and **nothing that moves 
 from where he stands is refused rather than turned into movement nobody authorized. (That paragraph is about the
 *ordered* pick and is still true of it; the automatic tour of §6f is the survey, the route and the batching, and it
 walks him.) `GunnarCollectionJob`,
-`CollectionSurvey` and `GunnarTargetPredicate` are still unwired; that automatic path is its own work, and it is
-where wards, locations, creators and work areas start to matter, because they are the questions that only arise
-once something other than a person is choosing.
+`CollectionSurvey` and `GunnarTargetPredicate` are wired by that tour (§6f), and it is where wards, locations,
+creators and work areas start to matter, because they are the questions that only arise once something other than a
+person is choosing.
 
 **The two lifecycle verbs, and why the choice is not spelled at the call site.** `Forget()` means a *job* ended and
 **keeps** the unconfirmed-source record; `ForgetWorld()` means the *world* went away and is the only verb that may
@@ -725,9 +725,9 @@ Every plant is run against the real validator on the real tree and required to r
 
 ### Not claimed
 
-Nothing here has been observed in a running game; §10 is the go-around. The **automatic** survey-driven loop is
-still unwired — this is one deposit a player explicitly orders, which is the other half of the ordered pick, not
-the tour of §1. D16's death drop is §6g.
+Nothing here has been observed in a running game; §10 is the go-around. This section is one deposit a player
+explicitly orders, which is the other half of the ordered pick; the automatic survey-driven tour, which deposits
+through the same legs, is §6f. D16's death drop is §6g.
 
 ## 6g. He dies, and what he carried does not die with him (`DECISIONS.md` D16)
 
@@ -1124,6 +1124,9 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
     he gives it up and carries on with the rest; he never jumps or teleports.
 42. **Reload mid-tour.** Save and quit mid-load, reload: the tour is gone, the stones he picked are still in him
     (§6c), and after `destination` and `area` again, `start` takes them to the chest first.
+43. **Death mid-tour (§6g).** Let something kill Gunnar while he walks a load. The tour must stop at once with
+    "Gunnar died" in the log (not some seconds later as a silent body), what he picked on that load must be on the
+    ground where he fell, and the death record must count it. `ct_collect status` afterwards shows no tour running.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

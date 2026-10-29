@@ -13,7 +13,7 @@ to act *through* `CartAuthorityPolicy.MayMutate` (test-asserted).
    the game's own replicated/local state and writes only its own per-world
    sidecar files. Two further exceptions to the second half of this sentence:
    D15's deposit writes a vanilla container's inventory - **built, pinned to one file** - and D16's death drop puts
-   item instances into the world, which is **decided and not built**
+   item instances into the world - **built, pinned to one file** (`GunnarDeathDropPort.cs`)
    (`docs/settlement/cart-and-collection/DECISIONS.md`). There is no RPC and no `SetOwner`/ownership claim anywhere
    in the source, and no `ZDO.Set` except one scoped exception — validator-audited
    (comments that state this absence are the only other occurrences). The

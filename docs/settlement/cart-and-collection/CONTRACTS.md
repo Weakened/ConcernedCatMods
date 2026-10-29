@@ -1,6 +1,6 @@
 # Cart pulling and resource collection: contracts
 
-Contract revision **C5** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3, C4 and C5 are documentation only, see §10). The compilable half lives in:
+Contract revision **C6** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3, C4, C5 and C6 are documentation only, see §10). The compilable half lives in:
 
 | Area | Source | Compiled into | Tests |
 |---|---|---|---|
@@ -517,6 +517,17 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 - **Fault injection:** agent D's tests inject failures at every step of §5.2 and §5.3 and replay every journal prefix.
 
 ## 10. Revision log
+
+### C6 (2026-10-28): documentation only
+
+Owner decisions asked directly by the lead, recorded in `DECISIONS.md`:
+- **D17:** the Teamster carve-out's own-body pathfinding covers Gunnar's on-foot collection tour (#381, #445); a
+  load is 225 units, the 24-source trip is a planning limit, and no load is refused for being small. No cart on a
+  tour.
+- **D16** confirmed as built: its fail-closed reading (material recorded unresolved, not dropped, whenever a gate
+  fails) is the intended narrowing.
+
+Neither changes a name, value or transition in this document. Neither has been observed in game.
 
 ### C5 (2026-09-29): documentation only
 

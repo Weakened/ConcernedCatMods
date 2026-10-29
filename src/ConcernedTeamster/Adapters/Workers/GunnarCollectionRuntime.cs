@@ -387,9 +387,18 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             {
                 EndOrder("Gunnar died");
             }
+        }
+        catch (Exception exception)
+        {
+            _log?.LogError("Gunnar died and his order could not be ended cleanly: " + SafeFailure.Describe(exception));
+        }
 
-            // A tour would also end on the next frame, when the watcher sees the
-            // dead body; ending it here says why, with the same job verb.
+        // Without this a tour would end only when the frame watcher noticed the
+        // worker ticks had stopped, seconds later, for a vaguer reason: the body
+        // is destroyed straight after vanilla's death callback, so no tick sees
+        // it dead. Same job verb as a cancel: the sources still exist.
+        try
+        {
             if (_tour != null)
             {
                 CancelTour("Gunnar died");
@@ -397,7 +406,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         }
         catch (Exception exception)
         {
-            _log?.LogError("Gunnar died and his order could not be ended cleanly: " + SafeFailure.Describe(exception));
+            _log?.LogError("Gunnar died and his tour could not be ended cleanly: " + SafeFailure.Describe(exception));
         }
 
         string rows = WorkerDeathRows.Serialize(DateTime.UtcNow, WorkerKey.Gunnar.Value, where.x, where.y, where.z, report);
