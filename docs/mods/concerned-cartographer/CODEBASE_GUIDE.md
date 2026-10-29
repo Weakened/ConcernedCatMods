@@ -951,7 +951,7 @@ It should drive `PinWorkbenchController` / `PinOperations`, not persistence dire
 
 ### `Map/MapUiCoordinator.cs` (#100, replaced `LargeMapControls.cs`)
 
-The large-map UI coordinator on `Minimap.m_largeRoot`: the persistent compact toolbar ([Atlas] [Markers] [Routes] [Survey] [Share] [Quick Pin] [Settings]), the contextual pin action button ("Upgrade & Edit" / "Edit Pin", kept alive via pointer-hover plus a grace window), the hover tooltip, and the accelerator hint. It also owns the one-major-side-surface-at-a-time rule: every panel registers with `RegisterSurface`, `OpenExclusive` closes the rest before opening one, and `CloseAllSurfaces` runs on world switch, disable, and Quick Pin arming. `HasFailed` feeds the vanilla-rail restore (#99): if the toolbar dies, the rail comes back, because the toolbar is the only route to the replacement surfaces. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+The large-map UI coordinator on `Minimap.m_largeRoot`: the persistent compact toolbar ([Atlas] [Markers] [Routes] [Areas] [Survey] [Share] [Quick Pin] [Settings]; Areas since #296 slice 2), the contextual pin action button ("Upgrade & Edit" / "Edit Pin", kept alive via pointer-hover plus a grace window), the hover tooltip, and the accelerator hint. It also owns the one-major-side-surface-at-a-time rule: every panel registers with `RegisterSurface`, `OpenExclusive` closes the rest before opening one, and `CloseAllSurfaces` runs on world switch, disable, and Quick Pin arming. `HasFailed` feeds the vanilla-rail restore (#99): if the toolbar dies, the rail comes back, because the toolbar is the only route to the replacement surfaces. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
 
 ### `Map/CcSidePanel.cs` (#100)
 
@@ -1304,9 +1304,22 @@ Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol versio
   which is part of `CartographerWorldSidecars`.
 - `Runtime/Interop/WorkAreaCapabilityPublisher.cs` publishes the capability next
   to presence in `Plugin.ConcernedCatCapabilities`.
+- Slice 2 adds the visible editor:
+  - `Domain/Atlas/WorkAreaEditing.cs`, which is game-free:
+    - `WorkAreaDrawSession` is one bounded freehand stroke, using the route `FreeDrawStrokeGate`.
+    - `WorkAreaEditor` holds what the panel does: draw, cancel, select by id, rename, two-click delete, rows and details. It goes through the same `WorkAreaStore` as `cc_areas`.
+    - `WorkAreaOutlines` is the list the outline layer draws.
+  - `Map/WorkAreasPanel.cs` is the side panel, opened by the toolbar's **Areas** button.
+  - `RoadVectorLayer.BakeWorkAreas` draws the outlines on the large map only, in a crisp graphic of its own: saved areas sky blue, the selected one amber, the draft pale gold.
+  - `CartographerRuntime` owns the editor.
+    - The draw mode is UI-owned like a route mode: plain LMB, with clicks and drag consumed.
+    - The panel gets no editor while no world is bound or the world's area file is read-only.
+    - Every panel edit writes the sidecar at once.
 - Not yet built:
-  - the visible map editor (slice 2);
   - "Assign Thorstein" and the Foreman consumer (Lane D2, after #295);
+  - progress and attention display;
+  - vertex-level editing (to change a boundary, draw a new area and delete the old one);
+  - minimap outlines;
   - the ConcernedNPC provider registry (#375).
 
 ### `Runtime/CompatibilityRegistry.cs` (v0.8)

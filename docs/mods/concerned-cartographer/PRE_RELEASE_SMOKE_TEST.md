@@ -646,7 +646,7 @@ Every block **BLOCKS** unless marked otherwise.
 ### M. Toolbar and panel dock (#100)
 
 1. Open the large map: the toolbar shows **[Atlas] [Markers] [Routes]
-   [Survey] [Share] [Quick Pin] [Settings]** at the bottom center,
+   [Areas] [Survey] [Share] [Quick Pin] [Settings]** at the bottom center,
    inside the map.
 2. Open each panel in turn: exactly one side panel is ever visible;
    opening the next closes the previous. Each docks at the same

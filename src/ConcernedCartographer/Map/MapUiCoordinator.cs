@@ -11,7 +11,7 @@ using UnityEngine.UI;
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
 /// <summary>The large-map UI coordinator (#100): one persistent compact
-/// toolbar — [Atlas][Markers][Routes][Survey][Share][Quick Pin][Settings]
+/// toolbar — [Atlas][Markers][Routes][Areas][Survey][Share][Quick Pin][Settings]
 /// — plus the contextual pin action button, the accelerator hint, and the
 /// Atlas tooltip, all on <c>Minimap.m_largeRoot</c> so they live and die
 /// with the map. It also enforces the one-major-side-surface-at-a-time
@@ -49,6 +49,7 @@ internal sealed class MapUiCoordinator
     public Action? AtlasClicked;
     public Action? MarkersClicked;
     public Action? RoutesClicked;
+    public Action? AreasClicked;
     public Action? SurveyClicked;
     public Action? ShareClicked;
     public Action? QuickPinClicked;
@@ -185,12 +186,15 @@ internal sealed class MapUiCoordinator
                 ("toolbar.atlas", () => AtlasClicked),
                 ("toolbar.markers", () => MarkersClicked),
                 ("toolbar.routes", () => RoutesClicked),
+                ("toolbar.areas", () => AreasClicked),
                 ("toolbar.survey", () => SurveyClicked),
                 ("toolbar.share", () => ShareClicked),
                 ("toolbar.quickpin", () => QuickPinClicked),
                 ("toolbar.settings", () => SettingsClicked),
             };
-            const float buttonWidth = 98f;
+            // #296 slice 2: eight buttons since Areas joined; narrower so
+            // the row stays as wide as the seven-button one was.
+            const float buttonWidth = 86f;
             const float gap = 4f;
             float total = (buttons.Length * buttonWidth) + ((buttons.Length - 1) * gap);
             float x = -total / 2f + (buttonWidth / 2f);
