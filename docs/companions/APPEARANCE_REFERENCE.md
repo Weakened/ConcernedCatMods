@@ -17,7 +17,11 @@ by the #298 sweep; nothing below was rewritten.
 | Thorstein | Concerned Foreman | **Applied to his presentation body** (#295 step 1, 2026-10-27): `ThorsteinLookPlan` resolves `Mullet` and `Mustache` by the installed game's own label and then by `Hair32`/`Beard22`, and his colours go through the character screen's palette. The figure is shown at home only while he has no worker body. His worker body is still the `Dverger` clone and cannot wear them. **Not observed in game.** See `docs/mods/concerned-foreman/PROJECT.md` |
 | Gunnar | Concerned Teamster | **Not applied**, same reason |
 
-Gunnar has no presentation body yet (#297). Thorstein has had one since #295 step 1,
+Since the #295 lift, the dresser that applies these rows is Concerned NPC's
+`NpcFigureDresser`, and each product supplies only its row as an `NpcLookSpec`:
+a body (`NpcBodyModel.Female` for a female row), a hair and beard request (by
+label, then localization token, then prefab id; no request means no beard), the
+slider readings and the clothes. Gunnar has no presentation body yet (#297). Thorstein has had one since #295 step 1,
 shown only while he has no worker body; the two never coexist.
 
 ---

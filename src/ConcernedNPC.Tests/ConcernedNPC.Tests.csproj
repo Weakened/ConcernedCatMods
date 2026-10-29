@@ -33,8 +33,23 @@
          same boundary Concerned Steward and Concerned Foreman drew around their
          own plugin wiring, for the same reason. -->
     <Compile Include="..\ConcernedNPC\**\*.cs"
-             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
+             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\Body\Dressing\**\*.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
              LinkBase="Library" />
+
+    <!-- Body/Dressing is the second exclusion, and the reason is not
+         convenience. It is the figure dresser lifted from Concerned Foreman
+         (#295): nearly every line of it is renderers, materials, shader
+         properties, the item table and the localization table, and the only
+         thing stubs of those could prove is that the stubs agree with
+         themselves. The decisions it makes are game-free and live in
+         Appearance/, which IS linked and tested here. Its engine writes are
+         confined to Body/Dressing/NpcFigureParts.cs and pinned by spelling in
+         tools/validate_repo.py ("NPC figure-parts audit"), which also pins
+         that this folder's public surface is exactly NpcFigureDresser and
+         NpcCustomizationPalette - the half of PublicSurfaceTests this
+         assembly cannot see. The product build in scripts/verify.ps1 compiles
+         it against the real game. Before the lift no test project compiled it
+         either. -->
 
     <!-- The shipped WorkerKey, linked ONLY so its slug rules can be compared
          against this library's. NpcIdentity is a separate type because a shared

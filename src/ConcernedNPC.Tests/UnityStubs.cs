@@ -436,6 +436,17 @@ namespace UnityEngine
     {
     }
 
+    /// <summary>An asset. Only ever referenced: the presentation extraction
+    /// copies the source character's body meshes out by reference.</summary>
+    public class Mesh : Object
+    {
+    }
+
+    /// <summary>An asset, referenced like <see cref="Mesh"/>.</summary>
+    public class Material : Object
+    {
+    }
+
     public class Animator : Component
     {
     }

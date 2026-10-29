@@ -121,9 +121,12 @@ public static class NpcPresentationBody
             Transform? helmet = null;
             Transform? rightHand = null;
             SkinnedMeshRenderer? body = null;
+            Mesh?[]? modelMeshes = null;
+            Material?[]? modelMaterials = null;
             VisEquipment equipment = clone.GetComponentInChildren<VisEquipment>(includeInactive: true);
             if (equipment != null)
             {
+                ReadModels(equipment, out modelMeshes, out modelMaterials);
                 helmet = InsideOrNull(equipment.m_helmet, visual);
                 rightHand = InsideOrNull(equipment.m_rightHand, visual);
                 body = equipment.m_bodyModel != null
@@ -174,7 +177,8 @@ public static class NpcPresentationBody
 
             GameObject built = root;
             root = null;
-            return NpcPresentationFigure.Built(built, animator, helmet, rightHand, body, quieted, quietedNames);
+            return NpcPresentationFigure.Built(
+                built, animator, helmet, rightHand, body, quieted, quietedNames, modelMeshes, modelMaterials);
         }
         catch (Exception exception)
         {
@@ -196,6 +200,32 @@ public static class NpcPresentationBody
             }
 
             UnityEngine.Object.DestroyImmediate(holder);
+        }
+    }
+
+    /// <summary>Copies the source's body list out of its equipment component:
+    /// the game keeps one mesh and one base material per selectable body, and
+    /// the character screen chooses between them by index. Read only, and read
+    /// before the component is destroyed; the references are to assets, which
+    /// outlive the clone. A build without the list leaves both arrays null.
+    /// </summary>
+    private static void ReadModels(VisEquipment equipment, out Mesh?[]? meshes, out Material?[]? materials)
+    {
+        meshes = null;
+        materials = null;
+        VisEquipment.PlayerModel[]? models = equipment.m_models;
+        if (models == null || models.Length == 0)
+        {
+            return;
+        }
+
+        meshes = new Mesh?[models.Length];
+        materials = new Material?[models.Length];
+        for (int index = 0; index < models.Length; index++)
+        {
+            VisEquipment.PlayerModel? model = models[index];
+            meshes[index] = model?.m_mesh;
+            materials[index] = model?.m_baseMaterial;
         }
     }
 

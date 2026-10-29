@@ -18,6 +18,36 @@ A worker can rest as a presentation figure, under the same one-body rule (#295, 
 * This is an additive minor version that widens the public surface by two members. Every in-repository consumer pin
   moves with it, so no product can compile against one contract and install another.
 
+A figure can be dressed, and the one dresser lives here (#295, lifted from Concerned Foreman).
+
+* `Body.Dressing.NpcFigureDresser` dresses an extracted figure from an `Appearance.NpcLookSpec`: which body it
+  wears, hair, beard, colouring and garments. It also stands the figure (`StandAt`) and takes it down (`TakeDown`).
+  It is Thorstein's dresser from Concerned Foreman, moved rather than copied. Foreman now uses it and keeps no copy,
+  and Concerned Steward and Concerned Teamster can dress Sunniva and Gunnar with it.
+* What a role asks for is its own data: `NpcLookSpec`, `NpcLookRequest` and `NpcBodyModel`. The rule that resolves
+  a request against what the installed game offers is `NpcLookPlan`. Its order is a player's override, the owner's
+  label, the label's localization token, a documented prefab id, a shape, the family, then nothing. Slider readings
+  are turned into colours by `NpcLookColour`, which is the character screen's own conversion. A slot with no request
+  is left alone, which is how a role asks for no beard.
+* Two things Thorstein never needed are new:
+  * **A second body.** `NpcBodyModel.Female` is the game's model index 1, the one the character screen's toggle
+    selects. The dresser puts it on the way the game's equipment component does. The bodies are read from the source
+    character's own list before the extraction destroys the source, and `NpcPresentationFigure` carries them, by
+    reference only. If they cannot be read, `ModelApplied` stays false and the figure keeps the first body.
+  * **A localization token** as a request key (for example `$customization_hair12`). It finds the same choice in
+    any language, and it counts as a match.
+* `NpcCustomizationPalette` reads the character screen's colour endpoints once per process. Every consumer shares the
+  one cache.
+* Every public member of the dresser acts on the figure it was built for, never on an object it is handed. A
+  consumer's own pinned audits therefore cannot be bypassed through the library. The engine writes are confined to
+  one internal file. `tools/validate_repo.py`'s "NPC figure-parts audit" pins every creation, destruction,
+  re-parenting, pose write and mesh swap in the whole library by path and exact spelling. A product that grows its
+  own dresser is refused by the "#295 one-dresser audit". Concerned Cartographer's Hulgi keeps his own pre-library
+  copy, exempted by name.
+* Not observed in game: neither the second body nor the token key. Thorstein's look is unchanged by the move, apart
+  from the wording of three log lines.
+* Still additive. A role that does not use these types is unaffected.
+
 ## 0.4.0
 
 The public surface gains the mint and the transfer recorder that Concerned Teamster's Gunnar deposit needs (#415, #374,
