@@ -1979,7 +1979,11 @@ def _strip_cs_comments(text: str) -> str:
             while index + run < length and text[index + run] == '"':
                 run += 1
 
-        if quote == '"' and run >= 3:
+        # A verbatim string's `""` is an escaped quote, never a raw-string
+        # delimiter: `@"""x"` is the string `"x`. Reading it as raw closed it at
+        # the next `"""` and turned that string's contents into code, so a `//`
+        # inside them hid the rest of the line (review of 21b6c73, #382).
+        if quote == '"' and run >= 3 and not verbatim:
             delimiter = '"' * run
             out.append(delimiter)
             index += run

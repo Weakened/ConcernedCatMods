@@ -533,6 +533,17 @@ class CarveOutIsNarrow(CarveOutFixture):
             "a generic nullable in an interpolation hid a later worker destruction",
             marker="#381")
 
+    def test_a_verbatim_string_opening_with_an_escaped_quote_does_not_hide_worker_destruction(self):
+        # Review of the Steward S1 audit at 21b6c73 (#382): `@"""x"` was read
+        # as a raw string, so the next one's `//` hid the call. Verified to pass
+        # the validator at 21b6c73 before the fix.
+        self.plant_file(
+            os.path.join(WORKERS, "ZzVerbatimQuote.cs"),
+            '        var a = @"""x"; var b = @"""y // "; view.Destroy();')
+        self.assert_refused(
+            "a verbatim string opening with an escaped quote hid a worker destruction",
+            marker="#381")
+
     def test_the_population_pin_descends_into_subdirectories(self):
         # `glob("*.cs")` does not descend, so the same planted removal one folder
         # down was invisible while the success sentence said "anywhere in

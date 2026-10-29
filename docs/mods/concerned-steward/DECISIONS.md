@@ -59,9 +59,9 @@ untouched; `cs_steward recruit` brings her body back.
   port tests, one witness at a time, not by the audit; and it cannot see a destruction reached through a delegate, a
   method group or reflection.
 - `src/ConcernedSteward.Tests/StewardRetirementTests.cs` — control flow over the stubbed game.
-- `tools/tests/test_steward_retire_audit.py` — thirty-eight plants, each a way a body could leave the world outside
-  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last eleven) and to be
-  refused with it. Twenty-seven
+- `tools/tests/test_steward_retire_audit.py` — thirty-nine plants, each a way a body could leave the world outside
+  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last twelve) and to be
+  refused with it. Twenty-eight
   of them were found by successive independent reviews, each getting past the version of the rule it was found against
   and added with the fix that closes it: a reassigned view, a swapped body, a `using static`, a `using` alias and a
   method group; a local function or lambda whose own parameter is `view` (two shapes) and a deconstruction into
@@ -72,7 +72,8 @@ untouched; `cs_steward recruit` brings her body back.
   Retired while her body still stands; a directive hidden behind `#region x /*`, one after a form feed, and a
   `[Conditional]` attribute; code after a U+2028 inside a `//` comment; a `List<int?>` in an
   interpolation that made the shared comment stripper read the format colon as code (fixed in the stripper, which
-  the Teamster audits share; a Teamster plant was added too).
+  the Teamster audits share; a Teamster plant was added too); a verbatim string opening with an escaped quote that
+  the same stripper read as a raw string (likewise fixed there, with a Teamster plant).
 - The port reads her pack from the body itself; a pack the caller states in the ledger can only add a reason to
   refuse (more held, or unreadable), never remove one.
 - `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which

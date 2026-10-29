@@ -8,8 +8,8 @@ verified to pass the validator that lacked this rule (origin/main d72b397)
 before being added here. The plants found by successive reviews were also each
 verified to pass the validator of the head they were found against (d0d559e:
 five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two, 80c3f3a:
-four, 8144fbd: three, 3b23929: one, 3252bcd: one), whose rule they got past; the last
-eleven were checked against origin/main 0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
+four, 8144fbd: three, 3b23929: one, 3252bcd: one, 21b6c73: one), whose rule they got past;
+the last twelve were checked against origin/main 0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
 pass the merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
 re-runs that check, expecting every plant to get through it.
 """
@@ -365,6 +365,15 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      RUNTIME_MARKER + "            string tidy = $\"{new System.Collections.Generic.List<int?>()"
                      ".Count://}\"; UnityEngine.Object.Destroy(_census.Live!.gameObject);\n")
         self.assert_refused("the stripper read `int?` as a conditional, so `//` in the format hid the destruction")
+
+    # Review of 21b6c73: verified to pass 21b6c73's validator as well as
+    # origin/main 0171cf6's.
+
+    def test_a_verbatim_string_opening_with_an_escaped_quote_is_refused(self):
+        self.swap_in(RUNTIME, RUNTIME_MARKER,
+                     RUNTIME_MARKER + "            string tidyA = @\"\"\"x\"; string tidyB = @\"\"\"y // \"; "
+                     "UnityEngine.Object.Destroy(_census.Live!.gameObject);\n")
+        self.assert_refused("`@\"\"\"x\"` was read as a raw string and the next one's `//` hid the destruction")
 
     def test_a_guard_wrapped_in_a_condition_is_refused(self):
         self.swap_in(PORT, PORT_GUARD,
