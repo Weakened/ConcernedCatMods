@@ -24,8 +24,9 @@ public sealed class ToolsOfTheTradeTests
         bool uncertain = false,
         bool area = true,
         bool writable = true,
-        bool authority = true) =>
-        new ToolsOfTheTradeFacts(quest, employed, axe, hammer, uncertain, area, writable, authority);
+        bool authority = true,
+        bool rosterSaved = true) =>
+        new ToolsOfTheTradeFacts(quest, employed, axe, hammer, uncertain, area, writable, authority, rosterSaved);
 
     [Fact]
     public void Before_the_square_is_examined_nothing_is_asked_and_nothing_recorded()
@@ -182,5 +183,163 @@ public sealed class ToolsOfTheTradeTests
         Assert.StartsWith("Left my tools with the last folk who needed them.", ThorsteinLines.Introduction);
         Assert.StartsWith("Good edge. Sound handle.", ThorsteinLines.Completion);
         Assert.True(new[] { ThorsteinLines.ObjectiveAxe, ThorsteinLines.ObjectiveHammer }.All(line => line.Length > 0));
+    }
+
+    [Fact]
+    public void An_unsaved_roster_is_never_built_on()
+    {
+        // Employed in memory only: the story must not be recorded over it.
+        ToolsOfTheTradeFacts facts = Facts(QuestState.IntroPending, employed: true, axe: true, hammer: true,
+            rosterSaved: false);
+
+        Assert.Equal(ToolsOfTheTradeStep.None, ToolsOfTheTrade.Decide(facts, out ToolsOfTheTradeWait wait));
+        Assert.Equal(ToolsOfTheTradeWait.RecordsUnsaved, wait);
+    }
+
+    // --- the flow: the order of the writes ----------------------------------------------------
+
+    private sealed class FakePorts : IToolsOfTheTradePorts
+    {
+        internal QuestState Quest = QuestState.IntroPending;
+        internal bool EmployedInMemory;
+        internal bool EmployedOnDisk;
+        internal bool Axe = true;
+        internal bool Hammer = true;
+        internal bool Area = true;
+        internal bool RosterSaveFails;
+        internal bool StorySaveFails;
+        internal bool Announced;
+        internal readonly System.Collections.Generic.List<string> Writes = new System.Collections.Generic.List<string>();
+
+        public ToolsOfTheTradeFacts Read() => new ToolsOfTheTradeFacts(
+            Quest, EmployedInMemory, Axe, Hammer, false, Area, true, true,
+            rosterSaved: EmployedInMemory == EmployedOnDisk);
+
+        public bool TryRecruit(out string refusal)
+        {
+            Writes.Add("recruit");
+            refusal = string.Empty;
+            EmployedInMemory = true;
+            return true;
+        }
+
+        public bool TrySaveRoster(out string? notice)
+        {
+            Writes.Add("save-roster");
+            notice = RosterSaveFails ? "disk full" : null;
+            if (!RosterSaveFails)
+            {
+                EmployedOnDisk = EmployedInMemory;
+            }
+
+            return !RosterSaveFails;
+        }
+
+        public bool TryRecordWelcome(out string? notice)
+        {
+            Writes.Add("welcome");
+            notice = null;
+            if (StorySaveFails)
+            {
+                return false;
+            }
+
+            Quest = QuestState.Recruited;
+            return true;
+        }
+
+        public bool TryAnnounceJoin()
+        {
+            if (Announced)
+            {
+                return false;
+            }
+
+            Announced = true;
+            return true;
+        }
+    }
+
+    [Fact]
+    public void The_roster_reaches_disk_before_the_story_is_recorded()
+    {
+        var ports = new FakePorts();
+
+        string said = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.Equal(new[] { "recruit", "save-roster", "welcome" }, ports.Writes);
+        Assert.True(ports.EmployedOnDisk);
+        Assert.Equal(QuestState.Recruited, ports.Quest);
+        Assert.Contains(ThorsteinLines.Completion, said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_failed_roster_save_records_no_story_now_or_on_the_next_pass()
+    {
+        var ports = new FakePorts { RosterSaveFails = true };
+
+        string first = ToolsOfTheTradeFlow.Settle(ports);
+        string second = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.DoesNotContain("welcome", ports.Writes);
+        Assert.NotEqual(QuestState.Recruited, ports.Quest);
+        Assert.Contains("could not be saved", first, StringComparison.Ordinal);
+        Assert.Contains("could not be saved", second, StringComparison.Ordinal);
+        Assert.DoesNotContain(ThorsteinLines.Completion, first + second, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_roster_save_that_succeeds_on_retry_lets_the_story_finish()
+    {
+        var ports = new FakePorts { RosterSaveFails = true };
+        ToolsOfTheTradeFlow.Settle(ports);
+
+        ports.RosterSaveFails = false;
+        string said = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.True(ports.EmployedOnDisk);
+        Assert.Equal(QuestState.Recruited, ports.Quest);
+        Assert.Contains(ThorsteinLines.Completion, said, StringComparison.Ordinal);
+        Assert.Equal(1, ports.Writes.FindAll(write => write == "recruit").Count);
+    }
+
+    [Fact]
+    public void A_failed_story_save_keeps_him_employed_and_says_so()
+    {
+        var ports = new FakePorts { StorySaveFails = true };
+
+        string said = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.True(ports.EmployedOnDisk);
+        Assert.NotEqual(QuestState.Recruited, ports.Quest);
+        Assert.Contains("taken on", said, StringComparison.Ordinal);
+        Assert.False(ports.Announced);
+    }
+
+    [Fact]
+    public void A_worker_employed_before_the_story_gets_the_record_without_the_speech()
+    {
+        var ports = new FakePorts
+        {
+            Quest = QuestState.Unstarted, EmployedInMemory = true, EmployedOnDisk = true, Axe = false, Hammer = false,
+        };
+
+        string said = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.Equal(new[] { "welcome" }, ports.Writes);
+        Assert.DoesNotContain(ThorsteinLines.Completion, said, StringComparison.Ordinal);
+        Assert.Contains("already works", said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_join_is_announced_once()
+    {
+        var ports = new FakePorts();
+        string first = ToolsOfTheTradeFlow.Settle(ports);
+        string again = ToolsOfTheTradeFlow.Settle(ports);
+
+        Assert.Contains(ThorsteinLines.Completion, first, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, again);
+        Assert.Equal(1, ports.Writes.FindAll(write => write == "recruit").Count);
     }
 }

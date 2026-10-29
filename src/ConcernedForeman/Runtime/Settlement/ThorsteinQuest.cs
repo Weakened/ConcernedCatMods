@@ -100,7 +100,7 @@ internal sealed class ThorsteinQuest
         progress.Advance(QuestTransition.BeginIntroduction);
         if (progress.HasUnsavedChanges)
         {
-            return "The square could not be recorded, so nothing has changed: " +
+            return "The square could not be saved, so after a reload it will need examining again: " +
                 (progress.Notice ?? "the companion file was not written.");
         }
 
@@ -108,58 +108,62 @@ internal sealed class ThorsteinQuest
             Describe(progress, register, journal) + Settle(progress, register, journal, saveRecords);
     }
 
-    /// <summary>Carries out whatever <see cref="ToolsOfTheTrade.Decide"/> says,
-    /// register first and story second.</summary>
+    /// <summary>Carries out whatever <see cref="ToolsOfTheTrade.Decide"/> says.
+    /// The order of the writes is <see cref="ToolsOfTheTradeFlow"/>'s, which is
+    /// game-free and tested; this only answers its questions.</summary>
     private string Settle(
         CompanionProgress progress, SettlementRegister register, SettlementJournal journal, Func<string?> saveRecords)
     {
-        ToolsOfTheTradeFacts facts = Facts(progress, register, journal);
-        switch (ToolsOfTheTrade.Decide(facts, out ToolsOfTheTradeWait wait))
-        {
-            case ToolsOfTheTradeStep.Recruit:
-                RecruitmentResult result = register.Recruit(_worker(), WorkerRoles.Labourer, _hasAuthority());
-                if (!result.IsRecruited)
-                {
-                    return "\nHe has both tools but could not be taken on: " + result.Describe();
-                }
-
-                string? notice = saveRecords();
-                if (register.IsDirty)
-                {
-                    return "\nHe has both tools, but the settlement record could not be written, so he is not " +
-                        "taken on yet." + (notice == null ? string.Empty : " " + notice);
-                }
-
-                return RecordStory(progress);
-
-            case ToolsOfTheTradeStep.RecordCompletion:
-                return RecordStory(progress);
-
-            default:
-                string waiting = ToolsOfTheTrade.DescribeWait(wait);
-                return waiting.Length == 0 ? string.Empty : "\n" + waiting;
-        }
-    }
-
-    private string RecordStory(CompanionProgress progress)
-    {
-        progress.Advance(QuestTransition.Welcome);
-        if (progress.HasUnsavedChanges)
-        {
-            // He is employed; only the story line is late. The next pass
-            // finishes it (RecordCompletion), so nothing is lost.
-            return "\nThorstein is taken on. His story could not be saved yet and will be on the next try." +
-                (progress.Notice == null ? string.Empty : " " + progress.Notice);
-        }
-
-        if (progress.AnnounceJoin())
+        string result = ToolsOfTheTradeFlow.Settle(new Ports(this, progress, register, journal, saveRecords));
+        if (result.IndexOf(ThorsteinLines.Completion, StringComparison.Ordinal) >= 0)
         {
             _log("Thorstein joined (Tools of the Trade).");
-            return "\nThorstein: \"" + ThorsteinLines.Completion + "\"\nThorstein joined your settlement. " +
-                "Give him a work order when you are ready; nothing starts on its own.";
         }
 
-        return string.Empty;
+        return result;
+    }
+
+    private sealed class Ports : IToolsOfTheTradePorts
+    {
+        private readonly ThorsteinQuest _owner;
+        private readonly CompanionProgress _progress;
+        private readonly SettlementRegister _register;
+        private readonly SettlementJournal _journal;
+        private readonly Func<string?> _saveRecords;
+
+        internal Ports(ThorsteinQuest owner, CompanionProgress progress, SettlementRegister register,
+            SettlementJournal journal, Func<string?> saveRecords)
+        {
+            _owner = owner;
+            _progress = progress;
+            _register = register;
+            _journal = journal;
+            _saveRecords = saveRecords;
+        }
+
+        public ToolsOfTheTradeFacts Read() => _owner.Facts(_progress, _register, _journal);
+
+        public bool TryRecruit(out string refusal)
+        {
+            RecruitmentResult result = _register.Recruit(_owner._worker(), WorkerRoles.Labourer, _owner._hasAuthority());
+            refusal = result.IsRecruited ? string.Empty : result.Describe();
+            return result.IsRecruited;
+        }
+
+        public bool TrySaveRoster(out string? notice)
+        {
+            notice = _saveRecords();
+            return !_register.IsDirty;
+        }
+
+        public bool TryRecordWelcome(out string? notice)
+        {
+            _progress.Advance(QuestTransition.Welcome);
+            notice = _progress.Notice;
+            return !_progress.HasUnsavedChanges;
+        }
+
+        public bool TryAnnounceJoin() => _progress.AnnounceJoin();
     }
 
     private string Describe(CompanionProgress progress, SettlementRegister register, SettlementJournal journal)
@@ -168,8 +172,8 @@ internal sealed class ThorsteinQuest
         switch (ToolsOfTheTrade.Stage(facts))
         {
             case ThorsteinQuestStage.NotMet:
-                return "Tools of the Trade: not begun. A carpenter's square is waiting near your bed " +
-                    "(for now: cf_settle quest examine).";
+                return "Tools of the Trade: not begun. The carpenter's square that starts it is not in the " +
+                    "world yet in this build; cf_settle quest examine stands in for examining it.";
 
             case ThorsteinQuestStage.WaitingForTools:
                 var lines = new List<string> { "Tools of the Trade:" };
@@ -200,7 +204,8 @@ internal sealed class ThorsteinQuest
             ledger.HasUncertainHandover(worker),
             register.HasSettlementArea,
             !register.IsReadOnly && !journal.IsReadOnly,
-            _hasAuthority());
+            _hasAuthority(),
+            rosterSaved: !register.IsDirty);
     }
 
     private bool TryOpen(out CompanionProgress progress, out string reason)

@@ -58,6 +58,10 @@ internal enum ToolsOfTheTradeWait
     /// settlement runtime is off).</summary>
     NoAuthority = 3,
 
+    /// <summary>He is on the roster in memory, but the settlement record has not
+    /// reached disk. The story is never recorded over that.</summary>
+    RecordsUnsaved = 5,
+
     /// <summary>A tool handover is unresolved. The record does not know
     /// whether he has it, and a recruitment decided on a guess is the kind of
     /// worker authority this repository requires to fail closed.</summary>
@@ -75,7 +79,8 @@ internal readonly struct ToolsOfTheTradeFacts
         bool handoverUncertain,
         bool hasSettlementArea,
         bool recordsWritable,
-        bool hasAuthority)
+        bool hasAuthority,
+        bool rosterSaved = true)
     {
         Quest = quest;
         Employed = employed;
@@ -85,7 +90,13 @@ internal readonly struct ToolsOfTheTradeFacts
         HasSettlementArea = hasSettlementArea;
         RecordsWritable = recordsWritable;
         HasAuthority = hasAuthority;
+        RosterSaved = rosterSaved;
     }
+
+    /// <summary>The register in memory has nothing unwritten. False after a
+    /// recruitment whose save failed: the roster says "employed" in memory and
+    /// not on disk.</summary>
+    internal bool RosterSaved { get; }
 
     /// <summary>This character's quest record, from the companion sidecar.</summary>
     internal QuestState Quest { get; }
@@ -163,6 +174,14 @@ internal static class ToolsOfTheTrade
     internal static ToolsOfTheTradeStep Decide(in ToolsOfTheTradeFacts facts, out ToolsOfTheTradeWait wait)
     {
         wait = ToolsOfTheTradeWait.None;
+        if (facts.Employed && !facts.RosterSaved)
+        {
+            // Employed only in memory. Recording the story now would leave it
+            // saying "recruited" over a roster that, after a reload, does not.
+            wait = ToolsOfTheTradeWait.RecordsUnsaved;
+            return ToolsOfTheTradeStep.None;
+        }
+
         if (facts.Employed)
         {
             return QuestStateMachine.IsComplete(facts.Quest)
@@ -233,6 +252,9 @@ internal static class ToolsOfTheTrade
                     "is written over them. See cf_settle status.";
             case ToolsOfTheTradeWait.NoAuthority:
                 return "He has both tools, but only the host with the settlement runtime on can take him on.";
+            case ToolsOfTheTradeWait.RecordsUnsaved:
+                return "He is on the roster for this session, but the settlement record could not be saved; his " +
+                    "story waits until it is. See cf_settle status.";
             case ToolsOfTheTradeWait.HandoverUncertain:
                 return "He has both tools on record, but one handover is unresolved. Run cf_settle reconcile " +
                     "first; he is not taken on over a guess.";
