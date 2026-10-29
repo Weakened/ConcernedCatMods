@@ -20,7 +20,9 @@ public readonly struct NpcPresentationFigure
         SkinnedMeshRenderer? bodyModel,
         int quietedScripts,
         string quietedNames,
-        string refusal)
+        string refusal,
+        Mesh?[]? modelMeshes = null,
+        Material?[]? modelMaterials = null)
     {
         Root = root;
         Animator = animator;
@@ -30,7 +32,17 @@ public readonly struct NpcPresentationFigure
         QuietedScripts = quietedScripts;
         QuietedNames = quietedNames ?? string.Empty;
         Refusal = refusal ?? string.Empty;
+        _modelMeshes = modelMeshes;
+        _modelMaterials = modelMaterials;
     }
+
+    // The source character's own body list, copied out of its equipment
+    // component before that component was destroyed with the rest of the
+    // source. Asset references only: a mesh and a base material per body,
+    // never anything that was instantiated. Read by the dresser, which is the
+    // only thing that ever swaps a figure's body.
+    private readonly Mesh?[]? _modelMeshes;
+    private readonly Material?[]? _modelMaterials;
 
     /// <summary>The finished figure, active, with nothing inside it that can
     /// run. Null on a refusal.</summary>
@@ -66,6 +78,23 @@ public readonly struct NpcPresentationFigure
 
     public bool IsBuilt => Root != null;
 
+    /// <summary>The mesh and base material of the source's body number
+    /// <paramref name="index"/>, if the source offered one.</summary>
+    internal bool TryGetModel(int index, out Mesh? mesh, out Material? baseMaterial)
+    {
+        mesh = null;
+        baseMaterial = null;
+        if (_modelMeshes == null || _modelMaterials == null || index < 0
+            || index >= _modelMeshes.Length || index >= _modelMaterials.Length)
+        {
+            return false;
+        }
+
+        mesh = _modelMeshes[index];
+        baseMaterial = _modelMaterials[index];
+        return mesh != null && baseMaterial != null;
+    }
+
     internal static NpcPresentationFigure Built(
         GameObject root,
         Animator animator,
@@ -73,9 +102,12 @@ public readonly struct NpcPresentationFigure
         Transform? rightHandJoint,
         SkinnedMeshRenderer? bodyModel,
         int quietedScripts,
-        string quietedNames) =>
+        string quietedNames,
+        Mesh?[]? modelMeshes = null,
+        Material?[]? modelMaterials = null) =>
         new NpcPresentationFigure(
-            root, animator, helmetJoint, rightHandJoint, bodyModel, quietedScripts, quietedNames, string.Empty);
+            root, animator, helmetJoint, rightHandJoint, bodyModel, quietedScripts, quietedNames, string.Empty,
+            modelMeshes, modelMaterials);
 
     internal static NpcPresentationFigure Refused(string reason) =>
         new NpcPresentationFigure(

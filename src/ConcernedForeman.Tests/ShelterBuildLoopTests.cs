@@ -302,6 +302,62 @@ public sealed class ShelterBuildLoopTests
     }
 
     [Fact]
+    public void A_chest_the_player_empties_mid_order_waits_names_what_is_missing_and_conjures_nothing()
+    {
+        // #287 "the designated container emptied by the player mid-order": the
+        // first phase is drawn, then the player takes everything left in the
+        // chest. What he already holds still goes up, nothing is drawn from
+        // anywhere else, and no material appears that the chest, his pack and
+        // the placed pieces did not already account for.
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = world.Loop();
+        int tick = 0;
+        while (world.Materials.Draws == 0 && tick < 80)
+        {
+            loop.Tick(100f + (tick++ * Step));
+        }
+
+        Assert.Equal(1, world.Materials.Draws);
+        Assert.True(world.Carrying("Wood") > 0, "the first phase should have drawn wood before the chest is emptied");
+
+        // The player empties the chest, outside the loop's custody.
+        world.Chest["Wood"] = 0;
+        world.Chest["DeerHide"] = 0;
+        int wood = world.Total("Wood");
+        int hide = world.Total("DeerHide");
+        int placedBefore = world.Placer.Placed.Count;
+
+        for (int more = 0; more < 80; more++)
+        {
+            loop.Tick(100f + (tick++ * Step));
+            Assert.Equal(wood, world.Total("Wood"));
+            Assert.Equal(hide, world.Total("DeerHide"));
+        }
+
+        // The round's outcome, not Step: on a draw-retry tick Step still reads
+        // Provisioning while the round is a wait.
+        Assert.Equal(RoundOutcome.Waiting, loop.Round.Outcome);
+        Assert.Contains("Wood", loop.Reason);
+        Assert.Contains("not in any container", loop.Reason);
+
+        // He finished the phase he had drawn - every Foundation piece went up and
+        // he holds no wood - then waited: waiting is not stopping.
+        int foundation = 0;
+        foreach (CostedPiece piece in world.Plan.Pieces)
+            if (piece.Phase == BuildPhase.Foundation) foundation++;
+        Assert.Equal(0, placedBefore);
+        Assert.Equal(foundation, world.Placer.Placed.Count);
+        foreach (string key in world.Placer.Placed)
+        {
+            Assert.True(world.Plan.TryFind(key, out CostedPiece placed));
+            Assert.Equal(BuildPhase.Foundation, placed.Phase);
+        }
+
+        Assert.Equal(0, world.Carrying("Wood"));
+        Assert.Equal(0, world.InChest("Wood"));
+    }
+
+    [Fact]
     public void No_marked_chest_is_a_named_refusal_and_nothing_moves()
     {
         var world = new BuildWorld();

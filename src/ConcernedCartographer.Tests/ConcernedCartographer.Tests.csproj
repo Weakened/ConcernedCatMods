@@ -16,6 +16,10 @@
     <!-- CC-NPC-001: the same shared companion sources the plugin compiles, so
          the tests prove the shipped code rather than a copy of it. -->
     <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
+    <!-- #296: the work-area contract both the provider and any consumer
+         compile, plus the capability map it is published through. -->
+    <Compile Include="..\Shared\Interop\CapabilityMap.cs" Link="Interop/CapabilityMap.cs" />
+    <Compile Include="..\Shared\Interop\WorkArea\**\*.cs" LinkBase="Interop/WorkArea" />
   </ItemGroup>
 
   <ItemGroup>

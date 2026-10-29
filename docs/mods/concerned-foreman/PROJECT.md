@@ -160,8 +160,9 @@ model's own. The leather tunic and trousers are this build's proposal, not the
 owner's; the reference does not lock clothes. All four slots can be overridden
 in the `[Thorstein]` config section. The attachment rules, including binding a
 skinned preset to the body's own bone array and taking off any piece that is not
-drawn where it was put, are Hulgi's, copied from Cartographer rather than
-referenced.
+drawn where it was put, are Hulgi's. Since the #295 lift the dresser that applies
+them is Concerned NPC's `Body/Dressing/NpcFigureDresser`, shared with Sunniva and
+Gunnar; Foreman keeps only his look (`ThorsteinLookPlan.Spec`) and his settings.
 
 **What this is not yet.** There is no idle routine, no sitting, no dialogue, no
 quest and no hand-over UI. He stands at home facing you. His worker body is still

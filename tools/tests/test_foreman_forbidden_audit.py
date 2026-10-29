@@ -192,34 +192,24 @@ class ForemanRuntimeCapabilitiesArePinned(unittest.TestCase):
             "}\n")
         self.assert_refused("a same-named file in another directory inherited the allowance")
 
-    # #295: the figure's helpers destroy and move ANY object, so their callers
-    # are confined. Each plant below is the "lift it into a helper" escape.
-    def assert_figure_refused(self, why):
-        code, out = validate()
-        self.assertNotEqual(0, code, why + "\n" + out[-3000:])
-        self.assertIn("[foreman] #295 figure-parts audit", out, why)
-
-    def test_a_figure_helper_called_from_another_runtime_file_is_refused(self):
+    # #295 lift: the figure's helpers moved to Concerned NPC
+    # (tools/tests/test_npc_figure_parts_audit.py holds their plants). What is
+    # left to prove HERE is that their #400 allowances left with them: a Foreman
+    # file that grows the old helper back is an unpinned destruction again.
+    def test_a_regrown_figure_helper_is_unpinned_again(self):
         self.plant_file(
-            ("Settlement", "ZzFigureEscape.cs"),
-            "using TheConcernedCat.ConcernedForeman.Runtime.Presentation;\n"
-            "internal static class ZzFigureEscape\n"
+            ("Presentation", "FigureParts.cs"),
+            "internal static class FigureParts\n"
             "{\n"
-            "    internal static void Run(ZNetView view) => FigureParts.Drop(view.gameObject);\n"
+            "    internal static void Drop(UnityEngine.Object? target)\n"
+            "    {\n"
+            "        if (target != null)\n"
+            "        {\n"
+            "            UnityEngine.Object.Destroy(target);\n"
+            "        }\n"
+            "    }\n"
             "}\n")
-        self.assert_figure_refused("a Runtime file outside the figure destroyed through FigureParts.Drop")
-
-    def test_an_extra_figure_helper_call_in_an_allowed_file_is_refused(self):
-        path = os.path.join(RUNTIME, "Presentation", "ThorsteinPresentation.cs")
-        marker = "            FigureParts.Drop(figure);"
-        self.after(path, marker, "            FigureParts.Drop(Player.m_localPlayer);")
-        self.assert_figure_refused("a second Drop in the presentation runtime went unpinned")
-
-    def test_a_figure_helper_method_group_is_refused(self):
-        path = os.path.join(RUNTIME, "Presentation", "ThorsteinPresentation.cs")
-        marker = "            FigureParts.Drop(figure);"
-        self.after(path, marker, "            System.Action<UnityEngine.Object?> drop = FigureParts.Drop;")
-        self.assert_figure_refused("a method group carried Drop out of the audit")
+        self.assert_refused("the old FigureParts destruction came back at its old path and stayed pinned")
 
     def test_success_sentence_states_the_text_audits_limits(self):
         code, out = validate()

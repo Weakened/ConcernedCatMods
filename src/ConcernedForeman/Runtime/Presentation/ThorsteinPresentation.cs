@@ -4,7 +4,9 @@ using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Collection;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
+using TheConcernedCat.ConcernedForeman.Domain.Presentation;
 using TheConcernedCat.ConcernedNPC.Body;
+using TheConcernedCat.ConcernedNPC.Body.Dressing;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
@@ -31,8 +33,9 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Presentation;
 /// by Concerned NPC (<see cref="NpcPresentationBody"/>): no network view, no
 /// character, no AI, no collider, nothing saved, and every game script removed
 /// before it was ever enabled. Never a live <c>Player</c> stripped afterwards.
-/// It is dressed by <see cref="ThorsteinDresser"/> and stood near the respawn
-/// anchor. It changes nothing in the world: no bed is claimed, nothing is
+/// It is dressed and stood near the respawn anchor by Concerned NPC's
+/// <see cref="NpcFigureDresser"/>, from <see cref="ThorsteinLookPlan.Spec"/>.
+/// It changes nothing in the world: no bed is claimed, nothing is
 /// placed, and nobody else sees it.
 ///
 /// <b>Where it runs.</b> On the host only (single player, or the host of a
@@ -57,7 +60,7 @@ internal sealed class ThorsteinPresentation
     private readonly ThorsteinBodies _bodies;
 
     private GameObject? _figure;
-    private ThorsteinDresser? _dresser;
+    private NpcFigureDresser? _dresser;
     private Vector3 _builtFor;
     private string _figureRefusal = string.Empty;
     private bool _buildFailedThisWorld;
@@ -376,27 +379,27 @@ internal sealed class ThorsteinPresentation
             look = outward;
         }
 
-        FigureParts.Place(figure.Root.transform, spot, Quaternion.LookRotation(look.normalized, Vector3.up));
+        _dresser = new NpcFigureDresser(
+            figure,
+            ThorsteinLookPlan.Spec(
+                _settings.Hair.Value, _settings.Beard.Value, _settings.ChestGarment.Value, _settings.LegsGarment.Value),
+            "CF_ThorsteinHarvest",
+            _log);
+        _dresser.StandAt(spot, Quaternion.LookRotation(look.normalized, Vector3.up));
         _figure = figure.Root;
         _builtFor = home;
 
-        _dresser = new ThorsteinDresser(figure, _settings, _log);
         _dresser.Apply();
     }
 
     private void TakeDown()
     {
-        GameObject? figure = _figure;
         _figure = null;
-        if (figure != null)
-        {
-            // Dark at once, gone at the end of the frame: never drawn beside a
-            // worker body created in the same frame.
-            figure.SetActive(false);
-            FigureParts.Drop(figure);
-        }
 
-        _dresser?.Dispose();
+        // Dark at once, gone at the end of the frame: never drawn beside a
+        // worker body created in the same frame. The dresser owns the figure it
+        // was built for, and is the only thing that takes it down.
+        _dresser?.TakeDown();
         _dresser = null;
     }
 

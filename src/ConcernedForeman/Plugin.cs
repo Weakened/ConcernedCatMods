@@ -444,7 +444,7 @@ public sealed class Plugin : BaseUnityPlugin
         // The delegate is made once: this line runs every frame of the session.
         if (_paletteLog != null && !worldIsUp)
         {
-            Runtime.Presentation.ThorsteinPalette.Poll(Time.unscaledDeltaTime, _paletteLog);
+            TheConcernedCat.ConcernedNPC.Body.Dressing.NpcCustomizationPalette.Poll(Time.unscaledDeltaTime, _paletteLog);
         }
 
         _worldWasUp = worldIsUp;

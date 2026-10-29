@@ -301,13 +301,40 @@ Author identity (`state/author-id.dat`, a GUID per profile) is labeling for audi
 
 `cartographer-strings.tsv` — optional `key<TAB>value` overrides for the built-in string catalog. Malformed rows are skipped; unknown keys are ignored. A template can be written from `cc_atlas`.
 
+## Work areas (#296)
+
+`<world-uid>.work-areas.tsv` holds the work areas the player drew in that world.
+The first line is the header `# cc-work-areas v1`. Each following row has six
+tab-separated fields:
+
+1. id: `wa-` followed by 32 lowercase hex digits. It is stable and never reused.
+2. name: 1 to 48 characters, with no control characters.
+3. purpose: `woodGathering` is the only purpose so far.
+4. created time, in UTC ticks.
+5. modified time, in UTC ticks.
+6. boundary: `x;z|x;z|...` with invariant round-trip floats. The vertices are
+   stored counter-clockwise and the closing point is not repeated.
+
+How a file is read:
+- A row that does not parse completely is skipped and counted. So is a row
+  whose boundary fails `WorkAreaPolygon` validation, which covers fewer than 3 or
+  more than 64 points, non-finite values, a width or depth over 256 m, an area
+  under 16 m², and a boundary that crosses itself. Such a row is never loaded as
+  any other shape.
+- A file whose header is not v1 loads as nothing, and it is not overwritten for
+  the rest of the session. The same applies to an unreadable file, and to a v1
+  file with any row whose purpose this build does not know: that row is a later
+  build's area, so it must not be dropped on the next save.
+- The capability answers Unavailable for such a world rather than an empty list.
+- The support report shows only counts. It never shows names or geometry.
+
 ## Backups (v0.8+)
 
 `cc_atlas backup` copies the atlas sidecars into `backups/<world-uid>-<timestamp>-<label>/`. Backup folders double as the export/import format (copy them between machines/profiles). `restore <n>` takes its own safety backup first and clears journals so the restored snapshot is authoritative after relog.
 
-**All five per-world sidecars, and one list of them (#367).** A backup covers
-`.roads.tsv`, `.pins.tsv`, `.routes-atlas.tsv`, `.survey-rejected.tsv` and
-`.terrain-intent.tsv`. It used to cover the first three: the backup tools kept
+**All per-world sidecars, and one list of them (#367).** A backup covers
+`.roads.tsv`, `.pins.tsv`, `.routes-atlas.tsv`, `.survey-rejected.tsv`,
+`.terrain-intent.tsv` and, since #296, `.work-areas.tsv`. It used to cover the first three: the backup tools kept
 their own copy of the list, so a player's rejected-observation memory (what he
 already said no to, which is what stops the survey re-offering it) and his
 terrain-intent exclusion mask were in no backup, could not be restored, and were
