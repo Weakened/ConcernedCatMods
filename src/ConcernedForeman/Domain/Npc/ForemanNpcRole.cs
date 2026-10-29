@@ -87,9 +87,16 @@ internal sealed class ForemanNpcRole : INpcRole
     /// <inheritdoc />
     public NpcIdentity Identity => Id;
 
-    /// <inheritdoc />
+    /// <summary>A worker who rests as a presentation figure (#295 step 1,
+    /// Concerned NPC 0.5.0).
+    ///
+    /// The two durable facts are unchanged, character for character: the same
+    /// prefab name every saved body is found by and the same key prefix it
+    /// stores itself under. Only the set of kinds the arbiter will grant him
+    /// widens, to a figure at home while he rests. The arbiter still grants
+    /// one body at a time (<see cref="ThorsteinBodies"/>).</summary>
     public NpcBodyContract Body { get; } =
-        NpcBodyContract.ForWorker(ForemanRole.BodyPrefabName, ForemanRole.BodyKeyPrefix);
+        NpcBodyContract.ForWorkerWithPresentation(ForemanRole.BodyPrefabName, ForemanRole.BodyKeyPrefix);
 
     /// <inheritdoc />
     public INpcDataPaths Paths { get; }

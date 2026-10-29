@@ -70,8 +70,46 @@ internal sealed class SettlementRuntime
             area => _housing.Measure(area));
 
         WorkerBody.Loaded = OnWorkerBodyLoaded;
-        WorkerBody.Died = (body, dropped, where) => _custody.OnWorkerDied(body, dropped, where);
+        WorkerBody.Died = (body, dropped, where) =>
+        {
+            _custody.OnWorkerDied(body, dropped, where);
+            BodiesChanged?.Invoke();
+        };
         WorkerBody.ErrorLog = log;
+    }
+
+    /// <summary>#295 step 1: the hand-over from Thorstein's figure at home to
+    /// his worker body. Asked by <see cref="Spawn"/> immediately before a body
+    /// is created: it takes the figure down, gives up its lease, and asks
+    /// Concerned NPC for the worker lease. A refusal refuses the spawn. Unset
+    /// means no figure can exist, so there is nothing to hand over.</summary>
+    internal WorkerBodyHandOver? TakeWorkerBody { get; set; }
+
+    /// <summary>Gives the worker lease back when a body was not created after
+    /// all, or has been retired.</summary>
+    internal Action? ReleaseWorkerBody { get; set; }
+
+    /// <summary>A saved body may have appeared or gone: spawn, despawn, death.
+    /// </summary>
+    internal Action? BodiesChanged { get; set; }
+
+    /// <summary>One line about Thorstein's bodies for <c>cf_worker status</c>.
+    /// </summary>
+    internal Func<string>? DescribeBodies { get; set; }
+
+    /// <summary>Whether this settlement's roster employs Thorstein. Unreadable
+    /// is no: a figure is shown only for somebody who was recruited.</summary>
+    internal bool IsThorsteinRecruited()
+    {
+        try
+        {
+            return _records.TryOpen(out SettlementRegister register, out SettlementJournal _)
+                && register.Employs(_custody.ToolWorker);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>The custody runtime collection and cooperation consume
@@ -212,12 +250,14 @@ internal sealed class SettlementRuntime
                 ? " TWO BODIES carry this worker's identity; neither is used until one is removed by hand."
                 : census.IsMissing && worker == null ? " No worker body in this world." : string.Empty;
 
+        string bodies = DescribeBodiesSafely();
         if (worker == null)
         {
             return
                 $"Settlement runtime: {(_settings.SettlementRuntimeEnabled.Value ? "on" : "off")}. " +
                 $"Authority: {authority}. No worker in loaded ground." + body + " " +
-                $"Prefab: {(ForemanWorkerPrefab.IsReady ? "ready" : ForemanWorkerPrefab.LastFailure ?? "not built")}.";
+                $"Prefab: {(ForemanWorkerPrefab.IsReady ? "ready" : ForemanWorkerPrefab.LastFailure ?? "not built")}." +
+                bodies;
         }
 
         string goalText = worker.IsDeferred
@@ -231,7 +271,26 @@ internal sealed class SettlementRuntime
             $"Worker at {Format(worker.transform.position)}, goal {goalText}, carrying " +
             $"{(live == null ? 0 : live.ItemCount).ToString(CultureInfo.InvariantCulture)} item stack(s). " +
             $"Path requests so far: {worker.TotalPathRequests}." + body +
-            (worker.IsFaulted ? " WORKER FAULTED and is inert; see the log." : string.Empty);
+            (worker.IsFaulted ? " WORKER FAULTED and is inert; see the log." : string.Empty) +
+            bodies;
+    }
+
+    private string DescribeBodiesSafely()
+    {
+        Func<string>? describe = DescribeBodies;
+        if (describe == null)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return " " + describe();
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
     }
 
     internal string DescribeMissingAuthority()
@@ -270,9 +329,29 @@ internal sealed class SettlementRuntime
         }
 
         Vector3 position = player.transform.position + (player.transform.forward * 3f);
+
+        // #295 step 1: one body at a time. If Thorstein is standing at home as a
+        // figure, the figure goes and its lease is given up BEFORE the worker
+        // body exists, and the body appears where he stood. Concerned NPC
+        // refusing the worker lease refuses the spawn.
+        WorkerBodyHandOver? handOver = TakeWorkerBody;
+        if (handOver != null)
+        {
+            if (!handOver(out Vector3? standing, out string refusal))
+            {
+                return "Refused: Concerned NPC would not give Thorstein a worker body (" + refusal + ").";
+            }
+
+            if (standing.HasValue)
+            {
+                position = standing.Value;
+            }
+        }
+
         ForemanWorkerAI? worker = ForemanWorkerPrefab.Spawn(position, Quaternion.identity);
         if (worker == null)
         {
+            ReleaseWorkerBody?.Invoke();
             return "Refused: that ground is not loaded.";
         }
 
@@ -281,10 +360,12 @@ internal sealed class SettlementRuntime
             // An identity-less body is never adopted later; say so rather than
             // leave one standing unexplained.
             _log("A spawned worker body could not be given its identity; it will not be used.");
+            ReleaseWorkerBody?.Invoke();
             return "Refused: the new body could not be given its identity, so it will not be used.";
         }
 
         Bind(worker);
+        BodiesChanged?.Invoke();
         return $"Worker spawned at {Format(position)}. It has no order, so it should do nothing at all.";
     }
 
@@ -431,6 +512,10 @@ internal sealed class SettlementRuntime
 
         view.Destroy();
         _worker = null;
+
+        // #295 step 1: the worker body is gone, so its lease goes too. The
+        // presentation runtime counts again and may show him at home.
+        ReleaseWorkerBody?.Invoke();
         return "Worker despawned.";
     }
 
@@ -509,3 +594,9 @@ internal sealed class SettlementRuntime
         };
     }
 }
+
+/// <summary>The hand-over from Thorstein's figure to his worker body: the
+/// figure is taken down and its lease given up before the worker lease is
+/// asked for. <paramref name="standing"/> is where the figure stood, if there
+/// was one.</summary>
+internal delegate bool WorkerBodyHandOver(out Vector3? standing, out string refusal);

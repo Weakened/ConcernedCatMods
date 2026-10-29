@@ -6,6 +6,10 @@ every other Concerned Cat mod.
 
 ## Unreleased
 
+- **Requires Concerned NPC 0.5.0** (was 0.4.0). The library's new body contract (#295) is additive. Nothing about the
+  Steward's own body, identity or keys changed. The pin moves because every consumer pins the library version it was
+  compiled against.
+
 Sunniva (CNPC-R3 / #382). Not released, not tagged, and the version has
 deliberately not moved: `0.1.0` is still unpublished, so there is nothing for a
 bump to protect.
