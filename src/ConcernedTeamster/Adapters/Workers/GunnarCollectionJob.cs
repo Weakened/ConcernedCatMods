@@ -29,13 +29,18 @@ internal sealed class GunnarCollectionJob : INpcJobRole
 {
     private readonly Func<CollectionSurvey> _survey;
     private readonly Func<IReadOnlyList<SourceStock>> _sources;
+    private readonly Func<string, StopStatus>? _live;
     private readonly Dictionary<string, CollectionCandidate> _byKey =
         new Dictionary<string, CollectionCandidate>(StringComparer.Ordinal);
 
-    public GunnarCollectionJob(Func<CollectionSurvey> survey, Func<IReadOnlyList<SourceStock>> sources)
+    public GunnarCollectionJob(
+        Func<CollectionSurvey> survey,
+        Func<IReadOnlyList<SourceStock>> sources,
+        Func<string, StopStatus>? live = null)
     {
         _survey = survey ?? throw new ArgumentNullException(nameof(survey));
         _sources = sources ?? throw new ArgumentNullException(nameof(sources));
+        _live = live;
     }
 
     /// <summary>How the last look went, so a runtime can tell a player "the area
@@ -84,7 +89,12 @@ internal sealed class GunnarCollectionJob : INpcJobRole
                 // is empty and no provisioning step is written for it. That is
                 // the whole difference between collecting and building, and it
                 // is expressed as data rather than as a second pipeline.
-                needs: default));
+                needs: default,
+                // What it leaves him carrying. The driver fills a load with this
+                // exactly as it fills one with what a trip fetches, so the job
+                // comes back as the fewest loads he can carry - never one
+                // source per trip, and never one load for the whole area.
+                carries: candidate.Units));
         }
 
         return targets;
@@ -127,6 +137,13 @@ internal sealed class GunnarCollectionJob : INpcJobRole
             // see it this time" is not "it is not there", and only one of those
             // may end a target for good.
             return StopStatus.Unreadable;
+        }
+
+        if (_live != null && candidate.IsTakeable)
+        {
+            // Read again now, not from the survey: a job is long enough for the
+            // player to have picked the stone up themselves.
+            return _live(stop.Key);
         }
 
         return candidate.IsTakeable
