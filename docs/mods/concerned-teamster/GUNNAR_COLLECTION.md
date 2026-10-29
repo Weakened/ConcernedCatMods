@@ -825,11 +825,10 @@ game's. Every unreadable number is a load of nothing, and a tour that would carr
 - **No cart.** Above.
 - **A tour needs the hauling runtime's bound body** (`GunnarHaulingEnabled` on, Gunnar spawned), exactly as the
   ordered pick does: collection never finds or builds a body of its own.
-- **Owner questions, not settled here:** whether the Teamster carve-out's "pathfind his own body" (written for the
-  hauling runtime) is meant to cover walking him for collection; on-foot only; a load sized like a vanilla player
-  wearing Megingjord (225 units) regardless of what he wears; the effective 24-source trip; and whether a tiny load
-  (one or two units, when he is carrying something heavy that is not going in the chest) should be refused rather
-  than walked.
+- **Owner decisions, settled 2026-10-28 (`DECISIONS.md` D17):** the Teamster carve-out's "pathfind his own body"
+  covers walking him for collection, on foot only (a cart-assisted round still needs its own grant); a load is sized
+  like a vanilla player wearing Megingjord (225 units) regardless of what he wears; the 24-source trip is accepted as a
+  planning limit; and no load is refused for being small - one or two units are walked like any other load.
 - **Nothing here has been observed in a running game.** §10's tour rows are OWNER GO-AROUND PENDING.
 
 ### Tested and pinned
