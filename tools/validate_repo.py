@@ -3316,7 +3316,13 @@ STEWARD_RETIRE_METHOD = re.compile(
 STEWARD_RETIRE_DECIDES = "StewardRetirement.Decide("
 STEWARD_RETIRE_REFUSES = re.compile(r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(")
 STEWARD_RETIRE_OWN_VIEW = re.compile(r"ZNetView\?\s+view\s*=\s*body\s*\.\s*View\s*;")
-STEWARD_RETIRE_CALL = re.compile(r"StewardRetirementPort\s*\.\s*Retire\s*\(")
+# Any reference, not only a call: a method group (`StewardRetirementPort.Retire` with
+# no parenthesis) handed to a delegate is a second caller the call count cannot see.
+STEWARD_RETIRE_CALL = re.compile(r"StewardRetirementPort\s*\.\s*Retire\b")
+STEWARD_RETIRE_ASSIGNS_VIEW = re.compile(r"(?<![\w.])view\s*(?:\?\?=|=(?![=>]))")
+STEWARD_RETIRE_ASSIGNS_BODY = re.compile(r"(?<![\w.])body\s*(?:\?\?=|=(?![=>]))")
+STEWARD_RETIRE_BY_REFERENCE = re.compile(r"\b(?:ref|out)\s+(?:ZNetView\??\s+|StewardBody\??\s+)?(?:view|body)\b")
+STEWARD_RETIRE_USING = re.compile(r"\busing\b[^;{]*\bStewardRetirementPort\b[^;{]*;")
 STEWARD_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bDestroyZDO\s*\(")
 STEWARD_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
 STEWARD_DESTRUCTION_SITES = {
@@ -3385,8 +3391,8 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         total_calls += calls
         expected_calls = 1 if key == STEWARD_RETIRE_CALLER else 0
         if calls != expected_calls:
-            fail(f"{label}: {path.relative_to(ROOT)} calls StewardRetirementPort.Retire {calls} time(s); "
-                 f"this rule expects {expected_calls}. The verb has one caller, the console's retire, "
+            fail(f"{label}: {path.relative_to(ROOT)} names StewardRetirementPort.Retire {calls} "
+                 f"time(s) (a call or a method group); this rule expects {expected_calls}. The verb has one caller, the console's retire, "
                  "which hands it every witness the body cannot see", errors)
 
     code = _strip_cs_comments(port.read_text(encoding="utf-8"))
@@ -3427,15 +3433,45 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
                 fail(f"{label}: the removal in Retire(...) is not `view.Destroy()` on the view taken "
                      "from her own body above it", errors)
 
+    # The declaration is the ONLY assignment `view` may have, and `body` (the
+    # parameter) may not be assigned or passed by reference at all. Without this
+    # a single `view = ZNetScene.instance.FindInstance(...)` - or `body =
+    # StewardBody.FindLive(...)` - between the declaration and the removal kept
+    # every pin above green while the removal hit any network object (review of
+    # d0d559e).
+    view_assignments = len(STEWARD_RETIRE_ASSIGNS_VIEW.findall(body))
+    if view_assignments != 1:
+        fail(f"{label}: `view` is assigned {view_assignments} time(s) in Retire(...); only its "
+             "declaration from `body.View` may assign it, or the removal can be pointed at another "
+             "object", errors)
+    if STEWARD_RETIRE_ASSIGNS_BODY.search(body):
+        fail(f"{label}: Retire(...) assigns its `body` parameter - the removal must act on the body "
+             "the caller handed in, never on one swapped in afterwards", errors)
+    if STEWARD_RETIRE_BY_REFERENCE.search(body):
+        fail(f"{label}: Retire(...) passes `view` or `body` by reference, which is an assignment this "
+             "text audit cannot follow", errors)
+
+    for path in sorted(steward_dir.rglob("*.cs")):
+        relative = path.relative_to(steward_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        if STEWARD_RETIRE_USING.search(_strip_cs_comments(path.read_text(encoding="utf-8"))):
+            fail(f"{label}: {path.relative_to(ROOT)} imports StewardRetirementPort through a `using` "
+                 "(static or alias), which lets a second caller reach the verb under a spelling the "
+                 "one-caller pin cannot count", errors)
+
     return [
         f"{label}: {scanned} Steward source(s) scanned (all of {steward_dir.relative_to(ROOT).as_posix()} "
         f"less obj/ and bin/) holding {total_destructions} destruction(s), {total_routed} routed through "
         f"an instance and {total_removals} body removal(s), each at a pinned site; the one removal is "
-        "her own body's `view.Destroy()` inside StewardRetirementPort.Retire, below a "
-        f"StewardRetirement.Decide and a refusing `if (!StewardRetirement.Allows(...))`, with "
-        f"{total_calls} caller(s). This text audit establishes where the refusal is written, not that "
-        "control flow obeys it (StewardRetirementTests), and it cannot see a destruction reached "
-        "through a delegate"
+        "`view.Destroy()` inside StewardRetirementPort.Retire, below a StewardRetirement.Decide and a "
+        "refusing `if (!StewardRetirement.Allows(...))`, on a `view` whose only assignment is "
+        "`body.View` and a `body` parameter that is never reassigned; the port is named (call or method "
+        "group) at "
+        f"{total_calls} call site(s), in {STEWARD_RETIRE_CALLER}, and no file imports it by `using`. "
+        "This text audit establishes where the refusal is written, not that control flow obeys it "
+        "(StewardRetirementTests), and it cannot see a destruction reached through a delegate or a "
+        "method group"
     ]
 
 def _offsets_of_pattern(text: str, pattern: re.Pattern) -> list[int]:

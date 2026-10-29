@@ -399,7 +399,13 @@ public class ZNetView : MonoBehaviour
     /// made.</summary>
     public int DestroyCalls { get; private set; }
 
-    public void Destroy() => DestroyCalls++;
+    public void Destroy()
+    {
+        // Vanilla's ZNetScene.Destroy resets the view's ZDO at once (verified in
+        // the decompiled 1.0.14), so the view is invalid from this call on.
+        DestroyCalls++;
+        Valid = false;
+    }
 
     internal void Register(string name, Action handler) => _handlers[name] = handler;
 

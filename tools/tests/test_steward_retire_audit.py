@@ -5,8 +5,9 @@ Each test changes the real source tree, runs the real repository validator, and
 restores the exact original text. Every plant is a way Sunniva's body (or any
 networked body) could leave the world outside the one guarded verb, and each was
 verified to pass the validator that lacked this rule (origin/main d72b397)
-before being added here; `--escapes-without-rule` re-runs that check against a
-validator path given on the command line.
+(and the last five also the validator at d0d559e, whose rule they got past)
+before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
+path re-runs that check, expecting every plant to get through it.
 """
 import os
 import shutil
@@ -149,6 +150,50 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
         self._planted.insert(0, moved)
         os.remove(PORT)
         self.assert_refused("the allowance followed a basename into another folder")
+
+    # The five below each kept every pin of d0d559e's rule green: the view and
+    # body swaps and the two using spellings came out of the review of that
+    # head, the method group out of fixing them. Each was verified to pass that
+    # head's validator as well as d72b397's.
+
+    def test_reassigning_the_view_before_the_removal_is_refused(self):
+        self.swap_in(PORT, PORT_REMOVAL,
+                     "            view = ZNetScene.instance.FindInstance(ZDOID.None)?.GetComponent<ZNetView>();\n"
+                     + PORT_REMOVAL)
+        self.assert_refused("the declaration was hers but the removal hit a looked-up object")
+
+    def test_swapping_the_body_parameter_is_refused(self):
+        self.swap_in(PORT, PORT_VIEW,
+                     "        body = StewardBody.FindLive(\"someone-else\") ?? body;\n" + PORT_VIEW)
+        self.assert_refused("the guard read one body and the removal acted on another")
+
+    def test_a_second_caller_through_using_static_is_refused(self):
+        self.swap_in(COMMAND, "using System;\n",
+                     "using System;\nusing static TheConcernedCat.ConcernedSteward.Runtime.StewardRetirementPort;\n")
+        self.swap_in(COMMAND, "            case \"retire\":\n",
+                     "            case \"retire-now\":\n"
+                     "                Retire(null, default, out string ignored);\n"
+                     "                return ignored;\n\n"
+                     "            case \"retire\":\n")
+        self.assert_refused("a bare Retire( under using static is a caller the pin cannot count")
+
+    def test_a_second_caller_through_a_using_alias_is_refused(self):
+        self.swap_in(COMMAND, "using System;\n",
+                     "using System;\nusing Port = TheConcernedCat.ConcernedSteward.Runtime.StewardRetirementPort;\n")
+        self.swap_in(COMMAND, "            case \"retire\":\n",
+                     "            case \"retire-now\":\n"
+                     "                Port.Retire(null, default, out string ignored);\n"
+                     "                return ignored;\n\n"
+                     "            case \"retire\":\n")
+        self.assert_refused("an aliased Port.Retire( is a caller the pin cannot count")
+
+    def test_a_second_caller_through_a_method_group_is_refused(self):
+        self.swap_in(COMMAND, "            case \"retire\":\n",
+                     "            case \"retire-now\":\n"
+                     "                RetireVerb verb = StewardRetirementPort.Retire;\n"
+                     "                return verb(null, default, out string ignored).ToString();\n\n"
+                     "            case \"retire\":\n")
+        self.assert_refused("a method group handed to a delegate is a caller with no parenthesis")
 
     def test_this_suite_is_not_vacuous(self):
         # Not a plant: the guard text every plant above edits is still where

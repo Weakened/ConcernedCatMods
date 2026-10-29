@@ -42,11 +42,16 @@ untouched; `cs_steward recruit` brings her body back.
 - `src/ConcernedSteward/Runtime/StewardRetirementPort.cs` — the one removal, `view.Destroy()` on `body.View`, below
   `StewardRetirement.Decide(` and a refusing `if (!StewardRetirement.Allows(`.
 - `tools/validate_repo.py` "[steward] S1 retire audit" — pins every destruction in the product by file, every routed
-  one, every body removal, the guard above the removal, that the removal acts on her own body's view, and that the
-  port has one caller (`StewardRuntime.Retire`). It is a text audit: it establishes where the refusal is written, not
-  that control flow obeys it.
+  one, every body removal, the guard above the removal, that the removal acts on her own body's view (declared from
+  `body.View` and never reassigned; the `body` parameter never reassigned or passed by reference), and that the port
+  is named once, by `StewardRuntime.Retire` (a call or a method group), with no file importing it through `using`.
+  It is a text audit: it establishes where the refusal is written, not that control flow obeys it.
 - `src/ConcernedSteward.Tests/StewardRetirementTests.cs` — control flow over the stubbed game.
-- `tools/tests/test_steward_retire_audit.py` — eleven plants, each a way a body could leave the world outside the
-  verb, each verified to pass the validator without this rule (main `d72b397`) and to be refused with it.
+- `tools/tests/test_steward_retire_audit.py` — sixteen plants, each a way a body could leave the world outside the
+  verb, each verified to pass the validator without this rule (main `d72b397`) and to be refused with it; five of them
+  (a reassigned view, a swapped body, a `using static`, a `using` alias, a method group) also got past the first
+  version of the rule and were added with the fix.
+- `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which
+  she is retired nothing can adopt the body that is going.
 
 **Still owner go-around pending:** the retire and re-recruit round trip in a running game.

@@ -11,6 +11,7 @@ namespace TheConcernedCat.ConcernedSteward.Tests;
 /// <summary>Owner decision S1 (2026-10-28): Sunniva's own worker body may leave
 /// the world, and only empty-handed with no round open. These tests are the
 /// control-flow half of what the validator's text audit cannot prove.</summary>
+[Collection("scene")]
 public sealed class StewardRetirementTests
 {
     private static StewardRetireFacts Clear(
@@ -90,6 +91,10 @@ public sealed class StewardRetirementTests
         Assert.Equal(StewardRetireOutcome.Retired, outcome);
         Assert.Equal(1, view.DestroyCalls);
         Assert.Contains("left the world", answer);
+
+        // And from that call on nothing can find her: the census cannot adopt a
+        // body whose object is gone for the rest of the frame.
+        Assert.Null(StewardBody.FindLive(StewardRole.Worker.Value));
     }
 
     [Fact]
