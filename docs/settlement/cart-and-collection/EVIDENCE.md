@@ -1,5 +1,10 @@
 # Cart pulling and resource collection: evidence
 
+> **2026-10-29 update.** The #313, #314, #315, #316 and #317 implementations are merged into `main` (PRs #336, #337,
+> #338, #347, #369, #370), and those issues are closed with that evidence. Rows below that cite those issues' tests are
+> expected to be automated-tested on `main` even where a row still says `pending`; every **live** row is still unobserved and is now
+> tracked on the owner playtest checklist, #470. This file was not re-audited row by row.
+
 **Statuses:**
 - **implemented:** the code exists.
 - **automated-tested:** a named test proves it.
@@ -56,7 +61,8 @@ The seams do not depend on any changed member. Each agent re-runs its own API au
 ## Integration heads, builds and test deployments (lead-verified)
 
 Every number in this table was produced by the lead on this machine, not reported by an agent. Nothing here is
-gameplay evidence, and none of it is merged into `main`.
+gameplay evidence. These heads were integration branches when recorded; the work has since merged into `main` (see
+the 2026-10-29 note at the top).
 
 | What | Head | Checks the lead ran | Deployed |
 |---|---|---|---|
