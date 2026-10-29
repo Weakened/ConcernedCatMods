@@ -103,6 +103,13 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
+    /// <summary>#296 slice 2: feeds work-area outlines to the large-map vector
+    /// layer (the only place they are drawn).</summary>
+    public void SetWorkAreaSource(Func<List<Atlas.WorkAreaOutline>>? source)
+    {
+        _vectorLayer.SetWorkAreaSource(source);
+    }
+
     /// <summary>Mirrors the route layer switch into the shared vector
     /// presentation (RC10 feedback 5/7).</summary>
     public void SetRouteVectorVisible(bool visible)

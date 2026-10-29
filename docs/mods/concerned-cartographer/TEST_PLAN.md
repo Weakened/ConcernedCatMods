@@ -69,6 +69,23 @@ Test at least five samples of each:
 - [ ] Speed, stamina, collision, fog, attack, interaction, networking, and route data remain unchanged.
 - [ ] Record Valheim 1.0.12 log and video evidence; automated tests are not a substitute for this owner check.
 
+## Work Areas editor (#296 slice 2): OWNER GO-AROUND PENDING
+
+Game-free coverage is `WorkAreaEditorTests`. None of the rows below has been observed in game.
+
+- [ ] The large map's toolbar shows **Areas** between Routes and Survey. The eight buttons fit at 1280×720 and above.
+- [ ] Areas opens the Work Areas panel, and opening another toolbar panel closes it.
+- [ ] Type a name, press **Draw boundary**, then hold LMB and draw a loop that comes back to where it started. On release the loop is saved, it appears in the list as selected, and a sky/amber outline appears on the large map. The map does not pan while you draw.
+- [ ] Each of these is refused with a reason, nothing is saved, and the mode stays on so you can draw again:
+  - a line that does not return to its start;
+  - a figure-eight;
+  - a loop wider than 256 m.
+- [ ] Escape, Cancel, closing the map, or opening another panel ends the draw mode, and vanilla map dragging works again right away.
+- [ ] Rename and Delete act on the selected area. Delete needs a second click, and `cc_areas list` agrees with the panel.
+- [ ] A relog keeps the areas, and backup includes `.work-areas.tsv`.
+- [ ] With `Map/HighPrecisionLargeMapRoads = false`, the panel says that outlines need that setting, and editing still works.
+- [ ] Drawing or saving an area starts no work. The panel says Assign Thorstein is not available yet.
+
 ## Performance
 
 - [ ] Run for 30 minutes while traversing/creating roads.

@@ -71,6 +71,8 @@ internal sealed class RoadVectorLayer
     private RoadVectorGraphic? _dirtGraphic;
     private RoadVectorGraphic? _pavedGraphic;
     private RoadVectorGraphic? _routeGraphic;
+    private RoadVectorGraphic? _areaGraphic;
+    private Func<List<Atlas.WorkAreaOutline>>? _areaSource;
     private bool _dirtVisible = true;
     private bool _pavedVisible = true;
     private bool _routesVisible = true;
@@ -94,6 +96,14 @@ internal sealed class RoadVectorLayer
         _settings.HighPrecisionLargeMapRoads.Value &&
         _container != null &&
         _container.gameObject.activeInHierarchy;
+
+    /// <summary>#296 slice 2: where the work-area outlines come from. The
+    /// layer only draws them; the editor owns the data.</summary>
+    public void SetWorkAreaSource(Func<List<Atlas.WorkAreaOutline>>? source)
+    {
+        _areaSource = source;
+        _scheduler.MarkDataDirty();
+    }
 
     public void MarkDataDirty()
     {
@@ -289,6 +299,7 @@ internal sealed class RoadVectorLayer
         _dirtGraphic = CreateGraphic("CcRoadVectorDirt", _container, featherTexture);
         _pavedGraphic = CreateGraphic("CcRoadVectorPaved", _container, featherTexture);
         _routeGraphic = CreateGraphic("CcRouteVector", _container, featherTexture: null);
+        _areaGraphic = CreateGraphic("CcWorkAreaVector", _container, featherTexture: null);
         _scheduler.Invalidate();
     }
 
@@ -529,6 +540,7 @@ internal sealed class RoadVectorLayer
         _pavedGraphic.CommitQuads();
 
         BakeRoutes(routes, highContrast, halfWidth, bakedUnitsPerScreenPixel);
+        BakeWorkAreas(halfWidth);
 
         if (_bakeProjectionFailures > 0)
         {
@@ -687,6 +699,69 @@ internal sealed class RoadVectorLayer
 
     private readonly List<(float X, float Y)> _routeBaked = new();
 
+    /// <summary>#296 slice 2: work-area boundaries (closed) and the boundary
+    /// being drawn (open), in their own crisp graphic over the routes. Saved
+    /// areas are sky blue, the selected one amber and wider, the draft pale
+    /// gold. Bounded: at most 32 areas of 64 corners plus one draft of 2 048
+    /// points, and a hard quad cap besides.</summary>
+    private void BakeWorkAreas(float halfWidth)
+    {
+        if (_areaGraphic == null)
+        {
+            return;
+        }
+
+        _areaGraphic.BeginQuads(new Color32(255, 255, 255, 255));
+        List<Atlas.WorkAreaOutline>? outlines = _areaSource?.Invoke();
+        int quads = 0;
+        if (outlines != null)
+        {
+            foreach (Atlas.WorkAreaOutline outline in outlines)
+            {
+                (Color32 color, float width) = outline.Emphasis switch
+                {
+                    Atlas.WorkAreaOutlineEmphasis.Selected => (new Color32(255, 176, 48, 255), halfWidth * 1.6f),
+                    Atlas.WorkAreaOutlineEmphasis.Draft => (new Color32(255, 236, 140, 255), halfWidth),
+                    _ => (new Color32(120, 196, 255, 230), halfWidth),
+                };
+
+                _routeBaked.Clear();
+                foreach ((float x, float z) in outline.Points)
+                {
+                    if (!MinimapReflection.TryWorldToMapPoint(new Vector3(x, 0f, z), out float mapX, out float mapY))
+                    {
+                        _bakeProjectionFailures++;
+                        continue;
+                    }
+
+                    (float bakedX, float bakedY) = RoadVectorMath.Bake(mapX, mapY);
+                    if (float.IsNaN(bakedX) || float.IsInfinity(bakedX) ||
+                        float.IsNaN(bakedY) || float.IsInfinity(bakedY))
+                    {
+                        _bakeProjectionFailures++;
+                        continue;
+                    }
+
+                    _routeBaked.Add((bakedX, bakedY));
+                }
+
+                int count = _routeBaked.Count;
+                int segments = outline.Closed && count > 2 ? count : count - 1;
+                for (int index = 0; index < segments && quads < MaxWorkAreaQuads; index++)
+                {
+                    (float fromX, float fromY) = _routeBaked[index];
+                    (float toX, float toY) = _routeBaked[(index + 1) % count];
+                    _areaGraphic.AddSegmentQuad(fromX, fromY, toX, toY, width, color);
+                    quads++;
+                }
+            }
+        }
+
+        _areaGraphic.CommitQuads();
+    }
+
+    private const int MaxWorkAreaQuads = 8_000;
+
     /// <summary>Budget overflow (RC8-1): a PARTIAL vector bake may not ship
     /// — the suppressed texture overlay would hide whatever fell over the
     /// budget. The layer disables itself for the session instead, so the
@@ -715,6 +790,7 @@ internal sealed class RoadVectorLayer
         _dirtGraphic = null;
         _pavedGraphic = null;
         _routeGraphic = null;
+        _areaGraphic = null;
     }
 
     private void DestroyContainer()

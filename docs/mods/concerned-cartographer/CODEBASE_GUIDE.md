@@ -1304,9 +1304,22 @@ Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol versio
   which is part of `CartographerWorldSidecars`.
 - `Runtime/Interop/WorkAreaCapabilityPublisher.cs` publishes the capability next
   to presence in `Plugin.ConcernedCatCapabilities`.
+- Slice 2 adds the visible editor:
+  - `Domain/Atlas/WorkAreaEditing.cs`, which is game-free:
+    - `WorkAreaDrawSession` is one bounded freehand stroke, using the route `FreeDrawStrokeGate`.
+    - `WorkAreaEditor` holds what the panel does: draw, cancel, select by id, rename, two-click delete, rows and details. It goes through the same `WorkAreaStore` as `cc_areas`.
+    - `WorkAreaOutlines` is the list the outline layer draws.
+  - `Map/WorkAreasPanel.cs` is the side panel, opened by the toolbar's **Areas** button.
+  - `RoadVectorLayer.BakeWorkAreas` draws the outlines on the large map only, in a crisp graphic of its own: saved areas sky blue, the selected one amber, the draft pale gold.
+  - `CartographerRuntime` owns the editor.
+    - The draw mode is UI-owned like a route mode: plain LMB, with clicks and drag consumed.
+    - The panel gets no editor while no world is bound or the world's area file is read-only.
+    - Every panel edit writes the sidecar at once.
 - Not yet built:
-  - the visible map editor (slice 2);
   - "Assign Thorstein" and the Foreman consumer (Lane D2, after #295);
+  - progress and attention display;
+  - vertex-level editing (to change a boundary, draw a new area and delete the old one);
+  - minimap outlines;
   - the ConcernedNPC provider registry (#375).
 
 ### `Runtime/CompatibilityRegistry.cs` (v0.8)
