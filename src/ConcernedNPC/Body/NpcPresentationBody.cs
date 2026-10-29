@@ -126,7 +126,19 @@ public static class NpcPresentationBody
             VisEquipment equipment = clone.GetComponentInChildren<VisEquipment>(includeInactive: true);
             if (equipment != null)
             {
-                ReadModels(equipment, out modelMeshes, out modelMaterials);
+                try
+                {
+                    ReadModels(equipment, out modelMeshes, out modelMaterials);
+                }
+                catch (Exception)
+                {
+                    // On a build that lacks or renamed the body list, the fault is
+                    // raised when ReadModels is compiled, so it surfaces HERE rather
+                    // than inside it. Caught here, it costs only the second body
+                    // and never refuses a figure that did not ask for one.
+                    modelMeshes = null;
+                    modelMaterials = null;
+                }
                 helmet = InsideOrNull(equipment.m_helmet, visual);
                 rightHand = InsideOrNull(equipment.m_rightHand, visual);
                 body = equipment.m_bodyModel != null
@@ -208,8 +220,13 @@ public static class NpcPresentationBody
     /// the character screen chooses between them by index. Read only, and read
     /// before the component is destroyed; the references are to assets, which
     /// outlive the clone. A build without the list, or one where reading it
-    /// faults, leaves both arrays null and the figure is built as before.
+    /// faults, leaves both arrays null and the figure is built as before: a
+    /// fault while it runs is caught inside, and a missing field or type -
+    /// which the runtime raises when this method is compiled, at the call -
+    /// is caught at the call. Kept out of line so that compile happens at
+    /// that call and not inside the extraction's own frame.
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static void ReadModels(VisEquipment equipment, out Mesh?[]? meshes, out Material?[]? materials)
     {
         meshes = null;
