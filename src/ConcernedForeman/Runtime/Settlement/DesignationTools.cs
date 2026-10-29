@@ -57,6 +57,10 @@ internal sealed class DesignationTools
     /// sentence it failed with claimed a measurement had been taken.</summary>
     private readonly Func<Designation, HousingCapacity>? _housing;
 
+    /// <summary>#295 S1: Thorstein's introduction. Null where no quest is
+    /// wired (tests that build the tools without a game).</summary>
+    internal ThorsteinQuest? Quest { get; set; }
+
     internal DesignationTools(
         Func<bool> hasAuthority,
         Func<string> describeMissingAuthority,
@@ -119,19 +123,31 @@ internal sealed class DesignationTools
             case "dismiss": return Dismiss(register, args);
             case "clear": return Clear(register, journal, args);
             case "resolve": return Resolve(journal, args);
-            case "give": return _custody == null ? NoCustody : _custody.Give(journal, args);
+            case "give": return _custody == null ? NoCustody : GiveAndSettle(register, journal, args);
+            case "quest": return Quest == null
+                ? "Thorstein's introduction is not available in this build."
+                : Quest.Execute(register, journal, _records.Save, args);
             case "takeback": return _custody == null ? NoCustody : _custody.TakeBack(journal, args);
             case "release": return _custody == null ? NoCustody : _custody.Release();
             case "reconcile": return _custody == null ? NoCustody : _custody.Reconcile();
             default:
                 return "Unknown subcommand. Try: status, housing, area <radius>, harvest <radius>, " +
                     "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
-                    "give axe|hammer, takeback [axe|hammer], release, reconcile, " +
+                    "give axe|hammer, takeback [axe|hammer], release, reconcile, quest [status|examine], " +
                     "resolve <request> mine|his|source|destination [count], resolve <order> lost.";
         }
     }
 
     private const string NoCustody = "Custody is not available in this build.";
+
+    /// <summary>A tool handover, then the one question it can answer: was that
+    /// the second tool Thorstein was waiting for? The handover is the existing
+    /// one, unchanged; the quest only reads its result from the ledger.</summary>
+    private string GiveAndSettle(SettlementRegister register, SettlementJournal journal, string[]? args)
+    {
+        string message = _custody!.Give(journal, args);
+        return Quest == null ? message : message + Quest.AfterHandover(register, journal, _records.Save);
+    }
 
     /// <summary>#286: what the settlement can actually house, measured from the
     /// real beds with vanilla's own rules rather than asserted by a blueprint.

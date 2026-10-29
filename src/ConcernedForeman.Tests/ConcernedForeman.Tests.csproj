@@ -103,6 +103,7 @@
 
     <!-- The game-free layers those sources sit on, the same way
          Shared.Settlement.Tests links them. -->
+    <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
