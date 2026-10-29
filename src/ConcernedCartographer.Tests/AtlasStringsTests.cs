@@ -63,13 +63,13 @@ public class AtlasStringsTests
         }
     }
 
-    /// <summary>#453, the race itself, made deterministic. The two interleaved
-    /// steps of the failed run are replayed in order on two threads: this thread
-    /// loads an override, a second thread does what <c>HulgiDialogueTests</c> used
-    /// to do (reset to English), and this thread then reads the key. The result is
-    /// English, which is exactly the observed failure. It proves the overrides are
-    /// shared across threads (not thread- or async-local), which is why loading
-    /// one is confined to this non-parallel collection.</summary>
+    /// <summary>#453: the interleaving of the failed run, replayed in order on two
+    /// threads. This thread loads an override, a second thread does what
+    /// <c>HulgiDialogueTests</c> used to do (reset to English), and this thread then
+    /// reads the key and gets English, which is the observed failure. This test
+    /// pins the mechanism, that the overrides are shared across threads (not
+    /// thread- or async-local); it does not guard the isolation, which is
+    /// <c>OnlyThisNonParallelCollectionLoadsOverrides</c>' job.</summary>
     [Fact]
     public void Overrides_AreProcessWide_SoAResetOnAnotherThreadIsSeenHere()
     {
@@ -93,7 +93,12 @@ public class AtlasStringsTests
     /// overrides is in this class and this class is in the non-parallel
     /// collection. Both halves are checked: by reflection for the attributes, and
     /// by source for the writers, so a new test elsewhere that loads an override
-    /// fails here instead of becoming the next intermittent red.</summary>
+    /// fails here instead of becoming the next intermittent red. The source scan
+    /// covers the test project and the product sources the project file links in
+    /// (<c>Domain</c>, <c>Runtime/VanillaMessage.cs</c> and <c>src/Shared/Companions</c>),
+    /// where only the definition itself may spell the call. It is a text audit: a
+    /// writer reached through a delegate or reflection spells no
+    /// <c>LoadOverrides</c> call and is invisible to it.</summary>
     [Fact]
     public void OnlyThisNonParallelCollectionLoadsOverrides()
     {
@@ -107,24 +112,43 @@ public class AtlasStringsTests
         Assert.NotNull(definition);
         Assert.True(definition!.DisableParallelization, "the overrides collection must not run in parallel");
 
-        string testRoot = Path.Combine(RepoRoot, "src", "ConcernedCartographer.Tests");
+        string src = Path.Combine(RepoRoot, "src");
         var writers = new List<string>();
-        foreach (string file in Directory.EnumerateFiles(testRoot, "*.cs", SearchOption.AllDirectories))
+        foreach (string root in new[]
         {
-            string relative = Path.GetRelativePath(testRoot, file).Replace('\\', '/');
-            if (relative.StartsWith("obj/", StringComparison.Ordinal) ||
-                relative.StartsWith("bin/", StringComparison.Ordinal))
+            Path.Combine(src, "ConcernedCartographer.Tests"),
+            Path.Combine(src, "ConcernedCartographer", "Domain"),
+            Path.Combine(src, "ConcernedCartographer", "Runtime", "VanillaMessage.cs"),
+            Path.Combine(src, "Shared", "Companions"),
+        })
+        {
+            IEnumerable<string> files = File.Exists(root)
+                ? new[] { root }
+                : Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories);
+            foreach (string file in files)
             {
-                continue;
-            }
+                string relative = Path.GetRelativePath(src, file).Replace('\\', '/');
+                if (relative.Contains("/obj/", StringComparison.Ordinal) ||
+                    relative.Contains("/bin/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
 
-            if (File.ReadAllText(file).Contains("LoadOverrides(", StringComparison.Ordinal))
-            {
-                writers.Add(relative);
+                if (File.ReadAllText(file).Contains("LoadOverrides(", StringComparison.Ordinal))
+                {
+                    writers.Add(relative);
+                }
             }
         }
 
-        Assert.Equal(new[] { "AtlasStringsTests.cs" }, writers);
+        writers.Sort(StringComparer.Ordinal);
+        Assert.Equal(
+            new[]
+            {
+                "ConcernedCartographer.Tests/AtlasStringsTests.cs",
+                "ConcernedCartographer/Domain/Atlas/AtlasStrings.cs",
+            },
+            writers);
     }
 
     [Fact]
