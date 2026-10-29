@@ -5,8 +5,8 @@ Each test changes the real source tree, runs the real repository validator, and
 restores the exact original text. Every plant is a way Sunniva's body (or any
 networked body) could leave the world outside the one guarded verb, and each was
 verified to pass the validator that lacked this rule (origin/main d72b397)
-(and the last five also the validator at d0d559e, whose rule they got past)
-before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
+(and the five from the review of d0d559e also that head's validator, the four
+from the review of e4f0392 also that head's, whose rules they got past) before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
 path re-runs that check, expecting every plant to get through it.
 """
 import os
@@ -33,6 +33,9 @@ PORT_GUARD = """        StewardRetireVerdict verdict = StewardRetirement.Decide(
         }
 """
 PORT_REMOVAL = "            view.Destroy();\n"
+PORT_DECIDE = "        StewardRetireVerdict verdict = StewardRetirement.Decide(facts);\n"
+PORT_RETIRED = "        return StewardRetireOutcome.Retired;\n"
+LOOKED_UP = "ZNetScene.instance.FindInstance(ZDOID.None)!.GetComponent<ZNetView>()"
 PORT_VIEW = "        ZNetView? view = body.View;\n"
 RUNTIME_MARKER = "            _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);\n            _log(answer);\n"
 
@@ -195,12 +198,42 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      "            case \"retire\":\n")
         self.assert_refused("a method group handed to a delegate is a caller with no parenthesis")
 
+    # The four below each kept every pin of e4f0392's rule green (review of that
+    # head): its `view` pins were positional and blind to scope. Each was
+    # verified to pass e4f0392's validator as well as d72b397's.
+
+    def test_a_local_function_shadowing_view_called_before_the_guard_is_refused(self):
+        self.swap_in(PORT, PORT_DECIDE, "        Erase(" + LOOKED_UP + ");\n" + PORT_DECIDE)
+        self.swap_in(PORT, PORT_REMOVAL, "            Erase(view);\n")
+        self.swap_in(PORT, PORT_RETIRED,
+                     PORT_RETIRED + "\n        static void Erase(ZNetView view) => view.Destroy();\n")
+        self.assert_refused("a local function's own `view` removed a looked-up object before the guard")
+
+    def test_a_block_bodied_local_function_shadowing_view_is_refused(self):
+        self.swap_in(PORT, PORT_DECIDE, "        Erase(" + LOOKED_UP + ");\n" + PORT_DECIDE)
+        self.swap_in(PORT, PORT_REMOVAL, "            Erase(view);\n")
+        self.swap_in(PORT, PORT_RETIRED,
+                     PORT_RETIRED + "\n        static void Erase(ZNetView view)\n        {\n"
+                     "            view.Destroy();\n        }\n")
+        self.assert_refused("the same escape with a block body and no `=>`")
+
+    def test_a_lambda_whose_parameter_is_view_is_refused(self):
+        self.swap_in(PORT, PORT_REMOVAL,
+                     "            Action<ZNetView> erase = view => view.Destroy();\n"
+                     "            erase(" + LOOKED_UP + ");\n")
+        self.assert_refused("a lambda's `view` removed a looked-up object after the guard")
+
+    def test_a_deconstruction_into_view_is_refused(self):
+        self.swap_in(PORT, PORT_REMOVAL,
+                     "            (view, _) = (" + LOOKED_UP + ", 0);\n" + PORT_REMOVAL)
+        self.assert_refused("a deconstruction reassigned `view` with no `view =` to count")
+
     def test_this_suite_is_not_vacuous(self):
         # Not a plant: the guard text every plant above edits is still where
         # the plants expect it, so a refactor cannot turn them into no-ops.
         with open(PORT, encoding="utf-8-sig") as handle:
             port = handle.read()
-        for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW):
+        for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW, PORT_DECIDE, PORT_RETIRED):
             self.assertEqual(1, port.count(pinned), pinned)
         with open(RUNTIME, encoding="utf-8-sig") as handle:
             self.assertEqual(1, handle.read().count(RUNTIME_MARKER))

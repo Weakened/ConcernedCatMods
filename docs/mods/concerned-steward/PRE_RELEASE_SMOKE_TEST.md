@@ -144,7 +144,10 @@ Record PASS / FAIL / note against each numbered row.
    retire`. **Expect:** her body disappears; nothing drops; `cs_steward status`
    shows no body; she is still taken on.
 3. Inside the settlement, `cs_steward recruit`. **Expect:** one body appears,
-   with an empty pack, and nothing is said twice.
+   with an empty pack, and nothing is said twice. (Typed in the very same frame
+   as the retire, the census may still count her saved record and answer as if
+   she were out of range; a moment later it spawns her. Unverified in game -
+   note what you see.)
 4. Save, quit, reload after step 2: no body comes back by itself and no duplicate
    appears.
 

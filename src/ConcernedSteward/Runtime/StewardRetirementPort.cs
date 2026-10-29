@@ -42,7 +42,9 @@ internal static class StewardRetirementPort
     /// <param name="body">Her bound, loaded body.</param>
     /// <param name="ledger">Everything the runtime knows that the body does
     /// not: the fuel ledger, the loop, the durable plan and the record. The
-    /// pack itself is read here, from the body, so a caller cannot state it.
+    /// pack itself is read here, from the body, so a caller cannot state it
+    /// away: a pack stated in the ledger only adds to what is held, and a
+    /// ledger that says unreadable refuses.
     /// </param>
     /// <param name="answer">The sentence for the player.</param>
     internal static StewardRetireOutcome Retire(
@@ -56,8 +58,14 @@ internal static class StewardRetirementPort
 
         // The pack is the body's own record, and an inert, unloaded or unsaved
         // one is unreadable - never "empty".
-        bool readable = body.IsLoaded && body.Fault == null && body.LastChangePersisted;
-        int held = readable ? body.ItemCount : 0;
+        // A pack the caller states (the runtime states none) can only add a
+        // reason to refuse, never take one away: the body's own count is always
+        // read here, and a stated item is added to it without overflowing.
+        bool readable = body.IsLoaded && body.Fault == null && body.LastChangePersisted &&
+            ledger.InventoryReadable;
+        int own = Math.Max(0, body.ItemCount);
+        int stated = Math.Max(0, ledger.ItemsHeld);
+        int held = !readable ? 0 : stated > int.MaxValue - own ? int.MaxValue : own + stated;
         var facts = new StewardRetireFacts(
             held,
             readable,

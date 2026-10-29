@@ -3389,8 +3389,10 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
 #    destruction anywhere in the product fails until a person records it;
 # 2. the PORT: Runtime/StewardRetirementPort.cs keeps its one removal inside
 #    `Retire(...)`, below a `StewardRetirement.Decide(` and a refusing
-#    `if (!StewardRetirement.Allows(`, and the removal is the network object of
-#    the body handed in (`body.View`), never anything looked up;
+#    `if (!StewardRetirement.Allows(`, and the removal statement is `view.Destroy();`
+#    on a `view` spelled only at its declaration from `body.View`, its validity
+#    check and that statement, in a method with no nested scope or
+#    deconstruction that could rename it (as far as a text audit can see);
 # 3. the CALLER: the port is called once in the product, from
 #    Runtime/StewardRuntime.cs.
 #
@@ -3418,6 +3420,24 @@ STEWARD_RETIRE_ASSIGNS_VIEW = re.compile(r"(?<![\w.])view\s*(?:\?\?=|=(?![=>]))"
 STEWARD_RETIRE_ASSIGNS_BODY = re.compile(r"(?<![\w.])body\s*(?:\?\?=|=(?![=>]))")
 STEWARD_RETIRE_BY_REFERENCE = re.compile(r"\b(?:ref|out)\s+(?:ZNetView\??\s+|StewardBody\??\s+)?(?:view|body)\b")
 STEWARD_RETIRE_USING = re.compile(r"\busing\b[^;{]*\bStewardRetirementPort\b[^;{]*;")
+# Review of e4f0392: the pins above are positional and blind to scope, so a
+# local function or lambda whose parameter is also called `view`, or a
+# deconstruction `(view, _) = (...)`, pointed the one removal at any object.
+# `view` is therefore pinned token by token: it appears exactly at its
+# declaration, the three places of the validity check, and the removal
+# statement - five tokens, nowhere else - and Retire(...) declares no lambda,
+# no local function, no anonymous delegate and no deconstruction, and spells
+# no identifier escape that could hide a sixth `view`.
+STEWARD_RETIRE_VIEW_TOKEN = re.compile(r"(?<![\w.])@?view\b")
+STEWARD_RETIRE_VIEW_CHECK = re.compile(
+    r"if\s*\(\s*view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)\s*\|\|\s*!\s*view\s*\.\s*"
+    r"IsOwner\s*\(\s*\)\s*\)")
+STEWARD_RETIRE_REMOVAL_STATEMENT = re.compile(r"(?<![\w.])view\s*\.\s*Destroy\s*\(\s*\)\s*;")
+STEWARD_RETIRE_VIEW_TOKENS = 5
+STEWARD_RETIRE_NO_NESTED_CODE = re.compile(
+    r"=>|\bdelegate\b|@|\\[uU][0-9A-Fa-f]|\)\s*=(?![=>])"
+    r"|\b(?!(?:if|for|foreach|while|switch|catch|using|lock|fixed|when)\b)[A-Za-z_]\w*\s*"
+    r"\((?:[^(){};]|\([^(){};]*\))*\)\s*\{")
 STEWARD_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bDestroyZDO\s*\(")
 STEWARD_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
 STEWARD_DESTRUCTION_SITES = {
@@ -3546,6 +3566,23 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         fail(f"{label}: Retire(...) passes `view` or `body` by reference, which is an assignment this "
              "text audit cannot follow", errors)
 
+    nested = STEWARD_RETIRE_NO_NESTED_CODE.search(body)
+    if nested is not None:
+        fail(f"{label}: Retire(...) holds `{nested.group(0).strip()[:40]}` - a lambda, local function, "
+             "anonymous delegate, deconstruction or identifier escape opens a scope or an assignment in "
+             "which `view` or `body` can name another object while every positional pin stays green",
+             errors)
+    view_tokens = [found.start() for found in STEWARD_RETIRE_VIEW_TOKEN.finditer(body)]
+    check = STEWARD_RETIRE_VIEW_CHECK.search(body)
+    statements = list(STEWARD_RETIRE_REMOVAL_STATEMENT.finditer(body))
+    if (len(view_tokens) != STEWARD_RETIRE_VIEW_TOKENS or own_view is None or check is None
+            or len(statements) != 1
+            or not own_view.start() < check.start() < statements[0].start()):
+        fail(f"{label}: `view` appears {len(view_tokens)} time(s) in Retire(...); it may appear only "
+             f"{STEWARD_RETIRE_VIEW_TOKENS} times - `ZNetView? view = body.View;`, then "
+             "`if (view == null || !view.IsValid() || !view.IsOwner())`, then the one statement "
+             "`view.Destroy();` - so that the object removed is the one taken from her body", errors)
+
     for path in sorted(steward_dir.rglob("*.cs")):
         relative = path.relative_to(steward_dir)
         if relative.parts[0] in ("obj", "bin"):
@@ -3561,7 +3598,9 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         f"an instance and {total_removals} body removal(s), each at a pinned site; the one removal is "
         "`view.Destroy()` inside StewardRetirementPort.Retire, below a StewardRetirement.Decide and a "
         "refusing `if (!StewardRetirement.Allows(...))`, on a `view` whose only assignment is "
-        "`body.View` and a `body` parameter that is never reassigned; the port is named (call or method "
+        "`body.View` and which appears nowhere but that declaration, its validity check and the removal "
+        "statement, in a method with no lambda, local function, delegate or deconstruction, and a `body` "
+        "parameter that is never reassigned; the port is named (call or method "
         "group) at "
         f"{total_calls} call site(s), in {STEWARD_RETIRE_CALLER}, and no file imports it by `using`. "
         "This text audit establishes where the refusal is written, not that control flow obeys it "

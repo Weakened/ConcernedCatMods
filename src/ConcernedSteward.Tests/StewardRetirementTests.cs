@@ -113,6 +113,23 @@ public sealed class StewardRetirementTests
     }
 
     [Fact]
+    public void A_pack_stated_in_the_ledger_only_ever_adds_a_refusal()
+    {
+        using var scene = new Scene();
+        (StewardBody body, ZNetView view) = PlaceBody();
+
+        // The body is empty and readable; a caller that says otherwise is
+        // believed in the direction that keeps her.
+        Assert.Equal(StewardRetireOutcome.Refused,
+            StewardRetirementPort.Retire(body, Clear(items: 1), out _));
+        Assert.Equal(StewardRetireOutcome.Refused,
+            StewardRetirementPort.Retire(body, Clear(items: int.MaxValue), out _));
+        Assert.Equal(StewardRetireOutcome.Refused,
+            StewardRetirementPort.Retire(body, Clear(readable: false), out _));
+        Assert.Equal(0, view.DestroyCalls);
+    }
+
+    [Fact]
     public void A_body_whose_last_change_was_not_saved_is_unreadable_and_kept()
     {
         using var scene = new Scene();
