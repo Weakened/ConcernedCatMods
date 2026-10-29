@@ -109,6 +109,10 @@ public sealed class AtlasMaintenanceDefectTests : IDisposable
                 ".routes-atlas.tsv",
                 ".survey-rejected.tsv",
                 ".terrain-intent.tsv",
+
+                // #296: added deliberately, with its own codec in the
+                // support report (WorkAreaCapabilityTests pins that).
+                ".work-areas.tsv",
             },
             CartographerWorldSidecars.Suffixes);
     }
