@@ -349,29 +349,29 @@ public class RouteFollowMathTests
     [Collection(ExactAllocationCollection.Name)]
     public class HotPath
     {
-    [Fact]
-    public void SamplingHotPath_AllocatesNothing()
-    {
-        var points = new[]
+        [Fact]
+        public void SamplingHotPath_AllocatesNothing()
         {
-            P(0f, 0f),
-            P(10f, 0f),
-            P(20f, 10f),
-            P(30f, 10f),
-        };
-        Assert.True(RouteFollowPath.TryCreate(points, out RouteFollowPath? path));
-        var scenario = new AllocationScenario(path!, P(12f, 2f));
-        Action sample = scenario.Sample;
+            var points = new[]
+            {
+                P(0f, 0f),
+                P(10f, 0f),
+                P(20f, 10f),
+                P(30f, 10f),
+            };
+            Assert.True(RouteFollowPath.TryCreate(points, out RouteFollowPath? path));
+            var scenario = new AllocationScenario(path!, P(12f, 2f));
+            Action sample = scenario.Sample;
 
-        long allocated = MeasureSteadyStateAllocations(
-            sample,
-            warmupIterations: 1_000,
-            measuredIterations: 10_000);
+            long allocated = MeasureSteadyStateAllocations(
+                sample,
+                warmupIterations: 1_000,
+                measuredIterations: 10_000);
 
-        Assert.True(scenario.Success);
-        Assert.True(scenario.Result.RemainingMeters > 0f);
-        Assert.Equal(0, allocated);
-    }
+            Assert.True(scenario.Success);
+            Assert.True(scenario.Result.RemainingMeters > 0f);
+            Assert.Equal(0, allocated);
+        }
     }
 
     private static long MeasureSteadyStateAllocations(

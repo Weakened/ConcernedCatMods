@@ -13,12 +13,14 @@ public sealed class ExactAllocationCollection
 
 /// <summary>#463: an allocation count that a busy machine cannot inflate.
 ///
-/// <c>GC.GetAllocatedBytesForCurrentThread</c> is not a pure per-thread
-/// count: under load, gen-0 collections set off by other threads' allocations
-/// charged a thread that allocated nothing with about one allocation quantum
-/// (7 936, 8 000 and 8 088 bytes in a local reproduction with four allocating
-/// neighbours; 0 every time with none). That is the 8 128 bytes
-/// <c>SteadyStateTickAllocatesNothing</c> once reported.
+/// Observed, not proven from the runtime's source: in a local reproduction a
+/// thread that allocated nothing was sometimes charged about one allocation
+/// quantum by <c>GC.GetAllocatedBytesForCurrentThread</c> (7 936, 8 000 and
+/// 8 088 bytes) while four other threads allocated and gen-0 collections ran;
+/// it read 0 every time with no allocating neighbours, and 0 every time inside
+/// a no-GC region even with them. A blocking <c>GC.Collect()</c> from another
+/// thread did not reproduce it. That matches the 8 128 bytes
+/// <c>SteadyStateTickAllocatesNothing</c> once reported under load.
 ///
 /// The window here runs inside a no-GC region, so no collection can happen in
 /// it, and a real allocation is still counted to the byte. If a collection
@@ -61,7 +63,16 @@ internal static class ExactAllocations
                 held = GCSettings.LatencyMode == GCLatencyMode.NoGCRegion;
                 if (held)
                 {
-                    GC.EndNoGCRegion();
+                    try
+                    {
+                        GC.EndNoGCRegion();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // A collection landed between the check and the end:
+                        // the window was not clean after all.
+                        held = false;
+                    }
                 }
             }
 
