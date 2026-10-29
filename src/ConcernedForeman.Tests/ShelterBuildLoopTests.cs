@@ -302,6 +302,48 @@ public sealed class ShelterBuildLoopTests
     }
 
     [Fact]
+    public void A_chest_the_player_empties_mid_order_waits_names_what_is_missing_and_conjures_nothing()
+    {
+        // #287 "the designated container emptied by the player mid-order": the
+        // first phase is drawn, then the player takes everything left in the
+        // chest. What he already holds still goes up, nothing is drawn from
+        // anywhere else, and no material appears that the chest, his pack and
+        // the placed pieces did not already account for.
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = world.Loop();
+        int tick = 0;
+        while (world.Materials.Draws == 0 && tick < 80)
+        {
+            loop.Tick(100f + (tick++ * Step));
+        }
+
+        Assert.Equal(1, world.Materials.Draws);
+        Assert.True(world.Carrying("Wood") > 0, "the first phase should have drawn wood before the chest is emptied");
+
+        // The player empties the chest, outside the loop's custody.
+        world.Chest["Wood"] = 0;
+        world.Chest["DeerHide"] = 0;
+        int wood = world.Total("Wood");
+        int hide = world.Total("DeerHide");
+        int placedBefore = world.Placer.Placed.Count;
+
+        for (int more = 0; more < 80; more++)
+        {
+            loop.Tick(100f + (tick++ * Step));
+            Assert.Equal(wood, world.Total("Wood"));
+            Assert.Equal(hide, world.Total("DeerHide"));
+        }
+
+        Assert.Equal(BuildStep.Waiting, loop.Step);
+        Assert.Contains("Wood", loop.Reason);
+        Assert.Contains("not in any container", loop.Reason);
+
+        // What he held still went up: waiting is not stopping.
+        Assert.True(world.Placer.Placed.Count > placedBefore, "the wood he already held should still have been placed");
+        Assert.Equal(0, world.InChest("Wood"));
+    }
+
+    [Fact]
     public void No_marked_chest_is_a_named_refusal_and_nothing_moves()
     {
         var world = new BuildWorld();
