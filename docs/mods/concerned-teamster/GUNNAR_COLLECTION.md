@@ -11,8 +11,9 @@ walk each load, take it to the chosen chest in one trip, measure it in, next loa
 persist per world (§6d, #374), and **a deposit now consumes one** (§6e, `DECISIONS.md` D15): `ct_collect destination`
 chooses the chest by pointing at it and `ct_collect deposit` moves what he carries into it, measured on both sides.
 The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
-Teamster stays at **1.0.5** and ConcernedNPC moves to **0.4.0** - the deposit needed the permit mint and the
-measured-move recorder, which were `internal` and reachable by no product. Nothing is published, tagged or
+Teamster stays at **1.0.5**. ConcernedNPC moved to **0.4.0** for the deposit - which needed the permit mint and the
+measured-move recorder, which were `internal` and reachable by no product - and then to **0.5.0** for the tour's
+`JobTarget` `carries` (§6f). Nothing is published, tagged or
 released.
 
 ## 1. What this is

@@ -3,7 +3,7 @@
 ## Unreleased
 
 * **Requires Concerned NPC 0.5.0** (was 0.4.0). The library's new body contract (#295) is additive. Gunnar's body,
-  identity and keys are unchanged. Teamster also needs 0.5.0's `JobTarget.Carries` for the collection tour's loads
+  identity and keys are unchanged. Teamster also needs 0.5.0's `JobTarget` `carries` constructor for the collection tour's loads
   (#381), so this is a real requirement and not only the pin following the library.
 
 * **Say which chests Gunnar may use (#374).** Look at a chest and press the key (`Workers/ContainerPermissionShortcut`,
