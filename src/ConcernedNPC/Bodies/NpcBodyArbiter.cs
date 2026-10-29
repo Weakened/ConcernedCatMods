@@ -72,14 +72,27 @@ internal sealed class NpcBodyArbiter
     /// Called once, by registration, and refuses a second call for the same
     /// identity - a second record would be a second owner, which is the
     /// condition this type exists to prevent.</summary>
-    internal bool Track(NpcIdentity identity, NpcBodyKind contractedKind)
+    internal bool Track(NpcIdentity identity, NpcBodyKind contractedKind) =>
+        Track(identity, contractedKind, alsoPresentation: false);
+
+    /// <summary>Starts tracking an identity from its whole contract, so a role
+    /// contracted for a worker body that rests as a presentation figure
+    /// (<see cref="NpcBodyContract.ForWorkerWithPresentation"/>) may be granted
+    /// either kind, one at a time.</summary>
+    internal bool Track(NpcIdentity identity, NpcBodyContract contract) =>
+        Track(
+            identity,
+            contract.Kind,
+            alsoPresentation: contract.Kind == NpcBodyKind.Worker && contract.Admits(NpcBodyKind.Presentation));
+
+    private bool Track(NpcIdentity identity, NpcBodyKind contractedKind, bool alsoPresentation)
     {
         if (identity.IsEmpty || _records.ContainsKey(identity.Value))
         {
             return false;
         }
 
-        _records.Add(identity.Value, new Record(identity, contractedKind));
+        _records.Add(identity.Value, new Record(identity, contractedKind, alsoPresentation));
         return true;
     }
 
@@ -152,9 +165,11 @@ internal sealed class NpcBodyArbiter
                 // role contracted for the kind it is asking for. Both would
                 // refuse, and which refusal a caller is told matters: "a
                 // presentation body already exists" is the rule, while "you did
-                // not contract for this" is an accident of a role having
-                // exactly one contracted kind today. A rule that holds only
-                // because of an unrelated restriction is not a rule.
+                // not contract for this" is an accident of which kinds a role
+                // contracted for - and since 0.5.0 a role may contract for both
+                // (ForWorkerWithPresentation), so for such a role this check is
+                // the only thing that refuses. A rule that holds only because
+                // of an unrelated restriction is not a rule.
                 return Refuse(BodyClaimStatus.RefusedOtherKindExists, identity, kind, holder,
                     "a " + record.BodyKind + " body already exists for this identity, held by '" +
                     record.BodyHolder + "'; it is released, never replaced");
@@ -169,7 +184,7 @@ internal sealed class NpcBodyArbiter
                 "'" + record.BodyHolder + "' already holds this identity's " + kind + " body");
         }
 
-        if (kind != record.ContractedKind)
+        if (!record.Admits(kind))
         {
             return Refuse(BodyClaimStatus.RefusedKindNotContracted, identity, kind, holder,
                 "this role contracted for " + record.ContractedKind + ", not " + kind);
@@ -309,10 +324,11 @@ internal sealed class NpcBodyArbiter
     /// </summary>
     private sealed class Record
     {
-        internal Record(NpcIdentity identity, NpcBodyKind contractedKind)
+        internal Record(NpcIdentity identity, NpcBodyKind contractedKind, bool alsoPresentation)
         {
             Identity = identity;
             ContractedKind = contractedKind;
+            AlsoPresentation = alsoPresentation && contractedKind == NpcBodyKind.Worker;
             Mode = new ActorModeOwner(identity);
             BodyHolder = string.Empty;
         }
@@ -320,6 +336,15 @@ internal sealed class NpcBodyArbiter
         internal NpcIdentity Identity { get; }
 
         internal NpcBodyKind ContractedKind { get; }
+
+        /// <summary>A worker identity that rests as a presentation figure. The
+        /// two kinds are still never held at once; this only says which kinds
+        /// may be asked for.</summary>
+        internal bool AlsoPresentation { get; }
+
+        internal bool Admits(NpcBodyKind kind) =>
+            kind != NpcBodyKind.Unspecified
+            && (kind == ContractedKind || (kind == NpcBodyKind.Presentation && AlsoPresentation));
 
         internal ActorModeOwner Mode { get; }
 
