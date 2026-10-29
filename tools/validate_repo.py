@@ -2708,15 +2708,24 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("UnityEngine.Object.Instantiate", re.compile(
         r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+        # #295: one attachment mesh (an item's attach child, never the item) cloned
+        # under an INACTIVE holder for Thorstein's local presentation figure.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
     )),
     ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*tameable\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*drop\s*\)"), 1),
+        # #295: the figure's own dark parts - an inactive holder, a refused
+        # piece, or a component on a piece that has never woken.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
     )),
     ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
         ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+        # #295: the local figure, a misfitting piece of it, or its material
+        # instance. Never a network view: the figure has none.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
     )),
     ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
@@ -2739,6 +2748,15 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+        # #295: Thorstein's local presentation figure, which has no collider, no
+        # rigidbody and no network view: seating a preset or garment piece on a
+        # joint, the game's equipoffset nudge, and standing the figure at home.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localPosition\s*\+=\s*offset\s*\.\s*position\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localRotation\s*\*=\s*offset\s*\.\s*rotation\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
     )),
 )
 
@@ -2799,6 +2817,84 @@ def _strip_foreman_cs_comments(text: str) -> str:
         out.append(char)
         index += 1
     return "".join(out)
+
+
+# #295: Thorstein's presentation figure keeps every engine write it makes in
+# Runtime/Presentation/FigureParts.cs, where #400 pins each one. Those pins
+# match a call INSIDE a helper, and the helpers take any UnityEngine.Object or
+# Transform - so without this rule any Foreman file could destroy a network
+# view or move the player through FigureParts.Drop/Place and spell no audited
+# token at all (the "lift it into a helper" escape). The helpers are therefore
+# confined: the type may be named only in its own file and in the two files
+# that build and dress the figure, only as `FigureParts.<Helper>`, and each
+# helper's population in each file is pinned.
+FOREMAN_FIGURE_PARTS_FILE = "Runtime/Presentation/FigureParts.cs"
+FOREMAN_FIGURE_PARTS_USES = {
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Discard"): 8,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Drop"): 2,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Harvest"): 2,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Holder"): 2,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Offset"): 1,
+    ("Runtime/Presentation/ThorsteinDresser.cs", "Seat"): 4,
+    ("Runtime/Presentation/ThorsteinPresentation.cs", "Drop"): 1,
+    ("Runtime/Presentation/ThorsteinPresentation.cs", "Place"): 1,
+}
+
+
+def check_foreman_figure_parts_confined(errors: list[str]) -> list[str]:
+    """Confines Thorstein's figure helpers to the files that own the figure."""
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    if not (foreman_dir / FOREMAN_FIGURE_PARTS_FILE).is_file():
+        fail(f"[foreman] #295 figure-parts audit: {FOREMAN_FIGURE_PARTS_FILE} is missing; point the "
+             "audit at the helpers' new home rather than leaving it green", errors)
+        return []
+
+    allowed_files = {path for path, _ in FOREMAN_FIGURE_PARTS_USES}
+    any_name = re.compile(r"\bFigureParts\b")
+    member = re.compile(r"\bFigureParts\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+    found: dict[tuple[str, str], int] = {}
+    violations = 0
+    for path in sorted(foreman_dir.rglob("*.cs")):
+        rel_parts = path.relative_to(foreman_dir).parts
+        if any(part in ("obj", "bin") for part in rel_parts):
+            continue
+        rel = path.relative_to(foreman_dir).as_posix()
+        if rel == FOREMAN_FIGURE_PARTS_FILE:
+            continue
+        code = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
+        names = list(any_name.finditer(code))
+        if not names:
+            continue
+        if rel not in allowed_files:
+            for match in names:
+                violations += 1
+                fail(f"[foreman] #295 figure-parts audit: FigureParts named in src/ConcernedForeman/{rel}:"
+                     f"{code.count(chr(10), 0, match.start()) + 1}; its helpers destroy and move any "
+                     "object, so only the figure's own two files may call them", errors)
+            continue
+        calls = list(member.finditer(code))
+        if len(calls) != len(names):
+            violations += 1
+            fail(f"[foreman] #295 figure-parts audit: src/ConcernedForeman/{rel} names FigureParts "
+                 f"{len(names)} time(s) but calls a helper {len(calls)} time(s); an alias, a method group "
+                 "or a static import would carry a helper out of this audit", errors)
+        for call in calls:
+            key = (rel, call.group(1))
+            found[key] = found.get(key, 0) + 1
+
+    for key in sorted(set(found) | set(FOREMAN_FIGURE_PARTS_USES)):
+        expected = FOREMAN_FIGURE_PARTS_USES.get(key, 0)
+        actual = found.get(key, 0)
+        if actual != expected:
+            violations += 1
+            fail(f"[foreman] #295 figure-parts audit: src/ConcernedForeman/{key[0]} calls FigureParts."
+                 f"{key[1]} {actual} time(s); the pinned population is {expected}", errors)
+
+    return [
+        f"[foreman] #295 figure-parts audit: the figure's {len({k[1] for k in FOREMAN_FIGURE_PARTS_USES})} "
+        f"engine-write helper(s) are called only from {len(allowed_files)} file(s), each population pinned, "
+        f"and named nowhere else in src/ConcernedForeman ({violations} violations)",
+    ]
 
 
 def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
@@ -5141,6 +5237,7 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
+    report.extend(check_foreman_figure_parts_confined(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))

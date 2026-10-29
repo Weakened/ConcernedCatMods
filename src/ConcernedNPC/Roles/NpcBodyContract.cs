@@ -43,12 +43,14 @@ public readonly struct NpcBodyContract
 {
     private readonly string? _prefabName;
     private readonly string? _zdoKeyPrefix;
+    private readonly bool _alsoPresentation;
 
-    private NpcBodyContract(NpcBodyKind kind, string prefabName, string zdoKeyPrefix)
+    private NpcBodyContract(NpcBodyKind kind, string prefabName, string zdoKeyPrefix, bool alsoPresentation = false)
     {
         Kind = kind;
         _prefabName = prefabName;
         _zdoKeyPrefix = zdoKeyPrefix;
+        _alsoPresentation = alsoPresentation && kind == NpcBodyKind.Worker;
     }
 
     /// <summary>Which of the two ways this role's body exists. Drives every
@@ -84,6 +86,36 @@ public readonly struct NpcBodyContract
     /// <param name="zdoKeyPrefix">The role's key prefix, including the trailing dot.</param>
     public static NpcBodyContract ForWorker(string prefabName, string zdoKeyPrefix) =>
         new NpcBodyContract(NpcBodyKind.Worker, prefabName ?? string.Empty, zdoKeyPrefix ?? string.Empty);
+
+    /// <summary>The contract for a role that is a <b>worker while it works and
+    /// a local presentation figure while it rests</b>: one identity, two ways
+    /// of having a body, never both at once (0.5.0).
+    ///
+    /// <see cref="Kind"/> stays <see cref="NpcBodyKind.Worker"/>, and the two
+    /// durable facts are exactly a worker's, validated exactly as a worker's.
+    /// The saved body is still found by them, so adding presentation to a
+    /// shipped role changes no byte on anybody's disk. What changes is that the
+    /// arbiter will also grant this identity a presentation claim, on the same
+    /// terms as any presentation claim: only while the identity is resting, and
+    /// only while no worker body is held for it
+    /// (<see cref="Bodies.BodyClaimStatus.RefusedOtherKindExists"/>). The reverse
+    /// holds too: a worker claim is refused while the figure is held. So a
+    /// hand-over is always release-then-claim, by whichever holder has the body
+    /// now; nothing tears one down on another's behalf.</summary>
+    /// <param name="prefabName">The name the role registers its worker prefab under.</param>
+    /// <param name="zdoKeyPrefix">The worker body's key prefix, including the trailing dot.</param>
+    public static NpcBodyContract ForWorkerWithPresentation(string prefabName, string zdoKeyPrefix) =>
+        new NpcBodyContract(
+            NpcBodyKind.Worker, prefabName ?? string.Empty, zdoKeyPrefix ?? string.Empty, alsoPresentation: true);
+
+    /// <summary>Whether this contract describes a body of
+    /// <paramref name="kind"/>: its own <see cref="Kind"/>, and, for a contract
+    /// made by <see cref="ForWorkerWithPresentation"/> only, a presentation
+    /// figure as well. Never true for <see cref="NpcBodyKind.Unspecified"/>.
+    /// </summary>
+    public bool Admits(NpcBodyKind kind) =>
+        kind != NpcBodyKind.Unspecified
+        && (kind == Kind || (kind == NpcBodyKind.Presentation && _alsoPresentation));
 
     /// <summary>Builds a contract from facts whose shape is not known in
     /// advance - a kind and two strings that came from somewhere else.
@@ -160,7 +192,7 @@ public readonly struct NpcBodyContract
 
     public override string ToString() =>
         Kind == NpcBodyKind.Worker
-            ? "Worker(" + PrefabName + ", " + ZdoKeyPrefix + "*)"
+            ? "Worker(" + PrefabName + ", " + ZdoKeyPrefix + "*)" + (_alsoPresentation ? "+Presentation" : string.Empty)
             : Kind.ToString();
 
     private static bool IsValidPrefabName(string value)
