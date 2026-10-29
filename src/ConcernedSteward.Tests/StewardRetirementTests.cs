@@ -183,6 +183,17 @@ public sealed class StewardRetirementTests
         Assert.Equal(StewardRetireOutcome.NotOurs, StewardRetirementPort.Retire(null, Clear(), out _));
     }
 
+    [Fact]
+    public void A_body_whose_network_object_is_already_gone_is_not_removed_again()
+    {
+        using var scene = new Scene();
+        (StewardBody body, ZNetView view) = PlaceBody();
+        view.Valid = false;
+
+        Assert.Equal(StewardRetireOutcome.NotOurs, StewardRetirementPort.Retire(body, Clear(), out _));
+        Assert.Equal(0, view.DestroyCalls);
+    }
+
     // ------------------------------------------------------------------
     // Reachability
     // ------------------------------------------------------------------

@@ -3550,16 +3550,20 @@ STEWARD_RETIRE_LITERAL = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])+\'
 # validity check returning NotOurs - and each must start a statement (only
 # `;`, `{` or `}` before it). `verdict` is spelled only at its declaration,
 # the refusal and the sentence, so it cannot be overwritten in between.
+# Review of 75d837d: a braceless `if/else` INSIDE a refusing block made its
+# return conditional, so each block is exactly one `answer = ...;` and its
+# return - no other statement.
 STEWARD_RETIRE_TOP_LEVEL = (
     ("`StewardRetireVerdict verdict = StewardRetirement.Decide(facts);`", re.compile(
         r"StewardRetireVerdict\s+verdict\s*=\s*StewardRetirement\s*\.\s*Decide\s*\(\s*facts\s*\)\s*;")),
-    ("`if (!StewardRetirement.Allows(verdict)) { ... return StewardRetireOutcome.Refused; }`", re.compile(
-        r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(\s*verdict\s*\)\s*\)\s*\{[^{}]*"
-        r"\breturn\s+StewardRetireOutcome\s*\.\s*Refused\s*;\s*\}")),
+    ("`if (!StewardRetirement.Allows(verdict)) { answer = ...; return StewardRetireOutcome.Refused; }`",
+     re.compile(
+        r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(\s*verdict\s*\)\s*\)\s*\{"
+        r"\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*Refused\s*;\s*\}")),
     ("`ZNetView? view = body.View;`", STEWARD_RETIRE_OWN_VIEW),
     ("the validity check on `view` returning NotOurs", re.compile(
         STEWARD_RETIRE_VIEW_CHECK.pattern
-        + r"\s*\{[^{}]*\breturn\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")),
+        + r"\s*\{\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")),
 )
 STEWARD_RETIRE_STATEMENT_START = re.compile(r"(?:^|[;{}])\s*$")
 STEWARD_RETIRE_VERDICT_TOKEN = re.compile(r"(?<![\w.])verdict\b")

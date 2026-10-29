@@ -5,10 +5,13 @@ Each test changes the real source tree, runs the real repository validator, and
 restores the exact original text. Every plant is a way Sunniva's body (or any
 networked body) could leave the world outside the one guarded verb, and each was
 verified to pass the validator that lacked this rule (origin/main d72b397)
-(and the five from the review of d0d559e also that head's validator, the four
-from the review of e4f0392 also that head's, the three from the review of
-203d449 also that head's, the four from the review of 2103c58 also that head's, whose rules they got past) before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
-path re-runs that check, expecting every plant to get through it.
+before being added here. The plants found by successive reviews were also each
+verified to pass the validator of the head they were found against (d0d559e:
+five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two), whose rule
+they got past; the last two were checked against origin/main 0171cf6 (still
+without this rule) instead of d72b397, whose own rules no longer pass the
+merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
+re-runs that check, expecting every plant to get through it.
 """
 import os
 import shutil
@@ -274,6 +277,23 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
     def test_overwriting_the_verdict_before_the_refusal_is_refused(self):
         self.swap_in(PORT, PORT_ALLOWS, "        verdict = StewardRetireVerdict.MayRetire;\n" + PORT_ALLOWS)
         self.assert_refused("the verdict refused on was not the one decided")
+
+    # The two below each kept every pin of 75d837d's rule green (review of
+    # that head): the refusing blocks' contents were unchecked. Each was
+    # verified to pass 75d837d's validator as well as origin/main 0171cf6's.
+
+    def test_a_conditional_return_inside_the_refusal_is_refused(self):
+        self.swap_in(PORT, "            answer = StewardRetirement.Describe(verdict, held);\n"
+                           "            return StewardRetireOutcome.Refused;\n",
+                     "            answer = StewardRetirement.Describe(verdict, held);\n"
+                     "            if (body.ItemCount > 100) answer += \".\"; else return StewardRetireOutcome.Refused;\n")
+        self.assert_refused("a heavily laden body fell through the refusal to the removal")
+
+    def test_a_conditional_return_inside_the_ownership_check_is_refused(self):
+        self.swap_in(PORT, "not this game's to remove.\";\n            return StewardRetireOutcome.NotOurs;\n",
+                     "not this game's to remove.\";\n"
+                     "            if (ZNet.instance != null) answer += \".\"; else return StewardRetireOutcome.NotOurs;\n")
+        self.assert_refused("a body this game does not own fell through the ownership check to the removal")
 
     def test_a_guard_wrapped_in_a_condition_is_refused(self):
         self.swap_in(PORT, PORT_GUARD,
