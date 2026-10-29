@@ -11,6 +11,23 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — Tools of the Trade, the story record (#295, slice S1)
+
+- **Thorstein's introduction has a record now.** It is kept per character and
+  per world. Bring him an axe and a hammer, in either order, through the
+  existing handover (`cf_settle give`), and he joins your settlement with
+  his completion line. The tools stay his real equipment; nothing is
+  destroyed at turn-in.
+- Joining is the settlement register's own recruitment, with all its checks.
+  The story records it only after the roster is written. An unresolved
+  handover, a read-only record, no authority or no settlement area each
+  waits and says why.
+- **Nothing relocks him.** A lost tool never relocks a recruited Thorstein,
+  replaying the story grants nothing, and a finished story never re-hires a
+  worker you dismissed.
+- `cf_settle quest [status|examine]`. `examine` stands in for the carpenter's
+  square, which comes in the next slice. **Not observed in game.**
+
 ### Added — Thorstein at home, and one body at a time (#295, #298)
 
 - **While Thorstein rests and has no worker body, he stands near your bed**

@@ -27,6 +27,10 @@
          C# with no Unity/BepInEx/Jotunn types, which is what lets
          Shared.Settlement.Tests link them and exercise the whole decision
          surface game-free. -->
+    <!-- #295 S1: Thorstein's "Tools of the Trade" story is kept in the shared
+         companion sidecar, the quest and persistence layer Concerned
+         Cartographer already uses for Hulgi. Game-free source, compiled in. -->
+    <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
     <!-- Game-free worker authority/actor-mode contracts and the cross-product
          capability contracts (docs/settlement/cart-and-collection). -->

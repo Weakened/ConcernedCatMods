@@ -68,6 +68,7 @@ internal sealed class SettlementRuntime
         _designations = new DesignationTools(
             HasAuthority, DescribeMissingAuthority, _records, new CustodyTools(this, _custody, _records),
             area => _housing.Measure(area));
+        _designations.Quest = new ThorsteinQuest(() => _custody.ToolWorker, HasAuthority, log);
 
         WorkerBody.Loaded = OnWorkerBodyLoaded;
         WorkerBody.Died = (body, dropped, where) =>
@@ -567,6 +568,7 @@ internal sealed class SettlementRuntime
         _custody.OnWorldUnloaded();
         _records.Forget();
         _designations.Forget();
+        _designations.Quest?.Forget();
     }
 
     private static string Format(Vector3 point)
