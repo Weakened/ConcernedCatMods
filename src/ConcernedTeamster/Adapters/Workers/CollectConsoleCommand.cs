@@ -24,9 +24,10 @@ internal sealed class CollectConsoleCommand : ConsoleCommand
     public override string Name => CommandName;
 
     public override string Help =>
-        "Concerned Teamster: Gunnar picks up one loose stone or fallen branch you point at " +
-        "(development aid). Subcommands: status, pick, cancel. Needs Workers/GunnarCollectionEnabled, " +
-        "single player or a host with nobody else connected, and Gunnar standing next to the thing.";
+        "Concerned Teamster: Gunnar collects loose stones and fallen branches (development aid). " +
+        "Subcommands: status, pick (the one you point at), destination (the chest you point at), deposit, " +
+        "area [radius] (around where you stand), start (a tour of that area into that chest), stop, cancel, " +
+        "chest. Needs Workers/GunnarCollectionEnabled, single player or a host with nobody else connected.";
 
     public override void Run(string[] args, Terminal context)
     {
@@ -46,5 +47,5 @@ internal sealed class CollectConsoleCommand : ConsoleCommand
     }
 
     public override List<string> CommandOptionList() =>
-        new List<string> { "status", "pick", "cancel" };
+        new List<string> { "status", "pick", "destination", "deposit", "area", "start", "stop", "cancel", "chest" };
 }
