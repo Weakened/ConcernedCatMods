@@ -13,9 +13,11 @@ namespace TheConcernedCat.ConcernedForeman.Domain.Construction;
 /// roof, interior - rather than arbitrary single-piece trips".
 ///
 /// <b>Where the ordering is enforced.</b> In this product, not in the shared NPC
-/// runtime: <see cref="ShelterBuildLoop"/> walks the phases in
-/// <see cref="BuildPhases.InOrder"/>, offers only the earliest unfinished phase's
-/// pieces as work, and draws one batch per phase from the supply chest. Nothing
+/// runtime: <see cref="ShelterBuildLoop"/> builds only pieces that
+/// <see cref="ConstructionProgress"/> allows, and ConstructionProgress walks the
+/// phases in <see cref="BuildPhases.InOrder"/>, so only the earliest unfinished
+/// phase's pieces are offered as work. Normally the loop draws one batch per
+/// phase from the supply chest. Nothing
 /// hands Thorstein's work to the shared runtime today (#377's two production
 /// roles are Sunniva's upkeep and Gunnar's collection tour), so
 /// <see cref="BuildPhases.PriorityOf"/> is not read by any production code. It
@@ -59,7 +61,9 @@ internal static class BuildPhases
         BuildPhase.Interior,
     };
 
-    /// <summary>How the shared runtime is told about phase order.
+    /// <summary>The priority a phase would carry if construction were ever
+    /// handed to the shared runtime (nothing does that today; see the class
+    /// remarks).
     ///
     /// Higher is serviced sooner, which is that runtime's convention, so the
     /// numbers run <i>down</i> as the build runs on. The gap of a hundred is

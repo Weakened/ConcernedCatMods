@@ -2,7 +2,7 @@
 
 > **2026-10-29 update.** The #313, #314, #315, #316 and #317 implementations are merged into `main` (PRs #336, #337,
 > #338, #347, #369, #370), and those issues are closed with that evidence. Rows below that cite those issues' tests are
-> automated-tested on `main` even where a row still says `pending`; every **live** row is still unobserved and is now
+> expected to be automated-tested on `main` even where a row still says `pending`; every **live** row is still unobserved and is now
 > tracked on the owner playtest checklist, #470. This file was not re-audited row by row.
 
 **Statuses:**
