@@ -94,21 +94,38 @@ public class WorkAreaEditorTests
     }
 
     [Fact]
-    public void AStrokePastTheCapEndsTheSessionWithNothingHandedBack()
+    public void AStrokePastTheCapIsDropped_AndNothingDrawsUntilTheButtonIsReleased()
     {
         var session = new WorkAreaDrawSession();
         session.Begin("Grove");
         session.Observe(true, At(0, 0), out _);
+        int index = 1;
         WorkAreaDrawSession.Outcome last = WorkAreaDrawSession.Outcome.None;
-        for (int index = 1; index <= WorkAreaDrawSession.MaxStrokePoints + 5 && session.Active; index++)
+        while (last != WorkAreaDrawSession.Outcome.Overflowed)
         {
-            last = session.Observe(true, At(index * 3f, 0), out List<RoadPoint>? done);
+            Assert.True(index <= WorkAreaDrawSession.MaxStrokePoints + 1, "the cap never tripped");
+            last = session.Observe(true, At(index++ * 3f, 0), out List<RoadPoint>? done);
             Assert.Null(done);
         }
 
-        Assert.Equal(WorkAreaDrawSession.Outcome.Overflowed, last);
-        Assert.False(session.Active);
+        Assert.True(session.Active);
         Assert.Empty(session.Draft);
+
+        // The same drag goes on, and on: nothing draws, nothing completes.
+        for (int more = 0; more < 50; more++)
+        {
+            Assert.Equal(WorkAreaDrawSession.Outcome.None, session.Observe(true, At(index++ * 3f, 5f), out List<RoadPoint>? done));
+            Assert.Null(done);
+        }
+
+        Assert.Empty(session.Draft);
+        Assert.Equal(WorkAreaDrawSession.Outcome.None, session.Observe(false, At(0, 0), out List<RoadPoint>? released));
+        Assert.Null(released);
+
+        // After the release a new stroke starts normally.
+        session.Observe(true, At(0, 0), out _);
+        Assert.Equal(WorkAreaDrawSession.Outcome.Changed, session.Observe(true, At(3, 0), out _));
+        Assert.Equal(2, session.Draft.Count);
     }
 
     [Fact]
@@ -128,6 +145,14 @@ public class WorkAreaEditorTests
         Assert.Empty(store.Areas);
         Assert.True(editor.Session.Active);
         Assert.Equal("Grove", editor.Session.PendingName);
+
+        // Releasing near where the line was dropped saves nothing: the tail of
+        // that drag was never a stroke.
+        Assert.Null(editor.HandleMapFrame(false, At(0, 0)));
+        Assert.Empty(store.Areas);
+
+        Draw(editor, Square());
+        Assert.Equal("Grove", Assert.Single(store.Areas).Name);
     }
 
     // ------------------------------------------------------------- editor

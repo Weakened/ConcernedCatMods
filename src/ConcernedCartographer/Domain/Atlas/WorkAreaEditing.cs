@@ -12,10 +12,12 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// hold has travelled (the route <see cref="FreeDrawStrokeGate"/>, so a click
 /// twitch never counts), points are kept at least
 /// <see cref="RouteOperations.FreehandMinimumSpacingMeters"/> apart, and the
-/// stroke is bounded at <see cref="MaxStrokePoints"/>: a longer line ends the
-/// session as <see cref="Outcome.Overflowed"/> rather than growing without
-/// limit. Releasing the button completes the stroke and ends the session; the
-/// caller decides whether it becomes an area.</summary>
+/// stroke is bounded at <see cref="MaxStrokePoints"/>: a longer line is
+/// dropped as <see cref="Outcome.Overflowed"/> rather than growing without
+/// limit, and the session then ignores the rest of that drag until the button
+/// is released, so no new line starts mid-drag. Releasing the button completes
+/// the stroke and ends the session; the caller decides whether it becomes an
+/// area.</summary>
 internal sealed class WorkAreaDrawSession
 {
     /// <summary>A loop inside the 256 m extent limit, drawn at 2 m spacing, is
@@ -35,13 +37,15 @@ internal sealed class WorkAreaDrawSession
         /// handed back for the caller to turn into an area or refuse.</summary>
         Completed,
 
-        /// <summary>The stroke passed <see cref="MaxStrokePoints"/>; the session
-        /// is over and nothing is handed back.</summary>
+        /// <summary>The stroke passed <see cref="MaxStrokePoints"/> and was
+        /// dropped. The session stays on, but nothing is drawn until the
+        /// button has been released.</summary>
         Overflowed,
     }
 
     private readonly FreeDrawStrokeGate _gate = new();
     private readonly List<RoadPoint> _stroke = new();
+    private bool _awaitRelease;
 
     public bool Active { get; private set; }
 
@@ -58,6 +62,7 @@ internal sealed class WorkAreaDrawSession
         PendingName = name ?? string.Empty;
         _stroke.Clear();
         _gate.Reset();
+        _awaitRelease = false;
     }
 
     public void Cancel()
@@ -65,6 +70,7 @@ internal sealed class WorkAreaDrawSession
         Active = false;
         _stroke.Clear();
         _gate.Reset();
+        _awaitRelease = false;
     }
 
     public Outcome Observe(bool held, RoadPoint cursor, out List<RoadPoint>? completed)
@@ -72,6 +78,14 @@ internal sealed class WorkAreaDrawSession
         completed = null;
         if (!Active)
         {
+            return Outcome.None;
+        }
+
+        if (_awaitRelease)
+        {
+            // The rest of an over-long drag draws nothing; the next stroke
+            // starts only after the button is let go.
+            _awaitRelease = held;
             return Outcome.None;
         }
 
@@ -92,7 +106,9 @@ internal sealed class WorkAreaDrawSession
 
                 if (_stroke.Count >= MaxStrokePoints)
                 {
-                    Cancel();
+                    _stroke.Clear();
+                    _gate.Reset();
+                    _awaitRelease = true;
                     return Outcome.Overflowed;
                 }
 
@@ -197,7 +213,6 @@ internal sealed class WorkAreaEditor
     /// name taken meanwhile, the world full) ends it.</summary>
     public string? HandleMapFrame(bool held, RoadPoint cursor)
     {
-        string name = Session.PendingName;
         WorkAreaDrawSession.Outcome outcome = Session.Observe(held, cursor, out List<RoadPoint>? stroke);
         switch (outcome)
         {
@@ -205,9 +220,8 @@ internal sealed class WorkAreaEditor
                 ChangeStamp++;
                 return null;
             case WorkAreaDrawSession.Outcome.Overflowed:
-                // Like a refused shape: the mode stays on under the same
-                // name so the player simply draws again.
-                Session.Begin(name);
+                // Like a refused shape, the mode stays on under the same name
+                // (the session itself waits for a release first).
                 ChangeStamp++;
                 return AtlasStrings.Get("areas.tooLong");
             case WorkAreaDrawSession.Outcome.Completed:

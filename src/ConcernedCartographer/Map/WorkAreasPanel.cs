@@ -73,6 +73,17 @@ internal sealed class WorkAreasPanel : CcSidePanel
             Refresh();
         }
 
+        // The outline layer can stop (setting changed, layer disabled for
+        // the session) while the panel is open; the note follows it.
+        if (IsVisible && _outlineNote != null)
+        {
+            bool showNote = !_outlinesVisible();
+            if (_outlineNote.gameObject.activeSelf != showNote)
+            {
+                _outlineNote.gameObject.SetActive(showNote);
+            }
+        }
+
         base.HandleFrame();
     }
 
