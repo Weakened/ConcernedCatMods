@@ -7,7 +7,7 @@ networked body) could leave the world outside the one guarded verb, and each was
 verified to pass the validator that lacked this rule (origin/main d72b397)
 (and the five from the review of d0d559e also that head's validator, the four
 from the review of e4f0392 also that head's, the three from the review of
-203d449 also that head's, whose rules they got past) before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
+203d449 also that head's, the four from the review of 2103c58 also that head's, whose rules they got past) before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
 path re-runs that check, expecting every plant to get through it.
 """
 import os
@@ -36,7 +36,9 @@ PORT_GUARD = """        StewardRetireVerdict verdict = StewardRetirement.Decide(
 PORT_REMOVAL = "            view.Destroy();\n"
 PORT_DECIDE = "        StewardRetireVerdict verdict = StewardRetirement.Decide(facts);\n"
 PORT_RETIRED = "        return StewardRetireOutcome.Retired;\n"
-PORT_SUCCESS = "        answer = \"Her worker body has left"
+PORT_ALLOWS = "        if (!StewardRetirement.Allows(verdict))\n"
+PORT_VIEW_CHECK = "        if (view == null || !view.IsValid() || !view.IsOwner())\n"
+PORT_SUCCESS ="        answer = \"Her worker body has left"
 LOOKED_UP ="ZNetScene.instance.FindInstance(ZDOID.None)!.GetComponent<ZNetView>()"
 PORT_VIEW = "        ZNetView? view = body.View;\n"
 RUNTIME_MARKER = "            _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);\n            _log(answer);\n"
@@ -252,6 +254,27 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
         self.swap_in(PORT, PORT_VIEW, "        decided:\n" + PORT_VIEW)
         self.assert_refused("a goto jumped from above the decision to below the refusal")
 
+    # The four below each kept every pin of 2103c58's rule green (review of
+    # that head): depth counted braces only, and the guard's verdict could be
+    # overwritten. Each was verified to pass 2103c58's validator as well as
+    # d72b397's.
+
+    def test_a_braceless_condition_in_front_of_the_refusal_is_refused(self):
+        self.swap_in(PORT, PORT_ALLOWS, "        if (ledger.UnresolvedSteps == 0)\n" + PORT_ALLOWS)
+        self.assert_refused("a braceless if made the refusal conditional at brace depth 1")
+
+    def test_an_else_in_front_of_the_refusal_is_refused(self):
+        self.swap_in(PORT, PORT_ALLOWS, "        if (!ledger.UnresolvedLoss) { }\n        else " + PORT_ALLOWS.lstrip())
+        self.assert_refused("an else branch the refusal never reaches")
+
+    def test_a_braceless_condition_in_front_of_the_ownership_check_is_refused(self):
+        self.swap_in(PORT, PORT_VIEW_CHECK, "        if (ledger.RoundOpen)\n" + PORT_VIEW_CHECK)
+        self.assert_refused("the ownership check ran only when a condition held")
+
+    def test_overwriting_the_verdict_before_the_refusal_is_refused(self):
+        self.swap_in(PORT, PORT_ALLOWS, "        verdict = StewardRetireVerdict.MayRetire;\n" + PORT_ALLOWS)
+        self.assert_refused("the verdict refused on was not the one decided")
+
     def test_a_guard_wrapped_in_a_condition_is_refused(self):
         self.swap_in(PORT, PORT_GUARD,
                      "        if (ledger.UnresolvedSteps >= 0)\n        {\n" + PORT_GUARD + "        }\n")
@@ -262,7 +285,8 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
         # the plants expect it, so a refactor cannot turn them into no-ops.
         with open(PORT, encoding="utf-8-sig") as handle:
             port = handle.read()
-        for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW, PORT_DECIDE, PORT_RETIRED, PORT_SUCCESS):
+        for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW, PORT_DECIDE, PORT_RETIRED, PORT_SUCCESS,
+                       PORT_ALLOWS, PORT_VIEW_CHECK):
             self.assertEqual(1, port.count(pinned), pinned)
         with open(RUNTIME, encoding="utf-8-sig") as handle:
             self.assertEqual(1, handle.read().count(RUNTIME_MARKER))

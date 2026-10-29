@@ -3447,12 +3447,27 @@ STEWARD_RETIRE_NO_NESTED_CODE = re.compile(
 # balance its braces, and these sit at the method's own top level (depth 1),
 # the removal one level down, inside its `try`.
 STEWARD_RETIRE_LITERAL = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])+\'')
+# Review of 2103c58: depth counts braces only, so a braceless `if (...)`,
+# `else`, `while (...)` or `for (...)` in front of a pinned statement still
+# skipped it at depth 1. Each pin is therefore its WHOLE statement - the
+# decision on `facts`, the refusal on `verdict` returning Refused, the
+# validity check returning NotOurs - and each must start a statement (only
+# `;`, `{` or `}` before it). `verdict` is spelled only at its declaration,
+# the refusal and the sentence, so it cannot be overwritten in between.
 STEWARD_RETIRE_TOP_LEVEL = (
-    ("`StewardRetirement.Decide(`", re.compile(r"StewardRetirement\s*\.\s*Decide\s*\(")),
-    ("the refusing `if (!StewardRetirement.Allows(`", STEWARD_RETIRE_REFUSES),
+    ("`StewardRetireVerdict verdict = StewardRetirement.Decide(facts);`", re.compile(
+        r"StewardRetireVerdict\s+verdict\s*=\s*StewardRetirement\s*\.\s*Decide\s*\(\s*facts\s*\)\s*;")),
+    ("`if (!StewardRetirement.Allows(verdict)) { ... return StewardRetireOutcome.Refused; }`", re.compile(
+        r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(\s*verdict\s*\)\s*\)\s*\{[^{}]*"
+        r"\breturn\s+StewardRetireOutcome\s*\.\s*Refused\s*;\s*\}")),
     ("`ZNetView? view = body.View;`", STEWARD_RETIRE_OWN_VIEW),
-    ("the validity check on `view`", STEWARD_RETIRE_VIEW_CHECK),
+    ("the validity check on `view` returning NotOurs", re.compile(
+        STEWARD_RETIRE_VIEW_CHECK.pattern
+        + r"\s*\{[^{}]*\breturn\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")),
 )
+STEWARD_RETIRE_STATEMENT_START = re.compile(r"(?:^|[;{}])\s*$")
+STEWARD_RETIRE_VERDICT_TOKEN = re.compile(r"(?<![\w.])verdict\b")
+STEWARD_RETIRE_VERDICT_TOKENS = 3
 
 
 def _steward_mask_literals(text: str) -> str:
@@ -3464,6 +3479,8 @@ def _steward_mask_literals(text: str) -> str:
 def _steward_brace_depth(masked: str, offset: int) -> int:
     """Open braces minus closed ones before an offset of literal-masked text."""
     return masked.count("{", 0, offset) - masked.count("}", 0, offset)
+
+
 STEWARD_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bDestroyZDO\s*\(")
 STEWARD_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
 STEWARD_DESTRUCTION_SITES = {
@@ -3616,13 +3633,22 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
              "on, unaudited", errors)
     for name, pattern in STEWARD_RETIRE_TOP_LEVEL:
         sites = list(pattern.finditer(masked))
-        if len(sites) != 1 or _steward_brace_depth(masked, sites[0].start()) != 1:
-            fail(f"{label}: {name} must appear once, at Retire(...)'s own top level - inside a block "
-                 "it can be skipped while every positional pin stays green", errors)
+        if (len(sites) != 1 or _steward_brace_depth(masked, sites[0].start()) != 1
+                or not STEWARD_RETIRE_STATEMENT_START.search(masked[:sites[0].start()])):
+            fail(f"{label}: {name} must appear once, whole, as its own statement at Retire(...)'s top "
+                 "level - inside a block, or behind a braceless `if`, `else`, `while` or `for`, it can "
+                 "be skipped while every positional pin stays green", errors)
+    verdicts = len(STEWARD_RETIRE_VERDICT_TOKEN.findall(masked))
+    if verdicts != STEWARD_RETIRE_VERDICT_TOKENS:
+        fail(f"{label}: `verdict` appears {verdicts} time(s) in Retire(...); it may appear only "
+             f"{STEWARD_RETIRE_VERDICT_TOKENS} times - its declaration from Decide, the refusal and the "
+             "sentence - or the verdict refused on is not the one decided", errors)
     for statement in STEWARD_RETIRE_REMOVAL_STATEMENT.finditer(masked):
         opened = masked.rfind("{", 0, statement.start())
-        if (_steward_brace_depth(masked, statement.start()) != 2
-                or not re.search(r"\btry\s*$", masked[:opened])):
+        tried = re.search(r"\btry\s*$", masked[:opened])
+        if (_steward_brace_depth(masked, statement.start()) != 2 or tried is None
+                or not STEWARD_RETIRE_STATEMENT_START.search(masked[:tried.start()])
+                or not STEWARD_RETIRE_STATEMENT_START.search(masked[:statement.start()])):
             fail(f"{label}: `view.Destroy();` must sit directly in Retire(...)'s top-level `try`, "
                  "below the guard, not inside a block that can carry it elsewhere", errors)
 

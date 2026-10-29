@@ -42,22 +42,24 @@ untouched; `cs_steward recruit` brings her body back.
 - `src/ConcernedSteward/Runtime/StewardRetirementPort.cs` — the one removal, `view.Destroy()` on `body.View`, below
   `StewardRetirement.Decide(` and a refusing `if (!StewardRetirement.Allows(`.
 - `tools/validate_repo.py` "[steward] S1 retire audit" — pins every destruction in the product by file, every routed
-  one, every body removal, the guard above the removal, that the removal acts on her own body's view (declared from
-  `body.View`, and spelled nowhere but that declaration, its validity check and the one `view.Destroy();`, in a method
-  with no lambda, local function, delegate, `goto` or deconstruction, whose braces balance, with the decision, the
-  refusal, the declaration and the validity check at its top level and the removal directly in its top-level `try`; the `body` parameter never reassigned or passed by
-  reference), and that the port
-  is named once, by `StewardRuntime.Retire` (a call or a method group), with no file importing it through `using`.
-  It is a text audit: it establishes where the refusal is written, not that control flow obeys it, and it cannot see a
+  one and every body removal; pins the port's `Retire(...)` as a method whose braces balance, with no lambda, local
+  function, delegate, `goto` or deconstruction, where each of these appears once, whole, as its own statement at the
+  method's top level (no braceless `if`, `else`, `while` or `for` in front): the decision on `facts`, the refusal on
+  `verdict` returning Refused (`verdict` spelled nowhere else but the sentence), `ZNetView? view = body.View;`, and
+  the validity check returning NotOurs; the removal is the one `view.Destroy();`, directly in the top-level `try`, and
+  `view` is spelled nowhere else; the `body` parameter is never reassigned or passed by reference; and the port is
+  named once, by `StewardRuntime.Retire` (a call or a method group), with no file importing it through `using`. It
+  is a text audit: it establishes where the refusal is written, not that control flow obeys it, and it cannot see a
   destruction reached through a delegate, a method group or reflection.
 - `src/ConcernedSteward.Tests/StewardRetirementTests.cs` — control flow over the stubbed game.
-- `tools/tests/test_steward_retire_audit.py` — twenty-three plants, each a way a body could leave the world outside the
-  verb, each verified to pass the validator without this rule (main `d72b397`) and to be refused with it; five of them
-  (a reassigned view, a swapped body, a `using static`, a `using` alias, a method group) also got past the first
-  version of the rule, and four more (a local function or lambda whose own parameter is `view`, in two shapes, and a
-  deconstruction into `view`) got past the second, and three more (a misindented brace ending the audited text, a
-  `goto` past the guard, a guard wrapped in a condition) got past the third; each was added with the fix that closes
-  it.
+- `tools/tests/test_steward_retire_audit.py` — twenty-seven plants, each a way a body could leave the world outside
+  the verb, each verified to pass the validator without this rule (main `d72b397`) and to be refused with it. Sixteen
+  of them were found by successive independent reviews, each getting past the version of the rule it was found against
+  and added with the fix that closes it: a reassigned view, a swapped body, a `using static`, a `using` alias and a
+  method group; a local function or lambda whose own parameter is `view` (two shapes) and a deconstruction into
+  `view`; a misindented brace ending the audited text, a `goto` past the guard and a guard in a braced condition; a
+  braceless `if` or an `else` in front of the refusal, a braceless `if` in front of the ownership check and an
+  overwritten verdict.
 - The port reads her pack from the body itself; a pack the caller states in the ledger can only add a reason to
   refuse (more held, or unreadable), never remove one.
 - `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which

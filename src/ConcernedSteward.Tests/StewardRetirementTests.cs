@@ -164,6 +164,10 @@ public sealed class StewardRetirementTests
             StewardRetirementPort.Retire(body, Clear(plan: true), out _));
         Assert.Equal(StewardRetireOutcome.Refused,
             StewardRetirementPort.Retire(body, Clear(fuel: 2), out _));
+        Assert.Equal(StewardRetireOutcome.Refused,
+            StewardRetirementPort.Retire(body, Clear(steps: 1), out _));
+        Assert.Equal(StewardRetireOutcome.Refused,
+            StewardRetirementPort.Retire(body, Clear(loss: true), out _));
         Assert.Equal(0, view.DestroyCalls);
     }
 
