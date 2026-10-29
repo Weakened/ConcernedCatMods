@@ -35,6 +35,13 @@ moved: 0.1.0 has never shipped, so these are still its notes.
 - **Requires Concerned NPC 0.5.0.** Thorstein's role now admits a figure as
   well as a worker body, with the **same prefab name and keys**, so no saved
   body is affected.
+- **His dresser is Concerned NPC's.** The code that puts his hair, beard,
+  colouring and leathers on the figure moved into the library
+  (`NpcFigureDresser`), so Sunniva and Gunnar can share it rather than
+  carry copies. What Foreman keeps is his look itself: Mullet, Mustache,
+  the slider readings, the proposed leathers and the `[Thorstein]` settings.
+  The look and the settings are unchanged. A handful of log lines are worded
+  for any companion now, rather than for him alone.
 
 ### Known limits — Thorstein's figure
 

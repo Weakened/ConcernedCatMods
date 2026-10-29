@@ -185,6 +185,54 @@ public sealed class PresentationBodyTests
     }
 
     [Fact]
+    public void The_sources_own_bodies_are_copied_out_before_its_equipment_is_destroyed()
+    {
+        // The dresser puts a second body on a figure (#295 lift, Sunniva). The
+        // only place the game keeps those bodies is the source's equipment
+        // component, which the extraction destroys with the rest of the source,
+        // so the list is read first - by reference, and nothing else.
+        GameObject source = Character();
+        VisEquipment equipment = source.Add(new VisEquipment());
+        var male = new Mesh { name = "body_m" };
+        var female = new Mesh { name = "body_f" };
+        var maleSkin = new Material { name = "skin_m" };
+        var femaleSkin = new Material { name = "skin_f" };
+        equipment.m_models = new[]
+        {
+            new VisEquipment.PlayerModel { m_mesh = male, m_baseMaterial = maleSkin },
+            new VisEquipment.PlayerModel { m_mesh = female, m_baseMaterial = femaleSkin },
+        };
+
+        NpcPresentationFigure figure = Extract(source);
+
+        Assert.True(figure.IsBuilt);
+        Assert.True(figure.TryGetModel(1, out Mesh? mesh, out Material? material));
+        Assert.Same(female, mesh);
+        Assert.Same(femaleSkin, material);
+        Assert.True(figure.TryGetModel(0, out mesh, out _));
+        Assert.Same(male, mesh);
+        Assert.False(figure.TryGetModel(2, out _, out _));
+        Assert.False(figure.TryGetModel(-1, out _, out _));
+    }
+
+    [Fact]
+    public void A_source_without_a_body_list_offers_no_second_body()
+    {
+        NpcPresentationFigure bare = Extract(Character());
+        Assert.True(bare.IsBuilt);
+        Assert.False(bare.TryGetModel(1, out _, out _));
+
+        GameObject half = Character();
+        half.Add(new VisEquipment()).m_models = new[]
+        {
+            new VisEquipment.PlayerModel { m_mesh = new Mesh() },
+            new VisEquipment.PlayerModel { m_mesh = new Mesh(), m_baseMaterial = null },
+        };
+        Assert.False(Extract(half).TryGetModel(1, out _, out _));
+        Assert.False(default(NpcPresentationFigure).TryGetModel(0, out _, out _));
+    }
+
+    [Fact]
     public void There_is_no_figure_without_a_source()
     {
         NpcPresentationFigure figure = Extract(null);
