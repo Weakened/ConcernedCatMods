@@ -2881,6 +2881,12 @@ NPC_ENGINE_WRITES = (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*root\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpiece\s*\.\s*SetParent\s*\(\s*parent\s*\)"), 1),
     )),
+    # Never in the library at all, so nothing is pinned: a figure has no
+    # rigidbody, and a body moves only through the game's own motor.
+    ("velocity or direct movement", re.compile(
+        r"(?:\.\s*(?:velocity|linearVelocity|angularVelocity|useGravity|isKinematic)\s*[-+*/|&^]?=(?!=)"
+        r"|\.\s*(?:SetPositionAndRotation|SetPositionAndRotations|Translate|Rotate|RotateAround|LookAt|MovePosition|"
+        r"MoveRotation|AddForce|AddTorque|AddRelativeForce|AddForceAtPosition|AddExplosionForce)\s*\()"), ()),
     ("pose or mesh write", re.compile(
         r"\.\s*(?:position|localPosition|rotation|localRotation|localScale|parent|sharedMesh)\s*[-+*/]?=(?!=)"), (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
@@ -2895,11 +2901,45 @@ NPC_ENGINE_WRITES = (
     )),
 )
 
-# A public member of the dresser that takes one of these could act on an object
-# the figure does not own.
-NPC_DRESSER_FORBIDDEN_PARAMETER = re.compile(
-    r"\b(?:GameObject|Transform|Component|Behaviour|MonoBehaviour|Renderer|SkinnedMeshRenderer|"
-    r"Material|Mesh|Object|UnityEngine\s*\.\s*Object)\b\s*\??\s+[A-Za-z_][A-Za-z0-9_]*\s*[,)=]")
+# The ONLY parameter types a public member of the dresser may take. An allowlist
+# rather than a list of engine types to refuse, because a denylist misses the
+# array, the generic, `object`, and every game type it did not think to name
+# (review of the lift). Whitespace and a trailing `?` are ignored.
+NPC_DRESSER_PARAMETER_TYPES = frozenset({
+    "NpcPresentationFigure", "NpcLookSpec", "string", "Action<string>", "Vector3", "Quaternion",
+})
+
+
+def _npc_parameter_types(parameters: str) -> list[str]:
+    """The declared type of each parameter in `(…)`, modifiers and defaults removed."""
+    inner = parameters.strip()
+    if inner.startswith("("):
+        inner = inner[1:]
+    if inner.endswith(")"):
+        inner = inner[:-1]
+    pieces: list[str] = []
+    depth = 0
+    current = ""
+    for char in inner:
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth -= 1
+        if char == "," and depth == 0:
+            pieces.append(current)
+            current = ""
+            continue
+        current += char
+    if current.strip():
+        pieces.append(current)
+    types: list[str] = []
+    for piece in pieces:
+        declaration = piece.split("=", 1)[0].strip()
+        declaration = re.sub(r"^(?:(?:in|ref|out|params|this|scoped)\s+)+", "", declaration)
+        match = re.match(r"^(.*\S)\s+[A-Za-z_][A-Za-z0-9_]*$", declaration, re.S)
+        declared = match.group(1) if match else declaration
+        types.append(re.sub(r"\s+", "", declared).rstrip("?"))
+    return types
 
 
 def _npc_public_signatures(code: str) -> list[tuple[int, str]]:
@@ -3023,20 +3063,25 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
              f"{sorted(NPC_DRESSING_PUBLIC_TYPES)}. This folder is not compiled into ConcernedNPC.Tests, so "
              "PublicSurfaceTests cannot see it and this is where its surface is written down", errors)
     for line, parameters in _npc_public_signatures(sources[NPC_FIGURE_DRESSER_FILE]):
-        offender = NPC_DRESSER_FORBIDDEN_PARAMETER.search(parameters)
-        if offender:
+        for declared in _npc_parameter_types(parameters):
+            if declared in NPC_DRESSER_PARAMETER_TYPES:
+                continue
             violations += 1
-            fail(f"{label}: a public member of NpcFigureDresser takes an engine object "
-                 f"({offender.group(0).strip()}) at {NPC_FIGURE_DRESSER_FILE}:{line}. The dresser acts only on "
-                 "the figure it was built for; a member that acted on whatever it was handed would let a "
-                 "consumer destroy or move anything without spelling an audited token", errors)
+            fail(f"{label}: a public member of NpcFigureDresser takes a {declared} at "
+                 f"{NPC_FIGURE_DRESSER_FILE}:{line}; the allowed parameter types are "
+                 f"{', '.join(sorted(NPC_DRESSER_PARAMETER_TYPES))}. The dresser acts only on the figure it was "
+                 "built for; a member that acted on whatever it was handed would let a consumer destroy or move "
+                 "anything without spelling an audited token", errors)
 
     return [
-        f"{label}: {len(sources)} library source(s); {pinned} engine creation/destruction/parenting/pose/mesh "
-        f"site(s) pinned by path and exact spelling; the dresser's {len(NPC_FIGURE_PARTS_USES)} helpers are "
+        f"{label}: {len(sources)} library source(s); {pinned} engine creation, destruction, parenting, "
+        "position/rotation/scale and mesh-swap site(s) pinned by path and exact spelling, and no velocity, "
+        "gravity, force or direct-movement call anywhere; the dresser's "
+        f"{len(NPC_FIGURE_PARTS_USES)} helpers are "
         f"internal and called only from {NPC_FIGURE_DRESSER_FILE}, each population pinned; "
-        f"{NPC_DRESSING_DIR} exports exactly {', '.join(sorted(NPC_DRESSING_PUBLIC_TYPES))} and no public "
-        "dresser member takes an engine object. A source-text audit with comments stripped: it does not "
+        f"{NPC_DRESSING_DIR} exports exactly {', '.join(sorted(NPC_DRESSING_PUBLIC_TYPES))} and a public "
+        "dresser member takes only an allowlisted parameter type. A source-text audit with comments stripped: "
+        "it does not cover material and renderer writes, and it does not "
         f"follow indirection or prove control flow ({violations} violations)",
     ]
 

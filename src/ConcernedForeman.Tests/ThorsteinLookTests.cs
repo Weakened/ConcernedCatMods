@@ -154,6 +154,7 @@ public sealed class ThorsteinLookTests
         Assert.Equal(ThorsteinLookColour.HairLevel, spec.HairLevel);
         Assert.Equal("Short Curls", spec.HairOverride);
         Assert.Null(spec.BeardOverride);
+        Assert.Equal(string.Empty, spec.ChestOverride);
         Assert.Equal("ArmorRagsLegs", spec.LegsOverride);
 
         // The spec's colours are exactly his own wrappers', so the lift moved

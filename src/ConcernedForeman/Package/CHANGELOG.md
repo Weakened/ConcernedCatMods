@@ -40,8 +40,8 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   (`NpcFigureDresser`), so Sunniva and Gunnar can share it rather than
   carry copies. What Foreman keeps is his look itself: Mullet, Mustache,
   the slider readings, the proposed leathers and the `[Thorstein]` settings.
-  The look and the settings are unchanged. Three log lines are worded for
-  any companion now, rather than for him alone.
+  The look and the settings are unchanged. A handful of log lines are worded
+  for any companion now, rather than for him alone.
 
 ### Known limits — Thorstein's figure
 

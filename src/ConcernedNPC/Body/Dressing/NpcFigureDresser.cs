@@ -73,6 +73,7 @@ public sealed class NpcFigureDresser
     private Material? _bodyMaterial;
     private bool _verified;
     private bool _takenDown;
+    private bool _applied;
 
     /// <param name="figure">A figure <see cref="NpcPresentationBody.TryExtract"/>
     /// built. A refused one is an argument error.</param>
@@ -146,15 +147,20 @@ public sealed class NpcFigureDresser
         return string.Join(", ", parts.ToArray());
     }
 
-    /// <summary>Dresses the figure. Every part fails on its own and none of them
+    /// <summary>Dresses the figure, once. Every part fails on its own and none of them
     /// can stop the figure existing: the worst case is the source model's own
     /// look, said in the log.</summary>
     public void Apply()
     {
-        if (_takenDown)
+        // Once. A second pass would attach a second set of pieces over the
+        // first, and the fit check would then take the first set off as
+        // misplaced; a role that wants another look builds another figure.
+        if (_takenDown || _applied)
         {
             return;
         }
+
+        _applied = true;
 
         try
         {

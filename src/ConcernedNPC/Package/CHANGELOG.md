@@ -44,8 +44,11 @@ A figure can be dressed, and the one dresser lives here (#295, lifted from Conce
   re-parenting, pose write and mesh swap in the whole library by path and exact spelling. A product that grows its
   own dresser is refused by the "#295 one-dresser audit". Concerned Cartographer's Hulgi keeps his own pre-library
   copy, exempted by name.
-* Not observed in game: neither the second body nor the token key. Thorstein's look is unchanged by the move, apart
-  from the wording of three log lines.
+* Not observed in game: neither the second body nor the token key. Thorstein's look is unchanged by the move. About
+  five log lines are now worded for any companion rather than for him.
+* `Apply` runs once per dresser. A second call would have attached a second set of pieces. If the source's body list
+  cannot be read, the figure is still built, with the first body. The palette's interval and give-up are measured in
+  real time, so two plugins polling it do not age it twice as fast.
 * Still additive. A role that does not use these types is unaffected.
 
 ## 0.4.0

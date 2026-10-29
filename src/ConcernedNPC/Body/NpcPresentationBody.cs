@@ -207,25 +207,39 @@ public static class NpcPresentationBody
     /// the game keeps one mesh and one base material per selectable body, and
     /// the character screen chooses between them by index. Read only, and read
     /// before the component is destroyed; the references are to assets, which
-    /// outlive the clone. A build without the list leaves both arrays null.
+    /// outlive the clone. A build without the list, or one where reading it
+    /// faults, leaves both arrays null and the figure is built as before.
     /// </summary>
     private static void ReadModels(VisEquipment equipment, out Mesh?[]? meshes, out Material?[]? materials)
     {
         meshes = null;
         materials = null;
-        VisEquipment.PlayerModel[]? models = equipment.m_models;
-        if (models == null || models.Length == 0)
+        try
         {
-            return;
-        }
+            VisEquipment.PlayerModel[]? models = equipment.m_models;
+            if (models == null || models.Length == 0)
+            {
+                return;
+            }
 
-        meshes = new Mesh?[models.Length];
-        materials = new Material?[models.Length];
-        for (int index = 0; index < models.Length; index++)
+            var readMeshes = new Mesh?[models.Length];
+            var readMaterials = new Material?[models.Length];
+            for (int index = 0; index < models.Length; index++)
+            {
+                VisEquipment.PlayerModel? model = models[index];
+                readMeshes[index] = model?.m_mesh;
+                readMaterials[index] = model?.m_baseMaterial;
+            }
+
+            meshes = readMeshes;
+            materials = readMaterials;
+        }
+        catch (Exception)
         {
-            VisEquipment.PlayerModel? model = models[index];
-            meshes[index] = model?.m_mesh;
-            materials[index] = model?.m_baseMaterial;
+            // A build that renamed the list costs only the second body. It must
+            // never refuse a figure that did not ask for one.
+            meshes = null;
+            materials = null;
         }
     }
 

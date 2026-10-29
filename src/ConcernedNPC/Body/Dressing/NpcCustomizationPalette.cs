@@ -27,8 +27,8 @@ public static class NpcCustomizationPalette
 
     private static readonly object Gate = new object();
     private static NpcLookPalette _cached = NpcLookPalette.Unobserved;
-    private static float _sincePoll;
-    private static float _polled;
+    private static float _startedAt = -1f;
+    private static float _lastAttempt;
     private static bool _gaveUp;
     private static bool _saidFallback;
 
@@ -46,6 +46,8 @@ public static class NpcCustomizationPalette
 
     /// <summary>Called from a plugin's Update in every scene. Cheap: four
     /// lookups a second until it succeeds or gives up, then nothing.</summary>
+    /// <param name="unscaledDeltaTime">Kept for the caller's convenience and
+    /// ignored: the interval and the give-up are measured in real time.</param>
     public static void Poll(float unscaledDeltaTime, Action<string>? log)
     {
         lock (Gate)
@@ -55,14 +57,21 @@ public static class NpcCustomizationPalette
                 return;
             }
 
-            _polled += unscaledDeltaTime;
-            _sincePoll += unscaledDeltaTime;
-            if (_sincePoll < IntervalSeconds)
+            // Real time, not the sum of each caller's frame time: two plugins
+            // polling in the same frame must not age the clock twice as fast.
+            float now = Time.realtimeSinceStartup;
+            if (_startedAt < 0f)
+            {
+                _startedAt = now;
+                _lastAttempt = now - IntervalSeconds;
+            }
+
+            if (now - _lastAttempt < IntervalSeconds)
             {
                 return;
             }
 
-            _sincePoll = 0f;
+            _lastAttempt = now;
             if (TryReadLive(out NpcLookPalette fresh))
             {
                 _cached = fresh;
@@ -70,7 +79,7 @@ public static class NpcCustomizationPalette
                 return;
             }
 
-            if (_polled >= GiveUpSeconds)
+            if (now - _startedAt >= GiveUpSeconds)
             {
                 _gaveUp = true;
             }

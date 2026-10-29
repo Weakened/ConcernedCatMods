@@ -150,6 +150,30 @@ class NpcFigurePartsArePinned(unittest.TestCase):
                      "    public void Discard(GameObject anything) { }\n\n" + marker)
         self.assert_refused("a public dresser member took an arbitrary GameObject")
 
+    def test_a_dresser_member_that_takes_an_array_of_objects_is_refused(self):
+        # The review's escape: a denylist of engine types matched `GameObject g`
+        # and missed `GameObject[] g`, generics, `object` and every game type.
+        marker = "    public void TakeDown()"
+        self.swap_in(DRESSER, marker,
+                     "    public void Adopt(System.Collections.Generic.IEnumerable<GameObject> pieces) { }\n\n"
+                     + marker)
+        self.assert_refused("a public dresser member took a collection of arbitrary objects")
+
+    def test_a_dresser_member_that_takes_a_game_type_is_refused(self):
+        marker = "    public void TakeDown()"
+        self.swap_in(DRESSER, marker, "    public void Face(Player viewer) { }\n\n" + marker)
+        self.assert_refused("a public dresser member took the player")
+
+    def test_a_velocity_write_anywhere_in_the_library_is_refused(self):
+        self.plant_file(LIBRARY, ("Body", "ZzShove.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Body;\n"
+                        "internal static class ZzShove\n"
+                        "{\n"
+                        "    internal static void Run(UnityEngine.Rigidbody body) =>\n"
+                        "        body.linearVelocity = UnityEngine.Vector3.zero;\n"
+                        "}\n")
+        self.assert_refused("a velocity write passed a census that used to live under #400")
+
     def test_a_third_public_type_in_the_dressing_folder_is_refused(self):
         self.plant_file(DRESSING, ("ZzDoor.cs",),
                         "namespace TheConcernedCat.ConcernedNPC.Body.Dressing;\n"
