@@ -140,14 +140,16 @@ public class ExactAllocationsTests
         long allocated = ExactAllocations.Measure(
             () =>
             {
-                for (int index = 0; index < 64; index++)
+                // 32 MiB against a 1 MiB budget: far past any rounding of the
+                // region, so the region is certain to break.
+                for (int index = 0; index < 512; index++)
                 {
                     keep.Add(new byte[64 * 1024]);
                 }
             },
             budget);
 
-        Assert.True(allocated >= budget, $"{allocated} bytes reported for a window that allocated about 4 MiB");
+        Assert.True(allocated >= budget, $"{allocated} bytes reported for a window that allocated about 32 MiB");
         Assert.NotEqual(GCLatencyMode.NoGCRegion, GCSettings.LatencyMode);
         GC.KeepAlive(keep);
     }
