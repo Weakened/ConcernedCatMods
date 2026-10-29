@@ -7,10 +7,10 @@ networked body) could leave the world outside the one guarded verb, and each was
 verified to pass the validator that lacked this rule (origin/main d72b397)
 before being added here. The plants found by successive reviews were also each
 verified to pass the validator of the head they were found against (d0d559e:
-five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two), whose rule
-they got past; the last two were checked against origin/main 0171cf6 (still
-without this rule) instead of d72b397, whose own rules no longer pass the
-merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
+five, e4f0392: four, 203d449: three, 2103c58: four, 75d837d: two, 80c3f3a:
+four), whose rule they got past; the last six were checked against origin/main
+0171cf6 (still without this rule) instead of d72b397, whose own rules no longer
+pass the merged tree. Setting STEWARD_PLANT_VALIDATOR to another validator's path
 re-runs that check, expecting every plant to get through it.
 """
 import os
@@ -27,6 +27,8 @@ STEWARD = os.path.join(ROOT, "src", "ConcernedSteward")
 PORT = os.path.join(STEWARD, "Runtime", "StewardRetirementPort.cs")
 RUNTIME = os.path.join(STEWARD, "Runtime", "StewardRuntime.cs")
 COMMAND = os.path.join(STEWARD, "Runtime", "StewardCommand.cs")
+DOMAIN = os.path.join(STEWARD, "Domain", "Retirement", "StewardRetirement.cs")
+DECIDE_OPEN = "    public static StewardRetireVerdict Decide(in StewardRetireFacts facts)\n    {\n"
 LABEL = "[steward] S1 retire audit"
 
 PORT_GUARD = """        StewardRetireVerdict verdict = StewardRetirement.Decide(facts);
@@ -295,6 +297,31 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      "            if (ZNet.instance != null) answer += \".\"; else return StewardRetireOutcome.NotOurs;\n")
         self.assert_refused("a body this game does not own fell through the ownership check to the removal")
 
+    # The four below each kept every pin of 80c3f3a's rule green (review of
+    # that head). Each was verified to pass 80c3f3a's validator as well as
+    # origin/main 0171cf6's.
+
+    def test_conditional_compilation_around_the_guard_is_refused(self):
+        self.swap_in(PORT, PORT_GUARD,
+                     "#if !NETFRAMEWORK\n        held += 0;\n" + PORT_GUARD + "#endif\n        held += 0;\n")
+        self.assert_refused("the tests (net10.0) compiled the guard; the plugin (net48) shipped without it")
+
+    def test_conditional_compilation_in_the_decision_is_refused(self):
+        self.swap_in(DOMAIN, DECIDE_OPEN,
+                     DECIDE_OPEN + "#if NETFRAMEWORK\n        return StewardRetireVerdict.MayRetire;\n#endif\n")
+        self.assert_refused("the shipped build's decision granted everything, in a file the port audit never read")
+
+    def test_an_interpolation_hiding_a_verdict_overwrite_is_refused(self):
+        self.swap_in(PORT, PORT_ALLOWS,
+                     "        answer = $\"{(verdict = StewardRetireVerdict.MayRetire)}\";\n" + PORT_ALLOWS)
+        self.assert_refused("an interpolation hole the literal mask blanked overwrote the verdict")
+
+    def test_an_early_retired_while_she_stands_is_refused(self):
+        self.swap_in(PORT, PORT_DECIDE,
+                     "        if (ledger.FuelCarried < 0)\n        {\n            answer = string.Empty;\n"
+                     "            return StewardRetireOutcome.Retired;\n        }\n\n" + PORT_DECIDE)
+        self.assert_refused("the runtime was told she had left while her body still stood")
+
     def test_a_guard_wrapped_in_a_condition_is_refused(self):
         self.swap_in(PORT, PORT_GUARD,
                      "        if (ledger.UnresolvedSteps >= 0)\n        {\n" + PORT_GUARD + "        }\n")
@@ -310,6 +337,8 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
             self.assertEqual(1, port.count(pinned), pinned)
         with open(RUNTIME, encoding="utf-8-sig") as handle:
             self.assertEqual(1, handle.read().count(RUNTIME_MARKER))
+        with open(DOMAIN, encoding="utf-8-sig") as handle:
+            self.assertEqual(1, handle.read().count(DECIDE_OPEN))
 
 
 if __name__ == "__main__":

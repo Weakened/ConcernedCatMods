@@ -3533,7 +3533,7 @@ STEWARD_RETIRE_VIEW_CHECK = re.compile(
 STEWARD_RETIRE_REMOVAL_STATEMENT = re.compile(r"(?<![\w.])view\s*\.\s*Destroy\s*\(\s*\)\s*;")
 STEWARD_RETIRE_VIEW_TOKENS = 5
 STEWARD_RETIRE_NO_NESTED_CODE = re.compile(
-    r"=>|\bdelegate\b|\bgoto\b|@|\\[uU][0-9A-Fa-f]|\)\s*=(?![=>])"
+    r"=>|\bdelegate\b|\bgoto\b|@|\$|\\[uU][0-9A-Fa-f]|\)\s*=(?![=>])"
     r"|\b(?!(?:if|for|foreach|while|switch|catch|using|lock|fixed|when)\b)[A-Za-z_]\w*\s*"
     r"\((?:[^(){};]|\([^(){};]*\))*\)\s*\{")
 # Review of 203d449: the method's end was found by indentation, so one
@@ -3566,6 +3566,16 @@ STEWARD_RETIRE_TOP_LEVEL = (
         + r"\s*\{\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")),
 )
 STEWARD_RETIRE_STATEMENT_START = re.compile(r"(?:^|[;{}])\s*$")
+# Review of 80c3f3a: the rule reads text, but the product builds for net48 and
+# the tests compile the same port for net10.0, so `#if !NETFRAMEWORK` around the
+# guard kept every pin green and every test passing while the plugin that
+# ships had no guard. No conditional-compilation directive may appear anywhere
+# in the product. And an interpolated string's holes are code the literal mask
+# blanks, so Retire(...) holds none; with that, every token pin reads the
+# masked text, so a sentence that says "view" is not miscounted. Retired is
+# said once, last, so the runtime is never told she left while she stands.
+STEWARD_PREPROCESSOR = re.compile(r"(?m)^[ \t]*#[ \t]*(?:if|elif|else|endif|define|undef|line)\b")
+STEWARD_RETIRE_RETIRED = re.compile(r"\breturn\s+StewardRetireOutcome\s*\.\s*Retired\s*;")
 STEWARD_RETIRE_VERDICT_TOKEN = re.compile(r"(?<![\w.])verdict\b")
 STEWARD_RETIRE_VERDICT_TOKENS = 3
 
@@ -3619,6 +3629,12 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         scanned += 1
         text = _strip_cs_comments(path.read_text(encoding="utf-8"))
 
+        directive = STEWARD_PREPROCESSOR.search(text)
+        if directive is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} uses `{directive.group(0).strip()}` - the plugin "
+                 "(net48) and the tests (net10.0) compile the same source, so conditional compilation "
+                 "can ship a guard the audit and the tests both see but the game does not", errors)
+
         destructions = len(STEWARD_DESTRUCTION.findall(text))
         total_destructions += destructions
         if destructions != STEWARD_DESTRUCTION_SITES.get(key, 0):
@@ -3661,6 +3677,7 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         return []
 
     body = method.group(1)
+    masked = _steward_mask_literals(body)
     removals_in_file = len(STEWARD_BODY_REMOVAL.findall(code))
     removal_offsets = _offsets_of_pattern(body, STEWARD_BODY_REMOVAL)
     if removals_in_file != len(removal_offsets):
@@ -3697,25 +3714,25 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
     # StewardBody.FindLive(...)` - between the declaration and the removal kept
     # every pin above green while the removal hit any network object (review of
     # d0d559e).
-    view_assignments = len(STEWARD_RETIRE_ASSIGNS_VIEW.findall(body))
+    view_assignments = len(STEWARD_RETIRE_ASSIGNS_VIEW.findall(masked))
     if view_assignments != 1:
         fail(f"{label}: `view` is assigned {view_assignments} time(s) in Retire(...); only its "
              "declaration from `body.View` may assign it, or the removal can be pointed at another "
              "object", errors)
-    if STEWARD_RETIRE_ASSIGNS_BODY.search(body):
+    if STEWARD_RETIRE_ASSIGNS_BODY.search(masked):
         fail(f"{label}: Retire(...) assigns its `body` parameter - the removal must act on the body "
              "the caller handed in, never on one swapped in afterwards", errors)
-    if STEWARD_RETIRE_BY_REFERENCE.search(body):
+    if STEWARD_RETIRE_BY_REFERENCE.search(masked):
         fail(f"{label}: Retire(...) passes `view` or `body` by reference, which is an assignment this "
              "text audit cannot follow", errors)
 
-    nested = STEWARD_RETIRE_NO_NESTED_CODE.search(body)
+    nested = STEWARD_RETIRE_NO_NESTED_CODE.search(masked)
     if nested is not None:
         fail(f"{label}: Retire(...) holds `{nested.group(0).strip()[:40]}` - a lambda, local function, "
-             "anonymous delegate, deconstruction or identifier escape opens a scope or an assignment in "
+             "anonymous delegate, deconstruction, interpolated string or identifier escape opens a scope or an assignment in "
              "which `view` or `body` can name another object while every positional pin stays green",
              errors)
-    view_tokens = [found.start() for found in STEWARD_RETIRE_VIEW_TOKEN.finditer(body)]
+    view_tokens = [found.start() for found in STEWARD_RETIRE_VIEW_TOKEN.finditer(masked)]
     check = STEWARD_RETIRE_VIEW_CHECK.search(body)
     statements = list(STEWARD_RETIRE_REMOVAL_STATEMENT.finditer(body))
     if (len(view_tokens) != STEWARD_RETIRE_VIEW_TOKENS or own_view is None or check is None
@@ -3726,7 +3743,11 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
              "`if (view == null || !view.IsValid() || !view.IsOwner())`, then the one statement "
              "`view.Destroy();` - so that the object removed is the one taken from her body", errors)
 
-    masked = _steward_mask_literals(body)
+    retired = list(STEWARD_RETIRE_RETIRED.finditer(masked))
+    if len(retired) != 1 or masked[retired[0].end():].strip():
+        fail(f"{label}: Retire(...) returns Retired {len(retired)} time(s); it may say so once, as its "
+             "last statement, after the removal - an earlier `return ...Retired;` tells the runtime she "
+             "has left while her body still stands", errors)
     if _steward_brace_depth(masked, len(masked)) != 1:
         fail(f"{label}: Retire(...)'s braces do not balance up to the `}}` the audit reads as its end "
              "(found by indentation) - a misindented brace ends the audited text while the method goes "

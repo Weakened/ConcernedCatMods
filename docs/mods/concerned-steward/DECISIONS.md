@@ -42,8 +42,9 @@ untouched; `cs_steward recruit` brings her body back.
 - `src/ConcernedSteward/Runtime/StewardRetirementPort.cs` — the one removal, `view.Destroy()` on `body.View`, below
   `StewardRetirement.Decide(` and a refusing `if (!StewardRetirement.Allows(`.
 - `tools/validate_repo.py` "[steward] S1 retire audit" — pins every destruction in the product by file, every routed
-  one and every body removal; pins the port's `Retire(...)` as a method whose braces balance, with no lambda, local
-  function, delegate, `goto` or deconstruction, where each of these appears once, whole, as its own statement at the
+  one and every body removal; refuses any conditional-compilation directive (`#if`, `#else`, `#define`, ...) anywhere
+  in the product, since the plugin (net48) and the tests (net10.0) compile the same source; pins the port's `Retire(...)` as a method whose braces balance, with no lambda, local
+  function, delegate, interpolated string, `goto` or deconstruction, that says Retired once, as its last statement, where each of these appears once, whole, as its own statement at the
   method's top level (no braceless `if`, `else`, `while` or `for` in front): the decision on `facts`, the refusal on
   `verdict` (`verdict` spelled nowhere else but the sentence), `ZNetView? view = body.View;`, and the validity check -
   each refusing block exactly one `answer = ...;` and its `return` (Refused, NotOurs), nothing else; the removal is
@@ -54,15 +55,17 @@ untouched; `cs_steward recruit` brings her body back.
   port tests, one witness at a time, not by the audit; and it cannot see a destruction reached through a delegate, a
   method group or reflection.
 - `src/ConcernedSteward.Tests/StewardRetirementTests.cs` — control flow over the stubbed game.
-- `tools/tests/test_steward_retire_audit.py` — twenty-nine plants, each a way a body could leave the world outside
-  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last two) and to be
-  refused with it. Eighteen
+- `tools/tests/test_steward_retire_audit.py` — thirty-three plants, each a way a body could leave the world outside
+  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last six) and to be
+  refused with it. Twenty-two
   of them were found by successive independent reviews, each getting past the version of the rule it was found against
   and added with the fix that closes it: a reassigned view, a swapped body, a `using static`, a `using` alias and a
   method group; a local function or lambda whose own parameter is `view` (two shapes) and a deconstruction into
   `view`; a misindented brace ending the audited text, a `goto` past the guard and a guard in a braced condition; a
   braceless `if` or an `else` in front of the refusal, a braceless `if` in front of the ownership check and an
-  overwritten verdict; a conditional `return` inside the refusal and inside the ownership check.
+  overwritten verdict; a conditional `return` inside the refusal and inside the ownership check;
+  `#if` around the guard and inside the decision, an interpolation hiding a verdict overwrite, and an early
+  Retired while her body still stands.
 - The port reads her pack from the body itself; a pack the caller states in the ledger can only add a reason to
   refuse (more held, or unreadable), never remove one.
 - `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which
