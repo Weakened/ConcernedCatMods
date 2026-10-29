@@ -1,5 +1,6 @@
 using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Roads;
+using ConcernedCartographer.Tests;
 
 /// <summary>#243 sailing Route Follow: deterministic control, geometry,
 /// safety, same-call cancellation, lifecycle and steady-state tests.
@@ -624,31 +625,40 @@ public class SailingRouteFollowControllerTests
 
     // ------------------------------------------------------ steady state
 
-    [Fact]
-    public void SteadyStateTickAllocatesNothing()
+    /// <summary>#463: the exact-allocation test lives in its own non-parallel
+    /// collection and measures inside a no-GC region (<see cref="ExactAllocations"/>),
+    /// so a collection set off by another test cannot charge it bytes it never
+    /// allocated. The bound is still exactly zero.</summary>
+    [Collection(ExactAllocationCollection.Name)]
+    public class SteadyState
     {
-        RouteFollowPath path = Path((0f, 0f), (0f, 200f), (120f, 320f), (120f, 520f));
-        SailingRouteFollowController controller = Started(path);
-
-        // Warm up so no first-call JIT allocation is measured.
-        for (int tick = 0; tick < 100; tick++)
+        [Fact]
+        public void SteadyStateTickAllocatesNothing()
         {
-            controller.Tick(Frame(0f, tick * 0.1f, 2f, 0.1f));
+            RouteFollowPath path = Path((0f, 0f), (0f, 200f), (120f, 320f), (120f, 520f));
+            SailingRouteFollowController controller = Started(path);
+
+            // Warm up through the same method the window calls, so no
+            // first-call JIT work lands in the measured window.
+            Ticks(controller, start: 0f, count: 100);
+            Ticks(controller, start: 10f, count: 100);
+
+            long allocated = ExactAllocations.Measure(() => Ticks(controller, start: 20f, count: 1000));
+
+            // Without these the test would pass vacuously if the controller had
+            // cancelled during warm-up: a cancelled Tick returns default and
+            // allocates nothing while measuring nothing.
+            Assert.True(controller.IsFollowing, "controller cancelled; nothing was measured");
+            Assert.True(allocated == 0, $"steady-state Tick allocated {allocated} bytes");
         }
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int tick = 0; tick < 1000; tick++)
+        private static void Ticks(SailingRouteFollowController controller, float start, int count)
         {
-            controller.Tick(Frame(0f, 10f + (tick * 0.1f), 2f, 0.1f));
+            for (int tick = 0; tick < count; tick++)
+            {
+                controller.Tick(Frame(0f, start + (tick * 0.1f), 2f, 0.1f));
+            }
         }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        // Without these the test would pass vacuously if the controller had
-        // cancelled during warm-up: a cancelled Tick returns default and
-        // allocates nothing while measuring nothing.
-        Assert.True(controller.IsFollowing, "controller cancelled; nothing was measured");
-        Assert.True(allocated == 0, $"steady-state Tick allocated {allocated} bytes");
     }
 
     [Fact]
