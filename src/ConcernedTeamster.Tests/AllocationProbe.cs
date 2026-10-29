@@ -5,7 +5,11 @@ namespace ConcernedTeamster.Tests;
 /// <summary>
 /// Measures allocations on a dedicated thread after a full iteration warmup.
 /// Keeping the measured region off xUnit's worker prevents unrelated runner
-/// work from being charged to the product code under test.
+/// work from being charged to the product code under test. A dedicated thread
+/// alone does not stop collections set off by other threads from charging it
+/// (#469, observed in #463), so the measured loop runs in an
+/// <see cref="ExactAllocations"/> window, and every caller sits in
+/// <see cref="ExactAllocationCollection"/>.
 /// </summary>
 internal static class AllocationProbe
 {
@@ -43,13 +47,14 @@ internal static class AllocationProbe
                 }
 
                 operation = operationFactory();
-                long before = GC.GetAllocatedBytesForCurrentThread();
-                for (int index = 0; index < measuredIterations; index++)
+                Action measured = operation;
+                allocated = ExactAllocations.Measure(() =>
                 {
-                    operation();
-                }
-
-                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                    for (int index = 0; index < measuredIterations; index++)
+                    {
+                        measured();
+                    }
+                });
             }
             catch (Exception exception)
             {

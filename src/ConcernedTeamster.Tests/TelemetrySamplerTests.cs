@@ -6,6 +6,7 @@ namespace ConcernedTeamster.Tests;
 /// budget, round-robin so no nearby cart starves, cap the store, evict stale
 /// entries (the destroyed-cart path), reset completely (the world-switch
 /// path), and allocate nothing in steady state.</summary>
+[Collection(ExactAllocationCollection.Name)]
 public class TelemetrySamplerTests
 {
     /// <summary>A scripted world: carts appear as ids, collection and
@@ -362,10 +363,10 @@ public class TelemetrySamplerTests
             "once the store has warmed up, not grow with session length.");
     }
 
+    /// <summary>#469: two equal windows compared by ratio; an inflated small
+    /// window could break the ratio on its own, so both are exact.</summary>
     private static long MeasureAllocatedBytes(Action action)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        action();
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        return ExactAllocations.Measure(action, 256L * 1024 * 1024);
     }
 }

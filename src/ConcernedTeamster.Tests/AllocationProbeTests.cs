@@ -1,5 +1,6 @@
 namespace ConcernedTeamster.Tests;
 
+[Collection(ExactAllocationCollection.Name)]
 public class AllocationProbeTests
 {
     [Fact]
