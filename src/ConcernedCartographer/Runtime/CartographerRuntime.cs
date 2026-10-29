@@ -190,7 +190,7 @@ internal sealed class CartographerRuntime : IDisposable
         _areasPanel = new WorkAreasPanel(
             log,
             WritableAreaEditor,
-            () => settings.HighPrecisionLargeMapRoads.Value,
+            () => _renderer.VectorLayerActive,
             AfterAreaEdit);
         _renderer.SetWorkAreaSource(() => WorkAreaOutlines.Collect(_workAreas, _areaEditor));
         _surveyPanel = new SurveyPanel(
@@ -274,7 +274,7 @@ internal sealed class CartographerRuntime : IDisposable
             if (AreaFileReadOnly())
             {
                 VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft,
-                    "This world's work areas could not be read (or were written by a newer version), so they are left untouched this session.");
+                    AtlasStrings.Get("areas.readOnly"));
                 return;
             }
 
@@ -1219,7 +1219,7 @@ internal sealed class CartographerRuntime : IDisposable
             }
 
             if (_routeCommands is not null && _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
-                (uiRouteMode || Input.GetKey(_settings.RouteDrawModifier.Value)) &&
+                (uiRouteMode || (!uiAreaMode && Input.GetKey(_settings.RouteDrawModifier.Value))) &&
                 MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld))
             {
                 // RC8-9: a pointer over any CC panel/control never adds
@@ -2831,7 +2831,7 @@ internal sealed class CartographerRuntime : IDisposable
     {
         if (!SaveWorkAreasIfDirty())
         {
-            _areasPanel.AppendNote("Not yet written to disk (see the log); it will be retried, but a restart before then loses this change.");
+            _areasPanel.AppendNote(AtlasStrings.Get("areas.saveFailed"));
         }
 
         _renderer.MarkVectorDataDirty();

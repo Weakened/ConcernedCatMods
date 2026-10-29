@@ -111,6 +111,25 @@ public class WorkAreaEditorTests
         Assert.Empty(session.Draft);
     }
 
+    [Fact]
+    public void AnOverLongLineIsRefusedAndTheModeStaysOn()
+    {
+        var store = new WorkAreaStore();
+        WorkAreaEditor editor = NewEditor(store);
+        editor.BeginDraw("Grove");
+        string? message = null;
+        editor.HandleMapFrame(true, At(0, 0));
+        for (int index = 1; index <= WorkAreaDrawSession.MaxStrokePoints + 5; index++)
+        {
+            message = editor.HandleMapFrame(true, At(index * 3f, 0)) ?? message;
+        }
+
+        Assert.Equal("Not saved: that line was too long. Draw a simpler loop, or Cancel.", message);
+        Assert.Empty(store.Areas);
+        Assert.True(editor.Session.Active);
+        Assert.Equal("Grove", editor.Session.PendingName);
+    }
+
     // ------------------------------------------------------------- editor
 
     [Fact]
@@ -443,6 +462,23 @@ public class WorkAreaEditorTests
         int writable = runtime.IndexOf("private WorkAreaEditor? WritableAreaEditor()", StringComparison.Ordinal);
         Assert.True(writable > 0);
         Assert.Contains("_workAreaPersistence.IsReadOnly(uid)", runtime.Substring(writable, 400));
+
+        // While an area is being drawn, a console-entered route mode does not
+        // draw from the same drag.
+        Assert.Contains("(uiRouteMode || (!uiAreaMode && Input.GetKey(_settings.RouteDrawModifier.Value)))", runtime);
+
+        // Every way out of the panel ends the draw mode: Escape (which keeps
+        // the panel), hiding, and the panel found hidden mid-draw.
+        string panel = Source("Map", "WorkAreasPanel.cs");
+        int escape = panel.IndexOf("Input.GetKeyDown(KeyCode.Escape)", StringComparison.Ordinal);
+        Assert.True(escape > 0);
+        Assert.Contains("CancelDraw()", panel.Substring(escape, 250));
+        int hidden = panel.IndexOf("protected override void OnHidden()", StringComparison.Ordinal);
+        Assert.True(hidden > 0);
+        Assert.Contains("CancelDraw()", panel.Substring(hidden, 200));
+        int stale = panel.IndexOf("if (!IsVisible && ModeActive)", StringComparison.Ordinal);
+        Assert.True(stale > 0);
+        Assert.Contains("CancelDraw()", panel.Substring(stale, 300));
 
         string toolbar = Source("Map", "MapUiCoordinator.cs");
         Assert.Contains("(\"toolbar.areas\", () => AreasClicked)", toolbar);

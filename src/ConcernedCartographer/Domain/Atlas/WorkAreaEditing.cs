@@ -192,10 +192,12 @@ internal sealed class WorkAreaEditor
 
     /// <summary>One large-map frame while drawing. Returns the message to
     /// show, or null when nothing the player needs to read happened. A
-    /// refused loop keeps the mode on under the same name, so the player
-    /// simply draws again.</summary>
+    /// refused or over-long loop keeps the mode on under the same name, so the
+    /// player simply draws again; only a refusal from the store itself (the
+    /// name taken meanwhile, the world full) ends it.</summary>
     public string? HandleMapFrame(bool held, RoadPoint cursor)
     {
+        string name = Session.PendingName;
         WorkAreaDrawSession.Outcome outcome = Session.Observe(held, cursor, out List<RoadPoint>? stroke);
         switch (outcome)
         {
@@ -203,6 +205,9 @@ internal sealed class WorkAreaEditor
                 ChangeStamp++;
                 return null;
             case WorkAreaDrawSession.Outcome.Overflowed:
+                // Like a refused shape: the mode stays on under the same
+                // name so the player simply draws again.
+                Session.Begin(name);
                 ChangeStamp++;
                 return AtlasStrings.Get("areas.tooLong");
             case WorkAreaDrawSession.Outcome.Completed:
