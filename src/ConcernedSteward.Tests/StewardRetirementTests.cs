@@ -51,6 +51,14 @@ public sealed class StewardRetirementTests
     }
 
     [Fact]
+    public void A_corrupt_negative_count_refuses_rather_than_reading_as_none()
+    {
+        Assert.False(StewardRetirement.Allows(StewardRetirement.Decide(Clear(items: -1))));
+        Assert.False(StewardRetirement.Allows(StewardRetirement.Decide(Clear(fuel: -1))));
+        Assert.False(StewardRetirement.Allows(StewardRetirement.Decide(Clear(steps: -1))));
+    }
+
+    [Fact]
     public void No_verdict_but_MayRetire_is_a_grant()
     {
         foreach (StewardRetireVerdict verdict in Enum.GetValues(typeof(StewardRetireVerdict)))

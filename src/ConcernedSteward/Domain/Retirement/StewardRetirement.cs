@@ -107,7 +107,8 @@ internal static class StewardRetirement
             return StewardRetireVerdict.RefusedUnreadable;
         }
 
-        if (facts.ItemsHeld > 0 || facts.FuelCarried > 0)
+        // A negative (corrupt) count is not "none": unknown is never empty.
+        if (facts.ItemsHeld != 0 || facts.FuelCarried != 0)
         {
             return StewardRetireVerdict.RefusedCarrying;
         }
@@ -117,7 +118,7 @@ internal static class StewardRetirement
             return StewardRetireVerdict.RefusedUnresolvedLoss;
         }
 
-        if (facts.RoundOpen || facts.PlanOpen || facts.UnresolvedSteps > 0)
+        if (facts.RoundOpen || facts.PlanOpen || facts.UnresolvedSteps != 0)
         {
             return StewardRetireVerdict.RefusedRoundOpen;
         }

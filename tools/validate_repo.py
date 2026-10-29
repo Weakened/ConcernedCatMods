@@ -3391,14 +3391,16 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
 #    `Retire(...)`, below a `StewardRetirement.Decide(` and a refusing
 #    `if (!StewardRetirement.Allows(`, and the removal statement is `view.Destroy();`
 #    on a `view` spelled only at its declaration from `body.View`, its validity
-#    check and that statement, in a method with no nested scope or
-#    deconstruction that could rename it (as far as a text audit can see);
+#    check and that statement, in a method with no nested function scope,
+#    `goto` or deconstruction that could rename it or jump past the guard,
+#    whose braces balance, with the guard at its top level and the removal
+#    directly in its top-level `try` (as far as a text audit can see);
 # 3. the CALLER: the port is called once in the product, from
 #    Runtime/StewardRuntime.cs.
 #
 # What it does NOT establish: that control flow obeys the refusal (that is
 # StewardRetirementTests), or anything about a destruction reached through a
-# delegate or a method group, which spells no `Destroy(` at all.
+# delegate, a method group or reflection, which spells no `Destroy(` at all.
 #
 # - Runtime/StewardWorkerPrefab.cs: four `UnityEngine.Object.DestroyImmediate`
 #   calls on the INACTIVE prefab clone being built at start-up (the clone
@@ -3435,9 +3437,33 @@ STEWARD_RETIRE_VIEW_CHECK = re.compile(
 STEWARD_RETIRE_REMOVAL_STATEMENT = re.compile(r"(?<![\w.])view\s*\.\s*Destroy\s*\(\s*\)\s*;")
 STEWARD_RETIRE_VIEW_TOKENS = 5
 STEWARD_RETIRE_NO_NESTED_CODE = re.compile(
-    r"=>|\bdelegate\b|@|\\[uU][0-9A-Fa-f]|\)\s*=(?![=>])"
+    r"=>|\bdelegate\b|\bgoto\b|@|\\[uU][0-9A-Fa-f]|\)\s*=(?![=>])"
     r"|\b(?!(?:if|for|foreach|while|switch|catch|using|lock|fixed|when)\b)[A-Za-z_]\w*\s*"
     r"\((?:[^(){};]|\([^(){};]*\))*\)\s*\{")
+# Review of 203d449: the method's end was found by indentation, so one
+# misindented `}` ended the audited text early while the method went on; and
+# the guard was pinned by position, not scope, so a wrapping `if` (or a `goto`
+# past it, now refused above) skipped it. The method's extent must therefore
+# balance its braces, and these sit at the method's own top level (depth 1),
+# the removal one level down, inside its `try`.
+STEWARD_RETIRE_LITERAL = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])+\'')
+STEWARD_RETIRE_TOP_LEVEL = (
+    ("`StewardRetirement.Decide(`", re.compile(r"StewardRetirement\s*\.\s*Decide\s*\(")),
+    ("the refusing `if (!StewardRetirement.Allows(`", STEWARD_RETIRE_REFUSES),
+    ("`ZNetView? view = body.View;`", STEWARD_RETIRE_OWN_VIEW),
+    ("the validity check on `view`", STEWARD_RETIRE_VIEW_CHECK),
+)
+
+
+def _steward_mask_literals(text: str) -> str:
+    """Blanks string and char literal contents, keeping every offset."""
+    return STEWARD_RETIRE_LITERAL.sub(lambda found: found.group(0)[0] + " " * (len(found.group(0)) - 2)
+                                      + found.group(0)[-1], text)
+
+
+def _steward_brace_depth(masked: str, offset: int) -> int:
+    """Open braces minus closed ones before an offset of literal-masked text."""
+    return masked.count("{", 0, offset) - masked.count("}", 0, offset)
 STEWARD_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bDestroyZDO\s*\(")
 STEWARD_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
 STEWARD_DESTRUCTION_SITES = {
@@ -3583,6 +3609,23 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
              "`if (view == null || !view.IsValid() || !view.IsOwner())`, then the one statement "
              "`view.Destroy();` - so that the object removed is the one taken from her body", errors)
 
+    masked = _steward_mask_literals(body)
+    if _steward_brace_depth(masked, len(masked)) != 1:
+        fail(f"{label}: Retire(...)'s braces do not balance up to the `}}` the audit reads as its end "
+             "(found by indentation) - a misindented brace ends the audited text while the method goes "
+             "on, unaudited", errors)
+    for name, pattern in STEWARD_RETIRE_TOP_LEVEL:
+        sites = list(pattern.finditer(masked))
+        if len(sites) != 1 or _steward_brace_depth(masked, sites[0].start()) != 1:
+            fail(f"{label}: {name} must appear once, at Retire(...)'s own top level - inside a block "
+                 "it can be skipped while every positional pin stays green", errors)
+    for statement in STEWARD_RETIRE_REMOVAL_STATEMENT.finditer(masked):
+        opened = masked.rfind("{", 0, statement.start())
+        if (_steward_brace_depth(masked, statement.start()) != 2
+                or not re.search(r"\btry\s*$", masked[:opened])):
+            fail(f"{label}: `view.Destroy();` must sit directly in Retire(...)'s top-level `try`, "
+                 "below the guard, not inside a block that can carry it elsewhere", errors)
+
     for path in sorted(steward_dir.rglob("*.cs")):
         relative = path.relative_to(steward_dir)
         if relative.parts[0] in ("obj", "bin"):
@@ -3599,13 +3642,15 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         "`view.Destroy()` inside StewardRetirementPort.Retire, below a StewardRetirement.Decide and a "
         "refusing `if (!StewardRetirement.Allows(...))`, on a `view` whose only assignment is "
         "`body.View` and which appears nowhere but that declaration, its validity check and the removal "
-        "statement, in a method with no lambda, local function, delegate or deconstruction, and a `body` "
+        "statement, in a method with no lambda, local function, delegate, goto or deconstruction, whose "
+        "braces balance, with the guard at its top level and the removal directly in its top-level "
+        "`try`, and a `body` "
         "parameter that is never reassigned; the port is named (call or method "
         "group) at "
         f"{total_calls} call site(s), in {STEWARD_RETIRE_CALLER}, and no file imports it by `using`. "
         "This text audit establishes where the refusal is written, not that control flow obeys it "
-        "(StewardRetirementTests), and it cannot see a destruction reached through a delegate or a "
-        "method group"
+        "(StewardRetirementTests), and it cannot see a destruction reached through a delegate, a "
+        "method group or reflection"
     ]
 
 def _offsets_of_pattern(text: str, pattern: re.Pattern) -> list[int]:

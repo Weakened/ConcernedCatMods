@@ -95,8 +95,10 @@ internal static class StewardRetirementPort
         }
         catch (Exception exception)
         {
-            answer = "Her body could not be removed (" + exception.GetType().Name + "); nothing else " +
-                "was touched.";
+            // Vanilla may have let go of the object before it threw, so this
+            // does not claim the body is still there.
+            answer = "Her body may not have been removed (" + exception.GetType().Name + "); nothing " +
+                "else was touched.";
             return StewardRetireOutcome.Refused;
         }
 

@@ -6,7 +6,8 @@ restores the exact original text. Every plant is a way Sunniva's body (or any
 networked body) could leave the world outside the one guarded verb, and each was
 verified to pass the validator that lacked this rule (origin/main d72b397)
 (and the five from the review of d0d559e also that head's validator, the four
-from the review of e4f0392 also that head's, whose rules they got past) before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
+from the review of e4f0392 also that head's, the three from the review of
+203d449 also that head's, whose rules they got past) before being added here; setting STEWARD_PLANT_VALIDATOR to another validator's
 path re-runs that check, expecting every plant to get through it.
 """
 import os
@@ -35,7 +36,8 @@ PORT_GUARD = """        StewardRetireVerdict verdict = StewardRetirement.Decide(
 PORT_REMOVAL = "            view.Destroy();\n"
 PORT_DECIDE = "        StewardRetireVerdict verdict = StewardRetirement.Decide(facts);\n"
 PORT_RETIRED = "        return StewardRetireOutcome.Retired;\n"
-LOOKED_UP = "ZNetScene.instance.FindInstance(ZDOID.None)!.GetComponent<ZNetView>()"
+PORT_SUCCESS = "        answer = \"Her worker body has left"
+LOOKED_UP ="ZNetScene.instance.FindInstance(ZDOID.None)!.GetComponent<ZNetView>()"
 PORT_VIEW = "        ZNetView? view = body.View;\n"
 RUNTIME_MARKER = "            _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);\n            _log(answer);\n"
 
@@ -228,12 +230,39 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      "            (view, _) = (" + LOOKED_UP + ", 0);\n" + PORT_REMOVAL)
         self.assert_refused("a deconstruction reassigned `view` with no `view =` to count")
 
+    # The three below each kept every pin of 203d449's rule green (review of
+    # that head): the method's end was found by indentation and the guard was
+    # pinned by position, not scope. Each was verified to pass 203d449's
+    # validator as well as d72b397's.
+
+    def test_a_misindented_brace_hiding_a_retarget_and_goto_is_refused(self):
+        self.swap_in(PORT, PORT_VIEW, PORT_VIEW + "        again:\n")
+        self.swap_in(PORT, PORT_SUCCESS,
+                     "        if (body.IsOwned)\n        {\n            answer = string.Empty;\n    }\n"
+                     "        view = " + LOOKED_UP + ";\n"
+                     "        if (view != null)\n        {\n            goto again;\n        }\n\n"
+                     + PORT_SUCCESS)
+        self.assert_refused("a `}` at method indentation ended the audited text; after it, `view` was "
+                            "pointed at a looked-up object and the removal re-run")
+
+    def test_a_goto_past_the_guard_is_refused(self):
+        self.swap_in(PORT, PORT_DECIDE,
+                     "        if (ledger.UnresolvedSteps < 0)\n        {\n            goto decided;\n        }\n\n"
+                     + PORT_DECIDE)
+        self.swap_in(PORT, PORT_VIEW, "        decided:\n" + PORT_VIEW)
+        self.assert_refused("a goto jumped from above the decision to below the refusal")
+
+    def test_a_guard_wrapped_in_a_condition_is_refused(self):
+        self.swap_in(PORT, PORT_GUARD,
+                     "        if (ledger.UnresolvedSteps >= 0)\n        {\n" + PORT_GUARD + "        }\n")
+        self.assert_refused("the decision and its refusal ran only when a condition held")
+
     def test_this_suite_is_not_vacuous(self):
         # Not a plant: the guard text every plant above edits is still where
         # the plants expect it, so a refactor cannot turn them into no-ops.
         with open(PORT, encoding="utf-8-sig") as handle:
             port = handle.read()
-        for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW, PORT_DECIDE, PORT_RETIRED):
+        for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW, PORT_DECIDE, PORT_RETIRED, PORT_SUCCESS):
             self.assertEqual(1, port.count(pinned), pinned)
         with open(RUNTIME, encoding="utf-8-sig") as handle:
             self.assertEqual(1, handle.read().count(RUNTIME_MARKER))
