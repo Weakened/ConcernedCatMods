@@ -2,9 +2,10 @@
 
 ## 0.5.0
 
-Two additive changes share this version: a worker can rest as a presentation figure (#295, #298, Concerned
-Foreman's Thorstein), and a job can say that doing a target leaves the NPC carrying something (#381, Concerned
-Teamster's Gunnar).
+Three additive changes share this version: a worker can rest as a presentation figure (#295, #298, Concerned
+Foreman's Thorstein), a job can say that doing a target leaves the NPC carrying something (#381, Concerned
+Teamster's Gunnar), and that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and
+Gunnar share it.
 
 ### A worker may rest as a presentation figure (#295, #298)
 
@@ -31,13 +32,7 @@ Teamster's Gunnar).
   `PlannedStep.Tour` says which load each stop belongs to.
 * The library still never learns what was gathered or where it goes: what happens at the end of a load is the role's.
 
-### Versioning
-
-* An additive minor version that widens the public surface by four members: `NpcBodyContract.ForWorkerWithPresentation`,
-  `NpcBodyContract.Admits`, one `JobTarget` constructor and the `JobTarget.Carries` property. Every in-repository
-  consumer pin moves with it, so no product can compile against one contract and install another.
-
-A figure can be dressed, and the one dresser lives here (#295, lifted from Concerned Foreman).
+### A figure can be dressed, and the one dresser lives here (#295, lifted from Concerned Foreman)
 
 * `Body.Dressing.NpcFigureDresser` dresses an extracted figure from an `Appearance.NpcLookSpec`: which body it
   wears, hair, beard, colouring and garments. It also stands the figure (`StandAt`) and takes it down (`TakeDown`).
@@ -68,7 +63,14 @@ A figure can be dressed, and the one dresser lives here (#295, lifted from Conce
 * `Apply` runs once per dresser. A second call would have attached a second set of pieces. If the source's body list
   cannot be read, the figure is still built, with the first body. The palette's interval and give-up are measured in
   real time, so two plugins polling it do not age it twice as fast.
-* Still additive. A role that does not use these types is unaffected.
+
+### Versioning
+
+* An additive minor version that widens the public surface by four members: `NpcBodyContract.ForWorkerWithPresentation`,
+  `NpcBodyContract.Admits`, one `JobTarget` constructor and the `JobTarget.Carries` property. It also adds the
+  dressing types: `Appearance.*` and `Body.Dressing.NpcFigureDresser` / `NpcCustomizationPalette`. A role that does not
+  use them is unaffected. Every in-repository consumer pin moves with it, so no product can compile against one
+  contract and install another.
 
 ## 0.4.0
 
