@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.0
+
+A worker can rest as a presentation figure, under the same one-body rule (#295, #298).
+
+* `NpcBodyContract.ForWorkerWithPresentation(prefab, keyPrefix)` and `NpcBodyContract.Admits(kind)` are new. The
+  contract is still a worker contract: the same prefab name and key prefix, validated the same way. A shipped role
+  that switches to it therefore changes nothing on disk, and its saved bodies are found exactly as before.
+* The arbiter now grants such an identity either kind of body, but **never both at once**. A presentation claim is
+  refused while a worker body is held, and a worker claim is refused while the figure is held
+  (`RefusedOtherKindExists`). A presentation claim also still needs the identity to be resting. A hand-over is
+  release-then-claim by whoever holds the body now. Nothing in the library tears a body down on anyone else's behalf.
+* A role registered with `ForWorker` or `ForPresentation` behaves exactly as in 0.4.0.
+* Stated limit: "resting only" is checked when the figure is claimed. A job entering the identity's mode while a
+  figure's lease is held is not refused by the library; the role holding the figure must take it down when its
+  identity stops resting. Concerned Foreman does so on its next pass (at most half a second).
+* This is an additive minor version that widens the public surface by two members. Every in-repository consumer pin
+  moves with it, so no product can compile against one contract and install another.
+
+## 0.4.0
+
+The public surface gains the mint and the transfer recorder that Concerned Teamster's Gunnar deposit needs (#415, #374,
+D15; `7d0de3d`).
+
+* Four types become public:
+  * `NpcContainerPermit`: a permit to use one container. Its constructor stays **private**, and the static
+    `Issue(...)` is the only way to get one. `Issue` re-reads the container's own access, so a refused container
+    yields no permit.
+  * `NpcTransferPlan`: what a move intends.
+  * `ContainerMoveOutcome` and `ContainerMoveResult`: one recorder for a move, measured on both sides. Any
+    disagreement between the two sides is recorded as Uncertain.
+* The rule that a permit cannot be forged did not depend on these types being internal. It depends on the private
+  constructor and the single mint. A reflection test and the repository validator's D15 permit-mint audit both check
+  that.
+* Still withheld: `NpcContainerGate`, `NpcContainerPlace`, the permission book, the sighting and the assignment.
+* This is an additive minor version. Every in-repository consumer pin moves with it.
+
 ## 0.3.0
 
 The durable interruption machinery becomes an actual consumer API and Concerned Steward adopts it around its shipped

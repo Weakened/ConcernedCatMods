@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+* **Requires Concerned NPC 0.5.0** (was 0.4.0). The library's new body contract (#295) is additive. Gunnar's body,
+  identity and keys are unchanged. The pin moves because every consumer pins the library version it was compiled
+  against.
+
 * **Say which chests Gunnar may use (#374).** Look at a chest and press the key (`Workers/ContainerPermissionShortcut`,
   F9 by default) to cycle what he may do with it: nothing, take from it, deposit into it, or both. **Every container
   starts at nothing** — a chest is yours until you say otherwise, once, per chest. Your choices are kept in one small

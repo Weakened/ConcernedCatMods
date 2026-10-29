@@ -68,6 +68,11 @@
          proved with no game installed. -->
     <Compile Include="..\ConcernedForeman\Domain\Npc\**\*.cs" LinkBase="Npc" />
 
+    <!-- #295 / #298: Thorstein's look, resolved against what a build offers, and
+         the game's own slider-to-colour conversion. Game-free on purpose; the
+         adapter that dresses the figure lives under Runtime/Presentation. -->
+    <Compile Include="..\ConcernedForeman\Domain\Presentation\**\*.cs" LinkBase="Presentation" />
+
     <!-- The game-free half of the Concerned NPC library, LINKED and not
          referenced.
 
