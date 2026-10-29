@@ -301,6 +301,37 @@ public sealed class ShelterBuildLoopTests
         Assert.Equal(2, world.Placer.Placed.Count);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_waiting_round_always_says_Waiting_including_on_a_draw_retry_tick(bool refuseDraw)
+    {
+        // #466: the provisioning branch set Step to Provisioning and then
+        // returned a Waiting round without resetting it, so on every
+        // draw-retry tick (and on a refused draw) Step and the round disagreed.
+        var world = new BuildWorld(wood: 4);
+        if (refuseDraw)
+        {
+            world.Materials.RefuseDraw = "the marked supply chest could not be opened (a ward refuses it)";
+        }
+
+        ShelterBuildLoop loop = world.Loop();
+        int waitingRounds = 0;
+        for (int tick = 0; tick < 120; tick++)
+        {
+            loop.Tick(100f + (tick * Step));
+            if (loop.Round.Outcome == RoundOutcome.Waiting)
+            {
+                waitingRounds++;
+                Assert.True(
+                    loop.Step == BuildStep.Waiting,
+                    "tick " + tick + ": the round is Waiting but Step reads " + loop.Step);
+            }
+        }
+
+        Assert.True(waitingRounds > 0, "the test never reached a waiting round");
+    }
+
     [Fact]
     public void No_marked_chest_is_a_named_refusal_and_nothing_moves()
     {

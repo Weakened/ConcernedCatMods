@@ -515,6 +515,7 @@ internal sealed class ShelterBuildLoop
                 // shortfall instead - and "you are short of wood" for a chest
                 // that is warded sends a player to fetch wood they already have.
                 _drawRefusal = ConstructionSentences.ContainerUnavailable(draw.Refusal);
+                Step = BuildStep.Waiting;
                 return new ShelterRound(
                     RoundOutcome.Waiting, Built, progress.Remaining.Count, Carried(), shortOfBatch,
                     _drawRefusal);
@@ -532,6 +533,9 @@ internal sealed class ShelterBuildLoop
             canAffordNext = _materials.IsReserved(piece) && Covers(_materials.Carried, piece.Recipe);
             if (!canAffordNext)
             {
+                // #466: a Waiting round says Waiting. Step was left at
+                // Provisioning here, so every draw-retry tick disagreed.
+                Step = BuildStep.Waiting;
                 return new ShelterRound(
                     RoundOutcome.Waiting, Built, progress.Remaining.Count, Carried(),
                     new MaterialTally().Add(piece.Recipe).Missing(_materials.Carried), string.Empty);
