@@ -521,6 +521,18 @@ class CarveOutIsNarrow(CarveOutFixture):
             "nullable interpolation alignment hid a later worker destruction",
             marker="#381")
 
+    def test_generic_nullable_interpolation_format_does_not_hide_later_worker_destruction(self):
+        # Review of the Steward S1 audit at 3252bcd (#382): the stripper read
+        # the `?` of `List<int?>` as a conditional, so the format colon became
+        # code and the `//` after it hid the destruction. Verified to pass the
+        # validator at 3252bcd before the fix.
+        self.plant_file(
+            os.path.join(WORKERS, "ZzGenericNullableFormattedDestroy.cs"),
+            '        var label = $"{new System.Collections.Generic.List<int?>().Count://}"; view.Destroy();')
+        self.assert_refused(
+            "a generic nullable in an interpolation hid a later worker destruction",
+            marker="#381")
+
     def test_the_population_pin_descends_into_subdirectories(self):
         # `glob("*.cs")` does not descend, so the same planted removal one folder
         # down was invisible while the success sentence said "anywhere in

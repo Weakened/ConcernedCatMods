@@ -59,9 +59,9 @@ untouched; `cs_steward recruit` brings her body back.
   port tests, one witness at a time, not by the audit; and it cannot see a destruction reached through a delegate, a
   method group or reflection.
 - `src/ConcernedSteward.Tests/StewardRetirementTests.cs` — control flow over the stubbed game.
-- `tools/tests/test_steward_retire_audit.py` — thirty-seven plants, each a way a body could leave the world outside
-  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last ten) and to be
-  refused with it. Twenty-six
+- `tools/tests/test_steward_retire_audit.py` — thirty-eight plants, each a way a body could leave the world outside
+  the verb, each verified to pass the validator without this rule (main `d72b397`; main `0171cf6` for the last eleven) and to be
+  refused with it. Twenty-seven
   of them were found by successive independent reviews, each getting past the version of the rule it was found against
   and added with the fix that closes it: a reassigned view, a swapped body, a `using static`, a `using` alias and a
   method group; a local function or lambda whose own parameter is `view` (two shapes) and a deconstruction into
@@ -70,7 +70,9 @@ untouched; `cs_steward recruit` brings her body back.
   overwritten verdict; a conditional `return` inside the refusal and inside the ownership check;
   `#if` around the guard and inside the decision, an interpolation hiding a verdict overwrite, and an early
   Retired while her body still stands; a directive hidden behind `#region x /*`, one after a form feed, and a
-  `[Conditional]` attribute; code after a U+2028 inside a `//` comment.
+  `[Conditional]` attribute; code after a U+2028 inside a `//` comment; a `List<int?>` in an
+  interpolation that made the shared comment stripper read the format colon as code (fixed in the stripper, which
+  the Teamster audits share; a Teamster plant was added too).
 - The port reads her pack from the body itself; a pack the caller states in the ledger can only add a reason to
   refuse (more held, or unreadable), never remove one.
 - `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which

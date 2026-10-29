@@ -1971,21 +1971,6 @@ def _strip_cs_comments(text: str) -> str:
             index += 1
         return index
 
-    def next_non_trivia(index: int) -> str:
-        """Return the next C# token character without changing output."""
-        while index < length:
-            if text[index].isspace():
-                index += 1
-                continue
-            if text.startswith("/*", index):
-                end = text.find("*/", index + 2)
-                return "" if end < 0 else next_non_trivia(end + 2)
-            if text.startswith("//", index):
-                newline = text.find("\n", index + 2)
-                return "" if newline < 0 else next_non_trivia(newline + 1)
-            return text[index]
-        return ""
-
     def scan_string(index: int) -> int:
         quote = text[index]
         interpolated, verbatim, dollar_count = prefix_at(index)
@@ -2054,11 +2039,17 @@ def _strip_cs_comments(text: str) -> str:
         return index
 
     def scan_interpolation(index: int, close_braces: int) -> int:
-        """Scan an interpolation expression, then preserve its format component."""
+        """Scan an interpolation expression, then preserve its format component.
+
+        As in the C# lexer, the first `:` outside parentheses and brackets
+        always begins the format: an unparenthesised conditional in a hole is
+        error CS8361, so a `?` before it never makes that `:` code. Treating
+        `?` as a conditional (once done here) let `List<int?>` turn the format
+        colon into code, and a `//` or `/*` in the format then hid real code
+        from every audit that reads this text (review of 3252bcd, #382)."""
         closing = "}" * close_braces
         paren_depth = 0
         bracket_depth = 0
-        conditional_depth = 0
         while index < length:
             if (paren_depth == 0 and bracket_depth == 0
                     and text.startswith(closing, index)):
@@ -2090,19 +2081,9 @@ def _strip_cs_comments(text: str) -> str:
                 out.append(char)
                 index = scan_code(index + 1, 1)
                 continue
-            elif char == "?" and paren_depth == 0 and bracket_depth == 0:
-                next_char = text[index + 1] if index + 1 < length else ""
-                previous = text[index - 1] if index else ""
-                if (next_char not in {"?", ".", "["}
-                        and previous != "?"
-                        and next_non_trivia(index + 1) not in {":", ","}):
-                    conditional_depth += 1
             elif char == ":" and paren_depth == 0 and bracket_depth == 0:
-                if conditional_depth:
-                    conditional_depth -= 1
-                else:
-                    out.append(char)
-                    return scan_format(index + 1, close_braces)
+                out.append(char)
+                return scan_format(index + 1, close_braces)
 
             out.append(char)
             index += 1
