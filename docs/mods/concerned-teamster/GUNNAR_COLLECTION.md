@@ -3,9 +3,10 @@
 Status: **planning, eligibility and accounting implemented and tested; the pickup port is written, the validator
 allowance that confines it has landed, and the port now has a call site behind an off-by-default switch (§6a) with
 the two material-loss paths that wiring opened closed behind it — a deliberate retire (§6b) and every involuntary
-unload, logout and reload (§6c). **Two doors still lose material and are named rather than left to be found: death,
-which now HAS an owner decision (`DECISIONS.md` D16, 2026-09-29) and no implementation, and the one change whose
-write to the network object failed** (§6c). The
+unload, logout and reload (§6c). **Death is closed too, by `DECISIONS.md` D16** (§6g): what he carries goes on the
+ground through vanilla's own drop when he genuinely dies, and every death is recorded. **One door still loses
+material and is named rather than left to be found: the one change whose write to the network object failed**
+(§6c). The
 automatic survey-driven job is **now wired** (§6f): survey a bounded area, plan the whole job in loads he can carry,
 walk each load, take it to the chosen chest in one trip, measure it in, next load. A player can now mark which chests Gunnar may use, and those marks
 persist per world (§6d, #374), and **a deposit now consumes one** (§6e, `DECISIONS.md` D15): `ct_collect destination`
@@ -311,9 +312,9 @@ subcommands. There is no survey, no route, no batching and **nothing that moves 
 from where he stands is refused rather than turned into movement nobody authorized. (That paragraph is about the
 *ordered* pick and is still true of it; the automatic tour of §6f is the survey, the route and the batching, and it
 walks him.) `GunnarCollectionJob`,
-`CollectionSurvey` and `GunnarTargetPredicate` are still unwired; that automatic path is its own work, and it is
-where wards, locations, creators and work areas start to matter, because they are the questions that only arise
-once something other than a person is choosing.
+`CollectionSurvey` and `GunnarTargetPredicate` are wired by that tour (§6f), and it is where wards, locations,
+creators and work areas start to matter, because they are the questions that only arise once something other than a
+person is choosing.
 
 **The two lifecycle verbs, and why the choice is not spelled at the call site.** `Forget()` means a *job* ended and
 **keeps** the unconfirmed-source record; `ForgetWorld()` means the *world* went away and is the only verb that may
@@ -528,9 +529,7 @@ Teamster worker body that **genuinely dies** may return what it carries through 
 death and on no other lifecycle event, never a retirement, a cancellation, a despawn, a zone unload, a logout, a
 world change or a plugin teardown. The cart detaches first under D4's ordering.
 
-**It is still not implemented, and this paragraph is not evidence that it is.** No port exists, no validator rule
-pins the call, and nothing has been observed in game. **Until it is built: Gunnar dying loses what he is
-carrying.**
+**It is implemented now - §6g - and still not observed in game.**
 
 **A third way material is lost, excluded from "doors" for a reason worth stating.** `ct_haul retire force`
 destroys what a body is carrying. It is not counted among the doors above because **the player is told**: the
@@ -726,10 +725,81 @@ Every plant is run against the real validator on the real tree and required to r
 
 ### Not claimed
 
-Nothing here has been observed in a running game; §10 is the go-around. The **automatic** survey-driven loop is
-still unwired — this is one deposit a player explicitly orders, which is the other half of the ordered pick, not
-the tour of §1. And D16's death drop is decided and **not built**, so a Gunnar who dies still loses what he is
-carrying.
+Nothing here has been observed in a running game; §10 is the go-around. This section is one deposit a player
+explicitly orders, which is the other half of the ordered pick; the automatic survey-driven tour, which deposits
+through the same legs, is §6f. D16's death drop is §6g.
+
+## 6g. He dies, and what he carried does not die with him (`DECISIONS.md` D16)
+
+**The door §6c named is closed.** `Adapters/Workers/GunnarDeathDropPort.cs` is a component on every Gunnar body,
+added to the inactive prefab clone like the inventory record, so a saved body gets it too. It subscribes to the
+body's own `Character.m_onDeath`: vanilla runs that from `Character.OnDeath` - only on the owner, after
+`CheckDeath` has marked the body dead and before `ZNetScene.instance.Destroy` removes it. The audit script pins all
+three of those facts against the installed game.
+
+**What happens, in order:**
+
+1. The handler asks the body itself, `IsDead()`. Anything else returns before touching anything.
+2. **The cart lets go first.** The collection runtime asks the hauling runtime to run its own frame observation now -
+   the D4 teardown that would otherwise have run on the next frame - and then asks whether any cart's joint still
+   holds the body. Not knowing is held.
+3. `WorkerDeathDrop.Decide` - game-free and tested - decides: a genuine death, the cart released, both switches on,
+   the probe verified, the work-authority rule granted, the body's inventory read. The first failure is the verdict,
+   and every verdict but `Drop` drops nothing.
+4. Each carried stack goes through vanilla's own `Humanoid.DropItem(_inventory, item, count)` - the same call
+   Foreman's worker makes on its death, and the call vanilla uses when a player drops something - one at a time, each
+   in its own try, counted before and after. `DeathDropLeg.Classify` credits the ground only when vanilla answered
+   that it dropped, nothing threw, and exactly the stack's count left him.
+5. The report always happens, whatever went wrong: the session ledger moves what it saw him take to
+   `DroppedOnDeath` or `UnresolvedAtDeath`; one row for the death and one per stack are appended to
+   `teamster_worker_deaths_<world>.tsv` beside Teamster's other sidecars; and the same rows go to the log at warning
+   level. An order in flight ends with the job verb.
+
+| Verdict | What happens to what he carried |
+|---|---|
+| `Drop` | each stack measured onto the ground; anything not proven there is unresolved |
+| `NotADeath` | nothing - and nothing that is not his own death can reach the handler at all |
+| `CartStillHeld` | nothing dropped; all unresolved; the record says a cart still held him |
+| `NotOptedIn`, `NoAuthority`, `SeamUnavailable` | nothing dropped; all unresolved, with the reason |
+| `InventoryUnreadable` | nothing dropped; what his saved record held is unresolved |
+
+**What it never does.** It never runs for a retirement (`ct_haul retire` and `retire force` destroy the body through
+`ZNetView.Destroy`, which never runs vanilla's death path), a cancellation, an unload, a logout, a world change or a
+teardown; it never drops anything the body did not hold; it never builds an item from a name; and it never touches the
+cart beyond the detach D4 already requires. The validator's `D16 death-drop audit` refuses the shapes that would: the
+drop outside the handler or lifted into a helper, a second caller of the handler (including `SendMessage("OnDeath")`),
+a call to vanilla's own `Character.OnDeath()`, the handler hung off the death *animation*, `m_onDeath` invoked or
+touched anywhere else, the `IsDead()` predicate removed, and the verdict consulted and ignored. The `#313` token pin
+refuses `.DropItem(` everywhere but the one call - inside `Adapters/Workers` and out, in `src/Shared` too, and
+vanilla's static `ItemDrop.DropItem` with it.
+
+**Nothing in this product may cause the death that reaches it.** An independent review found the first version's
+hole: the audit pinned who may *name* the handler, and nothing stopped `ct_haul retire` being rewritten as "set his
+health to nothing", which reaches the drop through vanilla's genuine death path with every gate green.
+`SetHealth`, `UseHealth`, `SetMaxHealth`, `.Damage(`, `ApplyDamage` and `RPC_Damage` are now refused everywhere in
+Teamster (and `InvokeRPC` outside the worker folder, as it already was inside), the `IsDead()` guard must be a bare
+`return;`, the decision is told the body died by `IsDead()` and never by a literal, the handler's own delegate is
+invoked by nobody but vanilla, and the inventory it empties is assigned once, from the dying body.
+
+**Where things land, and what vanilla does inside the call.** Vanilla's drop places each stack at the body's
+position plus one metre forward and up, with a small push - not exactly under him - and the ground items are ordinary
+dropped items: anyone can pick them up, and outside a base with nobody near they despawn after an hour, as any
+creature's drop does. Inside `DropItem` vanilla also plays the body's `interact` animation trigger and the drop
+effects; those are vanilla's, inside the one pinned call, the same way `Pickup`'s destruction of the item it takes
+is (§6). Nothing in this product calls `SetTrigger`.
+
+**It is listened for only when it can run.** A game that renamed `DropItem` would fail the handler's JIT inside
+vanilla's own death path, before any of this file's guards ran, and leave a dead body undestroyed. So the port
+subscribes only when the start-up probe verified every member it binds - which means, as for collection, that a game
+changing one of them turns the whole worker runtime off (the probe is one list) rather than half of it.
+
+**An interrupted walk still accounts for everything.** If anything throws part-way, every stack not yet reached is
+recorded unresolved, so the death record never understates what he held.
+
+**Not claimed.** Nothing here has been watched happening. The port binds Unity and no test here loads it; what is
+tested is the decision, the per-stack classification, the ledger and the record format (`WorkerDeathDropTests`),
+and what is pinned is the shape. A body that dies while inert, or while a cart cannot be released, still
+loses what it carries - recorded rather than silent. §10 rows 27-30 are the go-around.
 
 ## 6f. The tour: survey, loads, one trip per load (#381's automatic workflow)
 
@@ -1012,9 +1082,16 @@ claim that nobody who has not opted in is affected, and step 17 is the one that 
 26. **An old Gunnar loads unchanged.** Load a world containing a Gunnar saved by a build from before this change.
     His body must come back with his identity, an empty inventory, no fault line and no `Destroyed invalid prefab
     ZDO`. This is the zero-migration row and it is the one that is irreversible if it is wrong.
-27. **Death, which is NOT closed.** Let something kill Gunnar while he carries a Stone. Expect the Stone to be
-    **lost** — nothing drops. That is the known gap in §6c awaiting an owner decision, not a defect to file; record
-    what actually happened so the decision is made on an observation.
+27. **Death (§6g).** With collection on, let something kill Gunnar while he carries a few Stone. Expect them **on
+    the ground about a metre in front of where he fell** (vanilla's own drop position), the log's warning `Gunnar died: what he carried went on the ground ...`, and two or
+    more rows appended to `teamster_worker_deaths_<world>.tsv` in Teamster's config folder. Pick them up: the count
+    must equal what he held - not one more.
+28. **Death while hitched.** Assign and hitch a cart, give him a Stone, kill him. The cart must be let go and left
+    exactly where it was with its contents untouched, and the Stone on the ground.
+29. **Death with collection off.** Turn `GunnarCollectionEnabled` off, kill a Gunnar who is carrying something.
+    Nothing drops; the log and the death record say it is unresolved because collection is off.
+30. **Retire is not death.** `ct_haul retire force` a carrying Gunnar: the message still says what he carried was
+    destroyed, nothing drops, and **no** death row is written.
 
 ### The tour (§6f)
 
@@ -1047,6 +1124,9 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
     he gives it up and carries on with the rest; he never jumps or teleports.
 42. **Reload mid-tour.** Save and quit mid-load, reload: the tour is gone, the stones he picked are still in him
     (§6c), and after `destination` and `area` again, `start` takes them to the chest first.
+43. **Death mid-tour (§6g).** Let something kill Gunnar while he walks a load. The tour must stop at once with
+    "Gunnar died" in the log (not some seconds later as a silent body), what he picked on that load must be on the
+    ground where he fell, and the death record must count it. `ct_collect status` afterwards shows no tour running.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

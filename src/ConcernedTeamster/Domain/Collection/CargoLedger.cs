@@ -32,6 +32,18 @@ internal enum CargoPlace
     /// the material could not be put anywhere. Terminal, and still counted, so
     /// the totals stay honest.</summary>
     Lost = 5,
+
+    /// <summary>On the ground where he died, put there by the game's own drop
+    /// (`DECISIONS.md` D16) and measured leaving him. Terminal, and like a
+    /// spilled cart it is not a loss to be made good: the material exists, it
+    /// is simply not his any more. Nothing replaces it.</summary>
+    DroppedOnDeath = 6,
+
+    /// <summary>He was holding it when he died and it is not proven to be on the
+    /// ground: the drop was refused, declined, threw, or measured an amount it
+    /// cannot reconcile. D16's "held-and-unresolved". Terminal and counted, so the
+    /// totals stay honest; nothing is re-acquired or re-credited for it.</summary>
+    UnresolvedAtDeath = 7,
 }
 
 /// <summary>What one attempt to record a movement did.</summary>
