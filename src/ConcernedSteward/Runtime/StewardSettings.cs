@@ -34,7 +34,8 @@ internal sealed class StewardSettings
         ConfigEntry<float> refuelBelowSeconds,
         ConfigEntry<float> refuelToSeconds,
         ConfigEntry<int> mostUnitsPerLight,
-        ConfigEntry<int> carryPerTrip)
+        ConfigEntry<int> carryPerTrip,
+        ConfigEntry<bool> showAtHome)
     {
         RuntimeEnabled = runtimeEnabled;
         TendFiresEnabled = tendFiresEnabled;
@@ -51,6 +52,7 @@ internal sealed class StewardSettings
         RefuelToSeconds = refuelToSeconds;
         MostUnitsPerLight = mostUnitsPerLight;
         CarryPerTrip = carryPerTrip;
+        ShowAtHome = showAtHome;
     }
 
     /// <summary>The master switch. False by default. With it false the Steward
@@ -142,6 +144,11 @@ internal sealed class StewardSettings
 
     /// <summary>#382: how much fuel she carries in one trip. Read at start-up.</summary>
     public ConfigEntry<int> CarryPerTrip { get; }
+
+    /// <summary>#382: whether Sunniva is shown at her home post, as a player-style
+    /// figure, while she has no worker body in the world. On by default; the figure
+    /// is local presentation only and changes nothing in the world.</summary>
+    public ConfigEntry<bool> ShowAtHome { get; }
 
     public static StewardSettings Bind(ConfigFile config)
     {
@@ -270,8 +277,18 @@ internal sealed class StewardSettings
             "vanilla stack, so five low lights are one visit to the chest rather than five. " +
             "Clamped to 1-500. Read when the game starts.");
 
+        ConfigEntry<bool> showAtHome = config.Bind(
+            "Appearance",
+            "ShowAtHome",
+            true,
+            "While Sunniva has no worker body in the world (after \"cs_steward retire\"), show her " +
+            "at her home post beside the supply chest as a player-style figure: female, Matronly " +
+            "hair, fair, light blonde, in leather. Seen only on this machine, by the host; nothing " +
+            "is spawned, placed, claimed or saved, and she still walks as her worker body whenever " +
+            "\"cs_steward recruit\" brings it back. Turn off to show nothing at rest.");
+
         return new StewardSettings(
             runtime, tend, debug, creature, questItem, model, garment, garmentLegs, hairColour,
-            hairStyle, speak, below, to, most, carry);
+            hairStyle, speak, below, to, most, carry, showAtHome);
     }
 }

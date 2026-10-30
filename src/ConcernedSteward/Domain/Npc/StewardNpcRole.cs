@@ -92,7 +92,7 @@ internal sealed class StewardNpcRole : INpcRole
 
     /// <inheritdoc />
     public NpcBodyContract Body { get; } =
-        NpcBodyContract.ForWorker(StewardRole.BodyPrefabName, StewardRole.BodyKeyPrefix);
+        NpcBodyContract.ForWorkerWithPresentation(StewardRole.BodyPrefabName, StewardRole.BodyKeyPrefix);
 
     /// <inheritdoc />
     public INpcDataPaths Paths { get; }

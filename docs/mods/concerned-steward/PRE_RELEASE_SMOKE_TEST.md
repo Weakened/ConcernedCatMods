@@ -81,6 +81,20 @@ Record PASS / FAIL / note against each numbered row.
 3. If you know a vanilla dress or robe prefab, set `[Appearance] Garment` and
    confirm she wears it instead of the leather.
 
+## 3b. Her figure at rest — record what you see (OWNER GO-AROUND PENDING)
+
+1. With her settled and no round open, retire her body (`cs_steward retire`) and
+   stand near the supply chest. **Expect:** within a second she stands beside the
+   chest, on the floor, not inside a wall, facing you: female, Matronly hair, no
+   beard, fair skin, light blonde, leather tunic and pants. `cs_steward status`
+   says "Figure at home: shown". Record a screenshot.
+2. `cs_steward recruit` from inside the settlement. **Expect:** the figure is gone
+   before her worker body appears; at no moment are there two of her.
+3. Walk more than 64 m away and back; save, quit and reload; turn
+   `[Appearance] ShowAtHome` off and on. **Expect:** she disappears and reappears
+   accordingly, never doubled, and never while her worker body exists.
+4. A second player joined to your game sees no figure (host only).
+
 ## 4. One round, one trip to the chest — BLOCKS
 
 1. Put five campfires or standing torches inside the area, light them, and let
