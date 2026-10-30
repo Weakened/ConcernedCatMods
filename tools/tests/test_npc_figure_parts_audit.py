@@ -232,6 +232,30 @@ class NpcFigurePartsArePinned(unittest.TestCase):
                         "}\n")
         self.assert_refused("a third place built the dressing on an object it chose")
 
+    def test_a_qualified_construction_elsewhere_is_refused(self):
+        # The review's escape: `new Dressing.NpcDressing(` slipped past a
+        # pattern that only knew the bare name.
+        self.plant_file(LIBRARY, ("Work", "ZzQualified.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Work;\n"
+                        "internal static class ZzQualified\n"
+                        "{\n"
+                        "    internal static object Run(UnityEngine.GameObject anyone, "
+                        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec spec) =>\n"
+                        "        new TheConcernedCat.ConcernedNPC.Body.Dressing.NpcDressing(anyone, null, null, spec, "
+                        "\"h\", null);\n"
+                        "}\n")
+        self.assert_refused("a fully qualified construction carried the dressing to an arbitrary object")
+
+    def test_a_body_tint_moved_above_the_worker_return_is_refused(self):
+        self.swap_in(CORE,
+                     "            if (!_wholeFigure)\n            {\n",
+                     "            TintBody(1, hairColour, \"hair tint\");\n            if (!_wholeFigure)\n            {\n")
+        self.assert_refused("a worker body's renderer would be tinted before the worker-mode return")
+
+    def test_a_model_swap_without_the_whole_figure_flag_is_refused(self):
+        self.swap_in(CORE, "(_wholeFigure && ApplyModel((int)_spec.Model))", "ApplyModel((int)_spec.Model)")
+        self.assert_refused("a worker body could be given another mesh")
+
     def test_the_worker_dresser_calls_no_engine_write_helper(self):
         marker = "    public void TakeOff() => _dressing.TakeOff();"
         self.swap_in(WORKER, marker, marker + "\n\n    private static void Zz(GameObject g) => NpcFigureParts.Drop(g);")

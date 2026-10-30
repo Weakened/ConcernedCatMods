@@ -52,6 +52,10 @@ public sealed class NpcWorkerDresser
 
     public string Fit => _dressing.Fit;
 
+    /// <summary>False once the body it dressed is gone (despawned, unloaded,
+    /// dead) or it was taken off: a status line should then say nothing.</summary>
+    public bool IsOnBody => _dressing.IsOnBody;
+
     /// <summary>One line for a status command.</summary>
     public string Describe() => _dressing.Describe();
 

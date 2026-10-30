@@ -285,7 +285,7 @@ internal sealed class ThorsteinPresentation
             text += " Look: " + _dresser.Describe() + ".";
         }
 
-        if (_workerLook != null)
+        if (_workerLook != null && _workerLook.IsOnBody)
         {
             text += " Worker body look: " + _workerLook.Describe() + ".";
         }

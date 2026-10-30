@@ -2815,13 +2815,19 @@ def _strip_foreman_cs_comments(text: str) -> str:
 #    them would be the place the next one went. A new call that merely uses the
 #    same API in the same file is a different program and fails.
 # 2. CONFINEMENT of the helpers. NpcFigureParts takes any object or transform,
-#    so it may be named only in its own file and in NpcFigureDresser.cs, only as
-#    `NpcFigureParts.<Helper>(`, with each helper's population pinned. Across
-#    assemblies the confinement is the compiler's: the type is internal, which
-#    this rule also requires.
+#    so it may be named only in its own file, in the shared dressing
+#    (NpcDressing.cs) and in NpcFigureDresser.cs, only as
+#    `NpcFigureParts.<Helper>(`, with each helper's population pinned per file.
+#    Across assemblies the confinement is the compiler's: the type is internal,
+#    which this rule also requires. The shared dressing is internal too, named
+#    only in its own file and the two public dressers, and built once by each.
 # 3. THE DOOR CONSUMERS USE. Body/Dressing's public types are exactly the
-#    dresser and the palette, and no public member of the dresser takes an engine
-#    object - it acts on the figure it was built for and the pieces it put there.
+#    figure dresser, the worker dresser (#295 S6, D18) and the palette. No public
+#    member of the figure dresser takes an engine object; the worker dresser may
+#    take one Humanoid, and only through a guard that refuses anything but the
+#    registered role's own saved worker body, which this rule pins. In worker
+#    mode the dressing returns before any write to the body's renderer or
+#    material, which this rule pins by order.
 #    That is what keeps a consumer's own pinned audit (Foreman's #400) honest: a
 #    library member that destroyed or moved whatever it was handed would be a way
 #    round it that spells no audited token.
@@ -3071,15 +3077,49 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
             fail(f"{label}: {key[0]} calls NpcFigureParts.{key[1]} {actual} time(s); the "
                  f"pinned population is {expected}", errors)
 
-    # 2b. The shared dressing is built only by the two public dressers, once each.
-    construct = re.compile(r"\bnew\s+NpcDressing\s*\(")
+    # 2b. The shared dressing is named only where it is allowed (any spelling:
+    # qualified, aliased or target-typed construction all need the name), and
+    # built only by the two public dressers, once each.
+    dressing_name = re.compile(r"\bNpcDressing\b")
+    construct = re.compile(r"\bnew\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*\.\s*)*NpcDressing\s*\(")
     for rel, code in sources.items():
+        if rel == NPC_DRESSING_CORE_FILE:
+            continue
+        names = list(dressing_name.finditer(code))
+        if names and rel not in NPC_DRESSING_CONSTRUCTIONS:
+            for match in names:
+                violations += 1
+                fail(f"{label}: NpcDressing named in src/ConcernedNPC/{rel}:"
+                     f"{code.count(chr(10), 0, match.start()) + 1}; the shared dressing dresses whatever it is "
+                     f"built on, so only {', '.join(sorted(NPC_DRESSING_CONSTRUCTIONS))} may use it", errors)
+            continue
         count = len(construct.findall(code))
         expected = NPC_DRESSING_CONSTRUCTIONS.get(rel, 0)
         if count != expected:
             violations += 1
             fail(f"{label}: src/ConcernedNPC/{rel} constructs NpcDressing {count} time(s); the pinned "
                  f"population is {expected}", errors)
+        if re.search(r"=\s*new\s*\(", code) and rel in NPC_DRESSING_CONSTRUCTIONS:
+            violations += 1
+            fail(f"{label}: src/ConcernedNPC/{rel} uses a target-typed `new(`, which this audit cannot "
+                 "attribute to a type; spell the type so the construction count means something", errors)
+
+    # 2d. In worker mode the dressing returns before it can write the body's
+    # renderer or material: the early return precedes the skin tint and the
+    # garments, and the body swap is behind the whole-figure flag.
+    core_code = sources[NPC_DRESSING_CORE_FILE]
+    early = re.search(r"if\s*\(\s*!\s*_wholeFigure\s*\)\s*\{\s*(?://[^\n]*\s*)*return\s*;", core_code)
+    tint = re.search(r"SkinApplied\s*=\s*skin\s*\.\s*HasValue\s*&&\s*TintBody\s*\(", core_code)
+    calls = [m.start() for m in re.finditer(r"(?<!bool )\b(?:TintBody|AttachGarment|PaintGarment)\s*\(", core_code)
+             if not re.match(r"\s*private", core_code[core_code.rfind(chr(10), 0, m.start()) + 1:m.start()])]
+    model = re.search(r"_wholeFigure\s*&&\s*ApplyModel\s*\(", core_code)
+    apply_at = core_code.find("internal void Apply()")
+    first_body_write = min((at for at in calls if at > apply_at), default=-1)
+    if early is None or tint is None or model is None or first_body_write < 0 or early.start() > first_body_write:
+        violations += 1
+        fail(f"{label}: in {NPC_DRESSING_CORE_FILE}, Apply must return on `!_wholeFigure` before any TintBody, "
+             "AttachGarment or PaintGarment call, and must reach ApplyModel only behind `_wholeFigure &&`; a "
+             "worker body's renderer and material are not this package's to write (D18)", errors)
     if not re.search(r"\binternal\s+sealed\s+class\s+NpcDressing\b", sources[NPC_DRESSING_CORE_FILE]):
         violations += 1
         fail(f"{label}: NpcDressing must be internal; public, it would dress any object it was handed", errors)
@@ -3088,7 +3128,8 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
     # makes both of its comparisons.
     worker_code = sources[NPC_WORKER_DRESSER_FILE]
     guard_call = re.search(r"\b" + NPC_WORKER_GUARD + r"\s*\(\s*identity\s*,\s*body\b", worker_code)
-    build_at = worker_code.find("new NpcDressing")
+    build_match = construct.search(worker_code)
+    build_at = build_match.start() if build_match else -1
     if guard_call is None or build_at < 0 or guard_call.start() > build_at:
         violations += 1
         fail(f"{label}: {NPC_WORKER_DRESSER_FILE} must call {NPC_WORKER_GUARD}(identity, body, ...) before it "

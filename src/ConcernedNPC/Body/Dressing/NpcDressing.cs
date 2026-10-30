@@ -277,6 +277,9 @@ internal sealed class NpcDressing
         Fit = string.Join(", ", measured.ToArray());
     }
 
+    /// <summary>True while the body it dressed exists and it has not been taken off.</summary>
+    internal bool IsOnBody => !_takenOff && _root != null;
+
     /// <summary>Drops every piece this dressing attached and the material
     /// instance it created, and nothing else: never the body it was put on.
     /// Idempotent. A piece already gone with its body is skipped.</summary>
