@@ -10,6 +10,7 @@ namespace ConcernedTeamster.Tests;
 /// skipping, cross-world refusal, unknown-version refusal (migration
 /// stub), pruning caps, and atomic-write crash behavior on a real
 /// filesystem.</summary>
+[Collection(ExactAllocationCollection.Name)]
 public class TripPersistenceTests
 {
     private static CartTelemetry Pulled(
@@ -446,18 +447,32 @@ public class TripPersistenceTests
                 trips.Add(MakeTrip(20, cartId: "1:1", startTime: index * 100.0));
             }
 
-            long composeBefore = GC.GetAllocatedBytesForCurrentThread();
-            string composed = TripSidecar.Compose(trips, worldUid: 42L, "0.8.0");
-            Assert.True(SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError));
-            long composeAllocated = GC.GetAllocatedBytesForCurrentThread() - composeBefore;
+            // #469: exact windows, each with a no-GC budget 8x its ceiling below.
+            string composed = string.Empty;
+            string? writeError = null;
+            bool written = false;
+            long composeAllocated = ExactAllocations.Measure(
+                () =>
+                {
+                    composed = TripSidecar.Compose(trips, worldUid: 42L, "0.8.0");
+                    written = SidecarFileStore.TryWriteAtomic(path, composed, out writeError);
+                },
+                64L * 1024 * 1024);
+            Assert.True(written);
             Assert.Null(writeError);
 
             long fileSizeBytes = new FileInfo(path).Length;
 
-            long parseBefore = GC.GetAllocatedBytesForCurrentThread();
-            string? text = SidecarFileStore.TryRead(path, out string? readError);
-            TripSidecar.ParseResult parsed = TripSidecar.Parse(text, 42L);
-            long parseAllocated = GC.GetAllocatedBytesForCurrentThread() - parseBefore;
+            string? readError = null;
+            TripSidecar.ParseResult? parsedResult = null;
+            long parseAllocated = ExactAllocations.Measure(
+                () =>
+                {
+                    string? text = SidecarFileStore.TryRead(path, out readError);
+                    parsedResult = TripSidecar.Parse(text, 42L);
+                },
+                192L * 1024 * 1024);
+            TripSidecar.ParseResult parsed = parsedResult!;
 
             Assert.Null(readError);
             Assert.False(parsed.Refused);

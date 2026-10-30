@@ -23,6 +23,7 @@ namespace ConcernedTeamster.Tests;
 /// use generous multiples of the one-machine measured value (the same
 /// convention as the existing CT-040 scale tests) so they are not brittle to
 /// machine-to-machine or JIT/GC noise.</summary>
+[Collection(ExactAllocationCollection.Name)]
 public class PerformanceBudgetTests
 {
     // -- CT-023 route profiler: per-frame while a profile build is in flight --
@@ -275,9 +276,8 @@ public class PerformanceBudgetTests
         Trip b = BuildWorstCaseTrip(samples, "1:2");
         TripComparisonPresenter.Present(a, b);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        TripComparisonPresenter.Present(a, b);
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        // Budget: 16x the 512 KiB ceiling the caller asserts.
+        return ExactAllocations.Measure(() => TripComparisonPresenter.Present(a, b), 8L * 1024 * 1024);
     }
 
     // -- CT-029 network input guard: sanitizes every network-derived field
@@ -307,10 +307,10 @@ public class PerformanceBudgetTests
         Assert.Equal(0L, allocated);
     }
 
+    /// <summary>#469: two equal windows compared by ratio; an inflated small
+    /// window could break the ratio on its own, so both are exact.</summary>
     private static long MeasureAllocatedBytes(Action action)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        action();
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        return ExactAllocations.Measure(action, 256L * 1024 * 1024);
     }
 }
