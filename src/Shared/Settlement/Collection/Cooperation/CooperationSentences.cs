@@ -195,6 +195,14 @@ internal static class CooperationSentences
             return "No work area yet.";
         }
 
+        if (scope.Source == WorkScopeSource.CartographerWorkArea)
+        {
+            return scope.IsMissingBoundary
+                ? "Area: " + scope.AnchorDescription + ", not read in this session; choose it again before he works there."
+                : "Area: " + scope.AnchorDescription + " from your map, within " + Round(scope.RadiusMetres) + " m of " +
+                  Describe(scope.Centre) + ".";
+        }
+
         string where = scope.Source == WorkScopeSource.HarvestDesignation
             ? "your harvest area"
             : "the camp circle on " + (scope.AnchorDescription.Length > 0 ? scope.AnchorDescription : "your respawn point");

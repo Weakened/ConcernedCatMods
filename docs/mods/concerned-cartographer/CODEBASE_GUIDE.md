@@ -1316,7 +1316,7 @@ Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol versio
     - The panel gets no editor while no world is bound or the world's area file is read-only.
     - Every panel edit writes the sidecar at once.
 - Not yet built:
-  - "Assign Thorstein" and the Foreman consumer (Lane D2, after #295);
+  - "Assign Thorstein" from the Cartographer panel. Since slice 3, Foreman consumes `concernedcat.workarea/1`: the player picks the area for Thorstein's collection order on Foreman's side (`cf_collect area`, collection panel). See docs/mods/concerned-foreman/COLLECTION.md §1.1;
   - progress and attention display;
   - vertex-level editing (to change a boundary, draw a new area and delete the old one);
   - minimap outlines;

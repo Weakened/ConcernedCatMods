@@ -54,7 +54,7 @@ internal static class ScopeCheckpoint
 {
     public static ScopeCheck Revalidate(WorkScope accepted, ScopeObservation now, Func<SitePoint, bool> isLoaded)
     {
-        if (accepted == null)
+        if (accepted == null || accepted.IsMissingBoundary)
         {
             return ScopeCheck.Invalid;
         }
@@ -115,6 +115,11 @@ internal static class ScopeRevision
 
     public static int ForAnchor(string anchorKind, SitePoint point) =>
         Hash("anchor|" + (anchorKind ?? string.Empty) + "|" + Format(point));
+
+    /// <summary>#296 slice 3: a Cartographer work area's id and its provider's
+    /// boundary revision. A redrawn (or replaced) area changes it.</summary>
+    public static int ForWorkArea(string areaId, string areaRevision) =>
+        Hash("workarea|" + (areaId ?? string.Empty) + "|" + (areaRevision ?? string.Empty));
 
     private static string Format(SitePoint point) =>
         point.X.ToString("R", CultureInfo.InvariantCulture) + ";" +

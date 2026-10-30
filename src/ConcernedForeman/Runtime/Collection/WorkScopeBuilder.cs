@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using TheConcernedCat.ConcernedForeman;
+using TheConcernedCat.Interop.WorkArea;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Designations;
@@ -129,10 +130,15 @@ internal sealed class SettlementDiskReader
 internal sealed class WorkScopeBuilder
 {
     private readonly SettlementDiskReader _reader;
+    private readonly Func<string, WorkAreaLookup>? _describeWorkArea;
 
-    public WorkScopeBuilder(SettlementDiskReader reader)
+    /// <param name="describeWorkArea">#296 slice 3: asks Concerned
+    /// Cartographer about one work area by id; null when there is no way to
+    /// ask, in which case a Cartographer scope is never present.</param>
+    public WorkScopeBuilder(SettlementDiskReader reader, Func<string, WorkAreaLookup>? describeWorkArea = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _describeWorkArea = describeWorkArea;
     }
 
     /// <summary>The harvest designation, when the record is readable. False
@@ -186,8 +192,10 @@ internal sealed class WorkScopeBuilder
 
                 return new ScopeObservation(true, ScopeRevision.ForAnchor(anchor.RevisionName, anchor.Point), currentEpoch);
 
+            case WorkScopeSource.CartographerWorkArea:
+                return CartographerAreaScopes.Observe(scope, _describeWorkArea, currentEpoch);
+
             default:
-                // A Cartographer work area has no provider in this build.
                 return new ScopeObservation(false, 0, currentEpoch);
         }
     }

@@ -19,6 +19,19 @@ Only newly delivered units count. Nothing else in the world is touched.
 It works only when the settlement runtime is on, in single player or as a host with nobody connected (D3), in loaded
 ground, and only through agent D's custody runtime: without one every order is refused with a stated reason.
 
+### 1.1 Work areas from the map (#296 slice 3)
+
+With Concerned Cartographer installed, the player can point the next order at a work area they drew on the map, using `cf_collect area <name>` or the panel's **Next map area** / **Usual area** buttons.
+
+- **How Foreman reads it.** Foreman reads `concernedcat.workarea/1` at runtime. It finds Cartographer by its GUID and holds no compile reference to it. The contract can only list and describe areas.
+- **Precedence.** An area chosen from the map comes first, then the harvest designation, then the default camp circle.
+- **No substitution.** A chosen area that is unavailable, deleted, from another world, unreadable, or more than 48 m from its middle refuses the order with its reason. It is never replaced by the harvest area or the circle.
+- **Containment.** The scope is the drawn polygon. The circle around it only bounds the survey walk. Code: `WorkScope.TryForWorkArea`, `CartographerAreaScopes`, `WorkAreaClient`.
+- **Checkpoints.** Each one re-describes the area by its id, so a redrawn area pauses the order with "the work area changed".
+- **Reloads.** The journal keeps no polygon. A Cartographer scope rebuilt after a reload therefore contains nothing until the player chooses the area again and rebinds.
+- **The choice.** It belongs to one world load.
+- **Authority.** No new authority: only which allowlisted natural sources count gets narrower. Thorstein collects only with `Collection/ThorsteinCollects` on (#380), which is off by default.
+
 ## 2. Layout
 
 | Layer | Where | What |
@@ -317,6 +330,9 @@ and the commit.
 | N19 rebind | After N18: `cf_collect resume` | Refused, naming the rebind. Then look at the chest and `cf_collect rebind` → accepted; `resume` → he surveys and carries on; his carried stone is unchanged throughout |
 | N20 the uninstall path | After N18, without rebinding: `cf_collect cancel`, then `cf_settle release`, then `cf_worker despawn` | Each is accepted in turn: the order ends, the stone and the tools come back, the body retires. This is §13 of the custody guide end to end. **Requires Concerned NPC to have accepted Thorstein at startup** — without it the final `despawn` refuses by design (§2.1), so this row is run on a load whose log shows the registration succeeded |
 | N20b the uninstall path with the library missing | Remove or disable Concerned NPC, start, then `cf_collect start 10 0` and `cf_worker despawn` | The mod loads with one line naming the missing dependency (or BepInEx refuses it outright); the order is refused naming Concerned NPC and **not** "busy"; `despawn` refuses rather than destroying a body nothing can account for (§2.1) |
+| N22 map work area (#296 slice 3) | With Concerned Cartographer installed, draw an L-shaped work area (Areas button) under 48 m from its middle. Then `cf_collect area list`, `cf_collect area <name>` (or the panel's **Next map area**), and `cf_collect start 10 0 hold` | The order names the area. Only sources inside the drawn L are picked, never the ones in the L's missing corner. **OWNER GO-AROUND PENDING** |
+| N23 map area refusals | Choose an area, then: delete it on the map / remove Cartographer / draw one wider than 96 m, and `start` each time | Each is refused with its reason. **Never** the harvest area or the camp circle instead. `cf_collect area default` goes back to the usual area. **OWNER GO-AROUND PENDING** |
+| N24 map area redrawn mid-order | Redraw the chosen area on the map while he works | Paused "the work area changed" at the next checkpoint; after a reload the order needs `area <name>` and then `rebind`. **OWNER GO-AROUND PENDING** |
 | N21 a fresh zone | Walk into a zone you have never visited and immediately `cf_collect start 10 0` | While the zone is still filling, a survey that finds nothing says the look was cut short (`SurveyIncomplete`), never "no eligible sources"; once it settles, he collects |
 | N22 a location reloading | Stand with a 30 m circle overlapping the start temple and force its zone to reload (walk 200 m away and back) | No temple stone is ever picked, including in the seconds right after the zone comes back |
 
