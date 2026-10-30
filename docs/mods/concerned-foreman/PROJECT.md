@@ -186,6 +186,40 @@ has been observed in game. OWNER GO-AROUND PENDING**:
    and by firelight. Read the "Look:" part of `cf_worker status` for any
    fallback or removed piece.
 
+### Tools of the Trade, slice S1: the story record (#295)
+
+Thorstein's introduction now has a record. It is kept per character and per world
+in the shared companion sidecar (`src/Shared/Companions`, which Foreman now compiles
+under `<config>/ConcernedCatMods/ConcernedForeman/companions`). The game-free
+`ToolsOfTheTrade` decides what happens.
+
+- **The two objectives are read from the real tool ledger.** "An axe" is done when
+  the ledger says an axe given to him is held by him. The tools reach him only
+  through the existing handover, `cf_settle give axe|hammer`: a real, selected
+  instance with its tier and durability.
+- **When he holds both, he joins.** He is taken on through the settlement register,
+  by the same act as `cf_settle recruit thorstein` and with its checks: authority, a
+  readable record, a settlement area. The story is recorded complete only after the
+  register write has reached disk.
+- **It fails closed.** An unresolved handover, a read-only record, no authority or no
+  settlement area each waits, and says which.
+- **Nothing undoes it.** A lost tool never relocks him, and a replay grants nothing.
+  A finished story never re-hires a worker the player dismissed.
+- **The carpenter's square is slice S2.** Until then `cf_settle quest examine` stands
+  in for examining it, and `cf_settle quest` shows the objectives.
+
+**OWNER GO-AROUND PENDING** (a disposable world, settlement runtime on, host):
+
+1. `cf_settle quest`: "not begun". `cf_settle quest examine`: the inscription and
+   his introduction, with both objectives open.
+2. Mark a settlement area, run `cf_worker spawn`, and hold an axe: `cf_settle give
+   axe`. The axe objective is done and he is not yet recruited. Quit and reload:
+   `cf_settle quest` still shows the axe done.
+3. `cf_settle give hammer`: his completion line, "Thorstein joined your settlement",
+   and `cf_settle status` shows him employed. Nothing starts on its own.
+4. `cf_settle takeback axe`, then `cf_settle quest`: still complete.
+5. Repeat step 1's `examine`: it grants nothing twice.
+
 ---
 
 ## Research the contract owed — done
