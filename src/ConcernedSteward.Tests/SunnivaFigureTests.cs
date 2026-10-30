@@ -235,6 +235,16 @@ public sealed class SunnivaFigureTests
     }
 
     [Fact]
+    public void An_unidentified_or_uncounted_body_makes_the_count_unknown()
+    {
+        // A CS_Steward body whose identity stamp failed might be hers: the
+        // figure's count is then unknown (-1), which the plan refuses.
+        string inputs = Between(Runtime("StewardRuntime.cs"), "private SunnivaFigureInputs FigureInputs()", "bool settled");
+        Assert.Contains("_census.Verdict == StewardCensusVerdict.Unknown || _census.Unidentified > 0", inputs);
+        Assert.Contains("? -1", inputs);
+    }
+
+    [Fact]
     public void The_figure_yields_before_her_worker_body_is_spawned()
     {
         string ensure = Between(Runtime("StewardRuntime.cs"), "private string EnsureBody(", "internal string Status()");

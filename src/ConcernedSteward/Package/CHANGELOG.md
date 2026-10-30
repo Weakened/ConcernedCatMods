@@ -13,8 +13,8 @@ every other Concerned Cat mod.
   Concerned NPC's worker-with-presentation (`ForWorkerWithPresentation`), so the library's one arbiter keeps the
   figure and her worker body from ever coexisting; the figure goes before her worker body is claimed or spawned.
   New setting `[Appearance] ShowAtHome` (on). Identity `steward/steward`, prefab `CS_Steward` and keys `tcc.steward.`
-  are unchanged. The plugin now requires Concerned NPC 0.5.0 or later at load.
-- **Requires Concerned NPC 0.5.0** (was 0.4.0). The library's new body contract (#295) is additive. Nothing about the
+  are unchanged.
+- **Requires Concerned NPC 0.5.0** (was 0.4.0), now also checked at load (`BepInDependency` minimum version). The library's new body contract (#295) is additive. Nothing about the
   Steward's own body, identity or keys changed. The pin moves because every consumer pins the library version it was
   compiled against.
 

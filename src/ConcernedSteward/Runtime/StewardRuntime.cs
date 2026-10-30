@@ -353,7 +353,11 @@ internal sealed class StewardRuntime
     /// round, no plan, nothing unreceipted, nothing unaccounted for.</summary>
     private SunnivaFigureInputs FigureInputs()
     {
-        int saved = _census.Verdict == StewardCensusVerdict.Unknown ? -1 : _census.Saved;
+        // A CS_Steward body with no identity stamped might be hers (a stamp that
+        // failed leaves exactly that), so it is unknown, never "none".
+        int saved = _census.Verdict == StewardCensusVerdict.Unknown || _census.Unidentified > 0
+            ? -1
+            : _census.Saved;
         bool settled = _introduction.IsEngaged && _quest.Stage >= StewardQuestStage.Settled;
         bool resting = _loop.Custody.Carried == 0
             && !_loop.IsWorking && _loop.Phase != UpkeepPhase.NeedsAttention

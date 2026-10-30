@@ -79,10 +79,10 @@ internal readonly struct SunnivaBodyDecision
 ///
 /// <b>A saved worker body outranks everything, and is checked first.</b> While
 /// one with her identity exists anywhere in the world - loaded or not - she is
-/// that body and the figure is never asked for. Her worker body leaves the world
-/// only through the guarded retire verb (S1), empty-handed and with nothing
-/// open, so the figure only ever follows that verb or a world where she has not
-/// been given a body yet.
+/// that body and the figure is never asked for. An unidentified <c>CS_Steward</c>
+/// body counts as unknown. Her worker body leaves the world by dying or, with
+/// #475, through the guarded retire verb (S1); either way the figure appears only
+/// once nothing is open.
 ///
 /// <b>Anything unknown shows nothing.</b> A count that failed, a world not up, a
 /// client that is not the host, or a home that cannot be found all answer "no

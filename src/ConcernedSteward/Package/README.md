@@ -100,7 +100,8 @@ one trip for each kind, never one trip per light.
 **Her look.** She wears a leather tunic and leather pants. Vanilla only draws
 hair, hair colour, skin colour and the female model on a player-style body; on
 the default base creature those settings may have no visible effect, and the
-log says so. At rest, with no worker body in the world, she is shown beside the
+log says so (`[Appearance] HairColour` is her worker body's hair colour; the
+figure uses its own fair, light-blonde colouring). At rest, with no worker body in the world, she is shown beside the
 supply chest as a player-style figure that does show them: female, Matronly
 hair, fair and light blonde. That figure is seen only on the host's machine and
 changes nothing in the world; it is never there at the same time as her worker

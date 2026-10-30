@@ -281,7 +281,7 @@ internal sealed class StewardSettings
             "Appearance",
             "ShowAtHome",
             true,
-            "While Sunniva has no worker body in the world (after \"cs_steward retire\"), show her " +
+            "While Sunniva is settled, resting and has no worker body in the world, show her " +
             "at her home post beside the supply chest as a player-style figure: female, Matronly " +
             "hair, fair, light blonde, in leather. Seen only on this machine, by the host; nothing " +
             "is spawned, placed, claimed or saved, and she still walks as her worker body whenever " +
