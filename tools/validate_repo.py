@@ -2882,6 +2882,16 @@ def _strip_foreman_cs_comments(text: str) -> str:
 # Limits, stated: this is a source-text audit with comments stripped. It does
 # not follow a delegate or a method group to an engine call that spells no
 # `Destroy…(`, and it does not prove control flow.
+#
+# Known limits of the worker-dresser checks (#295 S6), stated rather than chased
+# (lead's rule: a purely lexical escape in a text audit is recorded, not a
+# blocker). The guard check proves the call `IsThatRolesWorkerBody(identity,
+# body` is written before the dressing is built, not that its result is obeyed
+# (`_ = IsThatRolesWorkerBody(...);` would pass), and that the guard's two
+# comparisons are written somewhere after its definition, not that they sit on
+# a live path inside it. The early-return check proves an ordering of text, not
+# that the return is reachable. Each of these is the reviewer's to see; the
+# behaviour they protect is stated in DECISIONS.md D18.
 NPC_FIGURE_PARTS_FILE = "Body/Dressing/NpcFigureParts.cs"
 NPC_FIGURE_DRESSER_FILE = "Body/Dressing/NpcFigureDresser.cs"
 # #295 S6 (owner decision 2026-10-29, option (b)): the dressing is shared by the
