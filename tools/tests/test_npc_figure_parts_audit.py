@@ -246,6 +246,29 @@ class NpcFigurePartsArePinned(unittest.TestCase):
                         "}\n")
         self.assert_refused("a fully qualified construction carried the dressing to an arbitrary object")
 
+    def test_a_global_qualified_second_construction_in_a_dresser_is_refused(self):
+        marker = "    public void TakeOff() => _dressing.TakeOff();"
+        self.swap_in(WORKER, marker, marker + "\n\n    private static object Zz(GameObject g, NpcLookSpec s) =>\n"
+                     "        new global::TheConcernedCat.ConcernedNPC.Body.Dressing.NpcDressing(g, null, null, s, "
+                     "\"h\", null);")
+        self.assert_refused("a second, unguarded dressing was built inside the worker dresser")
+
+    def test_a_target_typed_construction_in_a_dresser_is_refused(self):
+        marker = "    public void TakeOff() => _dressing.TakeOff();"
+        self.swap_in(WORKER, marker, marker + "\n\n    private static NpcDressing Zz(GameObject g, NpcLookSpec s) =>\n"
+                     "        new(g, null, null, s, \"h\", null);")
+        self.assert_refused("a target-typed new() built a dressing the count could not see")
+
+    def test_an_aliased_dressing_in_a_dresser_is_refused(self):
+        self.swap_in(WORKER, "using UnityEngine;\n",
+                     "using UnityEngine;\nusing Zd = TheConcernedCat.ConcernedNPC.Body.Dressing.NpcDressing;\n")
+        self.assert_refused("an alias carried the dressing under another name")
+
+    def test_a_body_tint_in_the_constructor_is_refused(self):
+        self.swap_in(CORE, "        _wholeFigure = wholeFigure;\n",
+                     "        _wholeFigure = wholeFigure;\n        TintBody(0, NpcLookRgb.White, \"skin tone\");\n")
+        self.assert_refused("a body tint outside Apply reached a worker body")
+
     def test_a_body_tint_moved_above_the_worker_return_is_refused(self):
         self.swap_in(CORE,
                      "            if (!_wholeFigure)\n            {\n",

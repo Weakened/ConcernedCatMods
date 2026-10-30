@@ -3081,7 +3081,8 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
     # qualified, aliased or target-typed construction all need the name), and
     # built only by the two public dressers, once each.
     dressing_name = re.compile(r"\bNpcDressing\b")
-    construct = re.compile(r"\bnew\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*\.\s*)*NpcDressing\s*\(")
+    construct = re.compile(
+        r"\bnew\s+(?:global\s*::\s*)?(?:[A-Za-z_][A-Za-z0-9_]*\s*\.\s*)*NpcDressing\s*\(")
     for rel, code in sources.items():
         if rel == NPC_DRESSING_CORE_FILE:
             continue
@@ -3099,10 +3100,14 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
             violations += 1
             fail(f"{label}: src/ConcernedNPC/{rel} constructs NpcDressing {count} time(s); the pinned "
                  f"population is {expected}", errors)
-        if re.search(r"=\s*new\s*\(", code) and rel in NPC_DRESSING_CONSTRUCTIONS:
+        if re.search(r"\bnew\s*\(", code):
             violations += 1
             fail(f"{label}: src/ConcernedNPC/{rel} uses a target-typed `new(`, which this audit cannot "
                  "attribute to a type; spell the type so the construction count means something", errors)
+        if re.search(r"\busing\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]*\bNpcDressing\b", code):
+            violations += 1
+            fail(f"{label}: src/ConcernedNPC/{rel} aliases NpcDressing, which would build it under a name "
+                 "this audit does not count", errors)
 
     # 2d. In worker mode the dressing returns before it can write the body's
     # renderer or material: the early return precedes the skin tint and the
@@ -3114,8 +3119,11 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
              if not re.match(r"\s*private", core_code[core_code.rfind(chr(10), 0, m.start()) + 1:m.start()])]
     model = re.search(r"_wholeFigure\s*&&\s*ApplyModel\s*\(", core_code)
     apply_at = core_code.find("internal void Apply()")
-    first_body_write = min((at for at in calls if at > apply_at), default=-1)
-    if early is None or tint is None or model is None or first_body_write < 0 or early.start() > first_body_write:
+    # Every call site in the file counts, not only those inside Apply: a tint in
+    # the constructor would reach a worker body as surely as one in Apply.
+    first_body_write = min(calls, default=-1)
+    if (early is None or tint is None or model is None or apply_at < 0 or first_body_write < 0
+            or early.start() > first_body_write):
         violations += 1
         fail(f"{label}: in {NPC_DRESSING_CORE_FILE}, Apply must return on `!_wholeFigure` before any TintBody, "
              "AttachGarment or PaintGarment call, and must reach ApplyModel only behind `_wholeFigure &&`; a "
