@@ -61,6 +61,8 @@ internal sealed class ThorsteinPresentation
 
     private GameObject? _figure;
     private NpcFigureDresser? _dresser;
+    private NpcWorkerDresser? _workerLook;
+    private string _workerLookRefusal = string.Empty;
     private Vector3 _builtFor;
     private string _figureRefusal = string.Empty;
     private bool _buildFailedThisWorld;
@@ -113,6 +115,7 @@ internal sealed class ThorsteinPresentation
         }
 
         _dresser?.VerifyOnce();
+        _workerLook?.VerifyOnce();
         if (_sincePass < PassSeconds)
         {
             return;
@@ -195,6 +198,7 @@ internal sealed class ThorsteinPresentation
     internal void OnWorldUnloaded()
     {
         TakeDown();
+        ForgetWorkerLook();
         _bodies.Reconcile(ThorsteinBodyKind.None);
         _bodies.Forget();
         _census = -1;
@@ -203,9 +207,54 @@ internal sealed class ThorsteinPresentation
         _gateWasOpen = false;
     }
 
+    /// <summary>#295 S6 (owner decision 2026-10-29, option (b)): a worker body
+    /// with Thorstein's identity has just loaded or been created. Unless the
+    /// player turned it off, his own hair and beard pieces are put on it,
+    /// locally, by Concerned NPC's <see cref="NpcWorkerDresser"/>, which refuses
+    /// anything that is not his saved worker body and falls back to the plain
+    /// look when a piece will not attach or does not fit. No prefab, saved data
+    /// or network object changes.</summary>
+    internal void OnWorkerBodyLoaded(Humanoid? body)
+    {
+        ForgetWorkerLook();
+        if (body == null || !_settings.WorkerLook.Value || !_npc.IsRegistered)
+        {
+            return;
+        }
+
+        try
+        {
+            _workerLook = NpcWorkerDresser.TryDress(
+                _npc.Identity,
+                body,
+                ThorsteinLookPlan.Spec(_settings.Hair.Value, _settings.Beard.Value, null, null),
+                "CF_ThorsteinWorkerHarvest",
+                _log,
+                out string refusal);
+            _workerLookRefusal = refusal;
+            _log(_workerLook != null
+                ? "Thorstein's worker body wears his own hair and beard: " + _workerLook.Describe() + "."
+                : "Thorstein's worker body keeps its plain look: " + refusal + ".");
+        }
+        catch (Exception exception)
+        {
+            _workerLook = null;
+            _workerLookRefusal = "dressing it failed on this build";
+            _log("Thorstein's worker body keeps its plain look: " + SafeFailure.Brief(exception));
+        }
+    }
+
+    private void ForgetWorkerLook()
+    {
+        _workerLook?.TakeOff();
+        _workerLook = null;
+        _workerLookRefusal = string.Empty;
+    }
+
     /// <summary>Plugin teardown.</summary>
     internal void Dispose()
     {
+        ForgetWorkerLook();
         TakeDown();
         _bodies.Reconcile(ThorsteinBodyKind.None);
     }
@@ -234,6 +283,15 @@ internal sealed class ThorsteinPresentation
         if (_dresser != null)
         {
             text += " Look: " + _dresser.Describe() + ".";
+        }
+
+        if (_workerLook != null)
+        {
+            text += " Worker body look: " + _workerLook.Describe() + ".";
+        }
+        else if (_workerLookRefusal.Length != 0)
+        {
+            text += " Worker body look: plain (" + _workerLookRefusal + ").";
         }
 
         return text;

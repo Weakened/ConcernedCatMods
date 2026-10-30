@@ -2831,18 +2831,27 @@ def _strip_foreman_cs_comments(text: str) -> str:
 # `Destroy…(`, and it does not prove control flow.
 NPC_FIGURE_PARTS_FILE = "Body/Dressing/NpcFigureParts.cs"
 NPC_FIGURE_DRESSER_FILE = "Body/Dressing/NpcFigureDresser.cs"
+# #295 S6 (owner decision 2026-10-29, option (b)): the dressing is shared by the
+# figure dresser and a worker-body dresser, so its engine-write calls live in
+# NpcDressing.cs; the figure dresser keeps only the two that act on a whole
+# figure (standing it, and dropping it); the worker dresser calls none.
+NPC_DRESSING_CORE_FILE = "Body/Dressing/NpcDressing.cs"
+NPC_WORKER_DRESSER_FILE = "Body/Dressing/NpcWorkerDresser.cs"
 NPC_DRESSING_DIR = "Body/Dressing/"
-NPC_DRESSING_PUBLIC_TYPES = frozenset({"NpcFigureDresser", "NpcCustomizationPalette"})
+NPC_DRESSING_PUBLIC_TYPES = frozenset({"NpcFigureDresser", "NpcWorkerDresser", "NpcCustomizationPalette"})
 NPC_FIGURE_PARTS_USES = {
-    "Discard": 8,
-    "Drop": 3,
-    "Harvest": 2,
-    "Holder": 2,
-    "Offset": 1,
-    "Place": 1,
-    "Reshape": 1,
-    "Seat": 4,
+    (NPC_DRESSING_CORE_FILE, "Discard"): 8,
+    (NPC_DRESSING_CORE_FILE, "Drop"): 3,
+    (NPC_DRESSING_CORE_FILE, "Harvest"): 2,
+    (NPC_DRESSING_CORE_FILE, "Holder"): 2,
+    (NPC_DRESSING_CORE_FILE, "Offset"): 1,
+    (NPC_DRESSING_CORE_FILE, "Reshape"): 1,
+    (NPC_DRESSING_CORE_FILE, "Seat"): 4,
+    (NPC_FIGURE_DRESSER_FILE, "Drop"): 1,
+    (NPC_FIGURE_DRESSER_FILE, "Place"): 1,
 }
+# Where the shared dressing may be constructed: once by each public dresser.
+NPC_DRESSING_CONSTRUCTIONS = {NPC_FIGURE_DRESSER_FILE: 1, NPC_WORKER_DRESSER_FILE: 1}
 
 
 def _npc_exact(pattern: str) -> re.Pattern:
@@ -2908,6 +2917,17 @@ NPC_ENGINE_WRITES = (
 NPC_DRESSER_PARAMETER_TYPES = frozenset({
     "NpcPresentationFigure", "NpcLookSpec", "string", "Action<string>", "Vector3", "Quaternion",
 })
+# The worker dresser must be told which body, so it may take one Humanoid and
+# the identity it belongs to - and only through the guard below, which refuses
+# any object that is not that registered role's own saved worker body.
+NPC_WORKER_DRESSER_PARAMETER_TYPES = NPC_DRESSER_PARAMETER_TYPES | frozenset({"NpcIdentity", "Humanoid"})
+NPC_WORKER_GUARD = "IsThatRolesWorkerBody"
+# The guard's two load-bearing comparisons, verbatim: the saved prefab is the
+# role's contracted worker prefab, and the saved identity is this identity.
+NPC_WORKER_GUARD_CHECKS = (
+    re.compile(r"string\s*\.\s*Equals\s*\(\s*prefab\s*\.\s*name\s*,\s*role\s*\.\s*Body\s*\.\s*PrefabName\s*,\s*StringComparison\s*\.\s*Ordinal\s*\)"),
+    re.compile(r"\bstored\s*!=\s*identity\b"),
+)
 
 
 def _npc_parameter_types(parameters: str) -> list[str]:
@@ -2968,8 +2988,9 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
         fail(f"{label}: the Concerned NPC library is not declared, so nothing was audited", errors)
         return []
     lib_dir: Path = library["project_dir"]  # type: ignore[assignment]
-    if not (lib_dir / NPC_FIGURE_PARTS_FILE).is_file() or not (lib_dir / NPC_FIGURE_DRESSER_FILE).is_file():
-        fail(f"{label}: {NPC_FIGURE_PARTS_FILE} or {NPC_FIGURE_DRESSER_FILE} is missing; point the audit at "
+    if not all((lib_dir / rel).is_file() for rel in (
+            NPC_FIGURE_PARTS_FILE, NPC_FIGURE_DRESSER_FILE, NPC_DRESSING_CORE_FILE, NPC_WORKER_DRESSER_FILE)):
+        fail(f"{label}: a dressing file under {NPC_DRESSING_DIR} is missing; point the audit at "
              "the dresser's new home rather than leaving it green", errors)
         return []
 
@@ -3018,19 +3039,20 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
              "a helper that destroys and moves any object", errors)
     any_name = re.compile(r"\bNpcFigureParts\b")
     member = re.compile(r"\bNpcFigureParts\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-    found: dict[str, int] = {}
+    found: dict[tuple[str, str], int] = {}
+    allowed_callers = {rel for rel, _ in NPC_FIGURE_PARTS_USES}
     for rel, code in sources.items():
         if rel == NPC_FIGURE_PARTS_FILE:
             continue
         names = list(any_name.finditer(code))
         if not names:
             continue
-        if rel != NPC_FIGURE_DRESSER_FILE:
+        if rel not in allowed_callers:
             for match in names:
                 violations += 1
                 fail(f"{label}: NpcFigureParts named in src/ConcernedNPC/{rel}:"
                      f"{code.count(chr(10), 0, match.start()) + 1}; its helpers destroy and move any object, so "
-                     f"only {NPC_FIGURE_DRESSER_FILE} may call them", errors)
+                     f"only {', '.join(sorted(allowed_callers))} may call them", errors)
             continue
         calls = list(member.finditer(code))
         if len(calls) != len(names):
@@ -3039,14 +3061,45 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
                  f"{len(calls)} time(s); an alias, a method group or a static import would carry a helper out "
                  "of this audit", errors)
         for call in calls:
-            found[call.group(1)] = found.get(call.group(1), 0) + 1
-    for helper in sorted(set(found) | set(NPC_FIGURE_PARTS_USES)):
-        expected = NPC_FIGURE_PARTS_USES.get(helper, 0)
-        actual = found.get(helper, 0)
+            key = (rel, call.group(1))
+            found[key] = found.get(key, 0) + 1
+    for key in sorted(set(found) | set(NPC_FIGURE_PARTS_USES)):
+        expected = NPC_FIGURE_PARTS_USES.get(key, 0)
+        actual = found.get(key, 0)
         if actual != expected:
             violations += 1
-            fail(f"{label}: {NPC_FIGURE_DRESSER_FILE} calls NpcFigureParts.{helper} {actual} time(s); the "
+            fail(f"{label}: {key[0]} calls NpcFigureParts.{key[1]} {actual} time(s); the "
                  f"pinned population is {expected}", errors)
+
+    # 2b. The shared dressing is built only by the two public dressers, once each.
+    construct = re.compile(r"\bnew\s+NpcDressing\s*\(")
+    for rel, code in sources.items():
+        count = len(construct.findall(code))
+        expected = NPC_DRESSING_CONSTRUCTIONS.get(rel, 0)
+        if count != expected:
+            violations += 1
+            fail(f"{label}: src/ConcernedNPC/{rel} constructs NpcDressing {count} time(s); the pinned "
+                 f"population is {expected}", errors)
+    if not re.search(r"\binternal\s+sealed\s+class\s+NpcDressing\b", sources[NPC_DRESSING_CORE_FILE]):
+        violations += 1
+        fail(f"{label}: NpcDressing must be internal; public, it would dress any object it was handed", errors)
+
+    # 2c. The worker dresser's guard runs before anything is built, and still
+    # makes both of its comparisons.
+    worker_code = sources[NPC_WORKER_DRESSER_FILE]
+    guard_call = re.search(r"\b" + NPC_WORKER_GUARD + r"\s*\(\s*identity\s*,\s*body\b", worker_code)
+    build_at = worker_code.find("new NpcDressing")
+    if guard_call is None or build_at < 0 or guard_call.start() > build_at:
+        violations += 1
+        fail(f"{label}: {NPC_WORKER_DRESSER_FILE} must call {NPC_WORKER_GUARD}(identity, body, ...) before it "
+             "constructs the dressing; without it the worker dresser would dress the player or anyone", errors)
+    guard_def = re.search(r"\bprivate\s+static\s+bool\s+" + NPC_WORKER_GUARD + r"\s*\(", worker_code)
+    guard_body = worker_code[guard_def.end():] if guard_def else ""
+    for check in NPC_WORKER_GUARD_CHECKS:
+        if not check.search(guard_body):
+            violations += 1
+            fail(f"{label}: {NPC_WORKER_GUARD} no longer makes the comparison {check.pattern!r}; both the "
+                 "saved prefab and the saved identity must match the registered role", errors)
 
     # 3. The door consumers use.
     public_types: set[str] = set()
@@ -3062,23 +3115,27 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
         fail(f"{label}: {NPC_DRESSING_DIR}'s public types are {sorted(public_types)}; the pinned surface is "
              f"{sorted(NPC_DRESSING_PUBLIC_TYPES)}. This folder is not compiled into ConcernedNPC.Tests, so "
              "PublicSurfaceTests cannot see it and this is where its surface is written down", errors)
-    for line, parameters in _npc_public_signatures(sources[NPC_FIGURE_DRESSER_FILE]):
-        for declared in _npc_parameter_types(parameters):
-            if declared in NPC_DRESSER_PARAMETER_TYPES:
-                continue
-            violations += 1
-            fail(f"{label}: a public member of NpcFigureDresser takes a {declared} at "
-                 f"{NPC_FIGURE_DRESSER_FILE}:{line}; the allowed parameter types are "
-                 f"{', '.join(sorted(NPC_DRESSER_PARAMETER_TYPES))}. The dresser acts only on the figure it was "
-                 "built for; a member that acted on whatever it was handed would let a consumer destroy or move "
-                 "anything without spelling an audited token", errors)
+    for rel, allowed in ((NPC_FIGURE_DRESSER_FILE, NPC_DRESSER_PARAMETER_TYPES),
+                         (NPC_WORKER_DRESSER_FILE, NPC_WORKER_DRESSER_PARAMETER_TYPES)):
+        for line, parameters in _npc_public_signatures(sources[rel]):
+            for declared in _npc_parameter_types(parameters):
+                if declared in allowed:
+                    continue
+                violations += 1
+                fail(f"{label}: a public member in {rel} takes a {declared} at line {line}; the allowed "
+                     f"parameter types are {', '.join(sorted(allowed))}. A dresser acts only on the figure it "
+                     "was built for or the role's own guarded worker body; a member that acted on whatever it "
+                     "was handed would let a consumer destroy or move anything without spelling an audited "
+                     "token", errors)
 
     return [
         f"{label}: {len(sources)} library source(s); {pinned} engine creation, destruction, parenting, "
         "position/rotation/scale and mesh-swap site(s) pinned by path and exact spelling, and no velocity, "
         "gravity, force or direct-movement call anywhere; the dresser's "
-        f"{len(NPC_FIGURE_PARTS_USES)} helpers are "
-        f"internal and called only from {NPC_FIGURE_DRESSER_FILE}, each population pinned; "
+        f"{len({key[1] for key in NPC_FIGURE_PARTS_USES})} helpers are "
+        f"internal and called only from {NPC_DRESSING_CORE_FILE} and {NPC_FIGURE_DRESSER_FILE}, each "
+        "population pinned; the shared dressing is internal and built once by each public dresser, and the "
+        "worker dresser's guard (saved prefab and saved identity must be the registered role's) runs first; "
         f"{NPC_DRESSING_DIR} exports exactly {', '.join(sorted(NPC_DRESSING_PUBLIC_TYPES))} and a public "
         "dresser member takes only an allowlisted parameter type. A source-text audit with comments stripped: "
         "it does not cover material and renderer writes, and it does not "

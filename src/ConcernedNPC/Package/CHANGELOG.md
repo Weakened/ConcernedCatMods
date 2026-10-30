@@ -64,11 +64,27 @@ Gunnar share it.
   cannot be read, the figure is still built, with the first body. The palette's interval and give-up are measured in
   real time, so two plugins polling it do not age it twice as fast.
 
+### A worker body may wear its character's own hair and beard (#295 S6, owner decision 2026-10-29)
+
+* **`Body.Dressing.NpcWorkerDresser`** puts a character's player hair and beard pieces on that role's own worker
+  body, as local children under its head joint, with the same pieces and checks as the figure dresser.
+* **It changes nothing else.** The worker prefab, its saved data and its network object are untouched. The body's
+  renderer and material are left alone too; only the pieces are tinted.
+* **Plain look on failure.** A piece that will not attach, or is not drawn where it was put on that rig, is taken
+  off, and the body keeps its plain look.
+* **It dresses only the right body.** `TryDress` refuses any object that is not the registered role's own saved
+  worker body: the saved prefab and the saved identity must both match. The validator pins that this guard runs
+  first.
+* **One dressing for both.** The dressing is now one internal type, `NpcDressing`, used by both dressers. The figure
+  dresser keeps everything it did before, and a worker body never gets a body swap, a skin tint or garments.
+* Recorded as `docs/settlement/cart-and-collection/DECISIONS.md` **D18**. **Not observed in game.**
+
 ### Versioning
 
 * An additive minor version that widens the public surface by four members: `NpcBodyContract.ForWorkerWithPresentation`,
   `NpcBodyContract.Admits`, one `JobTarget` constructor and the `JobTarget.Carries` property. It also adds the
-  dressing types: `Appearance.*` and `Body.Dressing.NpcFigureDresser` / `NpcCustomizationPalette`. A role that does not
+  dressing types: `Appearance.*` and `Body.Dressing.NpcFigureDresser` / `NpcWorkerDresser` /
+  `NpcCustomizationPalette`. A role that does not
   use them is unaffected. Every in-repository consumer pin moves with it, so no product can compile against one
   contract and install another.
 

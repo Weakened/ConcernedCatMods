@@ -25,6 +25,8 @@ LIBRARY = os.path.join(ROOT, "src", "ConcernedNPC")
 DRESSING = os.path.join(LIBRARY, "Body", "Dressing")
 PARTS = os.path.join(DRESSING, "NpcFigureParts.cs")
 DRESSER = os.path.join(DRESSING, "NpcFigureDresser.cs")
+CORE = os.path.join(DRESSING, "NpcDressing.cs")
+WORKER = os.path.join(DRESSING, "NpcWorkerDresser.cs")
 STEWARD = os.path.join(ROOT, "src", "ConcernedSteward")
 
 AUDIT = "[concernednpc] NPC figure-parts audit"
@@ -192,6 +194,48 @@ class NpcFigurePartsArePinned(unittest.TestCase):
                         "        UnityEngine.Resources.FindObjectsOfTypeAll<PlayerCustomizaton>();\n"
                         "}\n")
         self.assert_refused("Steward grew its own palette reader", rule=ONE_HOME)
+
+    # --- #295 S6: the worker-body dresser (owner decision 2026-10-29) ---------------------------
+
+    def test_the_worker_dresser_cannot_skip_its_guard(self):
+        self.swap_in(WORKER, "        if (!IsThatRolesWorkerBody(identity, body, out refusal))\n",
+                     "        refusal = string.Empty;\n        if (false)\n")
+        self.assert_refused("the worker dresser dressed a body it never proved was the role's")
+
+    def test_the_guard_must_still_compare_the_saved_prefab(self):
+        self.swap_in(WORKER,
+                     "!string.Equals(prefab.name, role.Body.PrefabName, StringComparison.Ordinal)",
+                     "prefab.name.Length == 0")
+        self.assert_refused("the guard stopped checking that the body is the role's worker prefab")
+
+    def test_the_guard_must_still_compare_the_saved_identity(self):
+        self.swap_in(WORKER, "            || stored != identity)", "            || stored.IsEmpty)")
+        self.assert_refused("the guard stopped checking that the body carries the role's identity")
+
+    def test_a_worker_dresser_member_that_takes_any_object_is_refused(self):
+        marker = "    public void TakeOff()"
+        self.swap_in(WORKER, marker, "    public void Adorn(GameObject anything) { }\n\n" + marker)
+        self.assert_refused("a public worker-dresser member took an arbitrary GameObject")
+
+    def test_the_shared_dressing_stays_internal(self):
+        self.swap_in(CORE, "internal sealed class NpcDressing", "public sealed class NpcDressing")
+        self.assert_refused("the shared dressing went public and would dress anything it was handed")
+
+    def test_the_shared_dressing_is_built_only_by_the_two_dressers(self):
+        self.plant_file(LIBRARY, ("Body", "ZzDressAnything.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Body;\n"
+                        "internal static class ZzDressAnything\n"
+                        "{\n"
+                        "    internal static object Run(UnityEngine.GameObject anyone, "
+                        "TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec spec) =>\n"
+                        "        new Dressing.NpcDressing(anyone, null, null, spec, \"h\", null);\n"
+                        "}\n")
+        self.assert_refused("a third place built the dressing on an object it chose")
+
+    def test_the_worker_dresser_calls_no_engine_write_helper(self):
+        marker = "    public void TakeOff() => _dressing.TakeOff();"
+        self.swap_in(WORKER, marker, marker + "\n\n    private static void Zz(GameObject g) => NpcFigureParts.Drop(g);")
+        self.assert_refused("the worker dresser reached for an engine-write helper directly")
 
     def test_success_sentences_state_the_text_audits_limits(self):
         code, out = validate()

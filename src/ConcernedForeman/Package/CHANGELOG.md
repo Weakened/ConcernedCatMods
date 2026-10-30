@@ -11,6 +11,16 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — his own hair and beard while he works (#295 S6, owner decision 2026-10-29)
+
+- **While Thorstein works, his worker body wears his Mullet and Mustache**, the same
+  pieces as his figure at home, put on locally by Concerned NPC. His worker body is
+  still the same creature with the same saved data; nothing is saved, networked or
+  migrated. A piece that will not attach or does not fit on that body is taken off
+  and he keeps the plain look. `cf_worker status` says which ("Worker body look").
+- New setting `Thorstein/WorkerLook` (**on** by default). It applies the next time
+  his worker body loads. **Not observed in game.**
+
 ### Added — Tools of the Trade, the story record (#295, slice S1)
 
 - **Thorstein's introduction has a record now.** It is kept per character and
