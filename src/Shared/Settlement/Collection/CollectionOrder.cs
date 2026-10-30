@@ -234,6 +234,13 @@ internal sealed class WorkScope
         // Rounded up, plus a centimetre, so float rounding can never leave a
         // corner just outside the circle.
         float radius = (float)(Math.Ceiling(furthest * 10d) / 10d) + 0.01f;
+        if (furthest <= MaxRadiusMetres && radius > MaxRadiusMetres)
+        {
+            // The margin never refuses an area whose furthest corner is within
+            // the limit: "more than 48 m" is what is refused.
+            radius = MaxRadiusMetres;
+        }
+
         if (radius < MinRadiusMetres)
         {
             radius = MinRadiusMetres;

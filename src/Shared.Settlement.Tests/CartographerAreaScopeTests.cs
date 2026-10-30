@@ -396,6 +396,18 @@ public sealed class CartographerAreaScopeTests
     }
 
     [Fact]
+    public void AnAreaExactlyAtTheLimitIsAccepted_AndJustBeyondItRefused()
+    {
+        // A square centred on the origin: corners 48 m out along the axes.
+        FakeProvider atLimit = WithGrove(Polygon((48f, 0f), (0f, 48f), (-48f, 0f), (0f, -48f)));
+        Assert.True(CartographerAreaScopes.TryBuild(Choose(atLimit), atLimit.Describe, 0f, Epoch, out WorkScope? scope, out string failure), failure);
+        Assert.Equal(WorkScope.MaxRadiusMetres, scope!.RadiusMetres);
+
+        FakeProvider beyond = WithGrove(Polygon((48.2f, 0f), (0f, 48.2f), (-48.2f, 0f), (0f, -48.2f)));
+        Assert.False(CartographerAreaScopes.TryBuild(Choose(beyond), beyond.Describe, 0f, Epoch, out _, out _));
+    }
+
+    [Fact]
     public void CircleScopesAreUnchanged()
     {
         var circle = new WorkScope(WorkScopeSource.DefaultCampCircle, new SitePoint(0f, 0f, 0f), 30f, "your bed", 4, Epoch);
