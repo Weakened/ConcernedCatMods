@@ -96,7 +96,7 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   authority-refused order goes to `Forget()`, which keeps it. That choice is made in the game-free
   `Domain/Collection/CollectionLifecycle.cs` so it is unit-tested rather than reasoned about, and
   `validate_repo.py`'s `#381 collection lifecycle audit` refuses the port if the two verbs are crossed.
-  Because a pick can now leave material in Gunnar and the deposit half is unwired, `ct_haul retire`
+  Because a pick or a tour can leave material in Gunnar, `ct_haul retire`
   **refuses while a worker body carries anything** (`WorkerRetirement`) rather than destroying its
   inventory with it — the shape Foreman's `SETTLEMENT_AUTHORITY.md` §5a already gives the deliberate
   removal verb, since vanilla's own drop applies to *death* and a deliberate drop would need an
@@ -109,14 +109,16 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   `tcc.worker.revision` into the body's own network object from vanilla's own change callback —
   byte-compatible with Foreman's worker, never before a successful load, and an absent field loads as an
   empty inventory rather than a fault. **Two doors were open when this paragraph was written; death is now
-  closed in code.** Death was the first: the body is destroyed and what it holds went with it. The owner's
-  decision (2026-09-29, **D16 below**) is implemented by PR #446: on a genuine death what he carries goes on
-  the ground through vanilla's own drop, and every death is recorded. A **ZDO write that fails** is the
+  closed in code wherever D16's gates allow, and fails closed where they do not.** Death was the first: the
+  body is destroyed and what it holds went with it. The owner's decision (2026-09-29, **D16 below**) is
+  implemented by PR #446: on a genuine death that passes those gates, what he carries goes on the ground through
+  vanilla's own drop; on one that does not, it is lost with the body and recorded as unresolved. Every death is
+  recorded. A **ZDO write that fails** is the
   second: the change that did not reach the network object is lost, because the live inventory has it and
   the stored package does not. The second is contained rather than fixed - a body whose last change did not
   persist is handed nothing more to hold - and the containment's limit is stated on purpose: nothing this
-  mod does will clear that refusal, because the only inventory change it makes is a pick and the refusal is
-  what stops the next one. A zone load re-creates the record from the last package that did get written.
+  mod does will clear that refusal: a pick is refused on such a body, and so is the deposit (D15;
+  `DepositOrderGate` refuses `WorkerRecordUnwritable`). A zone load re-creates the record from the last package that did get written.
   An explicit `ct_haul retire force` is a third way material goes, and it is excluded from the count for
   a reason rather than overlooked: the ordinary refusal names what he is holding, or says it could not be
   read - which is what it says in the very state above, where the record is unreadable - the forcing word
@@ -156,13 +158,14 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   item-drop behaviour to return what it carries to the world instead of letting the destruction take it. The cart
   detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing recreated from a name;
   a drop that failed is recorded as durable reconciliation evidence rather than silently deleted. **Voluntary
-  cancellation and retirement must never reach this path**, and the validator will refuse a death-drop call from
+  cancellation and retirement must never reach this path**, and the validator refuses a death-drop call from
   any other verb. `ct_haul retire` still refuses while a body carries anything, and `retire force` still
   destroys and still says so. **D16 is implemented (PR #446)**: the one drop call lives in
   `Adapters/Workers/GunnarDeathDropPort.cs`, pinned by the validator and refused everywhere else, and so is any
-  Teamster code that could take health away. It **fails closed** (owner confirmation 2026-10-28): with collection
-  off, another peer connected, the start-up probe failed, his inventory never read, or a cart still attached, nothing
-  drops and the loss is recorded instead.
+  Teamster code that could take health away. It **fails closed** (owner confirmation 2026-10-28): with Teamster or its
+  collection switch off, the shared work-authority rule refusing (not the host, a dedicated server, or another peer
+  connected), the start-up probe failed, his inventory never read, or a cart still attached after the detach,
+  nothing drops and what he carried is recorded as unresolved instead. Never observed in game.
 
 ## Local commands
 
