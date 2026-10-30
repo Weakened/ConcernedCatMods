@@ -305,6 +305,96 @@ public sealed class CartographerAreaScopeTests
         Assert.Contains("choose it again", CooperationSentences.ForScope(rebuilt));
     }
 
+    // --------------------------------------------------------------- rebind
+
+    private const string CopseId = "wa-ffffffffffffffffffffffffffffffff";
+
+    private static FakeProvider WithGroveAndCopse()
+    {
+        FakeProvider provider = WithGrove();
+        provider.Areas.Add(new PublishedWorkArea(CopseId, "Copse", WorkAreaContract.Purposes.WoodGathering, LShape(200f)));
+        return provider;
+    }
+
+    private static WorkScope FromJournal(WorkScope scope)
+    {
+        JournalFields fields = CustodyRowCodec.Encode(
+            new CollectionReboundRow(new OrderId("collect-0002"), scope, DeliveryTarget.HoldForPlayer()));
+        Assert.True(CustodyRowCodec.TryDecode(JournalEntryKind.CollectionRebound, fields, out CustodyRow decoded));
+        return Assert.IsType<CollectionReboundRow>(decoded).Scope;
+    }
+
+    [Fact]
+    public void ALiveOrderRebindsToItsOwnArea_WhateverIsChosenForTheNextOrder()
+    {
+        FakeProvider provider = WithGroveAndCopse();
+        WorkScope accepted = Build(provider);
+        WorkAreaChoice copse = Choose(provider, "Copse");
+
+        Assert.True(CartographerAreaScopes.TryRebind(accepted, copse, provider.Describe, 0f, Epoch, out WorkScope? kept, out string failure), failure);
+        Assert.Equal(GroveId, kept!.AreaId);
+        Assert.Equal(accepted.SourceRevision, kept.SourceRevision);
+
+        // "Usual area" for the next order does not stop a chest-only rebind.
+        Assert.True(CartographerAreaScopes.TryRebind(accepted, null, provider.Describe, 0f, Epoch, out WorkScope? still, out failure), failure);
+        Assert.Equal(GroveId, still!.AreaId);
+    }
+
+    [Fact]
+    public void ALiveOrderWhoseAreaWasRedrawnIsNotRebound()
+    {
+        FakeProvider provider = WithGrove();
+        WorkScope accepted = Build(provider);
+        provider.Areas[0] = new PublishedWorkArea(GroveId, "Birch grove", WorkAreaContract.Purposes.WoodGathering, LShape(1f));
+
+        Assert.False(CartographerAreaScopes.TryRebind(accepted, null, provider.Describe, 0f, Epoch, out WorkScope? scope, out string failure));
+        Assert.Null(scope);
+        Assert.Contains("redrawn", failure);
+    }
+
+    [Fact]
+    public void ARecoveredOrderRebindsOnlyToTheSameAreaWithTheSameShape()
+    {
+        FakeProvider provider = WithGroveAndCopse();
+        WorkScope recovered = FromJournal(Build(provider));
+        Assert.True(recovered.IsMissingBoundary);
+
+        Assert.False(CartographerAreaScopes.TryRebind(recovered, null, provider.Describe, 0f, Epoch, out _, out string unchosen));
+        Assert.Contains("Choose that area again", unchosen);
+
+        Assert.False(CartographerAreaScopes.TryRebind(
+            recovered, Choose(provider, "Copse"), provider.Describe, 0f, Epoch, out WorkScope? wrong, out string other));
+        Assert.Null(wrong);
+        Assert.Contains("not the one this order was accepted in", other);
+
+        Assert.True(CartographerAreaScopes.TryRebind(
+            recovered, Choose(provider), provider.Describe, 0f, Epoch, out WorkScope? same, out string failure), failure);
+        Assert.Equal(GroveId, same!.AreaId);
+        Assert.False(same.IsMissingBoundary);
+
+        provider.Areas[0] = new PublishedWorkArea(GroveId, "Birch grove", WorkAreaContract.Purposes.WoodGathering, LShape(1f));
+        Assert.False(CartographerAreaScopes.TryRebind(
+            recovered, Choose(provider), provider.Describe, 0f, Epoch, out _, out string redrawn));
+        Assert.Contains("redrawn", redrawn);
+    }
+
+    [Fact]
+    public void AFailedChoiceSaysTheChoiceIsUnchanged()
+    {
+        Assert.False(CartographerAreaScopes.TryChoose(WithGrove().List(), "Oak copse", Epoch, out _, out string message));
+        Assert.StartsWith("Work area choice unchanged:", message);
+    }
+
+    [Fact]
+    public void EveryCornerIsInsideTheCircle()
+    {
+        WorkScope scope = Build(WithGrove(Polygon((0.03f, 0.07f), (33.33f, 1.11f), (17.77f, 29.99f))));
+        foreach (WorkAreaPoint corner in scope.Boundary!.Points)
+        {
+            Assert.True(scope.Centre.HorizontalDistanceTo(new SitePoint(corner.X, 0f, corner.Z)) <= scope.RadiusMetres);
+        }
+    }
+
     [Fact]
     public void CircleScopesAreUnchanged()
     {

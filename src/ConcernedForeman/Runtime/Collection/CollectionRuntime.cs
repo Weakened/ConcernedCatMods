@@ -709,7 +709,13 @@ internal sealed class CollectionRuntime
         }
 
         CollectionOrderDefinition order = loop.Order;
-        if (!TryBuildScopeOfKind(order.Scope.Source, order.Scope.RadiusMetres, world.Epoch, out WorkScope? scope, out string failure))
+        WorkScope? scope;
+        string failure;
+        bool rebuilt = order.Scope.Source == WorkScopeSource.CartographerWorkArea
+            ? CartographerAreaScopes.TryRebind(
+                order.Scope, _areaChoice, _cartographerAreas.Describe, IssuerHeight(), world.Epoch, out scope, out failure)
+            : TryBuildScopeOfKind(order.Scope.Source, order.Scope.RadiusMetres, world.Epoch, out scope, out failure);
+        if (!rebuilt)
         {
             return "Refused: " + failure;
         }
@@ -832,10 +838,10 @@ internal sealed class CollectionRuntime
                 return true;
 
             case WorkScopeSource.CartographerWorkArea:
-                // The player confirms the area again in this world load: the
-                // journal keeps no boundary, and nothing is guessed from a name.
-                return CartographerAreaScopes.TryBuild(
-                    _areaChoice, _cartographerAreas.Describe, IssuerHeight(), epoch, out scope, out failure);
+                // Rebind handles these through CartographerAreaScopes.TryRebind,
+                // which keeps the order's own area; nothing else asks.
+                failure = "an order in an area from your map is rebound to that same area only";
+                return false;
 
             default:
                 failure = "this order's kind of work area has no provider in this build";
@@ -866,6 +872,7 @@ internal sealed class CollectionRuntime
         if (verb == "list")
         {
             var text = new StringBuilder(DescribeAreaChoice());
+            text.AppendLine().Append("  ").Append(_cartographerAreas.ProbeNote).Append('.');
             if (!listed.IsOk)
             {
                 text.AppendLine().Append("  Work areas from your map: ").Append(listed.Reason).Append('.');
@@ -901,7 +908,7 @@ internal sealed class CollectionRuntime
         return message;
     }
 
-    /// <summary>For the status line and the panel.</summary>
+    /// <summary>For the status line and <c>area list</c>.</summary>
     internal string DescribeAreaChoice()
     {
         WorkAreaChoice? choice = _areaChoice;

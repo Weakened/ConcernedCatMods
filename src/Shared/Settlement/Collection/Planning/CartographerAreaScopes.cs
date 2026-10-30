@@ -47,7 +47,7 @@ internal static class CartographerAreaScopes
         choice = null;
         if (listed == null || !listed.IsOk)
         {
-            message = "No work area chosen: " + (listed?.Reason ?? "Concerned Cartographer did not answer") + ".";
+            message = "Work area choice unchanged: " + (listed?.Reason ?? "Concerned Cartographer did not answer") + ".";
             return false;
         }
 
@@ -79,7 +79,7 @@ internal static class CartographerAreaScopes
 
                 if (match != null)
                 {
-                    message = "No work area chosen: more than one area is called \"" + wanted + "\". Rename one on the map.";
+                    message = "Work area choice unchanged: more than one area is called \"" + wanted + "\". Rename one on the map.";
                     return false;
                 }
 
@@ -89,7 +89,7 @@ internal static class CartographerAreaScopes
 
         if (match == null)
         {
-            message = "No work area chosen: there is no work area called \"" + wanted + "\" in this world.";
+            message = "Work area choice unchanged: there is no work area called \"" + wanted + "\" in this world.";
             return false;
         }
 
@@ -109,7 +109,7 @@ internal static class CartographerAreaScopes
         next = null;
         if (listed == null || !listed.IsOk)
         {
-            message = "No work area chosen: " + (listed?.Reason ?? "Concerned Cartographer did not answer") + ".";
+            message = "Work area choice unchanged: " + (listed?.Reason ?? "Concerned Cartographer did not answer") + ".";
             return false;
         }
 
@@ -186,6 +186,73 @@ internal static class CartographerAreaScopes
         WorkAreaSummary area = described.Area;
         return WorkScope.TryForWorkArea(
             area.Id, area.Name, area.Revision, area.Boundary!, groundY, worldLoadEpoch, out scope, out failure);
+    }
+
+    /// <summary>Re-snapshots an ACCEPTED Cartographer order's area in this world
+    /// load (rebind). The order keeps the area it was accepted in; the next-order
+    /// choice never moves it somewhere else.
+    /// <list type="bullet">
+    /// <item>A live order (its boundary still held) is re-described by its own
+    /// area id, whatever is chosen for the next order.</item>
+    /// <item>A recovered order (no boundary: the journal keeps none) needs the
+    /// player to choose its area again, and the chosen area must be the same
+    /// one with the same shape: its revision is compared with the revision the
+    /// journal kept, which is derived from the area's id and boundary.</item>
+    /// <item>Either way, an area that was redrawn since the order was accepted
+    /// is refused: that is a new order, not a rebind.</item>
+    /// </list></summary>
+    public static bool TryRebind(
+        WorkScope accepted,
+        WorkAreaChoice? choice,
+        Func<string, WorkAreaLookup> describe,
+        float groundY,
+        Guid worldLoadEpoch,
+        out WorkScope? scope,
+        out string failure)
+    {
+        scope = null;
+        if (accepted == null || accepted.Source != WorkScopeSource.CartographerWorkArea)
+        {
+            failure = "this order does not work in an area from your map";
+            return false;
+        }
+
+        WorkAreaChoice? which = accepted.IsMissingBoundary
+            ? choice
+            : new WorkAreaChoice(accepted.AreaId, NameOf(accepted), worldLoadEpoch);
+        if (which == null || which.WorldLoadEpoch != worldLoadEpoch)
+        {
+            failure = "this order works in " + accepted.AnchorDescription +
+                ". Choose that area again (cf_collect area <name>), then rebind";
+            return false;
+        }
+
+        if (!TryBuild(which, describe, groundY, worldLoadEpoch, out WorkScope? rebuilt, out failure))
+        {
+            return false;
+        }
+
+        if (rebuilt!.SourceRevision != accepted.SourceRevision)
+        {
+            failure = accepted.IsMissingBoundary
+                ? "the chosen area is not the one this order was accepted in (" + accepted.AnchorDescription +
+                  "), or that area has been redrawn since. Choose that area, or cancel the order and give a new one"
+                : accepted.AnchorDescription + " has been redrawn since the order was accepted. Cancel it and give a new order";
+            return false;
+        }
+
+        scope = rebuilt;
+        failure = string.Empty;
+        return true;
+    }
+
+    private static string NameOf(WorkScope scope)
+    {
+        const string prefix = "the work area \"";
+        string text = scope.AnchorDescription;
+        return text.StartsWith(prefix, StringComparison.Ordinal) && text.EndsWith("\"", StringComparison.Ordinal) && text.Length > prefix.Length
+            ? text.Substring(prefix.Length, text.Length - prefix.Length - 1)
+            : text;
     }
 
     /// <summary>What the provider says now about an accepted Cartographer

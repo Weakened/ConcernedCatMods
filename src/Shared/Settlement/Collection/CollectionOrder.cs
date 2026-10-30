@@ -231,7 +231,9 @@ internal sealed class WorkScope
             furthest = Math.Max(furthest, Math.Sqrt((dx * dx) + (dz * dz)));
         }
 
-        float radius = (float)Math.Ceiling(furthest * 10d) / 10f;
+        // Rounded up, plus a centimetre, so float rounding can never leave a
+        // corner just outside the circle.
+        float radius = (float)(Math.Ceiling(furthest * 10d) / 10d) + 0.01f;
         if (radius < MinRadiusMetres)
         {
             radius = MinRadiusMetres;

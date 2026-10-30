@@ -43,8 +43,14 @@ public sealed class WorkAreaScopeWiringTests
         Assert.Contains("CartographerAreaScopes.TryBuild(", chosenBlock);
         Assert.Contains("return false;", chosenBlock);
 
-        // A recovered Cartographer order is rebound only from a fresh choice.
-        Assert.Contains("case WorkScopeSource.CartographerWorkArea:", runtime);
+        // A Cartographer order is rebound through TryRebind, which keeps the
+        // order's own area (CartographerAreaScopeTests pins its rules), and the
+        // generic kind builder refuses rather than using the next-order choice.
+        Assert.Contains("CartographerAreaScopes.TryRebind(", runtime);
+        int kind = runtime.IndexOf("private bool TryBuildScopeOfKind(", StringComparison.Ordinal);
+        Assert.True(kind > 0);
+        string kindBody = runtime.Substring(kind, runtime.IndexOf("private string Area(", kind, StringComparison.Ordinal) - kind);
+        Assert.DoesNotContain("_areaChoice", kindBody);
 
         // The choice belongs to one world load.
         int drop = runtime.IndexOf("private void DropWorld()", StringComparison.Ordinal);
