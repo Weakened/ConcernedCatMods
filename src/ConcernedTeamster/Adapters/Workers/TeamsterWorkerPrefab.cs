@@ -168,6 +168,12 @@ internal static class TeamsterWorkerPrefab
         // remembering to attach it.
         clone.AddComponent<TeamsterWorkerRecord>();
 
+        // D16: what he carries goes on the ground through vanilla's own drop
+        // when he genuinely dies, rather than with his body. Added on the
+        // inactive clone for the same reason as the record above: every saved
+        // body gets it too.
+        clone.AddComponent<GunnarDeathDropPort>();
+
         Character character = clone.GetComponent<Character>();
         character.m_faction = Character.Faction.Players;
         character.m_boss = false;

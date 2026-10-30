@@ -898,6 +898,240 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             "the mover went back to two interchangeable inventory parameters", marker="#381")
 
 
+DEATH = os.path.join(WORKERS, "GunnarDeathDropPort.cs")
+PINNED_DROP = "returned = _humanoid.DropItem(_inventory, item, count);"
+
+
+class DeathDropIsNarrow(CarveOutFixture):
+    """The D16 death-drop allowance (`DECISIONS.md` D16), proved by plants.
+
+    D16 grants one thing: when Gunnar GENUINELY dies, what he carries may go on
+    the ground through vanilla's own drop. Two halves need proving. Where the
+    drop may be spelled - one pinned call, one file - is the #313 token pin. What
+    may REACH it is the D16 verb audit: the handler hangs off the body's own
+    death callback, asks the body whether it is dead and asks the decision
+    whether to drop, and nothing else in the product names it. Each plant below
+    is an escape across one of those lines, and each was run against the
+    validator from before this change (origin/main 89ce8b6), which let every one
+    of them through.
+    """
+
+    _restore_path = DEATH
+
+    def swap_in_death(self, old, new):
+        self.swap_in(DEATH, old, new)
+
+    def swap_many_in_death(self, pairs):
+        with open(DEATH, encoding="utf-8-sig") as handle:
+            original = handle.read()
+        self._restore = original
+        self._restore_path = DEATH
+        changed = original
+        for old, new in pairs:
+            self.assertEqual(1, changed.count(old), "the pinned text moved: " + old)
+            changed = changed.replace(old, new, 1)
+        with open(DEATH, "w", encoding="utf-8", newline="") as handle:
+            handle.write(changed)
+
+    # -- where the drop may be spelled --
+
+    def test_a_drop_is_not_allowed_in_another_worker_file(self):
+        # The retire verb is the one D16 names: `retire` must never reach a drop.
+        self.plant_file(os.path.join(WORKERS, "ZzRetireDrop.cs"),
+                        "        ((dynamic)who).DropItem(cart, null, 1);")
+        self.assert_refused("a drop appeared in a worker file that was never authorized to have one",
+                            contains="'.DropItem('")
+
+    def test_a_drop_is_not_allowed_outside_adapters_workers(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainDrop.cs"),
+                        "        ((dynamic)who).DropItem(cart, null, 1);")
+        self.assert_refused("a drop in Domain/ passed the audit", contains="'.DropItem('")
+
+    def test_vanillas_static_drop_is_refused_too(self):
+        # `ItemDrop.DropItem(data, n, at, rot)` builds a ground item from any
+        # ItemData this product chose - the spawning D15 and D16 both refuse.
+        self.plant_file(os.path.join(ADAPTERS, "ZzSpawner.cs"),
+                        "        ItemDrop.DropItem(null, 1, default, default);")
+        self.assert_refused("vanilla's static item spawn passed outside the worker folder",
+                            contains="'.DropItem('")
+
+    def test_a_drop_is_not_allowed_in_shared_sources_teamster_compiles(self):
+        self.plant_file(os.path.join(SHARED_WORKERS, "ZzSharedDrop.cs"),
+                        "        ((dynamic)who).DropItem(cart, null, 1);")
+        self.assert_refused("a drop in a shared tree Teamster compiles passed", contains="'.DropItem('")
+
+    def test_the_allowance_does_not_follow_the_port_name_elsewhere(self):
+        self.plant_file(os.path.join(WORKERS, "Extra", "GunnarDeathDropPort.cs"),
+                        "        ((dynamic)who).DropItem(cart, null, 1);")
+        self.assert_refused("a second file of the death port's name inherited the allowance",
+                            contains="'.DropItem('")
+
+    def test_a_space_and_a_newline_do_not_hide_a_drop(self):
+        self.plant_file(os.path.join(WORKERS, "ZzSpacedDrop.cs"),
+                        "        ((dynamic)who).\n            DropItem (cart, null, 1);")
+        self.assert_refused("whitespace got a drop past the audit", contains="'.DropItem('")
+
+    def test_the_drop_is_authorized_once_and_not_twice(self):
+        self.swap_in_death(
+            PINNED_DROP,
+            PINNED_DROP + "\n                    _humanoid.DropItem(_inventory, item, count);")
+        self.assert_refused("a second drop passed inside the authorized file", contains="appears 2 times")
+
+    def test_the_drop_may_not_drop_more_than_the_stack_holds(self):
+        # "No minting: exactly what the body holds, once." The count is the
+        # stack's own; a different number is a different call.
+        self.swap_in_death(PINNED_DROP, "returned = _humanoid.DropItem(_inventory, item, count * 2);")
+        self.assert_refused("a drop of a different count passed", contains="'.DropItem('")
+
+    def test_the_drop_may_not_empty_another_inventory(self):
+        # "No drop of items the body never held."
+        self.swap_in_death(
+            PINNED_DROP,
+            "returned = _humanoid.DropItem(Player.m_localPlayer.GetInventory(), item, count);")
+        self.assert_refused("a drop out of the player's inventory passed", contains="'.DropItem('")
+
+    # -- what may reach it --
+
+    def test_another_verb_in_the_port_may_not_call_the_handler(self):
+        # The retire that D16 names, written as the most natural one-liner.
+        self.swap_in_death(
+            "    private static void Report(string message)",
+            "    internal void Retire() { OnDeath(); }\n\n    private static void Report(string message)")
+        self.assert_refused("a second caller of the death handler passed", marker="D16 death-drop audit",
+                            contains="names OnDeath 3 time(s)")
+
+    def test_no_other_file_may_name_the_handler_or_call_vanillas_death(self):
+        # Calling vanilla's own Character.OnDeath() would be this product killing
+        # its worker to reach the drop - the death path entered by a verb.
+        self.plant_file(os.path.join(WORKERS, "ZzKill.cs"), "        ((dynamic)who).OnDeath();")
+        self.assert_refused("a call to OnDeath from another worker file passed",
+                            marker="D16 death-drop audit", contains="names OnDeath")
+
+    def test_the_handler_may_not_be_reached_by_name_through_a_message(self):
+        self.plant_file(os.path.join(ADAPTERS, "ZzMessage.cs"),
+                        "        ((dynamic)who).SendMessage(\"OnDeath\");")
+        self.assert_refused("a SendMessage naming the handler passed", marker="D16 death-drop audit",
+                            contains="names OnDeath")
+
+    def test_the_handler_may_not_hang_off_another_event(self):
+        # The death ANIMATION callback runs before the body is dead; the handler
+        # belongs on the death callback alone.
+        self.swap_in_death(
+            "_humanoid.m_onDeath = (Action)Delegate.Combine(_humanoid.m_onDeath, _onDeath);",
+            "_humanoid.m_onDeathAnim = (Action)Delegate.Combine(_humanoid.m_onDeathAnim, _onDeath);")
+        self.assert_refused("the handler was hung off the death animation and passed",
+                            marker="D16 death-drop audit", contains="subscription(s)")
+
+    def test_the_death_callback_may_not_be_invoked_by_this_product(self):
+        self.swap_in_death(
+            "    private void OnDestroy()\n    {\n",
+            "    private void OnDestroy()\n    {\n        _humanoid?.m_onDeath?.Invoke();\n")
+        self.assert_refused("the death callback was invoked from OnDestroy and passed",
+                            marker="D16 death-drop audit", contains="mention(s)")
+
+    def test_the_death_callback_may_not_be_touched_elsewhere(self):
+        self.plant_file(os.path.join(WORKERS, "ZzInvoke.cs"), "        ((dynamic)who).m_onDeath();")
+        self.assert_refused("the death callback was invoked from another file and passed",
+                            marker="D16 death-drop audit", contains="touches m_onDeath")
+
+    def test_the_death_predicate_may_not_be_removed(self):
+        self.swap_in_death(
+            "if (_humanoid == null || !_humanoid.IsDead())",
+            "if (_humanoid == null)")
+        self.assert_refused("the IsDead() predicate was removed and the drop passed",
+                            marker="D16 death-drop audit", contains="IsDead()")
+
+    def test_the_decision_may_not_be_skipped(self):
+        self.swap_in_death(
+            "DeathDropVerdict verdict = WorkerDeathDrop.Decide(facts);",
+            "DeathDropVerdict verdict = DeathDropVerdict.Drop;")
+        self.assert_refused("the decision was skipped and the drop passed",
+                            marker="D16 death-drop audit", contains="WorkerDeathDrop.Decide")
+
+    def test_the_verdict_may_not_be_consulted_and_ignored(self):
+        # The retire guard's lesson: a verdict read and not obeyed is no guard.
+        self.swap_in_death(
+            "if (verdict != DeathDropVerdict.Drop)",
+            "if (verdict == DeathDropVerdict.Unspecified)")
+        self.assert_refused("a verdict consulted and ignored passed",
+                            marker="D16 death-drop audit", contains="does not REFUSE")
+
+    def test_the_drop_may_not_be_lifted_out_of_the_handler(self):
+        # The escape that beat the first retire audit: lift the call into a
+        # helper, so the handler's body no longer contains it and anything may
+        # call the helper.
+        self.swap_many_in_death([
+            (PINNED_DROP, "returned = DropOne(item, count);"),
+            ("    private static void Report(string message)",
+             "    private bool DropOne(ItemDrop.ItemData item, int count) =>\n"
+             "        _humanoid!.DropItem(_inventory, item, count);\n\n"
+             "    private static void Report(string message)"),
+        ])
+        self.assert_refused("the drop was lifted into a helper and passed",
+                            marker="D16 death-drop audit", contains="inside OnDeath()")
+
+    # -- what may CAUSE the death that reaches it (review of 7330ef9) --
+
+    def test_a_retire_may_not_be_rewritten_as_a_death(self):
+        # The blocker an independent review found: `ct_haul retire` rewritten as
+        # "set his health to nothing" goes through vanilla's genuine death path
+        # with every gate green.
+        self.plant_file(os.path.join(WORKERS, "ZzRetireByDeath.cs"),
+                        "        ((dynamic)who).SetHealth(0f);")
+        self.assert_refused("a retire by SetHealth(0) passed", contains="'SetHealth'")
+
+    def test_nothing_may_hit_him_from_domain(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzHit.cs"),
+                        "        ((dynamic)who).Damage(cart);")
+        self.assert_refused("a damage call in Domain/ passed", contains="'.Damage('")
+
+    def test_nothing_may_send_vanillas_damage_message(self):
+        # The one plant here that was NOT an escape before this change: outside
+        # Adapters/Workers, CT-026's authority audit already refuses the
+        # InvokeRPC it needs. Kept as a regression guard for the new
+        # 'RPC_Damage' token, which also covers the name sent any other way.
+        self.plant_file(os.path.join(ADAPTERS, "ZzRpc.cs"),
+                        "        ((dynamic)who).InvokeRPC(\"RPC_Damage\", cart);")
+        self.assert_refused("a damage message outside the worker folder passed", contains="'RPC_Damage'")
+
+    def test_the_death_predicate_must_return(self):
+        self.swap_in_death(
+            "        if (_humanoid == null || !_humanoid.IsDead())\n        {\n",
+            "        if (_humanoid == null || !_humanoid.IsDead())\n        {\n            Report(\"not dead\");\n")
+        self.assert_refused("an IsDead() guard that does not return passed",
+                            marker="D16 death-drop audit", contains="bare `return;`")
+
+    def test_the_decision_is_told_by_the_body_never_by_a_literal(self):
+        self.swap_in_death(
+            "host.Prepare(_humanoid, genuineDeath: _humanoid.IsDead(), inventoryLoaded: loaded)",
+            "host.Prepare(_humanoid, genuineDeath: true, inventoryLoaded: loaded)")
+        self.assert_refused("a literal genuineDeath passed", marker="D16 death-drop audit",
+                            contains="without asking the body")
+
+    def test_the_handlers_own_delegate_may_not_be_invoked(self):
+        self.swap_in_death(
+            "    private void OnDestroy()\n    {\n",
+            "    private void OnDestroy()\n    {\n        _onDeath?.Invoke();\n")
+        self.assert_refused("the handler's delegate was invoked from OnDestroy and passed",
+                            marker="D16 death-drop audit", contains="_onDeath delegate")
+
+    def test_the_drop_empties_only_the_dying_bodys_own_inventory(self):
+        self.swap_in_death(
+            "_inventory = _humanoid.GetInventory();",
+            "_inventory = Player.m_localPlayer.GetInventory();")
+        self.assert_refused("the drop was pointed at the player's inventory and passed",
+                            marker="D16 death-drop audit", contains="assigns _inventory")
+
+    def test_the_handlers_delegate_may_not_be_invoked_in_place_of_its_null_check(self):
+        # A review's residual: the mention count stays at five if the null check
+        # is swapped for an invocation.
+        self.swap_in_death(
+            "        if (_humanoid != null && _onDeath != null)\n        {\n",
+            "        _onDeath?.Invoke();\n        if (_humanoid != null)\n        {\n")
+        self.assert_refused("the delegate was invoked in place of its null check and passed",
+                            marker="D16 death-drop audit", contains="invokes its _onDeath delegate")
+
+
 SURVEY = os.path.join(WORKERS, "GunnarCollectionSurvey.cs")
 TOUR_RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.Tour.cs")
 QUIET_WARD = "PrivateArea.CheckAccess(position, 0f, flash: false, wardCheck: false)"

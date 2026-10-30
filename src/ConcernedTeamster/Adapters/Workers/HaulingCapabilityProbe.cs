@@ -194,6 +194,16 @@ internal static class HaulingCapabilityProbe
                 new("ItemDrop", itemDrop, "m_itemData", GameMemberKind.InstanceField, itemData),
                 new("ItemDrop+ItemData", itemData, "m_stack", GameMemberKind.InstanceField, typeof(int)),
 
+                // D16: what a dying Gunnar carries goes on the ground through
+                // vanilla's own drop, from vanilla's own death callback. Verified
+                // here so a changed game refuses the drop (and says so) rather
+                // than throwing inside the game's death path.
+                // Inventory.GetAllItems and ItemData.m_dropPrefab, which it also
+                // reads, are verified once in the collection-tour block below.
+                new("Character", character, "m_onDeath", GameMemberKind.InstanceField, typeof(Action)),
+                new("Humanoid", humanoid, "DropItem", GameMemberKind.InstanceMethod, typeof(bool),
+                    new[] { inventory!, itemData!, typeof(int) }),
+
                 // The collection tour (#381): the survey reads, the carry limit
                 // and the inventory room. All reads; a changed game turns the
                 // tour off with the rest of the worker runtime rather than
