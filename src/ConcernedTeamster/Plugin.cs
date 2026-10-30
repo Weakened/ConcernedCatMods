@@ -108,6 +108,10 @@ public sealed class Plugin : BaseUnityPlugin
             () => _hauling?.BoundBodyRecordUnwritable ?? false,
             () => _hauling?.BoundBodyRecordUnreadable ?? false,
             () => _hauling?.SeamAvailable ?? false,
+            // D16: the cart lets go of a dying Gunnar through the hauling
+            // runtime's own D4 teardown before anything he carries is dropped.
+            // No hauling runtime, no release: the drop is refused.
+            body => _hauling?.ReleaseCartFromDyingBody(body) ?? false,
             // A tour is on foot. No hauling runtime is "held": unknown refuses.
             () => _hauling?.HoldsACart ?? true,
             _containers,

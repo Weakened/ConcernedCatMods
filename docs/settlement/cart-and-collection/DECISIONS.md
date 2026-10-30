@@ -3,7 +3,7 @@
 Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
 death door named in `GUNNAR_COLLECTION.md` §6c) and **C6** (2026-10-28, D17 - the collection tour's walking and
-load size).
+load size). D16's fail-closed reading was confirmed by the owner on 2026-10-28.
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -390,10 +390,51 @@ decision.
 The ledger records the transition; nothing is re-credited and nothing is re-acquired. An interrupted death-drop
 fails closed and keeps its evidence.
 
-**Where it will be enforced, and it is not yet.** `Adapters/Workers/GunnarDeathDropPort.cs`, to be pinned verbatim
-like D15's, with the death predicate and the verb it may be called from both audited. The pin is authored with the
-implementation, in the same change. Until then the behaviour is simply absent: **a Gunnar who dies today still loses
-what he is carrying**, exactly as `GUNNAR_COLLECTION.md` §6c says.
+**Where it is enforced.** `Adapters/Workers/GunnarDeathDropPort.cs`, a component on Gunnar's body, subscribed to
+the body's own `Character.m_onDeath` - vanilla's death callback, which vanilla runs from `Character.OnDeath` only on
+the owner, after it has marked the body dead and before it destroys it. One call, pinned verbatim and once by
+`tools/validate_repo.py`: `Humanoid.DropItem(_inventory, item, count)`, the stack's own count from the body's own
+inventory - what Foreman's worker body does on its own death (#400 pins that one). The validator's
+`D16 death-drop audit` pins the rest: the call sits inside the death handler, behind the body's own `IsDead()` and a
+refusing `WorkerDeathDrop` verdict; the handler is named only by its declaration and the subscription; and
+`m_onDeath` is touched nowhere else in the product - so no retire, cancel, unload or teardown verb can reach it.
+The planted escapes in `tools/tests/test_teamster_carveout.py`'s `DeathDropIsNarrow`, each verified to pass the
+validator from before this change, are refused.
+
+**How the paragraphs above were read where they leave a choice**, so a reader can disagree with the reading rather
+than discover it. **The owner confirmed this reading on 2026-10-28**, asked directly by the lead: D16 stays
+fail-closed exactly as built, and every gate below that leaves material unresolved instead of dropping it is the
+intended narrowing, not a defect to be widened later.
+
+- *Gates.* The drop runs only when Teamster's master switch and the collection switch are on, the start-up probe
+  verified every member it binds, the shared work-authority rule grants (D3), and the body had read its own stored
+  inventory. Each of those failing leaves the material **unresolved** - recorded, not dropped. That is narrower than
+  "its runtime may use vanilla's own drop" and never wider: a drop is a world write, and every other world write this
+  product makes fails closed on the same four questions.
+- *The cart.* The detach runs through the hauling runtime's own frame observation (the D4 teardown that would have
+  run on the next frame anyway, run now). If a cart's joint still holds the body afterwards, **nothing is dropped**:
+  "only then does the drop run" is read as a precondition, and an interrupted death drop fails closed and keeps its
+  evidence.
+- *Measurement.* Each stack is counted before and after its drop; the ground is credited only when vanilla answered
+  that it dropped, nothing threw, and exactly the stack's count left him. Anything else is unresolved, and a count
+  that cannot be reconciled is never balanced away.
+- *Durable evidence.* Every genuine death - dropped, refused or interrupted - appends one row for the death and one
+  per stack to a per-world, append-only file beside Teamster's other sidecars
+  (`teamster_worker_deaths_<world>.tsv`), and the same rows go to the log at warning level. The log alone is replaced
+  on the next launch, so it is not "durable". An existing file that cannot be read is left alone and the rows go to
+  the log only.
+- *The ledger.* `CollectionAccount.RecordDeath` moves what this session saw him take from `Carried` to
+  `DroppedOnDeath` or `UnresolvedAtDeath`. Units he carried from an earlier session were never acquired by this
+  session's ledger and are not acquired on paper to make it balance; the death record has them.
+- *Nothing may cause the death.* "Voluntary cancellation and retirement must never reach the death path" is read
+  to cover causing a death as well as calling the handler: every way to take health away (`SetHealth`, `UseHealth`,
+  `SetMaxHealth`, `.Damage(`, `ApplyDamage`, `RPC_Damage`) is refused anywhere in Teamster.
+- *Vanilla inside the call.* `Humanoid.DropItem` also plays the body's `interact` trigger and the drop effects, and
+  places each stack a metre in front of the body with a small push. Those are vanilla's, inside the one pinned call,
+  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`.
+
+**Never observed in game.** The port binds Unity; the decision, the classification, the accounting and the record
+format are unit-tested (`WorkerDeathDropTests`), the shape is pinned, and nothing has been watched happening.
 
 ## D17. Gunnar's on-foot collection tour walks his own body; a load is 225 units, any size, at most 24 sources
 
