@@ -1267,3 +1267,61 @@ class CollectionTourIsBounded(CarveOutFixture):
         self._planted.append(path)
         self.assert_refused("a runtime part in a differently named file chose the chest",
                             marker="#381 destination audit", contains="assigns the runtime's _destination")
+
+
+
+CART_NAVIGATION = os.path.join(WORKERS, "CartNavigationBridge.cs")
+LEXICAL_ANCHOR = "    {\n        _measured = false;\n"
+LEXICAL_AUDIT = "#473 lexical audit"
+
+
+class LexicalEscapesAreRefused(CarveOutFixture):
+    """Four lexical forms make the text every Teamster audit reads differ from
+    the text the compiler builds (#473, #480). Each plant below hides a real
+    destruction - `ZNetScene.instance.Destroy(null)` in a worker file, which the
+    #381 carried-material audit would otherwise count - and each was run against
+    the validator from before this rule (origin/main 640a6b5), which let every
+    one of them through at exit 0.
+    """
+
+    _restore_path = CART_NAVIGATION
+
+    def plant_lexical(self, lines):
+        self.swap_in(CART_NAVIGATION, LEXICAL_ANCHOR, LEXICAL_ANCHOR.split("\n")[0] + "\n" + lines)
+
+    def test_an_apostrophe_on_a_directive_line_does_not_hide_a_destruction(self):
+        # The stripper reads `it's` as the start of a char literal, closes it at
+        # the apostrophe inside the next comment, and then reads that comment's
+        # `/*` as code - so the destruction below is "inside a block comment" to
+        # every count and real code to the compiler.
+        self.plant_lexical("#region it's\n"
+                           "        // a ' /*\n"
+                           "        _measured = false;\n"
+                           "        ZNetScene.instance.Destroy(null);\n"
+                           "        // */\n"
+                           "#endregion\n")
+        self.assert_refused("a directive line's apostrophe hid a destruction", marker=LEXICAL_AUDIT,
+                            contains="has the directive line `#region it's`")
+
+    def test_a_unicode_escape_does_not_spell_destroy_past_the_counts(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ZNetScene.instance.Destr\\u006Fy(null);\n")
+        self.assert_refused("Destr\\u006Fy passed as something other than Destroy", marker=LEXICAL_AUDIT,
+                            contains="holds the Unicode escape `\\u0`")
+
+    def test_a_zero_width_space_does_not_split_destroy_past_the_counts(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ZNetScene.instance.Dest\u200broy(null);\n")
+        self.assert_refused("a zero-width space split Destroy past the audit", marker=LEXICAL_AUDIT,
+                            contains="holds the format character U+200B")
+
+    def test_a_soft_hyphen_does_not_split_destroy_past_the_counts(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ZNetScene.instance.Dest\u00adroy(null);\n")
+        self.assert_refused("a soft hyphen split Destroy past the audit", marker=LEXICAL_AUDIT,
+                            contains="holds the format character U+00AD")
+
+    def test_a_line_separator_does_not_end_a_comment_only_for_the_compiler(self):
+        self.plant_lexical("        _measured = false; // tidy\u2028        ZNetScene.instance.Destroy(null);\n")
+        self.assert_refused("code after a U+2028 inside a comment passed", marker=LEXICAL_AUDIT,
+                            contains="holds U+2028")
