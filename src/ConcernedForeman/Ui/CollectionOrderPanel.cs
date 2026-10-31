@@ -25,7 +25,7 @@ namespace TheConcernedCat.ConcernedForeman.Ui;
 internal sealed class CollectionOrderPanel : MonoBehaviour
 {
     private const float PanelWidth = 420f;
-    private const float PanelHeight = 520f;
+    private const float PanelHeight = 552f;
     private const float RowHeight = 22f;
     private const int ProgressRows = 3;
     private const double RefreshSeconds = 0.25;
@@ -307,6 +307,12 @@ internal sealed class CollectionOrderPanel : MonoBehaviour
         y -= 26f;
         _withGunnar = Check(gui, font, body, "With Gunnar and his cart", -170f, y);
         y -= 30f;
+
+        // #296 slice 3: where the next order works. The same command as
+        // cf_collect area, so the panel and the console cannot disagree.
+        AddButton(gui, "Next map area", -100f, y, 180f, () => Report(_collect(new[] { "area", "next" })));
+        AddButton(gui, "Usual area", 100f, y, 180f, () => Report(_collect(new[] { "area", "default" })));
+        y -= 32f;
 
         _start = AddButton(gui, "Survey and start", -100f, y, 180f, Start);
         AddButton(gui, "Preview area", 100f, y, 180f, () => Report(_collect(new[] { "preview" })));

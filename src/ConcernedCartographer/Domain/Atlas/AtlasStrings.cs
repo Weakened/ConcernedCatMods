@@ -87,7 +87,7 @@ internal static class AtlasStrings
         ["areas.row"] = "{0} — about {1} m²",
         ["areas.details"] = "Selected: {0} — wood gathering, about {1} m², {2} corners.",
         ["areas.more"] = "({0} more not shown; cc_areas list shows all)",
-        ["areas.assignUnavailable"] = "Assign Thorstein: not available yet. Orders arrive with Concerned Foreman's work-area support.",
+        ["areas.assignUnavailable"] = "Workers are not assigned here. Concerned Foreman, when installed, can use these areas.",
         ["areas.outlineUnavailable"] = "Outlines are not showing: they need Map/HighPrecisionLargeMapRoads on, and that layer to be running.",
         ["system.title"] = "System Markers",
         ["system.note"] = "Filters change map visibility only — nothing is ever deleted.",

@@ -192,11 +192,16 @@ public class WorkAreaRegistryTests
     }
 
     [Fact]
-    public void AProviderRegisteredFromOutsideThisPackageResolvesItsOwnShape()
+    public void ASecondProviderTheLibraryDoesNotShipResolvesItsOwnShape()
     {
-        // Registered from the test assembly, which is the point: the package
-        // depends on no map product, and there is no code path here that knows
-        // what a polygon is.
+        // What this proves: the registry resolves a shape kind the library has
+        // no code for, through a provider it does not ship, and the built-in
+        // circle stays out of it. What it does NOT prove: registration from
+        // another assembly. This test project compiles the library's own
+        // sources (ConcernedNPC.Tests.csproj), so the fixture sits inside the
+        // same assembly, and the registry is internal. Per the #375 decision
+        // (option a), the cross-product seam is the shared
+        // concernedcat.workarea/1 capability, not this registry.
         var registry = new NpcWorkAreaRegistry();
         Assert.Equal(
             ProviderRegistration.Registered, registry.Register(new PolygonAreaProvider(Areas.PolygonProvider)));

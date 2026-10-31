@@ -378,7 +378,12 @@ internal sealed class SettlementRuntime
         }
 
         Bind(body.GetComponent<ForemanWorkerAI>());
+        ThorsteinBodyLoaded?.Invoke(body.Humanoid);
     }
+
+    /// <summary>#295 S6: Thorstein's worker body has loaded or been created,
+    /// so his look can be put on it. Unset means nobody dresses it.</summary>
+    internal Action<Humanoid?>? ThorsteinBodyLoaded { get; set; }
 
     /// <summary>Wires a (re)created body: a body instantiated from its saved
     /// object comes back with no authority gate and no site policy, and must

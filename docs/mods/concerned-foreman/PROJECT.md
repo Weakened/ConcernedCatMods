@@ -220,6 +220,23 @@ under `<config>/ConcernedCatMods/ConcernedForeman/companions`). The game-free
 4. `cf_settle takeback axe`, then `cf_settle quest`: still complete.
 5. Repeat step 1's `examine`: it grants nothing twice.
 
+### His look while working, slice S6 (owner decision 2026-10-29, DECISIONS.md D18)
+
+His worker body stays the `Dverger` clone, with the same prefab, the same saved data and
+no migration. While `Thorstein/WorkerLook` is on (the default), Concerned NPC's
+`NpcWorkerDresser` puts his own Mullet and Mustache pieces on it, locally, each time his
+worker body loads. It refuses any body that is not his saved worker body. A piece that
+will not attach, or is not drawn where it was put on the `Dverger` rig, is taken off and
+he keeps the plain look. Nothing is tinted, painted or saved on the body itself.
+
+**OWNER GO-AROUND PENDING:**
+1. `cf_worker spawn`: within a moment, "Worker body look: hair Mullet ..., beard
+   Mustache ..." in `cf_worker status`, or "plain (...)" with the reason.
+2. Look at him working: the hair and beard sit on his head. A piece that floated would
+   have been taken off; the status line's fit says which.
+3. Quit and reload with the body saved: he is dressed again on load. Turn
+   `WorkerLook` off and reload: the plain `Dverger` look, with no error.
+
 ---
 
 ## Research the contract owed — done
