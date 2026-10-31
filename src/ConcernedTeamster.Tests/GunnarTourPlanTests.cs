@@ -223,6 +223,71 @@ public sealed class GunnarTourPlanTests
     }
 
     [Fact]
+    public void A_stopped_plan_whose_body_the_census_cannot_find_stops_for_a_person_without_a_start()
+    {
+        // #379 review B1: what the runtime really produces after ct_haul retire
+        // force in the same session - no body, so no load can be read, and the
+        // tour gate would refuse a start for having no worker. The frame
+        // watcher asks this, and it must decide the body-gone outcome itself.
+        using var folder = new TourPlanFolder();
+        var world = new TourWorld(4, 2);
+        var script = new TourScript(TourPlans.Opened(folder.PlanPath), world, NpcWorldEpoch.Mint());
+        Assert.True(script.Start() && script.Pick(0) && script.Stop("you stopped it"));
+        Assert.Equal(TourPlanStanding.Suspended, script.Plan.Standing);
+
+        // A body that answers decides nothing.
+        Assert.Equal(InterruptionResponse.Unspecified,
+            script.Plan.RevalidateIfBodyGone(script.Facts(bodies: 1)).Response);
+        Assert.Equal(TourPlanStanding.Suspended, script.Plan.Standing);
+
+        world.Gunnar.Clear();
+        var noBody = new TourPlanFacts(script.Epoch, 0, null, true, 0f);
+        TourPlanVerdict verdict = script.Plan.RevalidateIfBodyGone(noBody);
+
+        Assert.Equal(InterruptionResponse.NeedsAttention, verdict.Response);
+        Assert.Contains("retire force", verdict.Sentence);
+        Assert.Equal(TourPlanStanding.NeedsAttention, script.Plan.Standing);
+        Assert.Equal(TourPlanStanding.NeedsAttention, TourPlans.Opened(folder.PlanPath).Standing);
+
+        // He is spawned again, empty: resolve closes it, and nothing is recreated.
+        Assert.True(script.Plan.Resolve(script.Facts(), false, out string resolved), resolved);
+        Assert.False(script.Plan.BlocksOrders);
+        Assert.Empty(world.Carried());
+    }
+
+    [Fact]
+    public void A_replanned_plan_whose_body_the_census_cannot_find_stops_for_a_person()
+    {
+        using var folder = new TourPlanFolder();
+        var world = new TourWorld(4, 2);
+        var first = new TourScript(TourPlans.Opened(folder.PlanPath), world, NpcWorldEpoch.Mint());
+        Assert.True(first.Start() && first.Pick(0));
+
+        var plan = TourPlans.Opened(folder.PlanPath);
+        var script = new TourScript(plan, world, NpcWorldEpoch.Mint());
+        Assert.Equal(InterruptionResponse.Replan, plan.Revalidate(script.Facts()).Response);
+        Assert.Equal(TourPlanStanding.Replanned, plan.Standing);
+
+        world.Gunnar.Clear();
+        TourPlanVerdict verdict = plan.RevalidateIfBodyGone(new TourPlanFacts(script.Epoch, 0, null, true, 0f));
+        Assert.Equal(InterruptionResponse.NeedsAttention, verdict.Response);
+        Assert.Contains("retire force", verdict.Sentence);
+    }
+
+    [Fact]
+    public void The_body_gone_check_leaves_a_plan_nobody_stopped_alone()
+    {
+        using var folder = new TourPlanFolder();
+        var world = new TourWorld(4, 2);
+        var script = new TourScript(TourPlans.Opened(folder.PlanPath), world, NpcWorldEpoch.Mint());
+        Assert.True(script.Start());
+        Assert.Equal(TourPlanStanding.Running, script.Plan.Standing);
+        Assert.Equal(InterruptionResponse.Unspecified,
+            script.Plan.RevalidateIfBodyGone(new TourPlanFacts(script.Epoch, 0, null, true, 0f)).Response);
+        Assert.Equal(TourPlanStanding.Running, script.Plan.Standing);
+    }
+
+    [Fact]
     public void NeedsAttention_rather_than_refund_while_he_carries_a_load()
     {
         using var folder = new TourPlanFolder();

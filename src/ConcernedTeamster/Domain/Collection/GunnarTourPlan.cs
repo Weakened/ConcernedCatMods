@@ -161,7 +161,8 @@ internal sealed class GunnarTourPlan
     /// </summary>
     internal const string OpenPlanRefusal =
         "An interrupted collection tour is open, so he takes no other order until it is dealt with: " +
-        "ct_collect start carries it on, ct_collect resolve settles it.";
+        "ct_collect start carries it on, or - once it has stopped for you - ct_collect resolve settles it. " +
+        "ct_collect status says which.";
 
     private static readonly NpcMaterialStack[] Nothing = new NpcMaterialStack[0];
 
@@ -370,11 +371,30 @@ internal sealed class GunnarTourPlan
     /// </summary>
     internal TourPlanVerdict Revalidate(in TourPlanFacts facts) => Revalidate(facts, null, null);
 
+    /// <summary>An open plan that is not being worked - stopped this session
+    /// with a load on him, or re-planned after a reload - whose body the census
+    /// has now looked for and not found: <c>ct_haul retire force</c>, or a body
+    /// lost some other way. Revalidated at once, so it stops for a person with
+    /// the body-gone sentence instead of waiting for a start that the tour gate
+    /// would refuse for a different reason. Any other standing, or any body
+    /// count but zero, decides nothing.</summary>
+    internal TourPlanVerdict RevalidateIfBodyGone(in TourPlanFacts facts)
+    {
+        if ((_standing != TourPlanStanding.Suspended && _standing != TourPlanStanding.Replanned)
+            || facts.BodiesAnswering != 0)
+        {
+            return new TourPlanVerdict(InterruptionResponse.Unspecified, InterruptionCause.Unspecified, Describe());
+        }
+
+        return Revalidate(facts, null, null);
+    }
+
     private TourPlanVerdict Revalidate(in TourPlanFacts facts, string? sourceKey, string? destinationKey)
     {
         NpcPlanRun? run = _run;
         bool inSession = _standing == TourPlanStanding.Suspended;
-        if (run == null || (_standing != TourPlanStanding.Recovered && !inSession))
+        bool replanned = _standing == TourPlanStanding.Replanned;
+        if (run == null || (_standing != TourPlanStanding.Recovered && !inSession && !replanned))
         {
             return new TourPlanVerdict(InterruptionResponse.Unspecified, InterruptionCause.Unspecified, Describe());
         }

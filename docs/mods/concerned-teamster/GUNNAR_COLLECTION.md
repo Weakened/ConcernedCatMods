@@ -975,7 +975,7 @@ identity lease would then answer "busy" to the tour that tried to resume. The ce
 | What he holds differs from the record | **needs attention**, and the sentence says a crash rollback - the world going back to its last save while the plan did not - may be why |
 | His load cannot be read | **needs attention** |
 | Two bodies answer to Gunnar | **needs attention** |
-| His body is gone while the plan says he held something (`ct_haul retire force` included) | **needs attention**: nothing is recreated |
+| His body is gone while the plan says he held something (`ct_haul retire force` included) | **needs attention**: nothing is recreated. Decided on reload, and also within the session as soon as the census finds no body for a stopped or re-planned plan |
 | The plan file cannot be read | **needs attention**; the file is left exactly as it is |
 
 **The person's exit: `ct_collect resolve`.** Shaped like `cs_steward resolve`. It needs a live world, exactly one
@@ -1259,7 +1259,9 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
     chest: the start sentence says the stopped tour carries on, with the sources already worked; the log shows
     no new plan beginning, and the load he holds goes to the chest first.
 47. **`ct_haul retire force` with an open plan.** Stop a tour with stones on him, then `ct_haul retire force`.
-    `ct_collect start` must refuse with the body-gone sentence naming `retire force`, and nothing is recreated.
+    Within a moment, with no start needed, the log warns and `ct_collect status` shows the plan stopped for you
+    with the body-gone sentence naming `retire force` (the frame watcher sees the census find no body); nothing
+    is recreated.
     Spawn him again and `ct_collect resolve`: an empty Gunnar closes the plan; the stones are gone, as
     `retire force` said they would be.
 48. **A corrupt plan file.** With the game closed, damage `teamster_gunnar_tour_<world>.tsv` beside Teamster's

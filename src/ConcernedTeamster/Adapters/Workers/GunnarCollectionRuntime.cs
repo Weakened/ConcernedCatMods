@@ -394,12 +394,40 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             }
         }
 
-        if (_tourPlan.Standing != TourPlanStanding.Recovered || _tour != null || TourPlanWaitingFor().Length != 0)
+        if (_tour != null)
         {
             return;
         }
 
-        TourPlanVerdict verdict = _tourPlan.Revalidate(TourPlanFactsNow());
+        TourPlanStanding open = _tourPlan.Standing;
+        TourPlanVerdict verdict;
+        if (open == TourPlanStanding.Recovered)
+        {
+            if (TourPlanWaitingFor().Length != 0)
+            {
+                return;
+            }
+
+            verdict = _tourPlan.Revalidate(TourPlanFactsNow());
+        }
+        else if ((open == TourPlanStanding.Suspended || open == TourPlanStanding.Replanned)
+            && BodyStatus() == WorkerBodyStatus.NotFound
+            && TourPlanWaitingFor().Length == 0)
+        {
+            // An open plan with a load, and the census found no body: retire
+            // force, or a body lost. Stopped for a person now, with that reason,
+            // rather than at a start the tour gate refuses for another one.
+            verdict = _tourPlan.RevalidateIfBodyGone(TourPlanFactsNow());
+            if (verdict.Response == InterruptionResponse.Unspecified)
+            {
+                return;
+            }
+        }
+        else
+        {
+            return;
+        }
+
         if (verdict.Response == InterruptionResponse.NeedsAttention)
         {
             _log?.LogWarning("Gunnar's collection: " + verdict.Sentence);

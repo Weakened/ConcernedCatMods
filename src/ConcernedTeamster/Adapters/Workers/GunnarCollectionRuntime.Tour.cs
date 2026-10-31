@@ -590,6 +590,19 @@ internal sealed partial class GunnarCollectionRuntime
             return CollectionTourGate.Describe(refusal, request.Authority);
         }
 
+        // A plan read back from the disk is checked only once everything it is
+        // checked against can answer - the same wait the frame watcher keeps -
+        // so a start never decides it from a census that has not finished.
+        if (_tourPlan.Standing == TourPlanStanding.Recovered)
+        {
+            string waiting = TourPlanWaitingFor();
+            if (waiting.Length != 0)
+            {
+                return "No tour starts yet: the interrupted tour is still waiting to be checked (" + waiting +
+                    "). Try again in a moment; ct_collect status says what it is waiting for.";
+            }
+        }
+
         if (!NpcIdentity.TryParse(WorkerKey.Gunnar.Value, out NpcIdentity identity))
         {
             return "Gunnar's identity could not be read, so no tour starts.";
