@@ -167,6 +167,10 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   connected), the start-up probe failed, his inventory never read, or a cart still attached after the detach,
   nothing drops and what he carried is recorded as unresolved instead. Never observed in game.
 
+  **Decided 2026-10-31 by the owner, not yet implemented** (each gets its own pinned file, switch and plants when it is built; until then every token it would need stays refused): Gunnar may take from a chest the player explicitly marked `Take`/`Both` (measured, pinned like D15); his collection tour may load his own picked items into his explicitly assigned cart's container (measured); he may play the idle hammer animation through `ZSyncAnimation.SetTrigger` (cosmetic, a test proves no state change); and Thorstein (#282) may fell small trees - `Destructible.Damage` on the exact allowlist `Beech_small1`, `Beech_small2`, `FirTree_small`, `FirTree_small_dead`, with the issued axe, inside an explicit work area, at least 15 m from the player and player-built pieces, picking up only the drops his own call produced. `TreeBase.Damage`/`TreeLog.Damage` (full-size trees) were also approved but stay unused and refused until a mature-tree scope is chosen.
+
+- Steward additionally (owner decision 2026-10-28, `docs/mods/concerned-steward/DECISIONS.md` S1): `cs_steward retire` may remove Sunniva's own worker body (a `CS_Steward` body this game owns) through vanilla `ZNetView.Destroy()`, only when her pack, fuel ledger, loop, durable plan, record and loss ledger all show nothing held or open; no forcing word, no other object, no ownership takeover, no drop. One validator-pinned file (`Runtime/StewardRetirementPort.cs`), proved by planted escapes in `tools/tests/test_steward_retire_audit.py`; its known limits as a text audit are stated in S1. At rest she is a player-style presentation figure, and her worker body may wear her own hair (owner decision 2026-10-29, D18): presentation and worker body never coexist.
+
 ## Local commands
 
 ```powershell
