@@ -372,6 +372,11 @@ internal sealed class ThorsteinPresentation
         bool recruited = host && settlementOn && _census == 0 && _settings.ShowAtHome.Value
             && _settlement.IsThorsteinRecruited();
 
+        // #295 S3: once this character has examined the square he is at home,
+        // waiting for his tools, before he is on the roster.
+        bool introduced = !recruited && host && settlementOn && _census == 0 && _settings.ShowAtHome.Value
+            && _settlement.ThorsteinQuestStage() == ThorsteinQuestStage.WaitingForTools;
+
         var facts = new ThorsteinBodyFacts(
             registered: _npc.IsRegistered,
             worldLoaded: ZNetScene.instance != null && !_npc.World.IsUnknown,
@@ -382,7 +387,8 @@ internal sealed class ThorsteinPresentation
             savedWorkerBodies: _census,
             resting: _npc.Modes.MayRetireBody,
             homeKnown: homeKnown,
-            playerNearHome: near);
+            playerNearHome: near,
+            introduced: introduced);
 
         _last = ThorsteinBodyPlan.Decide(facts);
         if (_last.Kind != ThorsteinBodyKind.Presentation)
@@ -569,6 +575,30 @@ internal sealed class ThorsteinPresentation
         _builtFor = home;
 
         _dresser.Apply();
+        _dresser.EnableTalk(ThorsteinTalk.Name, ThorsteinTalk.Verb, Talk, _log);
+    }
+
+    /// <summary>#295 S3: a press of the use key on his figure. One line, from
+    /// the game-free <see cref="ThorsteinTalk"/>, shown like any other message.
+    /// </summary>
+    private void Talk()
+    {
+        string? line = _settlement.ThorsteinTalk();
+        if (string.IsNullOrEmpty(line))
+        {
+            return;
+        }
+
+        string said = ThorsteinTalk.Name + ": \"" + line + "\"";
+        _log(said);
+        try
+        {
+            ShowOnScreen(said);
+        }
+        catch (Exception exception)
+        {
+            _log("Thorstein's line could not be shown on screen on this build: " + SafeFailure.Brief(exception));
+        }
     }
 
     private void TakeDown()

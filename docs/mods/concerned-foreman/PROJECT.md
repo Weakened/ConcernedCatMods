@@ -226,6 +226,28 @@ under `<config>/ConcernedCatMods/ConcernedForeman/companions`). The game-free
 4. `cf_settle takeback axe`, then `cf_settle quest`: still complete.
 5. Repeat step 1's `examine`: it grants nothing twice.
 
+### At home from the introduction, and talking (slice S3)
+
+- **When he appears.** His figure shows once this character has examined the square
+  (stage "waiting for tools"), not only once he is on the roster. Every other condition
+  is unchanged:
+  - he is shown only to the host, with the settlement runtime on and `ShowAtHome` on;
+  - only while he is resting, with no saved worker body;
+  - only when home is known and the player is near it.
+- **Talking.** The use key on him says one line. The game-free `ThorsteinTalk` chooses it.
+  - While he waits, the line is about the tool he still needs, read from the ledger.
+  - Once recruited, he rotates through the three #295 house-building remarks with the
+    shared `DialogueRotation`, so none repeats until the others are said.
+- **The talk point** is Concerned NPC's: a capsule on a non-solid layer, a child of his
+  figure, which never blocks anybody.
+
+**OWNER GO-AROUND PENDING:**
+1. Examine the square: he appears near your bed. Walk into him: you are not blocked.
+2. Hover him ("Thorstein", your use key, "Talk"), then use: "An axe and a hammer..." Give
+   an axe (`cf_worker spawn`, `cf_settle give axe`, `cf_worker despawn`), then talk again:
+   he asks for the hammer.
+3. Once he has joined, talk four times: three different remarks, then they start again.
+
 ### His look while working, slice S6 (owner decision 2026-10-29, DECISIONS.md D18)
 
 His worker body stays the `Dverger` clone, with the same prefab, the same saved data and

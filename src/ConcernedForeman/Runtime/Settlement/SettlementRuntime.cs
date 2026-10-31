@@ -130,6 +130,23 @@ internal sealed class SettlementRuntime
         }
     }
 
+    /// <summary>#295 S3: Thorstein's answer to being talked to, or null. Never
+    /// throws.</summary>
+    internal string? ThorsteinTalk()
+    {
+        try
+        {
+            ThorsteinQuest? quest = _designations.Quest;
+            return quest != null && _records.TryOpen(out SettlementRegister register, out SettlementJournal journal)
+                ? quest.Talk(register, journal)
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>#295 S2: what examining the carpenter's square does - exactly
     /// what <c>cf_settle quest examine</c> does.</summary>
     internal string ExamineThorsteinKeepsake() => _designations.Execute(new[] { "quest", "examine" });
