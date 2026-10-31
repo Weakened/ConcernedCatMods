@@ -16,6 +16,7 @@ using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Persistence;
 using TheConcernedCat.ConcernedSteward.Domain.Quest;
 using TheConcernedCat.ConcernedSteward.Domain.Recruitment;
+using TheConcernedCat.ConcernedSteward.Domain.Retirement;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
 using TheConcernedCat.ConcernedSteward.Domain.Speech;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
@@ -851,6 +852,48 @@ internal sealed class StewardRuntime
         Persist();
         return StewardSentences.Dismissed() +
             " Her body stays where it is, and nothing has been destroyed.";
+    }
+
+    /// <summary>Takes her worker body out of the world, empty-handed, with no
+    /// round open (owner decision 2026-10-28, DECISIONS.md S1). Her employment,
+    /// her record and her story are untouched; "cs_steward recruit" brings the
+    /// body back. Everything the body itself cannot know is handed to the port
+    /// as a witness, and any one of them refuses.</summary>
+    internal string Retire()
+    {
+        string? blocked = WhyNotAvailable();
+        if (blocked != null)
+        {
+            return blocked;
+        }
+
+        RefreshCensus();
+        if (_census.Verdict != StewardCensusVerdict.Present)
+        {
+            return "Refused: " + _census.Describe();
+        }
+
+        var ledger = new StewardRetireFacts(
+            itemsHeld: 0,
+            inventoryReadable: true,
+            fuelCarried: _loop.Custody.Carried,
+            roundOpen: _loop.IsWorking || _loop.Phase == UpkeepPhase.NeedsAttention,
+            planOpen: _plan.HasActivePlan || _plan.IsBlocked,
+            unresolvedSteps: _journal.UnresolvedIntents.Count,
+            unresolvedLoss: _loop.Custody.HasLoss);
+
+        StewardRetireOutcome outcome = StewardRetirementPort.Retire(_census.Live, ledger, out string answer);
+        if (outcome == StewardRetireOutcome.Retired)
+        {
+            // The hold ended with the body. Released now rather than on the
+            // next census, so nothing in between can believe she still stands.
+            _npc.ReleaseBody();
+            _body = null;
+            _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);
+            _log(answer);
+        }
+
+        return answer;
     }
 
     internal string Acknowledge()
