@@ -56,6 +56,11 @@ public sealed class BodyInstantiationAuditTests
             ["NpcPresentationBody.cs"] =
                 "the presentation extraction: it instantiates a game prefab under an INACTIVE holder "
                 + "so nothing wakes, and destroys every part of it again before it returns",
+            ["NpcKeepsakeParts.cs"] =
+                "the keepsake's engine writes (#295 S2): it clones a game prefab under an INACTIVE holder only "
+                + "to read its meshes, destroys the clone and the holder in the same method, and builds a "
+                + "fresh render-only object with no network view - never a body; tools/validate_repo.py "
+                + "pins each spelling and every caller",
             ["NpcFigureParts.cs"] =
                 "the figure dresser's engine writes (#295 lift): it clones one item's attach child - "
                 + "never the item - under an INACTIVE holder so it can be inspected before it wakes, "
@@ -89,7 +94,7 @@ public sealed class BodyInstantiationAuditTests
     public void The_allowed_list_is_exactly_the_two_factories_and_the_harvest()
     {
         Assert.Equal(
-            new[] { "NpcFigureParts.cs", "NpcPresentationBody.cs", "NpcWorkerPrefabFactory.cs" },
+            new[] { "NpcFigureParts.cs", "NpcKeepsakeParts.cs", "NpcPresentationBody.cs", "NpcWorkerPrefabFactory.cs" },
             Allowed.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray());
 
         foreach (KeyValuePair<string, string> allowed in Allowed)

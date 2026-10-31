@@ -115,6 +115,12 @@ monotonic unlock policy, door geometry and permissions, camp sensing, residency 
 setbacks, dialogue rotation, designations and work scope, the custody ledger and transfer executor, the journal, the
 worker prefab factory, the body AI, body inventory, the census, presentation extraction, and console registration.
 
+**Moved (#295 S2, owner decision 2026-10-30):** the companion keepsake, lifted from Concerned Cartographer's Broken
+Compass as `Body/Keepsakes/NpcKeepsake` with the game-free `Keepsakes/NpcKeepsakeSpec`. It is used by Thorstein's
+carpenter's square first, then Gunnar's buckle and Sunniva's flint. It has no network view and is not an item; its
+engine writes are in the NPC census, and the "NPC keepsake audit" confines everything else. Hulgi's compass predates
+the library and stays in Cartographer.
+
 **Moved (#295 lift, inside the unpublished 0.5.0):** the figure dresser - Thorstein's, from Concerned Foreman - as
 `Body/Dressing/NpcFigureDresser` with the game-free `Appearance/` beside it (`NpcLookSpec`, `NpcLookPlan`,
 `NpcLookColour`). A role supplies its look as data and gets the body, hair, beard, colouring and garments applied.

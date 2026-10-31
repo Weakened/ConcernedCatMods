@@ -364,4 +364,29 @@ public sealed class ToolsOfTheTradeTests
             ToolsOfTheTrade.Stage(Facts(QuestState.IntroPending, employed: true, axe: true, hammer: true,
                 rosterSaved: false)));
     }
+
+    // --- S2: the carpenter's square -----------------------------------------------------------
+
+    [Fact]
+    public void The_square_lies_there_only_before_the_introduction_for_the_host_near_home()
+    {
+        Assert.True(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.NotMet, true, true, true, true));
+
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.WaitingForTools, true, true, true, true));
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.Recruited, true, true, true, true));
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(null, true, true, true, true));
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.NotMet, false, true, true, true));
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.NotMet, true, false, true, true));
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.NotMet, true, true, false, true));
+        Assert.False(ToolsOfTheTrade.ShowKeepsake(ThorsteinQuestStage.NotMet, true, true, true, false));
+    }
+
+    [Fact]
+    public void The_square_is_the_shared_keepsake_with_his_words()
+    {
+        Assert.Equal("Worn carpenter's square", ToolsOfTheTrade.Keepsake.HoverName);
+        Assert.Equal("Examine", ToolsOfTheTrade.Keepsake.HoverVerb);
+        Assert.Equal("Hammer", ToolsOfTheTrade.Keepsake.PrefabCandidates[0]);
+        Assert.Equal(1f, ToolsOfTheTrade.Keepsake.Scale);
+    }
 }

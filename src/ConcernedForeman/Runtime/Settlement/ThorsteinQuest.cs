@@ -69,9 +69,33 @@ internal sealed class ThorsteinQuest
             case "examine":
                 return Examine(progress, register, journal, saveRecords);
             default:
-                return "Usage: cf_settle quest [status|examine]. examine stands in for the carpenter's square " +
-                    "until it is in the world.";
+                return "Usage: cf_settle quest [status|examine]. examine does what examining the carpenter's " +
+                    "square near your bed does.";
         }
+    }
+
+    /// <summary>This character's stage, cheaply, for deciding whether the
+    /// carpenter's square belongs in the world (#295 S2). Reads the story and the
+    /// roster only - no journal replay, since the stage does not depend on the
+    /// tools. Null when the character or world cannot be identified.</summary>
+    internal ThorsteinQuestStage? StageFor(SettlementRegister register, SettlementJournal journal)
+    {
+        if (!TryOpen(out CompanionProgress progress, out _))
+        {
+            return null;
+        }
+
+        var facts = new ToolsOfTheTradeFacts(
+            progress.QuestState,
+            register.Employs(_worker()),
+            axeHeld: false,
+            hammerHeld: false,
+            handoverUncertain: false,
+            register.HasSettlementArea,
+            !register.IsReadOnly && !journal.IsReadOnly,
+            _hasAuthority(),
+            rosterSaved: !register.IsDirty);
+        return ToolsOfTheTrade.Stage(facts);
     }
 
     /// <summary>Called after every tool handover: if that was the second tool,
@@ -172,8 +196,8 @@ internal sealed class ThorsteinQuest
         switch (ToolsOfTheTrade.Stage(facts))
         {
             case ThorsteinQuestStage.NotMet:
-                return "Tools of the Trade: not begun. The carpenter's square that starts it is not in the " +
-                    "world yet in this build; cf_settle quest examine stands in for examining it.";
+                return "Tools of the Trade: not begun. A worn carpenter's square lies near your bed while the " +
+                    "settlement runtime is on; examine it (or cf_settle quest examine).";
 
             case ThorsteinQuestStage.WaitingForTools:
                 var lines = new List<string> { "Tools of the Trade:" };

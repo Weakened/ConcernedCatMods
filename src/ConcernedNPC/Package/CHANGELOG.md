@@ -2,11 +2,13 @@
 
 ## 0.5.0
 
-Four additive changes share this version:
+Five additive changes share this version:
 * a worker can rest as a presentation figure (#295, #298, Concerned Foreman's Thorstein);
 * a job can say that doing a target leaves the NPC carrying something (#381, Concerned Teamster's Gunnar);
 * that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and Gunnar share it;
-* a worker body can wear its character's own hair and beard, locally (#295 S6, owner decision 2026-10-29).
+* a worker body can wear its character's own hair and beard, locally (#295 S6, owner decision 2026-10-29);
+* one shared companion keepsake, the small local object that starts an introduction (#295 S2, owner decision
+  2026-10-30).
 
 ### A worker may rest as a presentation figure (#295, #298)
 
@@ -80,12 +82,31 @@ Four additive changes share this version:
   dresser keeps everything it did before, and a worker body never gets a body swap, a skin tint or garments.
 * Recorded as `docs/settlement/cart-and-collection/DECISIONS.md` **D18**. **Not observed in game.**
 
+### One shared companion keepsake (#295 S2, owner decision 2026-10-30)
+
+* `Body.Keepsakes.NpcKeepsake` places the small object a player examines to start a companion's introduction.
+  It is lifted from Concerned Cartographer's Broken Compass, so Thorstein's carpenter's square, Gunnar's buckle
+  (#457) and Sunniva's flint are one copy. Hulgi's own compass predates the library and stays in Cartographer.
+* The role supplies `Keepsakes.NpcKeepsakeSpec`: the name, the verb, the game prefabs whose look it borrows, and a
+  scale.
+* **Local in the strongest sense.**
+  * No network view, so it is never saved or replicated, and a peer without the mod sees nothing.
+  * Not an item. Examining it calls the role back and touches no inventory.
+  * Its collider is on a layer characters walk through, or is a trigger, so it never blocks anybody.
+* **The game prefab is never woken.** It is cloned under an inactive holder only to read its meshes, and destroyed
+  in the same method. The keepsake is a fresh object holding those meshes by reference, with shared materials only.
+* **Pinned like the dresser.** `tools/validate_repo.py` pins its engine writes in the NPC census. A new
+  "NPC keepsake audit" requires its helpers and behaviour to stay internal, confines the helpers to `NpcKeepsake`,
+  pins its public surface, refuses any network view in its folder, and refuses a companion product that builds its
+  own render-only keepsake. **Not observed in game.**
+
 ### Versioning
 
 * An additive minor version that widens the public surface by four members: `NpcBodyContract.ForWorkerWithPresentation`,
   `NpcBodyContract.Admits`, one `JobTarget` constructor and the `JobTarget.Carries` property. It also adds the
   dressing types: `Appearance.*` and `Body.Dressing.NpcFigureDresser` / `NpcWorkerDresser` /
-  `NpcCustomizationPalette`. A role that does not
+  `NpcCustomizationPalette`, and the keepsake types: `Keepsakes.NpcKeepsakeSpec` and `Body.Keepsakes.NpcKeepsake`.
+  A role that does not
   use them is unaffected. Every in-repository consumer pin moves with it, so no product can compile against one
   contract and install another.
 
