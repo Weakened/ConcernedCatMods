@@ -110,6 +110,7 @@ public sealed class Plugin : BaseUnityPlugin
         _settlement.ReleaseWorkerBody = presentation.ReleaseWorkerBody;
         _settlement.BodiesChanged = presentation.NoteBodiesChanged;
         _settlement.DescribeBodies = presentation.Describe;
+        _settlement.ThorsteinBodyLoaded = presentation.OnWorkerBodyLoaded;
 
         // #315/#316: Thorstein's collection runs on the custody runtime and shares its
         // world-load epoch, so every key made during one load agrees.

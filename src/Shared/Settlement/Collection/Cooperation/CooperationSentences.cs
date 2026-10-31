@@ -32,7 +32,8 @@ internal static class CooperationSentences
             case CollectionAttentionReason.JournalReadOnly:
                 return "The settlement record cannot be written, so nothing is moved. See the log for the file.";
             case CollectionAttentionReason.ScopeInvalid:
-                return "The work area is not usable. Mark a harvest area, or let him use the camp circle.";
+                return "The work area is not usable any more (deleted, unreadable, or from another world load). " +
+                    "Rebind it if it can be chosen again, or cancel and give a new order.";
             case CollectionAttentionReason.ScopeChanged:
                 return "The work area was chosen in an earlier world load, or has changed since. " +
                     "Run cf_collect rebind to set it again.";
@@ -193,6 +194,14 @@ internal static class CooperationSentences
         if (scope == null)
         {
             return "No work area yet.";
+        }
+
+        if (scope.Source == WorkScopeSource.CartographerWorkArea)
+        {
+            return scope.IsMissingBoundary
+                ? "Area: " + scope.AnchorDescription + ", not read in this session; choose it again before he works there."
+                : "Area: " + scope.AnchorDescription + " from your map, within " + Round(scope.RadiusMetres) + " m of " +
+                  Describe(scope.Centre) + ".";
         }
 
         string where = scope.Source == WorkScopeSource.HarvestDesignation
