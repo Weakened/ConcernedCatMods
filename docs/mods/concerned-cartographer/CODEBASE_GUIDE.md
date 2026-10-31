@@ -1315,9 +1315,9 @@ Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol versio
     - The draw mode is UI-owned like a route mode: plain LMB, with clicks and drag consumed.
     - The panel gets no editor while no world is bound or the world's area file is read-only.
     - Every panel edit writes the sidecar at once.
+- Order status (#296): `Runtime/Interop/WorkOrderProviderDiscovery` reads Concerned Foreman's `concernedcat.workorders/1` (`src/Shared/Interop/WorkOrders`). It asks at most once a second, only while the map is open. `WorkAreaOrders` turns the answer into the panel text and the outline mark (`WorkAreaOrderMark`). No answer means nothing is shown, never "no order".
 - Not yet built:
   - "Assign Thorstein" from the Cartographer panel. Since slice 3, Foreman consumes `concernedcat.workarea/1`: the player picks the area for Thorstein's collection order on Foreman's side (`cf_collect area`, collection panel). See docs/mods/concerned-foreman/COLLECTION.md §1.1;
-  - progress and attention display;
   - vertex-level editing (to change a boundary, draw a new area and delete the old one);
   - minimap outlines;
   - the ConcernedNPC provider registry (#375).

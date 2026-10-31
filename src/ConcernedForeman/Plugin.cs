@@ -71,6 +71,14 @@ public sealed class Plugin : BaseUnityPlugin
     private Runtime.Presentation.ThorsteinPresentation? _presentation;
     private Action<string>? _paletteLog;
     private bool _worldWasUp;
+    private WorkOrderCapabilityPublisher? _workOrderCapability;
+    private IReadOnlyDictionary<string, object> _capabilities =
+        new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(new Dictionary<string, object>());
+
+    /// <summary>What other Concerned Cat mods can call at runtime (#296):
+    /// <c>concernedcat.workorders/1</c>, read only. Found by GUID and by name,
+    /// never by reference, and only mscorlib types cross.</summary>
+    public IReadOnlyDictionary<string, object> ConcernedCatCapabilities => _capabilities;
 
     private void Awake()
     {
@@ -206,6 +214,32 @@ public sealed class Plugin : BaseUnityPlugin
                 }
             },
             Logger);
+
+        // #296: Cartographer shows, on the work area the player drew, who works
+        // there, the progress and why the order stopped - read from the same
+        // facts and view as the panel above, so the two cannot disagree.
+        try
+        {
+            _workOrderCapability = new WorkOrderCapabilityPublisher(
+                () =>
+                {
+                    OrderPanelFacts facts = BuildOrderPanelFacts(settings, collection, custody, delivery, companions);
+                    return WorkOrderSnapshot.From(
+                        WorkOrderCapabilityPublisher.CurrentWorldUid(), facts, OrderPanelPresenter.Present(facts, null, Time.time));
+                },
+                PluginVersion,
+                message => Logger.LogWarning(message));
+            _capabilities = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(
+                new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    [WorkOrderCapabilityPublisher.Key] = _workOrderCapability.Endpoint,
+                });
+        }
+        catch (Exception exception)
+        {
+            _workOrderCapability = null;
+            Logger.LogWarning("Work-order capability not published this session: " + exception.GetType().Name);
+        }
 
         // Which build this actually is, not just which version it claims: a test
         // profile keeps whatever DLL was last copied into it, and two builds of

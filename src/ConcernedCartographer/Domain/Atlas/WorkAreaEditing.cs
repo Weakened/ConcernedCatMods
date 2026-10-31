@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.Interop.WorkArea;
+using TheConcernedCat.Interop.WorkOrders;
 
 namespace TheConcernedCat.ConcernedCartographer.Atlas;
 
@@ -372,10 +373,21 @@ internal enum WorkAreaOutlineEmphasis
 }
 
 /// <summary>One line for the large-map outline layer, in world X/Z.</summary>
+/// <summary>#296: the map badge. What a worker product says about the order
+/// running in an area, if any.</summary>
+internal enum WorkAreaOrderMark
+{
+    None,
+    Working,
+    NeedsAttention,
+}
+
 internal sealed class WorkAreaOutline
 {
-    public WorkAreaOutline(List<(float X, float Z)> points, bool closed, WorkAreaOutlineEmphasis emphasis)
+    public WorkAreaOutline(
+        List<(float X, float Z)> points, bool closed, WorkAreaOutlineEmphasis emphasis, WorkAreaOrderMark mark = WorkAreaOrderMark.None)
     {
+        Mark = mark;
         Points = points;
         Closed = closed;
         Emphasis = emphasis;
@@ -388,6 +400,9 @@ internal sealed class WorkAreaOutline
     public bool Closed { get; }
 
     public WorkAreaOutlineEmphasis Emphasis { get; }
+
+    /// <summary>#296: the order badge, shown as the outline's colour.</summary>
+    public WorkAreaOrderMark Mark { get; }
 }
 
 /// <summary>#296 slice 2: what the outline layer draws. Saved areas first,
@@ -396,7 +411,13 @@ internal sealed class WorkAreaOutline
 /// </summary>
 internal static class WorkAreaOutlines
 {
-    public static List<WorkAreaOutline> Collect(WorkAreaStore store, WorkAreaEditor? editor)
+    public static List<WorkAreaOutline> Collect(WorkAreaStore store, WorkAreaEditor? editor) =>
+        Collect(store, editor, null);
+
+    /// <param name="orders">#296: the latest <c>concernedcat.workorders/1</c>
+    /// answer, or null when no worker product answered. Only an Ok answer
+    /// marks an area.</param>
+    public static List<WorkAreaOutline> Collect(WorkAreaStore store, WorkAreaEditor? editor, WorkOrderLookup? orders)
     {
         var outlines = new List<WorkAreaOutline>();
         string? selected = editor?.SelectedId;
@@ -409,12 +430,12 @@ internal static class WorkAreaOutlines
                 continue;
             }
 
-            outlines.Add(new WorkAreaOutline(Corners(area), closed: true, WorkAreaOutlineEmphasis.Saved));
+            outlines.Add(new WorkAreaOutline(Corners(area), closed: true, WorkAreaOutlineEmphasis.Saved, MarkFor(orders, area.Id)));
         }
 
         if (selectedArea != null)
         {
-            outlines.Add(new WorkAreaOutline(Corners(selectedArea), closed: true, WorkAreaOutlineEmphasis.Selected));
+            outlines.Add(new WorkAreaOutline(Corners(selectedArea), closed: true, WorkAreaOutlineEmphasis.Selected, MarkFor(orders, selectedArea.Id)));
         }
 
         if (editor != null && editor.Session.Active && editor.Session.Draft.Count > 0)
@@ -431,6 +452,8 @@ internal static class WorkAreaOutlines
         return outlines;
     }
 
+    private static WorkAreaOrderMark MarkFor(WorkOrderLookup? orders, string areaId) => WorkAreaOrders.MarkFor(orders, areaId);
+
     private static List<(float X, float Z)> Corners(WorkArea area)
     {
         var corners = new List<(float X, float Z)>(area.Boundary.Points.Count);
@@ -440,5 +463,68 @@ internal static class WorkAreaOutlines
         }
 
         return corners;
+    }
+}
+
+/// <summary>#296: what the map says about the order running in a work area,
+/// from <c>concernedcat.workorders/1</c>. The words are the worker product's
+/// own (its order panel's lines); nothing here invents a state, and a missing
+/// or failed answer says nothing rather than "no order".</summary>
+internal static class WorkAreaOrders
+{
+    public static WorkAreaOrderMark MarkFor(WorkOrderLookup? orders, string areaId)
+    {
+        PublishedWorkOrder? order = orders != null && orders.IsOk ? orders.ForArea(areaId) : null;
+        return order == null
+            ? WorkAreaOrderMark.None
+            : order.NeedsAttention ? WorkAreaOrderMark.NeedsAttention : WorkAreaOrderMark.Working;
+    }
+
+    /// <summary>The lines for the selected area, or empty when there is
+    /// nothing true to say (no worker product, or it did not answer).</summary>
+    public static string Describe(WorkOrderLookup? orders, string? areaId)
+    {
+        if (orders == null || !orders.IsOk || string.IsNullOrEmpty(areaId))
+        {
+            return string.Empty;
+        }
+
+        PublishedWorkOrder? order = orders.ForArea(areaId!);
+        if (order == null)
+        {
+            return AtlasStrings.Get("areas.noOrder");
+        }
+
+        var text = new System.Text.StringBuilder();
+        text.Append(AtlasStrings.Format("areas.orderWorker", order.Worker, order.StateLine));
+        foreach (string line in order.ProgressLines)
+        {
+            text.Append('\n').Append(line);
+        }
+
+        if (order.NeedsAttention && order.ReasonLine.Length > 0)
+        {
+            text.Append('\n').Append(AtlasStrings.Format("areas.orderAttention", order.ReasonLine));
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>A fingerprint of what the map shows, so the outline layer is
+    /// redrawn only when it changes.</summary>
+    public static string Signature(WorkOrderLookup? orders)
+    {
+        if (orders == null || !orders.IsOk)
+        {
+            return string.Empty;
+        }
+
+        var text = new System.Text.StringBuilder();
+        foreach (PublishedWorkOrder order in orders.Orders)
+        {
+            text.Append(order.AreaId).Append(order.NeedsAttention ? '!' : '.').Append('|');
+        }
+
+        return text.ToString();
     }
 }
