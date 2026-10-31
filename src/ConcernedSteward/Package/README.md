@@ -89,6 +89,7 @@ cs_fires                 every light she looked at, and her verdict on each
 | `[Steward] SpeakOnScreen` | true | Show what she says on screen as well as in the log. |
 | `[Appearance] Garment` | (empty) | A vanilla dress or robe prefab to try before the leather. |
 | `[Appearance] HairStyle` | `$customization_hair12` | Her hair (vanilla's "Matronly"). |
+| `[Appearance] ShowAtHome` | `true` | Show her at her home post as a player-style figure while she has no worker body. |
 
 Thresholds are measured in burning time, not fuel, because pieces burn at
 different rates. A threshold that would make her loop is refused and logged.
@@ -99,7 +100,12 @@ one trip for each kind, never one trip per light.
 **Her look.** She wears a leather tunic and leather pants. Vanilla only draws
 hair, hair colour, skin colour and the female model on a player-style body; on
 the default base creature those settings may have no visible effect, and the
-log says so.
+log says so (`[Appearance] HairColour` is her worker body's hair colour; the
+figure uses its own fair, light-blonde colouring). At rest, with no worker body in the world, she is shown beside the
+supply chest as a player-style figure that does show them: female, Matronly
+hair, fair and light blonde. That figure is seen only on the host's machine and
+changes nothing in the world; it is never there at the same time as her worker
+body.
 
 ## Compatibility
 

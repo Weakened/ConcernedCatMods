@@ -34,7 +34,9 @@ namespace TheConcernedCat.ConcernedSteward;
 // Spelled out rather than referred to by constant on purpose: the validator
 // reads this file as text (check_library_consumers), and a constant would leave
 // the rule looking satisfied to a reader and unsatisfied to the gate.
-[BepInDependency("com.theconcernedcat.valheim.concernednpc")]
+// 0.5.0 is the first Concerned NPC with the figure dresser and the
+// worker-with-presentation contract Sunniva's figure at home is built on.
+[BepInDependency("com.theconcernedcat.valheim.concernednpc", "0.5.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedsteward";
@@ -43,12 +45,14 @@ public sealed class Plugin : BaseUnityPlugin
 
     private StewardRuntime? _steward;
     private bool _worldWasUp;
+    private System.Action<string>? _paletteLog;
 
     private void Awake()
     {
         StewardSettings settings = StewardSettings.Bind(Config);
         _steward = new StewardRuntime(settings, message => Logger.LogInfo(message));
         _steward.Install();
+        _paletteLog = message => Logger.LogInfo(message);
 
         // Which build this actually is, not just which version it claims: a test
         // profile keeps whatever DLL was last copied into it, and two builds of
@@ -124,6 +128,13 @@ public sealed class Plugin : BaseUnityPlugin
         if (worldIsUp)
         {
             _steward?.Update();
+        }
+        else if (_paletteLog != null)
+        {
+            // Only the character screen carries the colours her figure's sliders
+            // are converted through, so this polls outside a world until it has
+            // them. The delegate is made once: this line runs every frame.
+            TheConcernedCat.ConcernedNPC.Body.Dressing.NpcCustomizationPalette.Poll(UnityEngine.Time.unscaledDeltaTime, _paletteLog);
         }
     }
 
