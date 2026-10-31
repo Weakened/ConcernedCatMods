@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TheConcernedCat.Companions.Identity;
 using TheConcernedCat.Companions.Quest;
+using TheConcernedCat.ConcernedNPC.Keepsakes;
 
 namespace TheConcernedCat.ConcernedForeman.Domain.Npc;
 
@@ -151,6 +152,26 @@ internal static class ToolsOfTheTrade
     /// <summary>The quest's durable id inside that sidecar.</summary>
     internal static readonly QuestId QuestId = new QuestId("tools-of-the-trade");
 
+    /// <summary>The carpenter's square (#295 S2): Concerned NPC's shared keepsake
+    /// with Thorstein's words on it. There is no carpenter's square among the
+    /// game's own objects, so its look is borrowed from the builder's hammer, the
+    /// nearest thing in his trade; this is this build's proposal, not the
+    /// owner's, and the candidates are read from the installed game.</summary>
+    internal static readonly NpcKeepsakeSpec Keepsake = new NpcKeepsakeSpec(
+        ThorsteinLines.KeepsakeName,
+        ThorsteinLines.KeepsakeVerb,
+        new[] { "Hammer", "Wood" },
+        1f);
+
+    /// <summary>Whether the square belongs in the world for this player now: the
+    /// introduction has not begun, the settlement runtime is on, this is the
+    /// host, the respawn anchor is known and the player is near it. Anything
+    /// unknown means no square: the console's <c>cf_settle quest examine</c>
+    /// still opens the introduction.</summary>
+    internal static bool ShowKeepsake(
+        ThorsteinQuestStage? stage, bool isHost, bool settlementEnabled, bool homeKnown, bool playerNearHome) =>
+        stage == ThorsteinQuestStage.NotMet && isHost && settlementEnabled && homeKnown && playerNearHome;
+
     internal static ThorsteinQuestStage Stage(in ToolsOfTheTradeFacts facts)
     {
         if (QuestStateMachine.IsComplete(facts.Quest) || (facts.Employed && facts.RosterSaved))
@@ -294,6 +315,10 @@ internal static class ThorsteinLines
 
     internal const string Completion =
         "Good edge. Sound handle. Right, I'm Thorstein. Point out the work — I'll mind the rest.";
+
+    internal const string KeepsakeName = "Worn carpenter's square";
+
+    internal const string KeepsakeVerb = "Examine";
 
     internal const string ObjectiveAxe = "Give Thorstein an axe";
 

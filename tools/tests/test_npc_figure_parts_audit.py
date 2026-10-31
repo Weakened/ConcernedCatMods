@@ -269,6 +269,23 @@ class NpcFigurePartsArePinned(unittest.TestCase):
                      "        _wholeFigure = wholeFigure;\n        TintBody(0, NpcLookRgb.White, \"skin tone\");\n")
         self.assert_refused("a body tint outside Apply reached a worker body")
 
+    def test_a_legitimate_new_constraint_elsewhere_in_the_library_is_not_refused(self):
+        # Not a plant: the target-typed `new(` rule is about the two dresser
+        # files. Ordinary code elsewhere in the library - a `where T : new()`
+        # constraint, a target-typed `new()` of a list - must stay legal
+        # (#295 S6 review; the rule used to scan every library file).
+        self.plant_file(LIBRARY, ("Work", "ZzOrdinaryGeneric.cs"),
+                        "using System.Collections.Generic;\n"
+                        "namespace TheConcernedCat.ConcernedNPC.Work;\n"
+                        "internal static class ZzOrdinaryGeneric\n"
+                        "{\n"
+                        "    internal static T Make<T>() where T : new() => new T();\n"
+                        "    internal static List<int> Empty() { List<int> list = new(); return list; }\n"
+                        "}\n")
+        code, out = validate()
+        self.assertEqual(0, code, "ordinary generic code was refused by a rule meant for the dressers:\n"
+                         + out[-3000:])
+
     def test_a_body_tint_moved_above_the_worker_return_is_refused(self):
         self.swap_in(CORE,
                      "            if (!_wholeFigure)\n            {\n",

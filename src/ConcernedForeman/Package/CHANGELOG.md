@@ -11,6 +11,20 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — the carpenter's square (#295 S2)
+
+- **A worn carpenter's square lies near your bed** while Thorstein's
+  introduction has not begun and the settlement runtime is on, for the host.
+  Hover it and use it to examine it. The result is the same as
+  `cf_settle quest examine`: the inscription, his introduction, and the two
+  objectives.
+- It is Concerned NPC's shared keepsake: local only, never saved or networked,
+  not an item, and nothing ever bumps into it. Once the introduction has begun
+  it is taken away. There is no carpenter's square among the game's objects, so
+  it borrows the hammer's look; that choice is this build's proposal.
+- `cf_worker status` says whether it is lying there, and whether the game's
+  hover has reached it. **Not observed in game.**
+
 ### Added — work areas from your map (#296, slice 3)
 
 - **Thorstein can collect in a work area you drew in Concerned Cartographer.**
