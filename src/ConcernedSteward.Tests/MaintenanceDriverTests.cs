@@ -10,6 +10,7 @@ using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 using TheConcernedCat.Settlement.Designations;
+using TheConcernedCat.Settlement.Worker;
 
 namespace TheConcernedCat.ConcernedSteward.Tests;
 
@@ -189,6 +190,71 @@ public sealed class MaintenanceDriverTests
         Assert.Equal(NpcJobProgress.Finished, driver.Progress);
         Assert.True(driver.LastRound.IsComplete);
         Assert.Equal(0, driver.LeftForAnotherRound);
+    }
+
+    // --- #382 "route an efficient circuit" -------------------------------------------------------
+
+    /// <summary>Five low lights on a line leading away from the chest, whose
+    /// urgency alternates far, near, far, near. Walked in urgency order that is
+    /// 114 m of zigzag; walked as a circuit it is 34 m. None of them is anywhere
+    /// near going out before she gets there, so the circuit is what she walks.
+    /// </summary>
+    private static Camp Zigzag() => new Camp(
+        Lights.Light("x-14", fuel: 2.0f, x: -14f),
+        Lights.Light("x18", fuel: 2.2f, x: 18f),
+        Lights.Light("x-6", fuel: 2.4f, x: -6f),
+        Lights.Light("x10", fuel: 2.6f, x: 10f),
+        Lights.Light("x2", fuel: 2.8f, x: 2f));
+
+    [Fact]
+    public void Within_one_tour_she_walks_a_short_circuit_not_the_urgency_zigzag()
+    {
+        Camp camp = Zigzag();
+        List<PlannedStep> walked = Walk(camp.Driver());
+        string[] services = walked.Where(step => !step.IsCollect).Select(step => step.Step.Subject).ToArray();
+
+        Assert.Equal(new[] { "x18", "x10", "x2", "x-6", "x-14" }, services);
+
+        // And that really is shorter than walking them most-urgent-first.
+        var chest = new SitePoint(20f, 0f, 0f);
+        SitePoint At(string key) => camp.Round.Stops.First(stop => stop.Light.Key.Value == key).Light.Position;
+        float circuit = RoundCircuit.Length(chest, services.Select(At).ToArray());
+        float byUrgency = RoundCircuit.Length(
+            chest, camp.Round.Stops.Select(stop => stop.Light.Position).ToArray());
+        Assert.Equal("x-14", camp.Round.Stops[0].Light.Key.Value);
+        Assert.True(circuit < byUrgency, "circuit " + circuit + " m is not shorter than urgency order " + byUrgency + " m");
+        Assert.Equal(34f, circuit, 3);
+    }
+
+    [Fact]
+    public void A_light_that_would_go_out_before_the_circuit_reached_it_is_walked_first()
+    {
+        // Thirty seconds left, forty-four metres the wrong way: on the circuit she
+        // would reach it after a minute, so it goes first and does not starve.
+        var camp = new Camp(
+            Lights.Light("x18", fuel: 2.2f, x: 18f),
+            Lights.Light("x10", fuel: 2.6f, x: 10f),
+            Lights.Light("x2", fuel: 2.8f, x: 2f),
+            Lights.Light("far", fuel: 0.5f, x: -24f));
+
+        List<PlannedStep> walked = Walk(camp.Driver());
+        string[] services = walked.Where(step => !step.IsCollect).Select(step => step.Step.Subject).ToArray();
+
+        Assert.Equal("far", services[0]);
+        Assert.Equal(new[] { "far", "x2", "x10", "x18" }, services);
+    }
+
+    [Fact]
+    public void Urgency_still_decides_which_lights_are_in_the_round()
+    {
+        // Ordering is the circuit's; membership and funding are still urgency's:
+        // the round's own list is still most urgent first.
+        Camp camp = Zigzag();
+        RoundPlan round = camp.Prepare();
+
+        Assert.Equal(
+            new[] { "x-14", "x18", "x-6", "x10", "x2" },
+            round.Stops.Select(stop => stop.Light.Key.Value).ToArray());
     }
 
     [Fact]

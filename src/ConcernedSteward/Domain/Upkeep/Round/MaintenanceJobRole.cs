@@ -178,6 +178,7 @@ internal sealed class MaintenanceJobRole : INpcJobRole
     private readonly Func<string> _epoch;
     private readonly MaintenanceThresholds _thresholds;
     private readonly NpcWorldEpoch _world;
+    private readonly int _unitsPerTrip;
     private RoundPlan _plannedRound;
     private bool _hasPlannedRound;
 
@@ -199,9 +200,11 @@ internal sealed class MaintenanceJobRole : INpcJobRole
         Func<FuelTargetKey, FuelTargetObservation?> look,
         Func<Designation?> settlement,
         Func<string> epoch,
-        MaintenanceThresholds thresholds)
+        MaintenanceThresholds thresholds,
+        int unitsPerTrip = 0)
     {
         _world = world;
+        _unitsPerTrip = unitsPerTrip;
         _round = round ?? throw new ArgumentNullException(nameof(round));
         _look = look ?? throw new ArgumentNullException(nameof(look));
         _settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
@@ -230,14 +233,24 @@ internal sealed class MaintenanceJobRole : INpcJobRole
         RoundPlan round = _round();
         _plannedRound = round;
         _hasPlannedRound = true;
-        foreach (LightNeed stop in round.Stops)
+
+        // #382 "route an efficient circuit": urgency chose these stops; the walk
+        // order is a short circuit from the chest, with only a light that would go
+        // out before it was reached walked first (RoundCircuit).
+        IReadOnlyList<LightNeed> stops = round.Stops;
+        SitePoint chest = round.Sources.Count > 0
+            ? round.Sources[0].Position
+            : stops.Count > 0 ? stops[0].Light.Position : default;
+        int[] bands = RoundCircuit.Bands(chest, stops, _unitsPerTrip);
+        for (int index = 0; index < stops.Count; index++)
         {
+            LightNeed stop = stops[index];
             targets.Add(new JobTarget(
                 stop.Light.Key.Value,
                 world,
                 SettlementWorkArea.Point(stop.Light.Position),
                 action: string.Empty,
-                priority: stop.Priority,
+                priority: bands[index],
                 needs: new JobManifest(new[] { new JobManifestLine(stop.Item, stop.Units) })));
         }
 
@@ -402,7 +415,7 @@ internal sealed class MaintenanceJobRole : INpcJobRole
         NpcWorldEpoch world = adoption.World;
         return NpcJobDriver.For(
             OrderFor(round, adoption.Identity, jobId, area, world, unitsPerTrip),
-            new MaintenanceJobRole(world, currentRound, look, settlement, epoch, thresholds),
+            new MaintenanceJobRole(world, currentRound, look, settlement, epoch, thresholds, unitsPerTrip),
             adoption.Registry);
     }
 
