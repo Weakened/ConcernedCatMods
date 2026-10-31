@@ -20,6 +20,7 @@
          compile, plus the capability map it is published through. -->
     <Compile Include="..\Shared\Interop\CapabilityMap.cs" Link="Interop/CapabilityMap.cs" />
     <Compile Include="..\Shared\Interop\WorkArea\**\*.cs" LinkBase="Interop/WorkArea" />
+    <Compile Include="..\Shared\Interop\WorkOrders\**\*.cs" LinkBase="Interop/WorkOrders" />
   </ItemGroup>
 
   <ItemGroup>

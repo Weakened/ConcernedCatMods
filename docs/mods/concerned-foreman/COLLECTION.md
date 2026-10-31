@@ -32,6 +32,7 @@ With Concerned Cartographer installed, the player can point the next order at a 
 - **Limits.** The rendezvous planner and the loaded-ground check use the circle around the area (its bounding-box centre, at the issuing player's height), not the polygon. Neither picks anything.
 - **Reloads.** The journal keeps no polygon. A Cartographer scope rebuilt after a reload therefore contains nothing until the player chooses the area again and rebinds.
 - **The choice.** It belongs to one world load.
+- **Shown on the map (#296).** Foreman publishes `concernedcat.workorders/1` (read only: `hello`, `listOrders`). It is built from the same facts and view as its collection panel, for an order running in a map area. Cartographer shows the worker, the progress and the attention reason in its Areas panel, and colours that area's outline: green when working, red when it needs attention.
 - **Authority.** No new authority: only which allowlisted natural sources count gets narrower. Thorstein collects only with `Collection/ThorsteinCollects` on (#380), which is off by default.
 
 ## 2. Layout
@@ -337,6 +338,9 @@ and the commit.
 | W1 map work area (#296 slice 3) | With Concerned Cartographer installed, draw an L-shaped work area (Areas button) that reaches no more than 48 m from its middle. Run `cf_collect area list`, then `cf_collect area <name>` (or press the panel's **Next map area**), then `cf_collect start 10 0 hold` | The order names the area. Only sources inside the drawn L are picked; none in the L's missing corner. **OWNER GO-AROUND PENDING** |
 | W2 map area refusals | Choose an area, then `start` after each of these: delete it on the map; remove Cartographer; draw a new area wider than 96 m and choose **that** one | Each is refused with its reason, **never** replaced by the harvest area or the camp circle. A failed `area <name>` keeps the previous choice and says so. `cf_collect area default` goes back to the usual area. **OWNER GO-AROUND PENDING** |
 | W3 map area replaced or reloaded | While he works: (a) delete the chosen area and draw a new one; (b) choose another area for a later order and run `rebind` on the running order; (c) save and reload, then rebind | (a) Paused "the work area is not usable any more". There is no vertex editing, so a redraw is a new area. (b) The running order keeps **its own** area; the next-order choice never moves it. (c) Rebind needs `area <the same area>` first; a different area, or the same one redrawn, is refused. **OWNER GO-AROUND PENDING** |
+| W4 map shows the order (#296) | With both mods, run an order in a map area (W1), open the map and select that area in **Areas** | The panel shows "Thorstein: Order: …", the progress lines and nothing about attention. The area outline is green. **OWNER GO-AROUND PENDING** |
+| W5 map shows attention | Pick the area clean (or remove his chest) until the order stops | The selected area shows "Needs attention: <the same reason as Foreman's panel>" within about a second, and the outline turns red. Foreman's own notice appears once, not repeatedly. Pausing yourself does **not** turn it red. **OWNER GO-AROUND PENDING** |
+| W6 map without Foreman | Disable Concerned Foreman, open Areas | No order text and no colour change; the panel never claims "no order" when it cannot know. **OWNER GO-AROUND PENDING** |
 
 ### 7.4 Runtime unknowns to settle while doing the above
 

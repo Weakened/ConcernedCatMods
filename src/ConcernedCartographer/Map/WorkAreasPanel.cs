@@ -37,13 +37,29 @@ internal sealed class WorkAreasPanel : CcSidePanel
     /// <param name="changed">Called after anything the player did that may
     /// have changed the store or the outlines (the runtime saves and
     /// redraws).</param>
-    public WorkAreasPanel(ManualLogSource log, Func<WorkAreaEditor?> editor, Func<bool> outlinesVisible, Action changed)
-        : base(log, "areas.title", 384f, 520f)
+    /// <param name="orderText">#296: what a worker product says about the order
+    /// in an area (empty when nothing true can be said).</param>
+    /// <param name="orderStamp">Bumps when that changes.</param>
+    public WorkAreasPanel(
+        ManualLogSource log,
+        Func<WorkAreaEditor?> editor,
+        Func<bool> outlinesVisible,
+        Action changed,
+        Func<string?, string> orderText,
+        Func<long> orderStamp)
+        : base(log, "areas.title", 384f, 580f)
     {
         _editor = editor;
         _outlinesVisible = outlinesVisible;
         _changed = changed;
+        _orderText = orderText ?? (_ => string.Empty);
+        _orderStamp = orderStamp ?? (() => 0L);
     }
+
+    private readonly Func<string?, string> _orderText;
+    private readonly Func<long> _orderStamp;
+    private Text? _order;
+    private long _renderedOrderStamp = -1;
 
     /// <summary>True while the draw mode is on (the runtime's input gate).
     /// </summary>
@@ -67,9 +83,11 @@ internal sealed class WorkAreasPanel : CcSidePanel
             _changed();
         }
 
-        if (IsVisible && _editor() is { } editor && editor.ChangeStamp != _renderedStamp)
+        if (IsVisible && _editor() is { } editor &&
+            (editor.ChangeStamp != _renderedStamp || _orderStamp() != _renderedOrderStamp))
         {
             _renderedStamp = editor.ChangeStamp;
+            _renderedOrderStamp = _orderStamp();
             Refresh();
         }
 
@@ -159,6 +177,7 @@ internal sealed class WorkAreasPanel : CcSidePanel
 
         _modeStatus = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 44f);
         _details = AddBody(gui, font, "", 12, new Color(1f, 0.95f, 0.75f, 1f), ref y, 30f);
+        _order = AddBody(gui, font, "", 11, new Color(0.8f, 1f, 0.8f, 1f), ref y, 60f);
         y -= 6f;
 
         for (int index = 0; index < AreaSlots; index++)
@@ -228,6 +247,10 @@ internal sealed class WorkAreasPanel : CcSidePanel
         }
 
         _details.text = editor.SelectionDetails();
+        if (_order != null)
+        {
+            _order.text = _orderText(editor.SelectedId);
+        }
         if (_overflow != null)
         {
             _overflow.text = hidden > 0 ? AtlasStrings.Format("areas.more", hidden) : string.Empty;

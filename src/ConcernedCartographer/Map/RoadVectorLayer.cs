@@ -725,6 +725,18 @@ internal sealed class RoadVectorLayer
                     _ => (new Color32(120, 196, 255, 230), halfWidth),
                 };
 
+                // #296: the order badge. A worker in the area turns it green;
+                // an order that needs attention turns it red. The selection
+                // keeps its width.
+                if (outline.Mark == Atlas.WorkAreaOrderMark.NeedsAttention)
+                {
+                    color = new Color32(235, 72, 60, 255);
+                }
+                else if (outline.Mark == Atlas.WorkAreaOrderMark.Working)
+                {
+                    color = new Color32(96, 204, 112, 255);
+                }
+
                 _routeBaked.Clear();
                 foreach ((float x, float z) in outline.Points)
                 {
