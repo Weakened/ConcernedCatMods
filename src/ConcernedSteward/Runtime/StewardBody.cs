@@ -87,6 +87,16 @@ internal sealed class StewardBody : MonoBehaviour
     {
         foreach (StewardBody body in Live)
         {
+            // A body whose network object has already been let go of - vanilla's
+            // removal resets it at once, while Unity only destroys the object at
+            // the end of the frame - is not a body any more. Without this the
+            // census could adopt a just-retired Sunniva for the rest of the frame
+            // and a round could be opened against a body that is gone.
+            if (body._view == null || !body._view.IsValid())
+            {
+                continue;
+            }
+
             if (string.Equals(body.Key, key, StringComparison.Ordinal))
             {
                 return body;

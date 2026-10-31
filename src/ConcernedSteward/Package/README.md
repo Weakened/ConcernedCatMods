@@ -73,6 +73,8 @@ cs_steward recruit       take her on (stand inside the settlement)
 cs_steward status        what she is doing, and why she is not doing anything
 cs_steward resolve       after she stops and asks you to look
 cs_steward dismiss       let her go; her body stays and nothing is destroyed
+cs_steward retire        take her worker body out of the world (only empty-handed,
+                         with no round open); recruit brings it back
 cs_fires                 every light she looked at, and her verdict on each
 ```
 

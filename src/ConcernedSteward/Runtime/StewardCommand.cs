@@ -32,7 +32,7 @@ internal sealed class StewardCommand : ConsoleCommand
 
     public override string Help =>
         "The Steward: area <radius> | depot | clear area|depot | runes | recruit | dismiss | " +
-        "resolve | status";
+        "resolve | retire | status";
 
     public override void Run(string[] args)
     {
@@ -82,6 +82,9 @@ internal sealed class StewardCommand : ConsoleCommand
 
             case "resolve":
                 return _runtime.Acknowledge();
+
+            case "retire":
+                return _runtime.Retire();
 
             case "status":
                 return _runtime.Status();

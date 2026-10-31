@@ -136,6 +136,21 @@ Record PASS / FAIL / note against each numbered row.
    fell, she stops, the screen says she stopped and needs you; `cs_steward
    resolve` after you have looked lets her work again. Nothing is recreated.
 
+## 7b. Retire and come back (owner decision S1)
+
+1. While she carries fuel, or mid-round, `cs_steward retire`. **Expect:** refused,
+   with the reason; her body stays.
+2. After a round has finished and she has put everything back, `cs_steward
+   retire`. **Expect:** her body disappears; nothing drops; `cs_steward status`
+   shows no body; she is still taken on.
+3. Inside the settlement, `cs_steward recruit`. **Expect:** one body appears,
+   with an empty pack, and nothing is said twice. (Typed in the very same frame
+   as the retire, the census may still count her saved record and answer as if
+   she were out of range; a moment later it spawns her. Unverified in game -
+   note what you see.)
+4. Save, quit, reload after step 2: no body comes back by itself and no duplicate
+   appears.
+
 ## 8. Settings
 
 1. `[Steward] SpeakOnScreen = false`: nothing on screen, everything still in the

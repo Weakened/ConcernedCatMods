@@ -59,6 +59,12 @@ bump to protect.
 - **Her hair** is the style the character screen calls Matronly, looked up by
   vanilla's own customization token.
 
+- **`cs_steward retire`** (owner decision S1, 2026-10-28). Takes Sunniva's own
+  worker body out of the world, and only when she holds nothing, the fuel
+  ledger agrees, no round or plan is open and nothing is unaccounted for. Her
+  employment and story stay; `cs_steward recruit` brings her body back. It never
+  removes anything else and never destroys carried fuel.
+
 ### Fixed
 
 - The round's fuel was chosen from whichever light held the least fuel, not
