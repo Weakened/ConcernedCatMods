@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedNPC.Containers;
+using TheConcernedCat.ConcernedNPC.Interruption;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
+using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using UnityEngine;
@@ -54,6 +56,19 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
     /// </summary>
     private readonly GunnarDeathRecordStore _deaths = new GunnarDeathRecordStore();
 
+    /// <summary>The tour's write-ahead plan (#379): one per Gunnar per world,
+    /// in <c>teamster_gunnar_tour_&lt;world&gt;.tsv</c> beside the death record.
+    /// Opened at the world-up edge, closed at the world-down edge, and
+    /// revalidated only once his body, his record, the switch and the authority
+    /// can all answer.</summary>
+    private readonly GunnarTourPlan _tourPlan = new GunnarTourPlan();
+
+    /// <summary>Whether this world's plan file has been opened, or found to have
+    /// no world id to be named by.</summary>
+    private bool _tourPlanOpened;
+    private bool _tourPlanUnnamed;
+    private Func<WorkerBodyStatus> _bodyStatus = () => WorkerBodyStatus.Unspecified;
+
     /// <summary>The chest the player chose, and the world load they chose it in.
     /// <b>There is no fallback.</b> With none designated the deposit refuses and
     /// says so; nothing here looks for the nearest one (`DECISIONS.md` D15).
@@ -95,12 +110,14 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         Func<bool> seamAvailable,
         Func<Humanoid?, bool> releaseCartFromDyingBody,
         Func<bool> cartHeld,
+        Func<WorkerBodyStatus> bodyStatus,
         ContainerPermissionRuntime? containers,
         ManualLogSource log)
     {
         GunnarCollectionRuntime runtime = host.AddComponent<GunnarCollectionRuntime>();
         runtime.Initialize(settings, worker, identity, recordUnwritable, recordUnreadable, seamAvailable, log);
         runtime._containers = containers;
+        runtime._bodyStatus = bodyStatus ?? throw new ArgumentNullException(nameof(bodyStatus));
         runtime._releaseCartFromDyingBody = releaseCartFromDyingBody
             ?? throw new ArgumentNullException(nameof(releaseCartFromDyingBody));
         runtime._cartHeld = cartHeld ?? throw new ArgumentNullException(nameof(cartHeld));
@@ -208,6 +225,11 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             _log?.LogInfo(
                 "Gunnar's collection: the world went away, so the pick in flight and every " +
                 "unconfirmed source went with it.");
+        }
+
+        if (worldUp)
+        {
+            WatchTourPlan();
         }
 
         if (worldUp && _tour != null)
@@ -339,6 +361,135 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(OptedIn()));
 
     // ------------------------------------------------------------------
+    // #379: the tour's plan, opened at the world-up edge and revalidated
+    // only once everything it is checked against can answer
+    // ------------------------------------------------------------------
+
+    /// <summary>Opens this world's plan once its id can be read, and revalidates
+    /// a recovered plan once its body, its record, the switch and the authority
+    /// can all answer. Nothing here moves material or builds anything.</summary>
+    private void WatchTourPlan()
+    {
+        if (!_tourPlanOpened)
+        {
+            long? uid = CurrentWorldUid();
+            if (uid == null)
+            {
+                if (!_tourPlanUnnamed)
+                {
+                    _tourPlanUnnamed = true;
+                    _tourPlan.Open(null, "this world has no id to name a plan file by yet");
+                }
+
+                return;
+            }
+
+            _tourPlanOpened = true;
+            string? path = GunnarTourPlanFiles.PathFor(
+                Adapters.TripRecordingService.SidecarDirectory, uid, out string why);
+            TourPlanStanding standing = _tourPlan.Open(path, why);
+            if (standing != TourPlanStanding.Idle && standing != TourPlanStanding.Closed)
+            {
+                _log?.LogInfo("Gunnar's collection: " + _tourPlan.Describe() + ".");
+            }
+        }
+
+        if (_tourPlan.Standing != TourPlanStanding.Recovered || _tour != null || TourPlanWaitingFor().Length != 0)
+        {
+            return;
+        }
+
+        TourPlanVerdict verdict = _tourPlan.Revalidate(TourPlanFactsNow());
+        if (verdict.Response == InterruptionResponse.NeedsAttention)
+        {
+            _log?.LogWarning("Gunnar's collection: " + verdict.Sentence);
+        }
+        else
+        {
+            _log?.LogInfo("Gunnar's collection: " + verdict.Sentence);
+        }
+    }
+
+    /// <summary>Why a recovered plan is not revalidated yet, or empty.</summary>
+    private string TourPlanWaitingFor()
+    {
+        if (CurrentEpoch().IsUnknown)
+        {
+            return "no world load is current yet";
+        }
+
+        return GunnarTourPlan.WaitingFor(
+            BodyStatus(),
+            !_recordUnwritable() && !_recordUnreadable(),
+            OptedIn(),
+            Authority() == WorkAuthorityVerdict.Granted);
+    }
+
+    /// <summary>What the plan is checked against, read now: the world load, the
+    /// census's count of bodies, what he carries (null when it could not be
+    /// read, or when there is no body to read), and the authority.</summary>
+    private TourPlanFacts TourPlanFactsNow()
+    {
+        int bodies = GunnarTourPlan.BodiesFor(BodyStatus());
+        return new TourPlanFacts(
+            CurrentEpoch(),
+            bodies < 0 ? 0 : bodies,
+            CarriedForPlan(),
+            Authority() == WorkAuthorityVerdict.Granted,
+            Time.time);
+    }
+
+    /// <summary>What he carries, per collected material, from his own inventory;
+    /// null when there is no trusted body or it could not be read. Never an
+    /// empty list standing in for "unknown".</summary>
+    private IReadOnlyList<KeyValuePair<string, int>>? CarriedForPlan()
+    {
+        try
+        {
+            Humanoid? worker = _worker();
+            if (worker == null)
+            {
+                return null;
+            }
+
+            IReadOnlyList<KeyValuePair<string, int>> carried =
+                _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable);
+            return readable ? carried : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private WorkerBodyStatus BodyStatus()
+    {
+        try
+        {
+            return _bodyStatus();
+        }
+        catch (Exception)
+        {
+            return WorkerBodyStatus.Unspecified;
+        }
+    }
+
+    /// <summary><c>ct_collect resolve</c>: the person's exit from a tour stopped
+    /// for them. Records what his body holds now - nothing else, and nothing
+    /// recreated.</summary>
+    private string ResolveTourPlan()
+    {
+        bool busy = TourRunning || _ordered || _port.Phase == PickPhase.Gathering;
+        bool resolved = _tourPlan.Resolve(TourPlanFactsNow(), busy, out string sentence);
+        if (resolved)
+        {
+            _log?.LogInfo("Gunnar's collection: " + sentence);
+        }
+
+        return sentence;
+    }
+
+    // ------------------------------------------------------------------
     // D16: he died. Called from vanilla's own death path through the port.
     // ------------------------------------------------------------------
 
@@ -361,6 +512,19 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 _log?.LogError("Gunnar died and whether a cart still holds him could not be established: " +
                     SafeFailure.Describe(exception));
                 released = false;
+            }
+
+            // #379: an intent before the drop, so its outcome can be concluded.
+            // Its result is deliberately ignored - a plan that could not be
+            // written must never stand between a dead body and vanilla's drop;
+            // it stops for a person afterwards instead.
+            try
+            {
+                _tourPlan.PrepareForDeath();
+            }
+            catch (Exception exception)
+            {
+                _log?.LogError("Gunnar died and his tour plan could not note it: " + SafeFailure.Describe(exception));
             }
         }
 
@@ -393,6 +557,31 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             _log?.LogError("Gunnar died and his order could not be ended cleanly: " + SafeFailure.Describe(exception));
         }
 
+        // The durable record first, so the plan below can say where it is.
+        string rows = WorkerDeathRows.Serialize(DateTime.UtcNow, WorkerKey.Gunnar.Value, where.x, where.y, where.z, report);
+        string kept;
+        try
+        {
+            _deaths.TryAppend(CurrentWorldUid(), rows, out kept);
+        }
+        catch (Exception exception)
+        {
+            kept = "the death record could not be written, so this one is in the log only: " + SafeFailure.Brief(exception);
+        }
+
+        // #379: the plan, before the tour is cancelled. A full, measured drop of
+        // exactly what the plan says he carried closes it as refunded; anything
+        // else stops it for a person. Before CancelTour, because cancelling ends
+        // the plan as a stopped tour - which would say his load is still on him.
+        try
+        {
+            _tourPlan.Died(report.Held, report.Dropped, report.Unresolved, kept);
+        }
+        catch (Exception exception)
+        {
+            _log?.LogError("Gunnar died and his tour plan could not record it: " + SafeFailure.Describe(exception));
+        }
+
         // Without this a tour would end only when the frame watcher noticed the
         // worker ticks had stopped, seconds later, for a vaguer reason: the body
         // is destroyed straight after vanilla's death callback, so no tick sees
@@ -407,17 +596,6 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         catch (Exception exception)
         {
             _log?.LogError("Gunnar died and his tour could not be ended cleanly: " + SafeFailure.Describe(exception));
-        }
-
-        string rows = WorkerDeathRows.Serialize(DateTime.UtcNow, WorkerKey.Gunnar.Value, where.x, where.y, where.z, report);
-        string kept;
-        try
-        {
-            _deaths.TryAppend(CurrentWorldUid(), rows, out kept);
-        }
-        catch (Exception exception)
-        {
-            kept = "the death record could not be written, so this one is in the log only: " + SafeFailure.Brief(exception);
         }
 
         _log?.LogWarning(
@@ -468,6 +646,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 return StartTour();
             case "stop":
                 return StopTour();
+            case "resolve":
+                return ResolveTourPlan();
             case "chest":
                 // #374: the containers a player has opened to him. A diagnostic;
                 // the key while looking at a chest is the player-facing surface.
@@ -478,6 +658,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 return "ct_collect: status, pick (the thing you are pointing at), cancel, "
                     + "destination (the chest you are pointing at), deposit, "
                     + "area [radius] (around where you stand), start (a tour of the area), stop, "
+                    + "resolve (after you have looked at a tour stopped for you), "
                     + "chest [status|list|clear].";
         }
     }
@@ -505,6 +686,10 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             " (phase " + _port.Phase + ")" +
             "; chest " + (_destination == null ? "NOT CHOSEN - he never looks for the nearest one"
                 : "chosen") +
+            "; tour plan: " + _tourPlan.Describe() +
+            (_tourPlan.Standing == TourPlanStanding.Recovered && TourPlanWaitingFor().Length != 0
+                ? " - it is checked once nothing stands in the way, and now " + TourPlanWaitingFor()
+                : "") +
             "; the ledger records " + _account.Ledger.Acquired.ToString(
                 System.Globalization.CultureInfo.InvariantCulture) + " unit(s) taken this session" +
             (_account.Ledger.IsConserved ? "" : "; THE LEDGER DOES NOT BALANCE - see the log") + ".";
@@ -555,7 +740,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             yieldItemPrefabName: yieldName,
             yieldUnits: units,
             reachMetres: _limits.PickupReachMetres,
-            distanceMetres: FlatDistance(worker, source));
+            distanceMetres: FlatDistance(worker, source),
+            interruptedTourOpen: _tourPlan.BlocksOrders);
 
         CollectionOrderRefusal refusal = CollectionOrderGate.Evaluate(request);
         if (refusal != CollectionOrderRefusal.None)
@@ -682,7 +868,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering,
             carryingSomething: carried.Count > 0,
             destinationDesignated: _destination != null && _destinationKey.Length != 0,
-            carriedIsReadable: readable);
+            carriedIsReadable: readable,
+            interruptedTourOpen: _tourPlan.BlocksOrders);
 
         DepositRefusal refusal = DepositOrderGate.Evaluate(request);
         if (refusal != DepositRefusal.None)

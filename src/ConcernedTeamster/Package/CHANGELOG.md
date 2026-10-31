@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* **Gunnar's collection tour survives an interruption (#379).** The tour now writes down what it is about to do
+  before every pick and every trip to the chest, in one small file per world beside Teamster's other files
+  (`teamster_gunnar_tour_<world>.tsv`), never in the world itself. After a reload it checks that record against
+  what Gunnar is actually carrying: if they agree, it keeps his progress and, once you choose the chest and the
+  area again, `ct_collect start` carries on by taking his load to the chest first; `ct_collect stop` followed by
+  `ct_collect start` carries on where it was. If they disagree - a pick or a deposit was in flight, the game was
+  closed without saving, his body is gone, or the file is damaged - nothing is repeated, replaced or forgotten: the
+  tour stops with a sentence saying why, and the new `ct_collect resolve` records what he holds once you have
+  looked. While a tour is open, `ct_collect pick` and `ct_collect deposit` wait. Off by default with the rest of
+  Gunnar's collection, and **not yet observed in game**.
+
 * **Requires Concerned NPC 0.5.0** (was 0.4.0). The library's new body contract (#295) is additive. Gunnar's body,
   identity and keys are unchanged. Teamster also needs 0.5.0's `JobTarget` `carries` constructor for the collection tour's loads
   (#381), so this is a real requirement and not only the pin following the library.
