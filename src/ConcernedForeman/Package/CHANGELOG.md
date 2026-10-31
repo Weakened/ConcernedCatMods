@@ -11,6 +11,20 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — small-tree felling (#282, owner decision 2026-10-31, D19)
+
+- **Thorstein can fell small trees** (small beech and small fir) with his own axe,
+  one hit per `cf_collect fell`. This works only inside a work area you chose
+  from the map or marked as your harvest area: never in the default camp circle,
+  never within 15 m of a player or anything you built, and never through a ward.
+- **Off by default**, under `Collection/ThorsteinFellsSmallTrees`.
+- **What falls is exactly what the game drops, and it stays on the ground.** He
+  does not pick it up yet. His axe is not worn, because the game wears weapons
+  only for players.
+- **Never felled:** full-size trees, saplings you planted, berry bushes, and
+  anything else.
+- Not yet observed in game.
+
 ### Added — work areas from your map (#296, slice 3)
 
 - **Thorstein can collect in a work area you drew in Concerned Cartographer.**

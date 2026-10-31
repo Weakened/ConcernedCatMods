@@ -2772,6 +2772,13 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
     )),
+    # D19 (owner decision 2026-10-31, #282): Thorstein may fell the four
+    # allowlisted small trees through vanilla's Destructible.Damage, one hit per
+    # call, in WorldFellingPort.cs alone. Any other `.Damage(` in Foreman's
+    # runtime - another receiver, a second call, another file - is refused.
+    ("Destructible.Damage (D19 small-tree felling)", re.compile(r"\.\s*Damage\s*\("), (
+        ("Runtime/Collection/WorldFellingPort.cs", _foreman_exact(r"\btree\s*\.\s*Damage\s*\(\s*hit\s*\)"), 1),
+    )),
 )
 
 FOREMAN_ALWAYS_FORBIDDEN = (
@@ -2780,6 +2787,13 @@ FOREMAN_ALWAYS_FORBIDDEN = (
     ("teleport/direct movement", re.compile(r"\.\s*(?:Teleport[A-Za-z0-9_]*|MovePosition|MoveRotation|SetPosition|SetRotation|SetPositionAndRotation|Translate|Rotate|RotateAround)\s*\(")),
     ("force injection", re.compile(r"\.\s*(?:AddForce|AddTorque|AddExplosionForce|AddRelativeForce|AddRelativeTorque|AddForceAtPosition|AddImpulse)\s*\(")),
     ("arbitrary RPC", re.compile(r"(?:\.\s*(?:InvokeRPC|InvokeRoutedRPC|RegisterRPC)\s*\(|\bZRoutedRpc\b)")),
+    # D19: TreeBase and TreeLog were decided (2026-10-31) but are UNUSED - the
+    # small trees are Destructible in Valheim 1.0.21 - so neither type may be
+    # named in Foreman's runtime until a mature-tree scope is decided and pinned.
+    ("TreeBase/TreeLog (D19: decided, unused)", re.compile(r"\b(?:TreeBase|TreeLog)\b")),
+    # Destruction that skips the pinned hit: the instant kill, a direct damage
+    # application, or calling the game's own damage handler by name.
+    ("destruction shortcut", re.compile(r"(?:\.\s*(?:DestroyNow|ApplyDamage)\s*\(|\bRPC_Damage\b)")),
 )
 
 

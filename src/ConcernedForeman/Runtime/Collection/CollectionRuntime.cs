@@ -442,11 +442,13 @@ internal sealed class CollectionRuntime
                     return Rebind();
                 case "area":
                     return Area(args);
+                case "fell":
+                    return Fell();
                 case "cancel":
                     return Control(loop => loop.Cancel(Time.time));
                 default:
                     return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold] [gunnar], " +
-                        "rebind (look at the chest), pause, resume, cancel, area [list | next | default | <name>].";
+                        "rebind (look at the chest), pause, resume, cancel, area [list | next | default | <name>], fell.";
             }
         }
         catch (Exception exception)
@@ -907,6 +909,48 @@ internal sealed class CollectionRuntime
 
         return message;
     }
+
+    /// <summary>D19 (owner decision 2026-10-31): one hit on the eligible small
+    /// tree nearest Thorstein inside the work area an order would use. Only an
+    /// explicit area (chosen from the map, or the harvest area) counts; the
+    /// default camp circle never authorises felling. He must be free: no order
+    /// and no other job may hold him. What falls stays on the ground.</summary>
+    private string Fell()
+    {
+        WorldState? world = _world;
+        if (world == null)
+        {
+            return "No world is loaded.";
+        }
+
+        if (!_settings.ThorsteinFellsSmallTrees.Value)
+        {
+            return "Not felled: " + TheConcernedCat.Workers.Felling.SmallTreeFelling.Describe(
+                TheConcernedCat.Workers.Felling.FellSiteRefusal.FeatureOff) + ".";
+        }
+
+        SoloCollectionLoop? loop = world.Loop;
+        if ((loop?.Order != null && !CollectionOrderStates.IsTerminal(loop.State)) || Modes.Mode != ActorMode.Resting)
+        {
+            return "Not felled: Thorstein is busy with another job. Let it finish, or cancel it first.";
+        }
+
+        if (!TryBuildScope(WorkScope.DefaultCampRadiusMetres, out WorkScope? scope, out _, out string failure))
+        {
+            return "Not felled: no work area (" + failure + ").";
+        }
+
+        _felling ??= new WorldFellingPort(
+            () => _settings.ThorsteinFellsSmallTrees.Value,
+            () => WorkAuthorityPolicy.Evaluate(CollectionWorldFacts.ReadAuthorityFacts(_settlement.SettlementRuntimeEnabled.Value)),
+            () => _body,
+            _site,
+            world.Parameters.PickupReachMetres,
+            _log);
+        return _felling.TryFellNearest(scope!, scope!.Source != WorkScopeSource.DefaultCampCircle).Message;
+    }
+
+    private WorldFellingPort? _felling;
 
     /// <summary>For the status line and <c>area list</c>.</summary>
     internal string DescribeAreaChoice()
