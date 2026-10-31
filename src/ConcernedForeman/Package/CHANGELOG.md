@@ -37,6 +37,11 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   `cf_collect area default` goes back to those.
 - Cartographer is optional and detected while the game runs. Without it,
   nothing changes.
+- **Cartographer shows the order on its map.** When an order runs in a map
+  area, the Areas panel shows Thorstein, the progress and why the order
+  stopped, and colours the area: green while working, red when it needs
+  attention. Foreman publishes this read-only; nothing on the map can change
+  an order.
 - Not yet observed in game.
 
 ### Added — his own hair and beard while he works (#295 S6, owner decision 2026-10-29)
