@@ -36,9 +36,17 @@ namespace TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 /// a one-second-wide sort of how much each light has left. Revalidation at each
 /// stop is untouched. Game-free and deterministic: ties break on the light's key.
 ///
-/// <b>Stated limit.</b> The estimate is an estimate. A light already about to go
+/// <b>It relies on the planner keeping these trips.</b> Concerned NPC's partitioner
+/// seeds each trip from the highest band left and, below the seed's band, tops it up
+/// from the highest band that still fits before the nearest; with every trip packed
+/// full, that rebuilds exactly these trips.
+///
+/// <b>Stated limits.</b> The estimate is an estimate: a light already about to go
 /// out when the round is planned can go out anyway; promotion makes it the first
-/// thing she walks to, not a guarantee.</summary>
+/// thing she walks to, not a guarantee. The planner walks at most eight trips a
+/// round (later ones, the least urgent, wait for the next round) and orders at most
+/// twenty-four stops in a round, keeping the nearest; in a settlement with more, a
+/// light beyond them waits for the next round.</summary>
 internal static class RoundCircuit
 {
     /// <summary>A slow walk, on purpose: overestimating her time to a light can
@@ -77,10 +85,9 @@ internal static class RoundCircuit
             var promoted = new List<int>();
 
             float end;
-            SitePoint last;
             while (true)
             {
-                end = elapsed + TripSeconds(chest, stops, promoted, members, out last);
+                end = elapsed + TripSeconds(chest, stops, promoted, members, out _);
                 var newly = new List<int>();
                 foreach (int stop in members)
                 {
@@ -111,7 +118,15 @@ internal static class RoundCircuit
                 bands[promoted[rank]] = floor + promoted.Count - rank;
             }
 
-            elapsed = end + (last.HorizontalDistanceTo(chest) / WalkMetresPerSecond) + StartAllowanceSeconds;
+            // Back to the chest from the trip's farthest stop: the planner's own
+            // order may end the trip anywhere in it, so this is the bound.
+            float back = 0f;
+            foreach (int stop in members)
+            {
+                back = Math.Max(back, stops[stop].Light.Position.HorizontalDistanceTo(chest));
+            }
+
+            elapsed = end + (back / WalkMetresPerSecond) + StartAllowanceSeconds;
         }
 
         return bands;

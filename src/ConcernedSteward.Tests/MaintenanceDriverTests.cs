@@ -284,6 +284,30 @@ public sealed class MaintenanceDriverTests
     }
 
     [Fact]
+    public void A_trip_with_a_promoted_light_is_not_topped_up_from_a_later_trip()
+    {
+        // She carries ten. Most urgent first: A (twelve seconds left, four units),
+        // B and C (three each) fill the first trip; D (three) is the second. D sits
+        // right beside A. Topped up by nearness, the first trip would take D and
+        // push C - judged against the first trip's end - onto the second.
+        var camp = new Camp(
+            Lights.Light("A", fuel: 0.2f, maxFuel: 4.2f, x: -30f),
+            Lights.Light("B", fuel: 1.5f, maxFuel: 4.5f, x: 0f),
+            Lights.Light("C", fuel: 1.6f, maxFuel: 4.6f, x: 4f),
+            Lights.Light("D", fuel: 2.0f, maxFuel: 5.0f, x: -29f));
+
+        RoundPlan round = camp.Prepare();
+        Assert.Equal(
+            new[] { ("A", 4), ("B", 3), ("C", 3), ("D", 3) },
+            round.Stops.Select(stop => (stop.Light.Key.Value, stop.Units)).ToArray());
+
+        List<PlannedStep> walked = Walk(camp.Driver(unitsPerTrip: 10));
+        string[] steps = walked.Select(step => step.IsCollect ? "fetch" : step.Step.Subject).ToArray();
+
+        Assert.Equal(new[] { "fetch", "A", "B", "C", "fetch", "D" }, steps);
+    }
+
+    [Fact]
     public void Urgency_still_decides_which_lights_are_in_the_round()
     {
         // Ordering is the circuit's; membership and funding are still urgency's:
