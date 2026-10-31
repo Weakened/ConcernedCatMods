@@ -6,7 +6,15 @@ every other Concerned Cat mod.
 
 ## Unreleased
 
-- **Requires Concerned NPC 0.5.0** (was 0.4.0). The library's new body contract (#295) is additive. Nothing about the
+- **Sunniva at rest, as herself.** While she has no worker body in the world and nothing is open, she is shown at
+  her home post beside the supply chest as a player-style figure: female, Matronly hair, fair, light blonde, in
+  leather. It is the game's own character model, extracted and dressed by Concerned NPC (never a live player
+  stripped afterwards), seen only on the host's machine, and it changes nothing in the world. Her contract is now
+  Concerned NPC's worker-with-presentation (`ForWorkerWithPresentation`), so the library's one arbiter keeps the
+  figure and her worker body from ever coexisting; the figure goes before her worker body is claimed or spawned.
+  New setting `[Appearance] ShowAtHome` (on). Identity `steward/steward`, prefab `CS_Steward` and keys `tcc.steward.`
+  are unchanged.
+- **Requires Concerned NPC 0.5.0** (was 0.4.0), now also checked at load (`BepInDependency` minimum version). The library's new body contract (#295) is additive. Nothing about the
   Steward's own body, identity or keys changed. The pin moves because every consumer pins the library version it was
   compiled against.
 
