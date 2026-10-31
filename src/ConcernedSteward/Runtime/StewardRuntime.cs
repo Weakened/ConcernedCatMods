@@ -53,6 +53,7 @@ internal sealed class StewardRuntime
     private readonly ResinWatch _resin = new ResinWatch();
     private readonly ResinSightings _sightings;
     private readonly StewardAppearance _appearance;
+    private readonly SunnivaPresentation _presentation;
     private readonly StewardRecordStore _records;
     private readonly RecordBackedJournal _journal;
     private readonly StewardNpcAdoption _npc;
@@ -126,6 +127,10 @@ internal sealed class StewardRuntime
             () => _epoch,
             () => _census.Live?.Humanoid,
             log: message => _log(message));
+        // #382: at rest, with no worker body in the world, she is a
+        // player-style figure at her home post. Concerned NPC's arbiter keeps
+        // the two from ever coexisting; see SunnivaPresentation.
+        _presentation = new SunnivaPresentation(_settings, _npc, FigureInputs, message => _log(message));
     }
 
     internal StewardScope Scope => _scope;
@@ -212,6 +217,7 @@ internal sealed class StewardRuntime
         // may mint it. Neither is derived from the other, and neither is
         // written to disk.
         _npc.NoteWorldLoaded();
+        _presentation.OnWorldLoaded();
         _restockProbed = false;
         _restock = RestockDiscovery.NotProbed;
 
@@ -289,7 +295,9 @@ internal sealed class StewardRuntime
 
         // The body hold ends with the world it stood in. Left standing it would
         // report a body destroyed with the scene as still there, and no holder
-        // string would survive the load to release it.
+        // string would survive the load to release it. The figure goes first,
+        // so it is down before its lease ends with the world.
+        _presentation.OnWorldUnloaded();
         _npc.NoteWorldUnloaded();
         // The baseline was about a pack that has gone. Kept, the next world's
         // first reading would be compared against somebody else's inventory.
@@ -314,6 +322,8 @@ internal sealed class StewardRuntime
     {
         if (!_settings.RuntimeEnabled.Value || !StewardWorldFacts.WorldIsUp)
         {
+            // Nothing of hers is shown while the runtime is off.
+            _presentation.YieldToWorker();
             return;
         }
 
@@ -333,6 +343,36 @@ internal sealed class StewardRuntime
             _motion,
             _npc.World,
             CurrentThresholds()));
+
+        // After the census, so a body that appeared this frame has already
+        // taken the figure down and its lease with it.
+        _presentation.Tick(Time.deltaTime);
+    }
+
+    /// <summary>What the figure at home needs to know, read once per pass.
+    /// "Resting" is the retire verb's own ledger (S1): nothing carried, no
+    /// round, no plan, nothing unreceipted, nothing unaccounted for.</summary>
+    private SunnivaFigureInputs FigureInputs()
+    {
+        // A CS_Steward body with no identity stamped might be hers (a stamp that
+        // failed leaves exactly that), so it is unknown, never "none".
+        int saved = _census.Verdict == StewardCensusVerdict.Unknown || _census.Unidentified > 0
+            ? -1
+            : _census.Saved;
+        bool settled = _introduction.IsEngaged && _quest.Stage >= StewardQuestStage.Settled;
+        bool resting = _loop.Custody.Carried == 0
+            && !_loop.IsWorking && _loop.Phase != UpkeepPhase.NeedsAttention
+            && !_plan.HasActivePlan && !_plan.IsBlocked
+            && _journal.UnresolvedIntents.Count == 0
+            && !_loop.Custody.HasLoss;
+
+        ScopeSnapshot scope = _scope.Resolve();
+        Vector3? home = scope.IsReady
+            ? new Vector3(scope.DepotPoint.X, scope.DepotPoint.Y, scope.DepotPoint.Z)
+            : scope.Settlement != null
+                ? new Vector3(scope.SettlementCentre.X, scope.SettlementCentre.Y, scope.SettlementCentre.Z)
+                : (Vector3?)null;
+        return new SunnivaFigureInputs(saved, settled, resting, home);
     }
 
     /// <summary>The refuel thresholds as configured, or the shipped ones and a
@@ -375,8 +415,14 @@ internal sealed class StewardRuntime
             // survives the thing it was a hold on.
             _npc.ReleaseBody();
             _body = null;
+            _presentation.OnWorkerBodyGone();
             return;
         }
+
+        // Her worker body is here, so the figure at home goes - down first, then
+        // its lease - before the worker lease is asked for: the arbiter refuses
+        // a worker claim while the figure's lease is held.
+        _presentation.YieldToWorker();
 
         // Re-asked every tick on purpose: asking again as the same holder is
         // AlreadyHeld, which is a grant, and a runtime that asked once would
@@ -402,6 +448,10 @@ internal sealed class StewardRuntime
         // VisEquipment is in front of us. Idempotent, so re-binding after a
         // reload costs nothing and a body that arrives undressed is dressed.
         _appearance.Apply(ai.gameObject);
+
+        // Owner decision 2026-10-29: her own hair on her worker body, locally,
+        // behind [Appearance] WorkerLook; plain Dverger when it will not fit.
+        _presentation.OnWorkerBodyLoaded(_census.Live?.Humanoid);
 
         ai.UseSitePolicy(new WorldStewardSitePolicy());
         ai.ErrorLog = message => _log(message);
@@ -905,6 +955,8 @@ internal sealed class StewardRuntime
                 "settlement; run \"cs_steward recruit\" again from there.";
         }
 
+        // The figure at home goes before her worker body appears: never both.
+        _presentation.YieldToWorker();
         StewardWorkerAI? spawned = StewardWorkerPrefab.Spawn(at.Value, Quaternion.identity);
         if (spawned == null)
         {
@@ -945,6 +997,7 @@ internal sealed class StewardRuntime
         text.AppendLine("  Introduction: " + _introduction);
         text.AppendLine("  Scope: " + _scope.Resolve().Describe());
         text.AppendLine("  Body: " + _census.Describe());
+        text.AppendLine("  " + _presentation.Describe());
         text.AppendLine("  Doing: " + _loop.Phase + " — " + _loop.Explanation);
         if (_loop.Attention.Length != 0)
         {
