@@ -4,149 +4,83 @@ All notable changes to Concerned Steward are recorded here. Versions follow
 `Major.Minor.Patch`, and this product versions and releases independently of
 every other Concerned Cat mod.
 
-## Unreleased
-
-- **Sunniva at rest, as herself.** While she has no worker body in the world and nothing is open, she is shown at
-  her home post beside the supply chest as a player-style figure: female, Matronly hair, fair, light blonde, in
-  leather. It is the game's own character model, extracted and dressed by Concerned NPC (never a live player
-  stripped afterwards), seen only on the host's machine, and it changes nothing in the world. Her contract is now
-  Concerned NPC's worker-with-presentation (`ForWorkerWithPresentation`), so the library's one arbiter keeps the
-  figure and her worker body from ever coexisting; the figure goes before her worker body is claimed or spawned.
-  New setting `[Appearance] ShowAtHome` (on). Identity `steward/steward`, prefab `CS_Steward` and keys `tcc.steward.`
-  are unchanged.
-- **Her own hair while she works** (owner decision 2026-10-29). Her Dverger worker body is given her Matronly hair,
-  locally, by Concerned NPC's `NpcWorkerDresser`, which refuses anything that is not her own saved worker body. No
-  prefab, saved data or network object changes; a piece that will not attach or fit is taken off and she keeps the
-  plain look. New setting `[Appearance] WorkerLook` (on).
-- **Requires Concerned NPC 0.5.0** (was 0.4.0), now also checked at load (`BepInDependency` minimum version). The library's new body contract (#295) is additive. Nothing about the
-  Steward's own body, identity or keys changed. The pin moves because every consumer pins the library version it was
-  compiled against.
-
-Sunniva (CNPC-R3 / #382). Not released, not tagged, and the version has
-deliberately not moved: `0.1.0` is still unpublished, so there is nothing for a
-bump to protect.
-
-### Added
-
-- **She has a name.** The Steward is Sunniva. Only the display name moved — the
-  identity `steward/steward`, the prefab name `CS_Steward` and the key prefix
-  `tcc.steward.` are all exactly what they were, so every saved body and every
-  record written by the previous build is found by the same values. That was the
-  point of keeping the name out of the identity in the first place.
-- **An introduction with an object in it.** The first time an eligible player
-  picks up resin, they also find a flint and steel with runes carved into them,
-  and there is one of it for the life of that world. It is a discovery the mod
-  remembers and never an item put into an inventory: nothing is minted.
-- **A look.** A leather tunic and leather pants, plus a female model, light
-  hair and fair colouring where the base creature can show them (see Known
-  limits), applied to her own body through vanilla's own `VisEquipment`. A dress or robe
-  can be named in the config and is tried first; nothing from another mod is
-  included or depended on.
-- **A planned maintenance round.** Every fuel-burning light in the settlement is
-  surveyed once, the whole round's requirement is totalled once, and the supply
-  is drawn once — so five low torches are one trip to the chest rather than five.
-  Urgency is measured in how long a light has left at its own burn rate rather
-  than in its fuel level, and lights are topped up to a configurable amount of
-  burning time rather than to full.
-- **No free fuel.** A round she cannot pay for is refused before a step, naming
-  what is missing. A round she can half pay for services the most urgent lights
-  it can pay for in full and counts the rest, so she never reports a settlement
-  looked after when it is not. Surplus goes back to a container approved for
-  deposits, and never to any other.
-
-- **She says it where you can see it.** The flint and steel, every beat of her
-  introduction, what fuel she needs ("I need 40 Resin"), lights burning low
-  that she may not touch, and why she stopped now appear on screen through
-  vanilla's own message display, not only in the log. Each subject is said at
-  most once every five minutes while it lasts. `[Steward] SpeakOnScreen` turns
-  it off.
-- **Configurable thresholds and carry.** `[Upkeep] RefuelBelowSeconds`,
-  `RefuelToSeconds`, `MostUnitsPerLight` and `CarryPerTrip`. A threshold that
-  would make her loop is refused with a log line and the shipped values apply.
-- **The round's books are closed.** At the end of every round each planned
-  light is accounted for — tended, skipped (filled by somebody else or
-  destroyed), refused (a ward that is not yours), failed, or left for another
-  round — and `cs_steward status` shows it. A refused light keeps the round
-  from being called complete.
-- **Her hair** is the style the character screen calls Matronly, looked up by
-  vanilla's own customization token.
-
-- **`cs_steward retire`** (owner decision S1, 2026-10-28). Takes Sunniva's own
-  worker body out of the world, and only when she holds nothing, the fuel
-  ledger agrees, no round or plan is open and nothing is unaccounted for. Her
-  employment and story stay; `cs_steward recruit` brings her body back. It never
-  removes anything else and never destroys carried fuel.
-
-### Fixed
-
-- The round's fuel was chosen from whichever light held the least fuel, not
-  the one closest to going out, so a slow-burning hearth could starve a torch of
-  another fuel indefinitely. It is now the most urgent light's fuel.
-- A settlement whose lights burn something the chest does not hold reported
-  "nothing to tend"; it now says what she needs, and how many lights wait on it.
-- A light found under a ward when she arrived was reported as "no longer needs
-  service"; it is now reported as one she may not touch.
-- Five low campfires were five visits to the chest at the old ten-a-trip
-  carry; the shipped carry is now one vanilla stack (50).
-- She could be recruited into a body standing outside the settlement; she now
-  moves in only when you recruit her from inside it.
-
-### Known limits
-
-- One fuel kind per trip: a settlement with wood and resin lights is one trip
-  for each kind (the custody record carries one item; widening it is a save
-  format change left for its own issue).
-- Vanilla draws hair, colouring and the female model only on a player-style
-  body. On the default base creature she shows her clothing only; the log says
-  so. Choosing her body is an owner decision that needs looking at in game.
-- Nothing in this section has been observed in a running game.
-
-### Changed
-
-- Concerned Steward now requires **Concerned NPC**, which ships as its own
-  package. The Steward's identity and the one-body-per-identity rule come from
-  it; without it the mod will say so at load rather than fail later.
-
-### Unchanged on purpose
-
-- No durable key, row tag, schema number, prefab name or file name moved. The
-  record gains one new row tag under the same format version `1`, so a record
-  written by the previous build loads unchanged and simply has no quest row.
-
 ## 0.1.0
 
-The first slice (CS-001 / #340). Not released.
+The first release (#340, #382). Sunniva keeps your settlement's fires burning.
+Requires **Concerned NPC 0.5.0** (`TheConcernedCat-ConcernedNPC`), which ships as
+its own package and must be installed with it; without it the mod says so at
+load and does nothing.
 
 ### Added
 
-- **The Steward.** A persistent settlement worker with a stable identity, a
-  real body built from an inactive prefab clone, and his own saved inventory in
-  his own network object. He is recruited once and remembered across reloads.
-- **Explicit scope.** He acts only inside a settlement area you marked and
-  takes only from a supply depot you marked. There is no nearest-chest search,
-  no radius that follows the player, and no fallback when a marked thing has
-  gone stale — a stale designation refuses and says to mark it again.
-- **Fire tending.** One bounded, deterministic upkeep loop: choose the hearth
-  closest to going out, reserve it, walk to the depot, withdraw real wood,
-  walk to the hearth, revalidate it, add fuel one unit at a time through
-  vanilla's own `Fireplace.UseItem`, measure what each unit was actually
-  worth, and carry the remainder back.
-- **Conservation.** Every unit of wood he withdraws is in exactly one place at
-  every moment — the depot, his hands, a fire, or explicitly recorded as
-  unaccounted. Intent is written down before anything moves and the receipt
-  records the measured result, never the intended one.
-- **Recovery.** After a crash or a reload, an unfinished withdrawal or feed is
-  reconciled against what he is actually carrying. Nothing is replayed and
-  nothing is compensated; an uncertain step is reported for a person to
-  resolve.
-- **`cs_steward`** console command: `area`, `depot`, `recruit`, `dismiss`,
-  `tend on|off`, `status`, `forget`.
+- **Sunniva.** A settlement worker with a real body, a stable identity
+  (`steward/steward`, prefab `CS_Steward`, keys `tcc.steward.`) and her own
+  saved inventory in her own network object. Recruited once and remembered
+  across reloads; one body per identity, enforced by Concerned NPC.
+- **An introduction with an object in it.** The first time an eligible player
+  picks up resin, they also find a flint and steel with runes carved into the
+  metal - one for the life of that world. It is a discovery the mod remembers,
+  never an item put into an inventory, and the resin pickup is untouched. Her
+  introduction is told in beats on screen; recruited from inside the settlement,
+  she moves in.
+- **Explicit scope.** She acts only inside a settlement area you mark and takes
+  only from the supply chest you mark. There is no nearest-chest search, and a
+  stale mark refuses and asks to be marked again.
+- **A planned maintenance round.** Every fuel-burning light in the settlement
+  is surveyed once, the whole round's need is totalled once, and the supply is
+  drawn once - five low torches are one trip to the chest, not five. Urgency is
+  how long a light has left at its own burn rate; lights are topped up to a
+  configurable burning time, not to full. At each stop she checks the light
+  again (filled by you or destroyed: she moves on), walks there on her own feet,
+  and feeds real fuel one piece at a time through vanilla's own
+  `Fireplace.UseItem`. Surplus goes back to the chest she took it from.
+- **No free fuel.** Every piece she burns came out of your chest and was
+  measured. A round she cannot pay for is refused, naming what is missing ("I
+  need 40 Resin"); a round she can half pay for tends the most urgent lights in
+  full and counts the rest.
+- **Conservation and recovery.** Every unit she withdraws is in exactly one
+  place at every moment: the chest, her hands, a fire, or recorded as
+  unaccounted. Intent is written before anything moves; after a crash or reload
+  an unfinished step is reconciled against what she actually carries, never
+  replayed or compensated, and an uncertain one is left for you to resolve.
+- **The round's books are closed.** Each planned light ends tended, skipped,
+  refused (a ward that is not yours), failed or left for another round, and
+  `cs_steward status` shows it.
+- **She says it where you can see it**, on screen through vanilla's own message
+  display as well as in the log, each subject at most once every five minutes.
+  `[Steward] SpeakOnScreen` turns it off.
+- **Her look.** At rest, with no worker body in the world, she stands beside
+  the supply chest as a player-style figure: female, Matronly hair, fair, light
+  blonde, in a leather tunic and leather pants. It is the game's own character
+  model, extracted and dressed by Concerned NPC (never a live player stripped
+  afterwards), seen only on the host's machine, and it changes nothing in the
+  world; the figure and her worker body never exist at the same time. While she
+  works, her worker body wears the leather and, locally, her own Matronly hair.
+  A dress or robe can be named in the config and is tried first; nothing from
+  another mod is included or depended on.
+- **`cs_steward retire`** (owner decision S1). Takes her worker body out of the
+  world, and only when she holds nothing and no round or plan is open; it never
+  removes anything else and never destroys carried fuel. `cs_steward recruit`
+  brings her back.
+- **Console:** `cs_steward area <radius> | depot | clear area|depot | runes |
+  recruit | dismiss | resolve | retire | status`, and `cs_fires` (every light she
+  looked at, and her verdict on each).
+- **Settings:** `[Steward] StewardRuntimeEnabled`, `TendFiresEnabled`,
+  `BaseCreature`, `QuestPickupItem`, `SpeakOnScreen`; `[Upkeep]
+  RefuelBelowSeconds`, `RefuelToSeconds`, `MostUnitsPerLight`, `CarryPerTrip`;
+  `[Appearance] ModelIndex`, `Garment`, `GarmentLegs`, `HairColour`, `HairStyle`,
+  `ShowAtHome`, `WorkerLook`; `[Diagnostics] DebugLogging`.
 
 ### Notes
 
-- The runtime is **off by default** (`[Steward] StewardRuntimeEnabled`) and
-  fire tending is off inside it (`[Steward] TendFiresEnabled`).
-- Single player only for now: host, not dedicated, nobody else connected. Every
-  other case refuses and explains.
-- His appearance uses vanilla assets and is provisional.
-- He has no proper name yet, by design.
+- **Off by default.** `[Steward] StewardRuntimeEnabled` and, inside it,
+  `[Steward] TendFiresEnabled`. With both off the mod changes nothing.
+- **Single player only for now:** host, not a dedicated server, nobody else
+  connected. Every other case refuses and explains.
+- **One fuel kind per trip:** a settlement with wood and resin lights makes one
+  trip for each kind.
+- **Her worker body is a Dverger.** Vanilla draws the female model, skin and hair
+  colour only on a player-style body, so while she works only her clothes and her
+  hair piece show; at rest the player-style figure shows all of it.
+- **Nothing here has been observed in a running game yet**; the owner's
+  pre-release smoke test is pending.
