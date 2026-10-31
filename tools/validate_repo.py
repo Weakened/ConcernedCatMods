@@ -1971,21 +1971,6 @@ def _strip_cs_comments(text: str) -> str:
             index += 1
         return index
 
-    def next_non_trivia(index: int) -> str:
-        """Return the next C# token character without changing output."""
-        while index < length:
-            if text[index].isspace():
-                index += 1
-                continue
-            if text.startswith("/*", index):
-                end = text.find("*/", index + 2)
-                return "" if end < 0 else next_non_trivia(end + 2)
-            if text.startswith("//", index):
-                newline = text.find("\n", index + 2)
-                return "" if newline < 0 else next_non_trivia(newline + 1)
-            return text[index]
-        return ""
-
     def scan_string(index: int) -> int:
         quote = text[index]
         interpolated, verbatim, dollar_count = prefix_at(index)
@@ -1994,7 +1979,11 @@ def _strip_cs_comments(text: str) -> str:
             while index + run < length and text[index + run] == '"':
                 run += 1
 
-        if quote == '"' and run >= 3:
+        # A verbatim string's `""` is an escaped quote, never a raw-string
+        # delimiter: `@"""x"` is the string `"x`. Reading it as raw closed it at
+        # the next `"""` and turned that string's contents into code, so a `//`
+        # inside them hid the rest of the line (review of 21b6c73, #382).
+        if quote == '"' and run >= 3 and not verbatim:
             delimiter = '"' * run
             out.append(delimiter)
             index += run
@@ -2054,11 +2043,17 @@ def _strip_cs_comments(text: str) -> str:
         return index
 
     def scan_interpolation(index: int, close_braces: int) -> int:
-        """Scan an interpolation expression, then preserve its format component."""
+        """Scan an interpolation expression, then preserve its format component.
+
+        As in the C# lexer, the first `:` outside parentheses and brackets
+        always begins the format: an unparenthesised conditional in a hole is
+        error CS8361, so a `?` before it never makes that `:` code. Treating
+        `?` as a conditional (once done here) let `List<int?>` turn the format
+        colon into code, and a `//` or `/*` in the format then hid real code
+        from every audit that reads this text (review of 3252bcd, #382)."""
         closing = "}" * close_braces
         paren_depth = 0
         bracket_depth = 0
-        conditional_depth = 0
         while index < length:
             if (paren_depth == 0 and bracket_depth == 0
                     and text.startswith(closing, index)):
@@ -2090,19 +2085,9 @@ def _strip_cs_comments(text: str) -> str:
                 out.append(char)
                 index = scan_code(index + 1, 1)
                 continue
-            elif char == "?" and paren_depth == 0 and bracket_depth == 0:
-                next_char = text[index + 1] if index + 1 < length else ""
-                previous = text[index - 1] if index else ""
-                if (next_char not in {"?", ".", "["}
-                        and previous != "?"
-                        and next_non_trivia(index + 1) not in {":", ","}):
-                    conditional_depth += 1
             elif char == ":" and paren_depth == 0 and bracket_depth == 0:
-                if conditional_depth:
-                    conditional_depth -= 1
-                else:
-                    out.append(char)
-                    return scan_format(index + 1, close_braces)
+                out.append(char)
+                return scan_format(index + 1, close_braces)
 
             out.append(char)
             index += 1
@@ -4446,6 +4431,386 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
     ]
 
 
+# ---------------------------------------------------------------------------
+# Concerned Steward S1 (owner decision 2026-10-28): Sunniva's own worker body
+# may leave the world through one guarded verb, and through nothing else.
+#
+# `docs/mods/concerned-steward/DECISIONS.md` S1 records the grant: a retire verb
+# that removes her OWN body, refused while she carries fuel or a round's plan is
+# open, with the removal in one file under a refusing guard. This rule is the
+# text half of that promise and says exactly what it establishes:
+#
+# 1. the POPULATION: every destruction-shaped call in src/ConcernedSteward is
+#    counted per file against STEWARD_DESTRUCTION_SITES, every one routed
+#    through an instance against STEWARD_ROUTED_DESTRUCTION_SITES, and every
+#    unambiguous body removal against STEWARD_BODY_REMOVAL_SITES - so a new
+#    destruction anywhere in the product fails until a person records it;
+# 2. the PORT: Runtime/StewardRetirementPort.cs keeps its one removal inside
+#    `Retire(...)`, below a `StewardRetirement.Decide(` and a refusing
+#    `if (!StewardRetirement.Allows(`, and the removal statement is `view.Destroy();`
+#    on a `view` spelled only at its declaration from `body.View`, its validity
+#    check and that statement, in a method with no nested function scope,
+#    `goto` or deconstruction that could rename it or jump past the guard,
+#    whose braces balance, with the guard at its top level and the removal
+#    directly in its top-level `try` (as far as a text audit can see);
+# 3. the CALLER: the port is called once in the product, from
+#    Runtime/StewardRuntime.cs.
+#
+# What it does NOT establish: that control flow obeys the refusal (that is
+# StewardRetirementTests), or anything about a destruction reached through a
+# delegate, a method group or reflection, which spells no `Destroy(` at all.
+#
+# - Runtime/StewardWorkerPrefab.cs: four `UnityEngine.Object.DestroyImmediate`
+#   calls on the INACTIVE prefab clone being built at start-up (the clone
+#   itself on failure, and the vanilla AI, tameable and drop components). No
+#   body in any world is ever touched there.
+# - Runtime/StewardRetirementPort.cs: `view.Destroy()`, her own body's network
+#   object, inside the guarded verb.
+STEWARD_RETIRE_PORT = ("Runtime", "StewardRetirementPort.cs")
+STEWARD_RETIRE_CALLER = "Runtime/StewardRuntime.cs"
+STEWARD_RETIRE_METHOD = re.compile(
+    r"internal\s+static\s+StewardRetireOutcome\s+Retire\s*\((.*?)\n    \}", re.DOTALL)
+STEWARD_RETIRE_DECIDES = "StewardRetirement.Decide("
+STEWARD_RETIRE_REFUSES = re.compile(r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(")
+STEWARD_RETIRE_OWN_VIEW = re.compile(r"ZNetView\?\s+view\s*=\s*body\s*\.\s*View\s*;")
+# Any reference, not only a call: a method group (`StewardRetirementPort.Retire` with
+# no parenthesis) handed to a delegate is a second caller the call count cannot see.
+STEWARD_RETIRE_CALL = re.compile(r"StewardRetirementPort\s*\.\s*Retire\b")
+STEWARD_RETIRE_ASSIGNS_VIEW = re.compile(r"(?<![\w.])view\s*(?:\?\?=|=(?![=>]))")
+STEWARD_RETIRE_ASSIGNS_BODY = re.compile(r"(?<![\w.])body\s*(?:\?\?=|=(?![=>]))")
+STEWARD_RETIRE_BY_REFERENCE = re.compile(r"\b(?:ref|out)\s+(?:ZNetView\??\s+|StewardBody\??\s+)?(?:view|body)\b")
+STEWARD_RETIRE_USING = re.compile(r"\busing\b[^;{]*\bStewardRetirementPort\b[^;{]*;")
+# Review of e4f0392: the pins above are positional and blind to scope, so a
+# local function or lambda whose parameter is also called `view`, or a
+# deconstruction `(view, _) = (...)`, pointed the one removal at any object.
+# `view` is therefore pinned token by token: it appears exactly at its
+# declaration, the three places of the validity check, and the removal
+# statement - five tokens, nowhere else - and Retire(...) declares no lambda,
+# no local function, no anonymous delegate and no deconstruction, and spells
+# no identifier escape that could hide a sixth `view`.
+STEWARD_RETIRE_VIEW_TOKEN = re.compile(r"(?<![\w.])@?view\b")
+STEWARD_RETIRE_VIEW_CHECK = re.compile(
+    r"if\s*\(\s*view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)\s*\|\|\s*!\s*view\s*\.\s*"
+    r"IsOwner\s*\(\s*\)\s*\)")
+STEWARD_RETIRE_REMOVAL_STATEMENT = re.compile(r"(?<![\w.])view\s*\.\s*Destroy\s*\(\s*\)\s*;")
+STEWARD_RETIRE_VIEW_TOKENS = 5
+STEWARD_RETIRE_NO_NESTED_CODE = re.compile(
+    r"=>|\bdelegate\b|\bgoto\b|@|\$|\\[uU][0-9A-Fa-f]|\)\s*=(?![=>])"
+    r"|\b(?!(?:if|for|foreach|while|switch|catch|using|lock|fixed|when)\b)[A-Za-z_]\w*\s*"
+    r"\((?:[^(){};]|\([^(){};]*\))*\)\s*\{")
+# Review of 203d449: the method's end was found by indentation, so one
+# misindented `}` ended the audited text early while the method went on; and
+# the guard was pinned by position, not scope, so a wrapping `if` (or a `goto`
+# past it, now refused above) skipped it. The method's extent must therefore
+# balance its braces, and these sit at the method's own top level (depth 1),
+# the removal one level down, inside its `try`.
+STEWARD_RETIRE_LITERAL = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])+\'')
+# Review of 2103c58: depth counts braces only, so a braceless `if (...)`,
+# `else`, `while (...)` or `for (...)` in front of a pinned statement still
+# skipped it at depth 1. Each pin is therefore its WHOLE statement - the
+# decision on `facts`, the refusal on `verdict` returning Refused, the
+# validity check returning NotOurs - and each must start a statement (only
+# `;`, `{` or `}` before it). `verdict` is spelled only at its declaration,
+# the refusal and the sentence, so it cannot be overwritten in between.
+# Review of 75d837d: a braceless `if/else` INSIDE a refusing block made its
+# return conditional, so each block is exactly one `answer = ...;` and its
+# return - no other statement.
+STEWARD_RETIRE_TOP_LEVEL = (
+    ("`StewardRetireVerdict verdict = StewardRetirement.Decide(facts);`", re.compile(
+        r"StewardRetireVerdict\s+verdict\s*=\s*StewardRetirement\s*\.\s*Decide\s*\(\s*facts\s*\)\s*;")),
+    ("`if (!StewardRetirement.Allows(verdict)) { answer = ...; return StewardRetireOutcome.Refused; }`",
+     re.compile(
+        r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(\s*verdict\s*\)\s*\)\s*\{"
+        r"\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*Refused\s*;\s*\}")),
+    ("`ZNetView? view = body.View;`", STEWARD_RETIRE_OWN_VIEW),
+    ("the validity check on `view` returning NotOurs", re.compile(
+        STEWARD_RETIRE_VIEW_CHECK.pattern
+        + r"\s*\{\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")),
+)
+STEWARD_RETIRE_STATEMENT_START = re.compile(r"(?:^|[;{}])\s*$")
+# Review of 80c3f3a: the rule reads text, but the product builds for net48 and
+# the tests compile the same port for net10.0, so `#if !NETFRAMEWORK` around the
+# guard kept every pin green and every test passing while the plugin that
+# ships had no guard. No conditional-compilation directive may appear anywhere
+# in the product. And an interpolated string's holes are code the literal mask
+# blanks, so Retire(...) holds none; with that, every token pin reads the
+# masked text, so a sentence that says "view" is not miscounted. Retired is
+# said once, last, so the runtime is never told she left while she stands.
+# Review of 8144fbd: the directive check ran on comment-stripped text, and the
+# stripper does not know directive lines - `#region x /*` blanked an `#if`
+# below it - and `^[ \t]*#` missed the other whitespace and line ends C#
+# accepts (\f, \v, no-break space, U+FEFF, a lone \r, U+2028...). So the raw
+# text is split on every C# line terminator and any line whose first
+# non-whitespace character is `#` is refused: no directive of any kind,
+# #region, #pragma and #nullable included. `[Conditional(...)]` drops calls
+# from one build only in the same way, so it is refused too.
+STEWARD_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
+STEWARD_CONDITIONAL = re.compile(r"\bConditional(?:Attribute)?\b")
+# Review of 3b23929: C# also ends a `//` comment at U+0085, U+2028 and U+2029,
+# while the shared comment stripper every pin here reads only ends one at CR
+# or LF - so `// tidy<U+2028>Object.Destroy(...)` was code to the compiler and
+# comment to every count. Those three characters have no use in this product's
+# source, so they are refused outright.
+STEWARD_EXOTIC_LINE_END = re.compile("[\u0085\u2028\u2029]")
+# Review of 785606f: C# accepts a Unicode escape inside an identifier, so
+# `Destr\u006Fy(` is a call to Destroy that spells no `Destroy(`. Refused
+# anywhere in the product's raw text (a string literal that needs one can use
+# the character itself).
+STEWARD_UNICODE_ESCAPE = re.compile(r"\\[uU][0-9A-Fa-f]")
+
+
+def _steward_directive_line(raw: str) -> str:
+    """The first line of raw C# whose first non-blank character is `#`, or ''."""
+    for line in STEWARD_LINE_TERMINATOR.split(raw):
+        lead = line
+        while lead and (lead[0].isspace() or lead[0] in "\ufeff\x1a"):
+            lead = lead[1:]
+        if lead.startswith("#"):
+            return line.strip()[:60] or "#"
+    return ""
+STEWARD_RETIRE_RETIRED = re.compile(r"\breturn\s+StewardRetireOutcome\s*\.\s*Retired\s*;")
+STEWARD_RETIRE_VERDICT_TOKEN = re.compile(r"(?<![\w.])verdict\b")
+STEWARD_RETIRE_VERDICT_TOKENS = 3
+
+
+def _steward_mask_literals(text: str) -> str:
+    """Blanks string and char literal contents, keeping every offset."""
+    return STEWARD_RETIRE_LITERAL.sub(lambda found: found.group(0)[0] + " " * (len(found.group(0)) - 2)
+                                      + found.group(0)[-1], text)
+
+
+def _steward_brace_depth(masked: str, offset: int) -> int:
+    """Open braces minus closed ones before an offset of literal-masked text."""
+    return masked.count("{", 0, offset) - masked.count("}", 0, offset)
+
+
+STEWARD_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bDestroyZDO\s*\(")
+STEWARD_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
+STEWARD_DESTRUCTION_SITES = {
+    "Runtime/StewardWorkerPrefab.cs": 4,
+    "Runtime/StewardRetirementPort.cs": 1,
+}
+STEWARD_ROUTED_DESTRUCTION_SITES = {
+    "Runtime/StewardRetirementPort.cs": 1,
+}
+STEWARD_BODY_REMOVAL_SITES = {
+    "Runtime/StewardRetirementPort.cs": 1,
+}
+
+
+def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
+    """Fails when Concerned Steward can take a body out of the world anywhere but
+    the one guarded retire verb (owner decision S1, 2026-10-28)."""
+    label = "[steward] S1 retire audit"
+    steward_dir: Path = PRODUCTS["steward"]["project_dir"]  # type: ignore[assignment]
+    port = steward_dir.joinpath(*STEWARD_RETIRE_PORT)
+    if not port.is_file():
+        fail(f"{label}: missing {port.relative_to(ROOT)} - the one place her body may leave the "
+             "world has moved, and the pins below are keyed to where it was", errors)
+        return []
+
+    scanned = 0
+    total_destructions = 0
+    total_routed = 0
+    total_removals = 0
+    total_calls = 0
+    for path in sorted(steward_dir.rglob("*.cs")):
+        relative = path.relative_to(steward_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        key = relative.as_posix()
+        scanned += 1
+        raw = path.read_text(encoding="utf-8")
+        text = _strip_cs_comments(raw)
+
+        directive = _steward_directive_line(raw)
+        if directive:
+            fail(f"{label}: {path.relative_to(ROOT)} has the directive line `{directive}` - the plugin "
+                 "(net48) and the tests (net10.0) compile the same source, so conditional compilation "
+                 "can ship a guard the audit and the tests both see but the game does not, and a "
+                 "directive line is also where this audit's comment stripping goes wrong", errors)
+        exotic = STEWARD_EXOTIC_LINE_END.search(raw)
+        if exotic is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} holds U+{ord(exotic.group(0)):04X} at offset "
+                 f"{exotic.start()} - C# ends a line there and this audit's comment stripping does not, "
+                 "so code after it would be invisible to every count here", errors)
+        escape = STEWARD_UNICODE_ESCAPE.search(raw)
+        if escape is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} holds the Unicode escape `{escape.group(0)}` at offset "
+                 f"{escape.start()} - in an identifier it spells a name (`Destr\\u006Fy`) that no count "
+                 "here can see", errors)
+        conditional = STEWARD_CONDITIONAL.search(raw)
+        if conditional is not None:
+            fail(f"{label}: {path.relative_to(ROOT)} names `{conditional.group(0)}` - a [Conditional] "
+                 "method's calls vanish from one build and not the other, the same split as `#if`",
+                 errors)
+
+        destructions = len(STEWARD_DESTRUCTION.findall(text))
+        total_destructions += destructions
+        if destructions != STEWARD_DESTRUCTION_SITES.get(key, 0):
+            fail(f"{label}: {path.relative_to(ROOT)} destroys something {destructions} time(s); this "
+                 f"rule expects {STEWARD_DESTRUCTION_SITES.get(key, 0)}. Her pack lives in her body and "
+                 "nothing is dropped, so a new destruction has to say what it destroys and what guards "
+                 "it, and be recorded in STEWARD_DESTRUCTION_SITES", errors)
+
+        routed = [receiver for receiver in
+                  (_destruction_receiver(text, found.start())
+                   for found in STEWARD_DESTRUCTION.finditer(text))
+                  if receiver not in TEAMSTER_STATIC_DESTROY_RECEIVERS]
+        total_routed += len(routed)
+        if len(routed) != STEWARD_ROUTED_DESTRUCTION_SITES.get(key, 0):
+            fail(f"{label}: {path.relative_to(ROOT)} routes a destruction through an instance "
+                 f"{len(routed)} time(s) ({', '.join(sorted(set(routed))) or 'none'}); this rule expects "
+                 f"{STEWARD_ROUTED_DESTRUCTION_SITES.get(key, 0)}. A routed destruction is how a networked "
+                 "body leaves the world, inventory and all", errors)
+
+        removals = len(STEWARD_BODY_REMOVAL.findall(text))
+        total_removals += removals
+        if removals != STEWARD_BODY_REMOVAL_SITES.get(key, 0):
+            fail(f"{label}: {path.relative_to(ROOT)} takes a body out of the world {removals} time(s); "
+                 f"this rule expects {STEWARD_BODY_REMOVAL_SITES.get(key, 0)}. Only the guarded retire "
+                 "verb in Runtime/StewardRetirementPort.cs may", errors)
+
+        calls = len(STEWARD_RETIRE_CALL.findall(text))
+        total_calls += calls
+        expected_calls = 1 if key == STEWARD_RETIRE_CALLER else 0
+        if calls != expected_calls:
+            fail(f"{label}: {path.relative_to(ROOT)} names StewardRetirementPort.Retire {calls} "
+                 f"time(s) (a call or a method group); this rule expects {expected_calls}. The verb has one caller, the console's retire, "
+                 "which hands it every witness the body cannot see", errors)
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8"))
+    method = STEWARD_RETIRE_METHOD.search(code)
+    if method is None:
+        fail(f"{label}: could not read Retire(...) in {port.relative_to(ROOT)} - the removal must "
+             "stay inside a named method whose guard is reviewable", errors)
+        return []
+
+    body = method.group(1)
+    masked = _steward_mask_literals(body)
+    removals_in_file = len(STEWARD_BODY_REMOVAL.findall(code))
+    removal_offsets = _offsets_of_pattern(body, STEWARD_BODY_REMOVAL)
+    if removals_in_file != len(removal_offsets):
+        fail(f"{label}: {port.relative_to(ROOT)} removes a body {removals_in_file} time(s) but only "
+             f"{len(removal_offsets)} inside Retire(...) - a removal outside it is one the guard never "
+             "sees", errors)
+
+    decisions = _offsets_of(body, STEWARD_RETIRE_DECIDES)
+    guards = _offsets_of_pattern(body, STEWARD_RETIRE_REFUSES)
+    for index, removal in enumerate(removal_offsets):
+        if len([at for at in decisions if at < removal]) <= index:
+            fail(f"{label}: removal {index + 1} in Retire(...) has no {STEWARD_RETIRE_DECIDES} of its "
+                 "own above it - the body is removed without asking what it holds", errors)
+        if len([at for at in guards if at < removal]) <= index:
+            fail(f"{label}: removal {index + 1} in Retire(...) has no refusing "
+                 "`if (!StewardRetirement.Allows(...))` of its own above it - consulting the verdict "
+                 "without refusing on it is not a guard", errors)
+
+    own_view = STEWARD_RETIRE_OWN_VIEW.search(body)
+    if own_view is None:
+        fail(f"{label}: Retire(...) does not take the network object from the body it was handed "
+             "(`ZNetView? view = body.View;`) - the one removal granted is HER body's, never an object "
+             "looked up or passed in some other way", errors)
+    else:
+        for removal in removal_offsets:
+            receiver = _destruction_receiver(body, removal + body[removal:].index("Destroy"))
+            if removal < own_view.start() or receiver != "view":
+                fail(f"{label}: the removal in Retire(...) is not `view.Destroy()` on the view taken "
+                     "from her own body above it", errors)
+
+    # The declaration is the ONLY assignment `view` may have, and `body` (the
+    # parameter) may not be assigned or passed by reference at all. Without this
+    # a single `view = ZNetScene.instance.FindInstance(...)` - or `body =
+    # StewardBody.FindLive(...)` - between the declaration and the removal kept
+    # every pin above green while the removal hit any network object (review of
+    # d0d559e).
+    view_assignments = len(STEWARD_RETIRE_ASSIGNS_VIEW.findall(masked))
+    if view_assignments != 1:
+        fail(f"{label}: `view` is assigned {view_assignments} time(s) in Retire(...); only its "
+             "declaration from `body.View` may assign it, or the removal can be pointed at another "
+             "object", errors)
+    if STEWARD_RETIRE_ASSIGNS_BODY.search(masked):
+        fail(f"{label}: Retire(...) assigns its `body` parameter - the removal must act on the body "
+             "the caller handed in, never on one swapped in afterwards", errors)
+    if STEWARD_RETIRE_BY_REFERENCE.search(masked):
+        fail(f"{label}: Retire(...) passes `view` or `body` by reference, which is an assignment this "
+             "text audit cannot follow", errors)
+
+    nested = STEWARD_RETIRE_NO_NESTED_CODE.search(masked)
+    if nested is not None:
+        fail(f"{label}: Retire(...) holds `{nested.group(0).strip()[:40]}` - a lambda, local function, "
+             "anonymous delegate, deconstruction, interpolated string or identifier escape opens a scope or an assignment in "
+             "which `view` or `body` can name another object while every positional pin stays green",
+             errors)
+    view_tokens = [found.start() for found in STEWARD_RETIRE_VIEW_TOKEN.finditer(masked)]
+    check = STEWARD_RETIRE_VIEW_CHECK.search(body)
+    statements = list(STEWARD_RETIRE_REMOVAL_STATEMENT.finditer(body))
+    if (len(view_tokens) != STEWARD_RETIRE_VIEW_TOKENS or own_view is None or check is None
+            or len(statements) != 1
+            or not own_view.start() < check.start() < statements[0].start()):
+        fail(f"{label}: `view` appears {len(view_tokens)} time(s) in Retire(...); it may appear only "
+             f"{STEWARD_RETIRE_VIEW_TOKENS} times - `ZNetView? view = body.View;`, then "
+             "`if (view == null || !view.IsValid() || !view.IsOwner())`, then the one statement "
+             "`view.Destroy();` - so that the object removed is the one taken from her body", errors)
+
+    retired = list(STEWARD_RETIRE_RETIRED.finditer(masked))
+    if len(retired) != 1 or masked[retired[0].end():].strip():
+        fail(f"{label}: Retire(...) returns Retired {len(retired)} time(s); it may say so once, as its "
+             "last statement, after the removal - an earlier `return ...Retired;` tells the runtime she "
+             "has left while her body still stands", errors)
+    if _steward_brace_depth(masked, len(masked)) != 1:
+        fail(f"{label}: Retire(...)'s braces do not balance up to the `}}` the audit reads as its end "
+             "(found by indentation) - a misindented brace ends the audited text while the method goes "
+             "on, unaudited", errors)
+    for name, pattern in STEWARD_RETIRE_TOP_LEVEL:
+        sites = list(pattern.finditer(masked))
+        if (len(sites) != 1 or _steward_brace_depth(masked, sites[0].start()) != 1
+                or not STEWARD_RETIRE_STATEMENT_START.search(masked[:sites[0].start()])):
+            fail(f"{label}: {name} must appear once, whole, as its own statement at Retire(...)'s top "
+                 "level - inside a block, or behind a braceless `if`, `else`, `while` or `for`, it can "
+                 "be skipped while every positional pin stays green", errors)
+    verdicts = len(STEWARD_RETIRE_VERDICT_TOKEN.findall(masked))
+    if verdicts != STEWARD_RETIRE_VERDICT_TOKENS:
+        fail(f"{label}: `verdict` appears {verdicts} time(s) in Retire(...); it may appear only "
+             f"{STEWARD_RETIRE_VERDICT_TOKENS} times - its declaration from Decide, the refusal and the "
+             "sentence - or the verdict refused on is not the one decided", errors)
+    for statement in STEWARD_RETIRE_REMOVAL_STATEMENT.finditer(masked):
+        opened = masked.rfind("{", 0, statement.start())
+        tried = re.search(r"\btry\s*$", masked[:opened])
+        if (_steward_brace_depth(masked, statement.start()) != 2 or tried is None
+                or not STEWARD_RETIRE_STATEMENT_START.search(masked[:tried.start()])
+                or not STEWARD_RETIRE_STATEMENT_START.search(masked[:statement.start()])):
+            fail(f"{label}: `view.Destroy();` must sit directly in Retire(...)'s top-level `try`, "
+                 "below the guard, not inside a block that can carry it elsewhere", errors)
+
+    for path in sorted(steward_dir.rglob("*.cs")):
+        relative = path.relative_to(steward_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        if STEWARD_RETIRE_USING.search(_strip_cs_comments(path.read_text(encoding="utf-8"))):
+            fail(f"{label}: {path.relative_to(ROOT)} imports StewardRetirementPort through a `using` "
+                 "(static or alias), which lets a second caller reach the verb under a spelling the "
+                 "one-caller pin cannot count", errors)
+
+    return [
+        f"{label}: {scanned} Steward source(s) scanned (all of {steward_dir.relative_to(ROOT).as_posix()} "
+        f"less obj/ and bin/) holding {total_destructions} destruction(s), {total_routed} routed through "
+        f"an instance and {total_removals} body removal(s), each at a pinned site; the one removal is "
+        "`view.Destroy()` inside StewardRetirementPort.Retire, below a StewardRetirement.Decide and a "
+        "refusing `if (!StewardRetirement.Allows(...))`, on a `view` whose only assignment is "
+        "`body.View` and which appears nowhere but that declaration, its validity check and the removal "
+        "statement, in a method with no lambda, local function, delegate, goto or deconstruction, whose "
+        "braces balance, with the guard at its top level and the removal directly in its top-level "
+        "`try`, and a `body` "
+        "parameter that is never reassigned; the port is named (call or method "
+        "group) at "
+        f"{total_calls} call site(s), in {STEWARD_RETIRE_CALLER}, and no file imports it by `using`. "
+        "This text audit establishes where the refusal is written, not that control flow obeys it "
+        "(StewardRetirementTests, which run on net10.0 only, so code that branches on the runtime it is "
+        "running on is a reviewer's job), and it cannot see a destruction reached through a delegate, a "
+        "method group or reflection"
+    ]
+
 def _offsets_of_pattern(text: str, pattern: re.Pattern) -> list[int]:
     """Every offset a pattern matches at, in order."""
     return [match.start() for match in pattern.finditer(text)]
@@ -6039,6 +6404,7 @@ def main() -> int:
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
+    report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))
     report.extend(check_teamster_destination_is_pointed_at(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))

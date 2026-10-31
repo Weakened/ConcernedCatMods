@@ -84,7 +84,7 @@ Game-free coverage is `WorkAreaEditorTests`. None of the rows below has been obs
 - [ ] Rename and Delete act on the selected area. Delete needs a second click, and `cc_areas list` agrees with the panel.
 - [ ] A relog keeps the areas, and backup includes `.work-areas.tsv`.
 - [ ] With `Map/HighPrecisionLargeMapRoads = false`, the panel says that outlines need that setting, and editing still works.
-- [ ] Drawing or saving an area starts no work. The panel says workers are not assigned here and Concerned Foreman can use the areas; Foreman's rows W1-W3 in docs/mods/concerned-foreman/COLLECTION.md cover that side.
+- [ ] Drawing or saving an area starts no work. The panel says workers are not assigned here and Concerned Foreman can use the areas; Foreman's rows W1-W6 in docs/mods/concerned-foreman/COLLECTION.md cover that side, including the order status shown here (W4-W6).
 
 ## Performance
 
