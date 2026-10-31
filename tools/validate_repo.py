@@ -2878,6 +2878,8 @@ def _strip_foreman_cs_comments(text: str) -> str:
 # that the return is reachable. Each of these is the reviewer's to see; the
 # behaviour they protect is stated in DECISIONS.md D18.
 NPC_FIGURE_PARTS_FILE = "Body/Dressing/NpcFigureParts.cs"
+# #295 S2 (owner decision 2026-10-30): the shared keepsake.
+NPC_KEEPSAKE_PARTS_FILE = "Body/Keepsakes/NpcKeepsakeParts.cs"
 NPC_FIGURE_DRESSER_FILE = "Body/Dressing/NpcFigureDresser.cs"
 # #295 S6 (owner decision 2026-10-29, option (b)): the dressing is shared by the
 # figure dresser and a worker-body dresser, so its engine-write calls live in
@@ -2912,11 +2914,14 @@ NPC_ENGINE_WRITES = (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
         ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*!\s*,\s*position\s*,\s*rotation\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*prefab\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
     )),
     ("new GameObject", re.compile(r"\bnew\s+GameObject\s*\("), (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bnew\s+GameObject\s*\(\s*holderName\s*\)"), 1),
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bnew\s+GameObject\s*\(\s*figureName\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bnew\s+GameObject\s*\(\s*name\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bnew\s+GameObject\s*\(\s*name\s*\)"), 2),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r'\bnew\s+GameObject\s*\(\s*"part"\s*\)'), 1),
     )),
     ("DestroyImmediate", re.compile(r"\bDestroyImmediate\s*\("), (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*root\s*\)"), 1),
@@ -2928,15 +2933,18 @@ NPC_ENGINE_WRITES = (
         ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
         ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*component\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
     )),
     ("Destroy", re.compile(r"(?<![A-Za-z0-9_])Destroy\s*\("), (
         ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
         ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*instance\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
     )),
     ("SetParent", re.compile(r"\bSetParent\s*\("), (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*root\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpiece\s*\.\s*SetParent\s*\(\s*parent\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*root\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
     )),
     # Never in the library at all, so nothing is pinned: a figure has no
     # rigidbody, and a body moves only through the game's own motor.
@@ -2955,6 +2963,26 @@ NPC_ENGINE_WRITES = (
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bbody\s*\.\s*sharedMesh\s*=\s*mesh\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bclone\s*\.\s*transform\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bclone\s*\.\s*transform\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bclone\s*\.\s*transform\s*\.\s*localScale\s*=\s*Vector3\s*\.\s*one\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\broot\s*\.\s*transform\s*\.\s*localScale\s*=\s*Vector3\s*\.\s*one\s*\*\s*scale\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*transform\s*\.\s*localPosition\s*=\s*position\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*transform\s*\.\s*localRotation\s*=\s*rotation\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*transform\s*\.\s*localScale\s*=\s*scale\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bkeepsake\s*\.\s*position\s*=\s*spot\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bkeepsake\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*AddComponent\s*<\s*MeshFilter\s*>\s*\(\s*\)\s*\.\s*sharedMesh\s*=\s*mesh\s*;"), 1),
+    )),
+    # #295 S2: components put on an object. The worker body factory's two, and
+    # the keepsake's four on the render-only object it built.
+    ("AddComponent", re.compile(r"\bAddComponent\s*(?:<[^(){};]*>\s*)?\("), (
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bclone\s*\.\s*AddComponent\s*<\s*NpcBodyMind\s*>\s*\(\s*\)"), 1),
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bclone\s*\.\s*AddComponent\s*<\s*NpcBody\s*>\s*\(\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*AddComponent\s*<\s*MeshFilter\s*>\s*\(\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*AddComponent\s*<\s*MeshRenderer\s*>\s*\(\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\broot\s*\.\s*AddComponent\s*<\s*NpcKeepsakeBehaviour\s*>\s*\(\s*\)"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\broot\s*\.\s*AddComponent\s*<\s*SphereCollider\s*>\s*\(\s*\)"), 1),
     )),
 )
 
@@ -3136,6 +3164,11 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
                      f"{code.count(chr(10), 0, match.start()) + 1}; the shared dressing dresses whatever it is "
                      f"built on, so only {', '.join(sorted(NPC_DRESSING_CONSTRUCTIONS))} may use it", errors)
             continue
+        if rel not in NPC_DRESSING_CONSTRUCTIONS:
+            # The construction, target-typed `new(` and alias rules are about the
+            # two dresser files only. Elsewhere in the library a `where T : new()`
+            # or a `new()` of anything else is ordinary code (#295 S6 review).
+            continue
         count = len(construct.findall(code))
         expected = NPC_DRESSING_CONSTRUCTIONS.get(rel, 0)
         if count != expected:
@@ -3249,6 +3282,158 @@ FIGURE_DRESSING_FINGERPRINTS = (
     ("the skin colour property", re.compile(r"\"_SkinColor\"")),
 )
 FIGURE_DRESSING_EXEMPT_PRODUCTS = frozenset({"cartographer"})
+
+
+# #295 S2 (owner decision 2026-10-30): one shared companion keepsake, lifted
+# from Concerned Cartographer's Broken Compass so that Thorstein's square,
+# Gunnar's buckle and Sunniva's flint are one copy. Its engine writes are in
+# the NPC census above (by path and exact spelling); this rule confines the
+# rest the same way the dresser's are confined:
+# - NpcKeepsakeParts and NpcKeepsakeBehaviour are internal and named only in
+#   Body/Keepsakes, the parts only from NpcKeepsake.cs, each helper's
+#   population pinned;
+# - Body/Keepsakes exports exactly NpcKeepsake, and its public members take
+#   only the role's spec, a place, names and callbacks - never an object;
+# - nothing in Body/Keepsakes names a network view, so a keepsake can never
+#   be saved or replicated;
+# - in the companion products that consume Concerned NPC, nothing builds a
+#   render-only object out of borrowed meshes - that is the keepsake's job.
+# Limits, stated: a text audit with comments stripped; it does not follow
+# indirection or prove control flow.
+NPC_KEEPSAKE_DIR = "Body/Keepsakes/"
+NPC_KEEPSAKE_FILE = "Body/Keepsakes/NpcKeepsake.cs"
+NPC_KEEPSAKE_PUBLIC_TYPES = frozenset({"NpcKeepsake"})
+NPC_KEEPSAKE_PARTS_USES = {
+    "Behaviour": 1,
+    "Collider": 1,
+    "Discard": 4,
+    "Drop": 1,
+    "Harvest": 1,
+    "Holder": 1,
+    "Layer": 1,
+    "Part": 1,
+    "Place": 1,
+    "Root": 1,
+}
+NPC_KEEPSAKE_PARAMETER_TYPES = frozenset({
+    "NpcKeepsakeSpec", "Vector3", "Quaternion", "string", "Action", "Action<string>",
+})
+KEEPSAKE_FINGERPRINTS = (
+    ("a render-only object's borrowed materials", re.compile(r"\.\s*sharedMaterials\s*=(?!=)")),
+    ("a mesh renderer put on an object", re.compile(r"\bAddComponent\s*<\s*Mesh(?:Renderer|Filter)\s*>")),
+)
+KEEPSAKE_CONSUMER_PRODUCTS = frozenset({"foreman", "steward", "teamster"})
+
+
+def check_npc_keepsake_confined(errors: list[str]) -> list[str]:
+    """Confines the shared companion keepsake the way the dresser is confined."""
+    label = "[concernednpc] NPC keepsake audit"
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        fail(f"{label}: the Concerned NPC library is not declared, so nothing was audited", errors)
+        return []
+    lib_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    if not (lib_dir / NPC_KEEPSAKE_PARTS_FILE).is_file() or not (lib_dir / NPC_KEEPSAKE_FILE).is_file():
+        fail(f"{label}: {NPC_KEEPSAKE_PARTS_FILE} or {NPC_KEEPSAKE_FILE} is missing; point the audit at the "
+             "keepsake's new home rather than leaving it green", errors)
+        return []
+
+    sources: dict[str, str] = {}
+    for path in sorted(lib_dir.rglob("*.cs")):
+        if any(part in ("obj", "bin") for part in path.relative_to(lib_dir).parts):
+            continue
+        sources[path.relative_to(lib_dir).as_posix()] = _strip_foreman_cs_comments(
+            path.read_text(encoding="utf-8-sig"))
+
+    violations = 0
+    for internal_type in ("NpcKeepsakeParts", "NpcKeepsakeBehaviour"):
+        declared = [rel for rel, code in sources.items()
+                    if re.search(r"\binternal\s+(?:static\s+|sealed\s+)*class\s+" + internal_type + r"\b", code)]
+        if len(declared) != 1:
+            violations += 1
+            fail(f"{label}: {internal_type} must be declared internal, once; found {declared}", errors)
+        for rel, code in sources.items():
+            if rel.startswith(NPC_KEEPSAKE_DIR):
+                continue
+            for match in re.finditer(r"\b" + internal_type + r"\b", code):
+                violations += 1
+                fail(f"{label}: {internal_type} named in src/ConcernedNPC/{rel}:"
+                     f"{code.count(chr(10), 0, match.start()) + 1}; only {NPC_KEEPSAKE_DIR} may use it", errors)
+
+    any_name = re.compile(r"\bNpcKeepsakeParts\b")
+    member = re.compile(r"\bNpcKeepsakeParts\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+    found: dict[str, int] = {}
+    for rel, code in sources.items():
+        if not rel.startswith(NPC_KEEPSAKE_DIR) or rel == NPC_KEEPSAKE_PARTS_FILE:
+            continue
+        names = list(any_name.finditer(code))
+        if names and rel != NPC_KEEPSAKE_FILE:
+            violations += 1
+            fail(f"{label}: NpcKeepsakeParts named in src/ConcernedNPC/{rel}; only {NPC_KEEPSAKE_FILE} may call "
+                 "its helpers", errors)
+            continue
+        calls = list(member.finditer(code))
+        if len(calls) != len(names):
+            violations += 1
+            fail(f"{label}: src/ConcernedNPC/{rel} names NpcKeepsakeParts {len(names)} time(s) but calls a helper "
+                 f"{len(calls)} time(s); an alias or a method group would carry a helper out of this audit", errors)
+        for call in calls:
+            found[call.group(1)] = found.get(call.group(1), 0) + 1
+    for helper in sorted(set(found) | set(NPC_KEEPSAKE_PARTS_USES)):
+        if found.get(helper, 0) != NPC_KEEPSAKE_PARTS_USES.get(helper, 0):
+            violations += 1
+            fail(f"{label}: {NPC_KEEPSAKE_FILE} calls NpcKeepsakeParts.{helper} {found.get(helper, 0)} time(s); "
+                 f"the pinned population is {NPC_KEEPSAKE_PARTS_USES.get(helper, 0)}", errors)
+
+    public_types: set[str] = set()
+    for rel, code in sources.items():
+        if not rel.startswith(NPC_KEEPSAKE_DIR):
+            continue
+        for match in re.finditer(
+                r"\bpublic\s+(?:(?:static|sealed|readonly|abstract|partial)\s+)*"
+                r"(?:class|struct|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)", code):
+            public_types.add(match.group(1))
+        for match in re.finditer(r"\bZNetView\b", code):
+            violations += 1
+            fail(f"{label}: src/ConcernedNPC/{rel}:{code.count(chr(10), 0, match.start()) + 1} names a network "
+                 "view; a keepsake is never saved or replicated", errors)
+    if public_types != NPC_KEEPSAKE_PUBLIC_TYPES:
+        violations += 1
+        fail(f"{label}: {NPC_KEEPSAKE_DIR}'s public types are {sorted(public_types)}; the pinned surface is "
+             f"{sorted(NPC_KEEPSAKE_PUBLIC_TYPES)}", errors)
+    for line, parameters in _npc_public_signatures(sources[NPC_KEEPSAKE_FILE]):
+        for declared in _npc_parameter_types(parameters):
+            if declared not in NPC_KEEPSAKE_PARAMETER_TYPES:
+                violations += 1
+                fail(f"{label}: a public member in {NPC_KEEPSAKE_FILE} takes a {declared} at line {line}; the "
+                     f"allowed parameter types are {', '.join(sorted(NPC_KEEPSAKE_PARAMETER_TYPES))}", errors)
+
+    scanned = 0
+    for product_key in sorted(KEEPSAKE_CONSUMER_PRODUCTS):
+        spec = PRODUCTS.get(product_key)
+        if spec is None:
+            continue
+        project_dir: Path = spec["project_dir"]  # type: ignore[assignment]
+        for path in sorted(project_dir.rglob("*.cs")):
+            if any(part in ("obj", "bin") for part in path.relative_to(project_dir).parts):
+                continue
+            scanned += 1
+            code = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
+            for what, pattern in KEEPSAKE_FINGERPRINTS:
+                for match in pattern.finditer(code):
+                    violations += 1
+                    fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{code.count(chr(10), 0, match.start()) + 1}"
+                         f" builds {what}, which is the shared keepsake's job; use Concerned NPC's NpcKeepsake",
+                         errors)
+
+    return [
+        f"{label}: the keepsake's helpers and behaviour are internal and confined to {NPC_KEEPSAKE_DIR}, each "
+        f"helper population pinned; it exports exactly {', '.join(sorted(NPC_KEEPSAKE_PUBLIC_TYPES))}, whose "
+        "public members take no object; nothing there names a network view; and none of the "
+        f"{len(KEEPSAKE_CONSUMER_PRODUCTS)} companion products ({scanned} sources) builds its own render-only "
+        "keepsake (Concerned Cartographer's pre-library Broken Compass exempt). A source-text audit with comments "
+        f"stripped: it does not follow indirection or prove control flow ({violations} violations)",
+    ]
 
 
 def check_figure_dressing_has_one_home(errors: list[str]) -> list[str]:
@@ -6294,6 +6479,7 @@ def main() -> int:
     report.extend(check_foreman_felling_scope(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
+    report.extend(check_npc_keepsake_confined(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
