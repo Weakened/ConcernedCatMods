@@ -8,8 +8,8 @@ every other Concerned Cat mod.
 
 The first release (#340, #382). Sunniva keeps your settlement's fires burning.
 Requires **Concerned NPC 0.5.0** (`TheConcernedCat-ConcernedNPC`), which ships as
-its own package and must be installed with it; without it the mod says so at
-load and does nothing.
+its own package and must be installed with it; without it BepInEx will not load
+the mod and says why.
 
 ### Added
 
@@ -33,7 +33,8 @@ load and does nothing.
   configurable burning time, not to full. At each stop she checks the light
   again (filled by you or destroyed: she moves on), walks there on her own feet,
   and feeds real fuel one piece at a time through vanilla's own
-  `Fireplace.UseItem`. Surplus goes back to the chest she took it from.
+  `Fireplace.UseItem`. Surplus goes back to the supply chest you marked; if it
+  has no room, she keeps holding it and tries again.
 - **No free fuel.** Every piece she burns came out of your chest and was
   measured. A round she cannot pay for is refused, naming what is missing ("I
   need 40 Resin"); a round she can half pay for tends the most urgent lights in
@@ -59,7 +60,8 @@ load and does nothing.
   A dress or robe can be named in the config and is tried first; nothing from
   another mod is included or depended on.
 - **`cs_steward retire`** (owner decision S1). Takes her worker body out of the
-  world, and only when she holds nothing and no round or plan is open; it never
+  world, and only when she holds nothing, no round or plan is open and nothing
+  she took is unaccounted for; it never
   removes anything else and never destroys carried fuel. `cs_steward recruit`
   brings her back.
 - **Console:** `cs_steward area <radius> | depot | clear area|depot | runes |
@@ -81,6 +83,9 @@ load and does nothing.
   trip for each kind.
 - **Her worker body is a Dverger.** Vanilla draws the female model, skin and hair
   colour only on a player-style body, so while she works only her clothes and her
-  hair piece show; at rest the player-style figure shows all of it.
+  hair piece show; at rest the player-style figure shows all of it. `[Appearance]
+  ModelIndex` and `HairColour` apply to the worker body only, so on the default
+  Dverger neither has a visible effect; the figure uses its own fair, light-blonde
+  colouring.
 - **Nothing here has been observed in a running game yet**; the owner's
   pre-release smoke test is pending.

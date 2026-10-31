@@ -96,3 +96,36 @@ so - as for Teamster's audits in `CLAUDE.md` - the remaining limits are stated r
 - its scope is `src/ConcernedSteward`; the Concerned NPC library and shared sources it builds on are not scanned.
 
 **Still owner go-around pending:** the retire and re-recruit round trip in a running game.
+
+## S2. Sunniva rests as a player-style figure and works as her worker body, never both
+
+Status: **accepted**. Owner decision **2026-10-27**, given to the completion lead (#382).
+
+**What is granted.** While Sunniva has no worker body in the world and nothing is open, she is shown at her home post
+(the supply chest, else the settlement centre) as a player-style figure built from the game's own character model by
+Concerned NPC (`NpcPresentationBody`, dressed by `NpcFigureDresser`): female, Matronly hair, fair, light blonde, in
+leather. Her role's contract is Concerned NPC's `ForWorkerWithPresentation`, so the library's arbiter refuses the
+figure while her worker lease is held and the worker lease while the figure's is held.
+
+**What is not granted.** No live `Player` is instantiated and stripped; the figure has no network view, character, AI
+or collider, is seen only on the host's machine, and changes nothing in the world. Identity `steward/steward`, prefab
+`CS_Steward` and keys `tcc.steward.` are unchanged.
+
+**Where it is enforced.** `Domain/Npc/SunnivaBodyPlan.cs` (a saved worker body anywhere, an unidentified one or a
+failed count shows nothing), `Domain/Npc/SunnivaFigureLease.cs`, `Runtime/SunnivaPresentation.cs` (`YieldToWorker`
+before every worker claim and spawn, on world unload and while the runtime is off), `[Appearance] ShowAtHome`;
+`SunnivaFigureTests`. **Owner go-around pending:** smoke test section 3b.
+
+## S3. Her own hair on her worker body
+
+Status: **accepted**. Owner decision **2026-10-29** (working bodies try player hair/beard pieces on the existing
+Dverger worker body behind a setting, plain Dverger as the fallback; no prefab rebase or migration).
+
+**What is granted.** While she works, her Matronly hair is put on her own saved `CS_Steward` worker body, locally, by
+Concerned NPC's `NpcWorkerDresser`, which refuses any other body; a piece that will not attach or fit is taken off.
+
+**What is not granted.** No beard, no garments, no prefab, saved data, network object or world change.
+
+**Where it is enforced.** `Domain/Appearance/SunnivaLookPlan.cs` (`WorkerSpec`), `Runtime/SunnivaPresentation.cs`
+(`OnWorkerBodyLoaded` / `OnWorkerBodyGone`), `Runtime/StewardRuntime.cs` (`BindBody`, `RefreshCensus`),
+`[Appearance] WorkerLook`; `SunnivaFigureTests`. **Owner go-around pending:** smoke test 3b.5.

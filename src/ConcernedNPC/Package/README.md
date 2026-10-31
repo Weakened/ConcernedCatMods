@@ -18,8 +18,8 @@ one of them, and so that a fix to those answers can reach you without every mod 
   sensible round, then reconcile. Not one item, one trip, repeat.
 * **How do I look?** A companion at rest can be shown as a player-style figure built from the game's own character
   model, dressed from that mod's own choices; a working body can wear its character's own hair; and an introduction
-  can start from one small keepsake. All of it is local to your machine: nothing is saved, networked or placed in
-  your world, and none of it happens unless a mod asks for it.
+  can start from one small keepsake. All of it is local to your machine: nothing is saved to your world or sent over
+  the network, and none of it happens unless a mod asks for it.
 * **What happens when I am interrupted?** A dead, logged-out or interrupted companion resumes or reports. Nothing is
   duplicated and nothing quietly disappears.
 
