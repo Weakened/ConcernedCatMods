@@ -3374,20 +3374,33 @@ FOREMAN_FELLING_FORBIDDEN = (
 )
 
 
-def _foreman_felling_sources() -> tuple[dict[str, str], list[str]]:
+def _foreman_felling_sources(errors: list[str]) -> tuple[dict[str, str], list[str]]:
+    """The audited scope. Every way it could quietly shrink is a failure."""
     foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
     roots = [foreman_dir]
     linked: list[str] = []
     csproj = foreman_dir / "ConcernedForeman.csproj"
-    if csproj.is_file():
-        for match in re.finditer(r'Include="\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]', csproj.read_text(encoding="utf-8-sig")):
+    if not csproj.is_file():
+        fail("[foreman] D19 felling audit: ConcernedForeman.csproj is missing, so the shared trees it compiles in "
+             "cannot be read; the audit refuses rather than shrinking its scope", errors)
+    else:
+        text = csproj.read_text(encoding="utf-8-sig")
+        for raw in re.findall(r'Include="(\.\.[\\/]Shared[\\/][^"]*)"', text):
+            match = re.match(r'\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]', raw)
+            if match is None:
+                fail(f"[foreman] D19 felling audit: a shared include this audit cannot follow: {raw}", errors)
+                continue
             name = match.group(1)
             if name not in linked:
                 linked.append(name)
                 roots.append(ROOT / "src" / "Shared" / name)
+        if not linked:
+            fail("[foreman] D19 felling audit: ConcernedForeman.csproj names no shared tree; the audit expected at "
+                 "least one and refuses rather than walking less than the product", errors)
     sources: dict[str, str] = {}
     for root in roots:
         if not root.is_dir():
+            fail(f"[foreman] D19 felling audit: {root.relative_to(ROOT).as_posix()} is compiled in but missing", errors)
             continue
         for path in sorted(root.rglob("*.cs")):
             if any(part in ("obj", "bin") for part in path.relative_to(root).parts):
@@ -3398,7 +3411,7 @@ def _foreman_felling_sources() -> tuple[dict[str, str], list[str]]:
 
 def check_foreman_felling_scope(errors: list[str]) -> list[str]:
     """D19: one pinned Destructible.Damage in the whole of Foreman; no tree types, no shortcuts."""
-    sources, linked = _foreman_felling_sources()
+    sources, linked = _foreman_felling_sources(errors)
     hits = 0
     pinned = 0
     for rel, code in sources.items():

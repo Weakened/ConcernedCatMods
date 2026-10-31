@@ -541,6 +541,10 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
   - it allows exactly one `.Damage(`: the pinned `tree.Damage(hit)` in the felling port;
   - it refuses `TreeBase`, `TreeLog`, `DestroyNow`, `ApplyDamage` and `RPC_Damage` anywhere in that scope, until a
     mature-tree scope is decided.
+  - a project file that is missing, a shared include it cannot follow, or a linked tree that is missing fails the
+    audit rather than shrinking its scope;
+  - the Concerned NPC library, referenced as a separate project, is outside this walk. It has its own audits and
+    does not fell.
 - **Excluded:** saplings (cultivation), berry bushes (food), and every other prefab.
 
 **Built in the first leaf (#282).**
