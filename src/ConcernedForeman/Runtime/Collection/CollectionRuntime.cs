@@ -1,5 +1,6 @@
 using System;
 using TheConcernedCat.Diagnostics;
+using TheConcernedCat.Interop.WorkArea;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -63,6 +64,11 @@ internal sealed class CollectionRuntime
     private readonly Func<Guid>? _sharedEpoch;
     private readonly SettlementDiskReader _reader = new SettlementDiskReader();
     private readonly WorkScopeBuilder _scopes;
+
+    // #296 slice 3: Cartographer's work areas, and the one the player chose
+    // for the next order in this world load (null: harvest area or circle).
+    private readonly CartographerWorkAreas _cartographerAreas;
+    private WorkAreaChoice? _areaChoice;
     private readonly IDesignationSite _site = new WorldDesignationSite();
     private readonly Action<ForemanWorkerAI, float> _workTick;
 
@@ -117,7 +123,8 @@ internal sealed class CollectionRuntime
         _custody = custody;
         _cooperation = cooperation;
         _sharedEpoch = sharedEpoch;
-        _scopes = new WorkScopeBuilder(_reader);
+        _cartographerAreas = new CartographerWorkAreas(_log);
+        _scopes = new WorkScopeBuilder(_reader, _cartographerAreas.Describe);
         _workTick = OnWorkerTick;
         Motion = new ForemanWorkerMotion(Modes, () => _body);
     }
@@ -217,6 +224,8 @@ internal sealed class CollectionRuntime
         _scene = null;
         _preview = null;
         _reader.Forget();
+        _areaChoice = null;
+        _cartographerAreas.Forget();
     }
 
     private void RefreshBody()
@@ -431,11 +440,13 @@ internal sealed class CollectionRuntime
                     return Control(loop => loop.Resume(Time.time));
                 case "rebind":
                     return Rebind();
+                case "area":
+                    return Area(args);
                 case "cancel":
                     return Control(loop => loop.Cancel(Time.time));
                 default:
                     return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold] [gunnar], " +
-                        "rebind (look at the chest), pause, resume, cancel.";
+                        "rebind (look at the chest), pause, resume, cancel, area [list | next | default | <name>].";
             }
         }
         catch (Exception exception)
@@ -467,6 +478,8 @@ internal sealed class CollectionRuntime
             text.AppendLine().Append("  No world is loaded.");
             return text.ToString();
         }
+
+        text.AppendLine().Append("  ").Append(DescribeAreaChoice());
 
         RefreshBody();
         text.AppendLine().Append("  Thorstein: ");
@@ -696,7 +709,13 @@ internal sealed class CollectionRuntime
         }
 
         CollectionOrderDefinition order = loop.Order;
-        if (!TryBuildScopeOfKind(order.Scope.Source, order.Scope.RadiusMetres, world.Epoch, out WorkScope? scope, out string failure))
+        WorkScope? scope;
+        string failure;
+        bool rebuilt = order.Scope.Source == WorkScopeSource.CartographerWorkArea
+            ? CartographerAreaScopes.TryRebind(
+                order.Scope, _areaChoice, _cartographerAreas.Describe, IssuerHeight(), world.Epoch, out scope, out failure)
+            : TryBuildScopeOfKind(order.Scope.Source, order.Scope.RadiusMetres, world.Epoch, out scope, out failure);
+        if (!rebuilt)
         {
             return "Refused: " + failure;
         }
@@ -738,6 +757,23 @@ internal sealed class CollectionRuntime
         scope = null;
         label = string.Empty;
         Guid epoch = _world!.Epoch;
+
+        // #296 slice 3: an area the player chose from the map comes first, and
+        // a chosen area that cannot be used is a refusal - never the harvest
+        // area or the circle in its place.
+        if (_areaChoice != null)
+        {
+            if (!CartographerAreaScopes.TryBuild(
+                    _areaChoice, _cartographerAreas.Describe, IssuerHeight(), epoch, out scope, out failure))
+            {
+                return false;
+            }
+
+            label = "Chosen work area: " + scope!.AnchorDescription + " from your map, exactly as drawn (within " +
+                scope.RadiusMetres.ToString("0.#", CultureInfo.InvariantCulture) + " m of its middle). " +
+                "A radius typed here does not apply.";
+            return true;
+        }
 
         if (!_scopes.TryGetHarvestArea(out Designation? harvest, out failure))
         {
@@ -801,9 +837,99 @@ internal sealed class CollectionRuntime
                 scope = WorkScopeBuilder.FromAnchor(anchor, radius, epoch);
                 return true;
 
+            case WorkScopeSource.CartographerWorkArea:
+                // Rebind handles these through CartographerAreaScopes.TryRebind,
+                // which keeps the order's own area; nothing else asks.
+                failure = "an order in an area from your map is rebound to that same area only";
+                return false;
+
             default:
                 failure = "this order's kind of work area has no provider in this build";
                 return false;
+        }
+    }
+
+    /// <summary>#296 slice 3: <c>cf_collect area [list | next | default |
+    /// &lt;name&gt;]</c>. Choosing only says where the NEXT order works; it
+    /// starts nothing and changes no order already accepted.</summary>
+    private string Area(string[]? args)
+    {
+        WorldState? world = _world;
+        if (world == null)
+        {
+            return "No world is loaded.";
+        }
+
+        string rest = args != null && args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1).Trim() : "list";
+        string verb = rest.ToLowerInvariant();
+        if (verb == "default" || verb == "none" || verb == "clear")
+        {
+            _areaChoice = null;
+            return "No work area chosen: orders use the harvest area, or else the camp circle around your respawn point.";
+        }
+
+        WorkAreaLookup listed = _cartographerAreas.List();
+        if (verb == "list")
+        {
+            var text = new StringBuilder(DescribeAreaChoice());
+            text.AppendLine().Append("  ").Append(_cartographerAreas.ProbeNote).Append('.');
+            if (!listed.IsOk)
+            {
+                text.AppendLine().Append("  Work areas from your map: ").Append(listed.Reason).Append('.');
+                return text.ToString();
+            }
+
+            text.AppendLine().Append("  Work areas from your map: ").Append(listed.Areas.Count).Append('.');
+            foreach (WorkAreaSummary area in listed.Areas)
+            {
+                text.AppendLine().Append("    \"").Append(area.Name).Append('"');
+            }
+
+            text.AppendLine().Append("  cf_collect area <name> chooses one; cf_collect area default goes back to the usual area.");
+            return text.ToString();
+        }
+
+        if (verb == "next")
+        {
+            CartographerAreaScopes.TryCycle(listed, _areaChoice, world.Epoch, out WorkAreaChoice? next, out string cycled);
+            if (listed.IsOk)
+            {
+                _areaChoice = next;
+            }
+
+            return cycled;
+        }
+
+        if (CartographerAreaScopes.TryChoose(listed, rest, world.Epoch, out WorkAreaChoice? chosen, out string message))
+        {
+            _areaChoice = chosen;
+        }
+
+        return message;
+    }
+
+    /// <summary>For the status line and <c>area list</c>.</summary>
+    internal string DescribeAreaChoice()
+    {
+        WorkAreaChoice? choice = _areaChoice;
+        return choice == null || _world == null || choice.WorldLoadEpoch != _world.Epoch
+            ? "Work area: the usual one (harvest area, or the camp circle)."
+            : "Work area: \"" + choice.Name + "\" from your map.";
+    }
+
+    /// <summary>The height a Cartographer area's middle is given: the issuing
+    /// player's own, read and never written. Only the rendezvous planner uses
+    /// it; containment is two-dimensional.</summary>
+    private static float IssuerHeight()
+    {
+        try
+        {
+            Player player = Player.m_localPlayer;
+            return player != null ? player.transform.position.y : 0f;
+        }
+        catch (Exception)
+        {
+            return 0f;
         }
     }
 

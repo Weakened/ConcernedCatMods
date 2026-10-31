@@ -85,15 +85,18 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   **nothing here has been watched happening**: no build of it has been run in game, and the in-game rows
   are OWNER GO-AROUND PENDING. What is reachable is *one pick a player explicitly orders* through
   `ct_collect pick`: a loose stone or a fallen branch, on the allowlist, yielding exactly what vanilla
-  yields, owned by this client, within `CollectionLimits.PickupReachMetres`, one at a time. Nothing
-  moves Gunnar. The survey-driven job (`GunnarCollectionJob`, `CollectionSurvey`,
-  `GunnarTargetPredicate`) still has no call site and wiring it is its own work. The **two lifecycle
+  yields, owned by this client, within `CollectionLimits.PickupReachMetres`, one at a time. **Since PR #445 the survey-driven tour
+  is reachable too** (`ct_collect area` / `start`, `GunnarCollectionRuntime.Tour.cs` constructs
+  `GunnarCollectionJob`): he surveys a bounded area, plans the whole job in loads of 225 units (at most 24
+  sources a trip), walks each load on foot and takes it to the chest the player pointed at in one trip.
+  Walking him for that tour is covered by the #313/#314 own-body pathfinding carve-out (owner decision
+  2026-10-28, `DECISIONS.md` **D17**); a cart-assisted round still needs its own grant. The **two lifecycle
   verbs are routed**: a world unload, a game shutdown or a plugin teardown goes to `ForgetWorld()`,
   which is the only verb that may drop the unconfirmed-source record; a cancelled, abandoned or
   authority-refused order goes to `Forget()`, which keeps it. That choice is made in the game-free
   `Domain/Collection/CollectionLifecycle.cs` so it is unit-tested rather than reasoned about, and
   `validate_repo.py`'s `#381 collection lifecycle audit` refuses the port if the two verbs are crossed.
-  Because a pick can now leave material in Gunnar and the deposit half is unwired, `ct_haul retire`
+  Because a pick or a tour can leave material in Gunnar, `ct_haul retire`
   **refuses while a worker body carries anything** (`WorkerRetirement`) rather than destroying its
   inventory with it — the shape Foreman's `SETTLEMENT_AUTHORITY.md` §5a already gives the deliberate
   removal verb, since vanilla's own drop applies to *death* and a deliberate drop would need an
@@ -105,16 +108,17 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   `TeamsterWorkerRecord` writes `tcc.worker.inventory` (vanilla's own `Inventory.Save` package) and
   `tcc.worker.revision` into the body's own network object from vanilla's own change callback —
   byte-compatible with Foreman's worker, never before a successful load, and an absent field loads as an
-  empty inventory rather than a fault. **Two doors were open when this paragraph was written; one is now decided, and neither is closed
-  in code.** Death is the first: the body is destroyed and what it holds goes with it. Closing it was
-  said here to need its own owner decision, and **that decision was given on 2026-09-29 (D16 below)** -
-  so death is authorized and still unimplemented, which means the behaviour in a running game is
-  unchanged and material is still lost on death today. A **ZDO write that fails** is the
+  empty inventory rather than a fault. **Two doors were open when this paragraph was written; death is now
+  closed in code wherever D16's gates allow, and fails closed where they do not.** Death was the first: the
+  body is destroyed and what it holds went with it. The owner's decision (2026-09-29, **D16 below**) is
+  implemented by PR #446: on a genuine death that passes those gates, what he carries goes on the ground through
+  vanilla's own drop; on one that does not, it is lost with the body and recorded as unresolved. Every death is
+  recorded. A **ZDO write that fails** is the
   second: the change that did not reach the network object is lost, because the live inventory has it and
   the stored package does not. The second is contained rather than fixed - a body whose last change did not
   persist is handed nothing more to hold - and the containment's limit is stated on purpose: nothing this
-  mod does will clear that refusal, because the only inventory change it makes is a pick and the refusal is
-  what stops the next one. A zone load re-creates the record from the last package that did get written.
+  mod does will clear that refusal: a pick is refused on such a body, and so is the deposit (D15;
+  `DepositOrderGate` refuses `WorkerRecordUnwritable`). A zone load re-creates the record from the last package that did get written.
   An explicit `ct_haul retire force` is a third way material goes, and it is excluded from the count for
   a reason rather than overlooked: the ordinary refusal names what he is holding, or says it could not be
   read - which is what it says in the very state above, where the record is unreadable - the forcing word
@@ -154,11 +158,14 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   item-drop behaviour to return what it carries to the world instead of letting the destruction take it. The cart
   detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing recreated from a name;
   a drop that failed is recorded as durable reconciliation evidence rather than silently deleted. **Voluntary
-  cancellation and retirement must never reach this path**, and the validator will refuse a death-drop call from
-  any other verb once that pin is authored with the implementation. `ct_haul retire` still refuses while a body
-  carries anything, and `retire force` still destroys and still says so. **D16 is decided and unimplemented**:
-  `GunnarDeathDropPort.cs` does not exist, no rule pins its call, and a Gunnar who dies today still loses what he
-  is carrying.
+  cancellation and retirement must never reach this path**, and the validator refuses a death-drop call from
+  any other verb. `ct_haul retire` still refuses while a body carries anything, and `retire force` still
+  destroys and still says so. **D16 is implemented (PR #446)**: the one drop call lives in
+  `Adapters/Workers/GunnarDeathDropPort.cs`, pinned by the validator and refused everywhere else, and so is any
+  Teamster code that could take health away. It **fails closed** (owner confirmation 2026-10-28): with Teamster or its
+  collection switch off, the shared work-authority rule refusing (not the host, a dedicated server, or another peer
+  connected), the start-up probe failed, his inventory never read, or a cart still attached after the detach,
+  nothing drops and what he carried is recorded as unresolved instead. Never observed in game.
 
 ## Local commands
 

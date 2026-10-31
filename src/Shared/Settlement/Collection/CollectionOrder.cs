@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TheConcernedCat.Interop.WorkArea;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 
@@ -104,8 +105,10 @@ internal enum WorkScopeSource
     /// respawn anchor.</summary>
     DefaultCampCircle = 2,
 
-    /// <summary>A Cartographer work area, through its capability (later).
-    /// </summary>
+    /// <summary>A work area the player drew in Concerned Cartographer and chose
+    /// for this order, read through <c>concernedcat.workarea/1</c> (#296 slice
+    /// 3). Its boundary is the polygon; the circle around it only bounds the
+    /// survey.</summary>
     CartographerWorkArea = 3,
 }
 
@@ -163,7 +166,105 @@ internal sealed class WorkScope
 
     public Guid WorldLoadEpoch { get; }
 
-    public bool Contains(SitePoint point) => Centre.HorizontalDistanceTo(point) <= RadiusMetres;
+    /// <summary>#296 slice 3: the drawn boundary of a Cartographer work area,
+    /// as described in this world load. Null for the circle sources, and null
+    /// for a Cartographer scope rebuilt from the journal, which keeps no
+    /// polygon: such a scope contains nothing (<see cref="Contains"/>) and
+    /// must be chosen again before any work.</summary>
+    public WorkAreaPolygon? Boundary { get; private set; }
+
+    /// <summary>The provider's stable id for a Cartographer work area; empty
+    /// for the circle sources and for a scope rebuilt from the journal.</summary>
+    public string AreaId { get; private set; } = string.Empty;
+
+    /// <summary>A Cartographer scope that has lost its boundary. It is never
+    /// worked from: it contains nothing and observes as not present.</summary>
+    public bool IsMissingBoundary => Source == WorkScopeSource.CartographerWorkArea && (Boundary == null || AreaId.Length == 0);
+
+    /// <summary>Inside the circle, and inside the drawn boundary when there is
+    /// one. A Cartographer scope without its boundary contains nothing: it fails
+    /// closed rather than becoming the circle around it.</summary>
+    public bool Contains(SitePoint point)
+    {
+        if (Centre.HorizontalDistanceTo(point) > RadiusMetres)
+        {
+            return false;
+        }
+
+        if (Source != WorkScopeSource.CartographerWorkArea)
+        {
+            return true;
+        }
+
+        return !IsMissingBoundary && Boundary!.Contains(point.X, point.Z);
+    }
+
+    /// <summary>Whether a point is outside the drawn boundary of a Cartographer
+    /// scope (always false for the circle sources). The survey uses it to skip
+    /// sources the circle reaches but the area does not.</summary>
+    public bool OutsideBoundary(SitePoint point) =>
+        Source == WorkScopeSource.CartographerWorkArea && (IsMissingBoundary || !Boundary!.Contains(point.X, point.Z));
+
+    /// <summary>A scope for a Cartographer work area: the polygon, inside the
+    /// smallest circle around its bounding box's centre that holds every
+    /// corner. The circle must fit the same 4-48 m radius every order has, so
+    /// an area wider than that is refused with its size, never clipped and
+    /// never widened.</summary>
+    public static bool TryForWorkArea(
+        string areaId, string areaName, string areaRevision, WorkAreaPolygon boundary, float groundY,
+        Guid worldLoadEpoch, out WorkScope? scope, out string failure)
+    {
+        scope = null;
+        if (string.IsNullOrEmpty(areaId) || boundary == null)
+        {
+            failure = "no work area was described";
+            return false;
+        }
+
+        float cx = boundary.CenterX;
+        float cz = boundary.CenterZ;
+        double furthest = 0d;
+        foreach (WorkAreaPoint corner in boundary.Points)
+        {
+            double dx = corner.X - cx;
+            double dz = corner.Z - cz;
+            furthest = Math.Max(furthest, Math.Sqrt((dx * dx) + (dz * dz)));
+        }
+
+        // Rounded up, plus a centimetre, so float rounding can never leave a
+        // corner just outside the circle.
+        float radius = (float)(Math.Ceiling(furthest * 10d) / 10d) + 0.01f;
+        if (furthest <= MaxRadiusMetres && radius > MaxRadiusMetres)
+        {
+            // The margin never refuses an area whose furthest corner is within
+            // the limit: "more than 48 m" is what is refused.
+            radius = MaxRadiusMetres;
+        }
+
+        if (radius < MinRadiusMetres)
+        {
+            radius = MinRadiusMetres;
+        }
+
+        if (radius > MaxRadiusMetres)
+        {
+            failure = "the work area \"" + areaName + "\" reaches " +
+                radius.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " m from its middle, and Thorstein works within " +
+                MaxRadiusMetres.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " m. Draw a smaller area for him";
+            return false;
+        }
+
+        var centre = new SitePoint(cx, float.IsNaN(groundY) || float.IsInfinity(groundY) ? 0f : groundY, cz);
+        scope = new WorkScope(
+            WorkScopeSource.CartographerWorkArea, centre, radius, "the work area \"" + areaName + "\"",
+            Planning.ScopeRevision.ForWorkArea(areaId, areaRevision), worldLoadEpoch)
+        {
+            Boundary = boundary,
+            AreaId = areaId,
+        };
+        failure = string.Empty;
+        return true;
+    }
 }
 
 internal enum DeliveryKind
