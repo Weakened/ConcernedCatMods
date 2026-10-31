@@ -205,13 +205,19 @@ under `<config>/ConcernedCatMods/ConcernedForeman/companions`). The game-free
   settlement area each waits, and says which.
 - **Nothing undoes it.** A lost tool never relocks him, and a replay grants nothing.
   A finished story never re-hires a worker the player dismissed.
-- **The carpenter's square is slice S2.** Until then `cf_settle quest examine` stands
-  in for examining it, and `cf_settle quest` shows the objectives.
+- **The carpenter's square (slice S2)** is Concerned NPC's shared keepsake. It lies near
+  your bed while this character's introduction has not begun, with the settlement runtime
+  on, for the host. Examining it does what `cf_settle quest examine` does; once the
+  introduction has begun it is taken away. It is local only (no network view, not an
+  item, never blocks). Its look is borrowed from the hammer, a proposal, since the game
+  has no carpenter's square. `cf_settle quest` shows the objectives.
 
 **OWNER GO-AROUND PENDING** (a disposable world, settlement runtime on, host):
 
-1. `cf_settle quest`: "not begun". `cf_settle quest examine`: the inscription and
-   his introduction, with both objectives open.
+1. `cf_settle quest`: "not begun". Walk to your bed: a worn carpenter's square lies
+   beside it. Hover it ("Worn carpenter's square", with your use key), then use it: the
+   inscription and his introduction on screen, with both objectives open. The square is
+   gone within a second. Walking through its spot is never blocked.
 2. Mark a settlement area, run `cf_worker spawn`, and hold an axe: `cf_settle give
    axe`. The axe objective is done and he is not yet recruited. Quit and reload:
    `cf_settle quest` still shows the axe done.

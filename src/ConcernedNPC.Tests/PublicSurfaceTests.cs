@@ -206,6 +206,7 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver",
         "TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder",
         "TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress",
+        "TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec",
         "TheConcernedCat.ConcernedNPC.Planning.INpcSourceAvailability",
         "TheConcernedCat.ConcernedNPC.Planning.JobManifest",
         "TheConcernedCat.ConcernedNPC.Planning.JobManifestLine",

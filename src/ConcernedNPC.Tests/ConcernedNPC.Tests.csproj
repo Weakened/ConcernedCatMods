@@ -33,7 +33,7 @@
          same boundary Concerned Steward and Concerned Foreman drew around their
          own plugin wiring, for the same reason. -->
     <Compile Include="..\ConcernedNPC\**\*.cs"
-             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\Body\Dressing\**\*.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
+             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\Body\Dressing\**\*.cs;..\ConcernedNPC\Body\Keepsakes\**\*.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
              LinkBase="Library" />
 
     <!-- Body/Dressing is the second exclusion, and the reason is not
@@ -49,7 +49,12 @@
          NpcWorkerDresser and NpcCustomizationPalette - the half of PublicSurfaceTests this
          assembly cannot see. The product build in scripts/verify.ps1 compiles
          it against the real game. Before the lift no test project compiled it
-         either. -->
+         either.
+
+         Body/Keepsakes is excluded for the same reason (#295 S2): meshes,
+         renderers, colliders, layers and the game's hover interfaces. Its one
+         game-free type, Keepsakes/NpcKeepsakeSpec, IS linked and tested here,
+         and its engine writes are pinned by the same validator audit. -->
 
     <!-- The shipped WorkerKey, linked ONLY so its slug rules can be compared
          against this library's. NpcIdentity is a separate type because a shared
