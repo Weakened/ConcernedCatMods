@@ -220,8 +220,9 @@ internal enum FellOutcome
 
 /// <summary>D19, game-free: which objects are small trees a worker may fell,
 /// where and when a hit is allowed, and how a hit's result is read. Shared so
-/// Teamster's Gunnar (#381) can apply the same rules; this file names no game
-/// type and calls nothing.</summary>
+/// Teamster's Gunnar (#381) can reuse the rules; D19 grants felling to Thorstein
+/// only, and Gunnar felling anything still needs its own owner decision. This
+/// file names no game type and calls nothing.</summary>
 internal static class SmallTreeFelling
 {
     /// <summary>The owner's 2026-10-31 clearance: never within this distance of

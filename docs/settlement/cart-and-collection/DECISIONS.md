@@ -524,7 +524,8 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
 - **Granted:** `Destructible.Damage` on exactly the four prefabs above, all tool tier 0, one hit per call.
   - The call is pinned in the single file `src/ConcernedForeman/Runtime/Collection/WorldFellingPort.cs`.
   - The hit is built from the issued axe's own item data: its damage, tool tier, item level and skill, with the
-    worker as attacker. Vanilla resolves the rest.
+    worker as attacker. It is the axe's plain damage: no skill factor, attack multipliers or status effects are
+    applied. Vanilla's damage handler resolves resistances, tool tier and health.
   - Durability follows vanilla's own rule. Vanilla wears a weapon on a hit only when the attacker is a player
     (`Attack`, `if (m_weapon.m_shared.m_useDurability && m_character.IsPlayer())`), so Thorstein's axe is not worn by
     felling. A broken axe is refused.
@@ -545,7 +546,9 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
 - Taking the wood, and felling as part of a collection order, belong to the next leaf, which will use the same-call
   custody granted above.
 - The eligibility rules are game-free in `src/Shared/Workers/Felling/SmallTreeFelling.cs`, so Teamster's Gunnar can
-  apply the same ones.
+  reuse them. **D19 grants felling to Thorstein only:** Gunnar felling anything still needs its own owner decision.
+- The #400 audit's refusals cover Foreman's `Runtime` folder, which is where the audit walks; code elsewhere in the
+  product is not scanned by it.
 
 **Not granted:**
 - full-size trees, logs, stumps, bushes or anything not on the list;

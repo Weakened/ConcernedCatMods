@@ -29,11 +29,13 @@ internal sealed class FellReport
 ///
 /// <b>The single authorised world call.</b> <c>Destructible.Damage</c> on one of
 /// the four allowlisted small trees, once per hit, here and nowhere else in
-/// Foreman (the #400 audit pins it; <c>TreeBase</c> and <c>TreeLog</c> are
-/// refused everywhere, decided but unused). The hit is built from the axe's own
-/// item data the way vanilla's melee attack builds one (damage, tool tier, item
-/// level, skill, the worker as attacker); vanilla resolves resistances, the tool
-/// tier, health and, at zero, its own <c>DropOnDestroyed</c> drops.
+/// Foreman's runtime (the #400 audit pins it there; <c>TreeBase</c> and
+/// <c>TreeLog</c> are refused in Foreman's runtime, decided but unused). The hit
+/// is built from the axe's own item data along the lines of vanilla's melee hit
+/// (damage, tool tier, item level, skill, the worker as attacker) but without the
+/// attacker's skill factor, attack multipliers or status effects, so it is the
+/// axe's plain damage. Vanilla then resolves resistances, the tool tier, health
+/// and, at zero, its own <c>DropOnDestroyed</c> drops.
 ///
 /// <b>Drops stay on the ground in this leaf.</b> Nothing is picked up, taken
 /// into custody or counted toward an order: the wood lies where vanilla dropped
@@ -269,8 +271,14 @@ internal sealed class WorldFellingPort
             health: destructible != null ? HealthOf(destructible, view) : 0f);
     }
 
+    /// <summary>Health as vanilla's damage handler reads it, with the same
+    /// default: base health plus the world-level bonus.</summary>
     private static float HealthOf(Destructible tree, ZNetView view) =>
-        view.IsValid() ? view.GetZDO().GetFloat(ZDOVars.s_health, tree.m_health) : 0f;
+        view.IsValid()
+            ? view.GetZDO().GetFloat(
+                ZDOVars.s_health,
+                tree.m_health + (Game.m_worldLevel * tree.m_health * (Game.instance != null ? Game.instance.m_worldLevelMineHPMultiplier : 0f)))
+            : 0f;
 
     /// <summary>His own best usable axe, read from his own inventory: the
     /// issued tool, never a clone and never one conjured for the hit.</summary>
@@ -293,11 +301,12 @@ internal sealed class WorldFellingPort
         return best;
     }
 
-    /// <summary>The hit vanilla's melee attack would build from this axe
-    /// (<c>Attack</c> in Valheim 1.0.21): tool tier, the item's own damage, item
-    /// level and world level, its skill, the worker as attacker and, because he
-    /// is not a player, the non-player hit type. No status effect, no skill
-    /// raise, no push.</summary>
+    /// <summary>A hit from this axe, built from the fields vanilla's melee
+    /// attack copies from the weapon (<c>Attack</c> in Valheim 1.0.21): tool
+    /// tier, the item's own damage, item level and world level, its skill, the
+    /// worker as attacker and, because he is not a player, the non-player hit
+    /// type. Not applied: the attacker's skill factor, attack multipliers,
+    /// status effects, skill raise and push.</summary>
     private static HitData HitFrom(ItemDrop.ItemData axe, Humanoid worker, Vector3 workerAt, Vector3 treeAt)
     {
         var hit = new HitData();
@@ -329,10 +338,14 @@ internal sealed class WorldFellingPort
         return nearest;
     }
 
+    /// <summary>The flat distance to the nearest player-built piece. The game's
+    /// search is a 3D sphere, so a piece 14 m away across a slope could sit
+    /// outside a 15 m sphere; the search is therefore four times wider and the
+    /// judgement is the flat distance, which errs towards refusing.</summary>
     private float NearestPieceMetres(Vector3 at)
     {
         _pieces.Clear();
-        Piece.GetAllPiecesInRadius(at, SmallTreeFelling.ClearanceMetres + 1f, _pieces);
+        Piece.GetAllPiecesInRadius(at, SmallTreeFelling.ClearanceMetres * 4f, _pieces);
         float nearest = float.PositiveInfinity;
         foreach (Piece piece in _pieces)
         {

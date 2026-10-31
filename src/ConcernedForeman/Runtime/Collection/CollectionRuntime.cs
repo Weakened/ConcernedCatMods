@@ -930,7 +930,7 @@ internal sealed class CollectionRuntime
         }
 
         SoloCollectionLoop? loop = world.Loop;
-        if ((loop?.Order != null && !CollectionOrderStates.IsTerminal(loop.State)) || Modes.Mode != ActorMode.Resting)
+        if ((loop?.Order != null && !CollectionOrderStates.IsTerminal(loop.State)) || Modes.Mode != ActorMode.Resting || Modes.JobId != null)
         {
             return "Not felled: Thorstein is busy with another job. Let it finish, or cancel it first.";
         }

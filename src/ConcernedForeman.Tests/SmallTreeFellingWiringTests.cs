@@ -71,6 +71,10 @@ public sealed class SmallTreeFellingWiringTests
         Assert.Contains("nearestBuiltPieceMetres: NearestPieceMetres(treeAt)", port);
         Assert.Contains("nearestPlayerMetres: NearestPlayerMetres(treeAt)", port);
         Assert.Contains("piece.IsPlacedByPlayer()", port);
+
+        // The game's piece search is a sphere; it must reach well past the flat
+        // clearance so a piece across a slope is still measured.
+        Assert.Contains("Piece.GetAllPiecesInRadius(at, SmallTreeFelling.ClearanceMetres * 4f, _pieces);", port);
     }
 
     [Fact]
@@ -86,6 +90,7 @@ public sealed class SmallTreeFellingWiringTests
         string body = runtime.Substring(fell, runtime.IndexOf("private WorldFellingPort? _felling;", fell, StringComparison.Ordinal) - fell);
         Assert.Contains("_settings.ThorsteinFellsSmallTrees.Value", body);
         Assert.Contains("Modes.Mode != ActorMode.Resting", body);
+        Assert.Contains("Modes.JobId != null", body);
         Assert.Contains("scope!.Source != WorkScopeSource.DefaultCampCircle", body);
     }
 }
