@@ -124,8 +124,9 @@ Dverger worker body behind a setting, plain Dverger as the fallback; no prefab r
 **What is granted.** While she works, her Matronly hair is put on her own saved `CS_Steward` worker body, locally, by
 Concerned NPC's `NpcWorkerDresser`, which refuses any other body; a piece that will not attach or fit is taken off.
 
-**What is not granted.** No beard, no garments, no prefab, saved data, network object or world change.
+**What is not granted.** The dresser adds no beard and no garments (her leather is the existing `VisEquipment`
+look), and changes no prefab, saved data, network object or world state.
 
 **Where it is enforced.** `Domain/Appearance/SunnivaLookPlan.cs` (`WorkerSpec`), `Runtime/SunnivaPresentation.cs`
 (`OnWorkerBodyLoaded` / `OnWorkerBodyGone`), `Runtime/StewardRuntime.cs` (`BindBody`, `RefreshCensus`),
-`[Appearance] WorkerLook`; `SunnivaFigureTests`. **Owner go-around pending:** smoke test 3b.5.
+`[Appearance] WorkerLook`; `SunnivaFigureTests`. **Owner go-around pending:** smoke test 3b, item 5.
