@@ -341,9 +341,36 @@ move fails. Nothing is recreated. Other roles still inherit the same preconditio
 through this API, they need their own role-side resolution path or must keep uncertainty unreachable.
 
 What is still not here is the larger Steward executor migration. `MaintenanceJobRole` and `NpcJobDriver` have a
-tested maintenance-round model, but the shipped runtime does not construct it; adopting that batch driver without a
-second live executor is a separate, broader cut-over. Gunnar and the other role leaves are unchanged by this first
-caller.
+tested maintenance-round model, but the Steward's shipped runtime does not construct it; adopting that batch driver
+without a second live executor is a separate, broader cut-over.
+
+## 10. The second production adoption: Gunnar's collection tour (#379)
+
+Concerned Teamster's Gunnar is the second caller, for his on-foot collection tour - which, unlike the Steward's
+round, **does** construct `NpcJobDriver` and walks it load by load. Teamster owns the `teamster_gunnar_tour_<world>.tsv`
+name beside its death record, `format 1`, the `plan` and `carried` rows and the `end <n>` trailer, and refuses a key
+it would have to escape. The tour runtime stays the only executor; `GunnarTourPlan` is its game-free witness. Every
+pick and every trip to the chest is intended before the pinned port is asked and concluded from a measurement
+afterwards, and the two material-moving phases are reached through the Steward's measured no-op. A tour reserves
+nothing and carries no vehicle, and its codec refuses both.
+
+Two differences from the first caller are worth naming. Gunnar's plan is revalidated with
+`NpcPlanRecovery.Revalidate`, not `Reconstruct`: a reconstruction claims the body under a holder name, and Gunnar's
+body is claimed by his own identity lease when a job starts, so a claim here would make the tour that tried to
+resume answer "busy". The body question is answered by Teamster's census instead, and revalidation waits until
+that census, his inventory record, the switch and the authority can all answer. And the arbitration ladder of §7
+does not apply to him: one job holds him at a time and nothing preempts another, so "resumes rather than
+restarts" is a plan kept open across whatever held him and continued afterwards, with the same job id, progress
+and load. His person-side exit is `ct_collect resolve`, which quarantines an unreadable plan through
+`TryQuarantine` before writing anything - so that affordance now has a second caller. No library source changed and
+the version did not move: 0.5.0's public surface was enough, which the product build - referencing the library as
+an assembly - proves. `docs/mods/concerned-teamster/GUNNAR_COLLECTION.md` §6h has the rest.
+
+**Lead defaults 2026-10-30, owner may override.** The Lane C lead accepted five behaviour questions as defaults:
+(1) a crash rollback - the measured load differing from the record - ends needs-attention; (2) a death whose whole
+load was measured onto the ground concludes the plan empty and ends it Refunded; (3) `ct_haul retire force` with an
+open plan ends needs-attention, as a lost body; (4) an ordered pick and an ordered deposit are refused while a plan is
+open; (5) nothing continues automatically after a reload - the chest and the area must be re-pointed first.
 
 One neighbouring dead end was closed rather than documented. `NpcPlanState.WithWorld` - §3's answer to staleness -
 had zero references and zero tests, so a re-planned plan re-planned for ever: it is in no world, a stale plan never
