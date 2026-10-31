@@ -31,8 +31,9 @@ the mod and says why.
   drawn once - five low torches are one trip to the chest, not five. Urgency is
   how long a light has left at its own burn rate; lights are topped up to a
   configurable burning time, not to full. Urgency decides which lights are in
-  the round; she walks them as a short circuit from the chest, and only a light
-  that would go out before the circuit reached it is walked first. At each stop
+  the round and which trip each goes on; she walks each trip as a short circuit
+  from the chest, and only a light that might go out before the trip is over is
+  visited first. At each stop
   she checks the light
   again (filled by you or destroyed: she moves on), walks there on her own feet,
   and feeds real fuel one piece at a time through vanilla's own

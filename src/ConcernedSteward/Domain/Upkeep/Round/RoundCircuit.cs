@@ -4,49 +4,58 @@ using TheConcernedCat.Settlement.Worker;
 
 namespace TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 
-/// <summary>The order one provisioned tour is walked in (#382: "route an
-/// efficient circuit"), expressed as the routing bands Concerned NPC's planner
-/// walks.
+/// <summary>The order one round is walked in (#382: "route an efficient
+/// circuit"), expressed as the routing bands Concerned NPC's planner walks: it
+/// finishes a higher band before a lower one, seeds and fills each trip from the
+/// highest band left, and orders by distance only inside a band.
 ///
 /// <b>The rule.</b>
 /// <list type="number">
 /// <item>Urgency decides <i>which</i> lights are in the round: every light under
 /// <c>RefuelBelowSeconds</c> is a stop, and when fuel is short the most urgent are
 /// the ones funded (<see cref="MaintenanceRound"/>, unchanged).</item>
-/// <item>Within the tour, every stop shares one band, so the planner walks them as a
-/// short circuit from the chest (nearest neighbour, then a bounded two-opt) instead
-/// of in strict urgency order, which zigzags.</item>
-/// <item>A stop that would go out before she reached it on that circuit is promoted
-/// to a band of its own, walked first. "Would go out" is judged on a deliberately
-/// pessimistic walk of the same circuit: nearest neighbour from the chest, a return
-/// to the chest whenever the next stop no longer fits in her hands, a slow
-/// <see cref="WalkMetresPerSecond"/> and <see cref="SecondsPerStop"/> spent at every
-/// stop before it.</item>
+/// <item>Urgency decides <i>which trip</i> a light is in: the stops, most urgent
+/// first, are packed greedily into trips of what she can carry, and each trip gets
+/// a band range above every later trip's.</item>
+/// <item>Inside a trip, every stop shares one band, so the planner walks them as a
+/// short circuit (nearest neighbour, then a bounded two-opt) instead of in strict
+/// urgency order, which zigzags.</item>
+/// <item>A stop that might not last until its trip is over is promoted above the
+/// trip's circuit, and promoted stops keep urgency order among themselves. "Might
+/// not last" compares the light's time left with the <i>end</i> of its trip on a
+/// deliberately slow estimate - every earlier trip, a walk back to the chest and a
+/// collection between trips, <see cref="WalkMetresPerSecond"/>,
+/// <see cref="SecondsPerStop"/> at every stop and <see cref="StartAllowanceSeconds"/>
+/// to reach the chest at all - so neither the circuit's own reordering nor the
+/// two-opt pass can bring a light later than the estimate. Promotion is repeated
+/// with the promoted stops walked first until nothing new is promoted.</item>
 /// </list>
 ///
 /// So "closest to going out first" still means what a player would want - nothing
-/// starves for the sake of a shorter walk - without the walk order being a
-/// one-second-wide sort of how much each light has left. Revalidation at each stop
-/// is untouched. Game-free and deterministic: ties break on the light's key.</summary>
+/// is left to go out for the sake of a shorter walk - without the walk order being
+/// a one-second-wide sort of how much each light has left. Revalidation at each
+/// stop is untouched. Game-free and deterministic: ties break on the light's key.
+///
+/// <b>Stated limit.</b> The estimate is an estimate. A light already about to go
+/// out when the round is planned can go out anyway; promotion makes it the first
+/// thing she walks to, not a guarantee.</summary>
 internal static class RoundCircuit
 {
-    /// <summary>The band every stop of the tour shares.</summary>
-    internal const int InTour = 1;
-
-    /// <summary>The band of a stop that would go out before the circuit reached it.
-    /// </summary>
-    internal const int WouldGoOut = 2;
-
-    /// <summary>A slow walk, on purpose: overestimating her time to a light can only
-    /// promote it, never let it starve.</summary>
+    /// <summary>A slow walk, on purpose: overestimating her time to a light can
+    /// only promote it, never leave it to go out.</summary>
     internal const float WalkMetresPerSecond = 1.0f;
 
     /// <summary>Time spent at each stop before she moves on, generously.</summary>
     internal const float SecondsPerStop = 5f;
 
+    /// <summary>Time allowed for reaching the chest and collecting, before a trip.
+    /// </summary>
+    internal const float StartAllowanceSeconds = 30f;
+
     /// <summary>The routing band of each stop, in the order given.</summary>
-    /// <param name="chest">Where every trip starts and returns to.</param>
-    /// <param name="stops">The round's stops.</param>
+    /// <param name="chest">The chest every trip starts at and returns to.</param>
+    /// <param name="stops">The round's stops, <b>most urgent first</b> (as
+    /// <see cref="RoundPlan.Stops"/> is).</param>
     /// <param name="unitsPerTrip">What she can carry at once; zero or less means
     /// everything in one trip.</param>
     internal static int[] Bands(SitePoint chest, IReadOnlyList<LightNeed> stops, int unitsPerTrip)
@@ -57,59 +66,96 @@ internal static class RoundCircuit
         }
 
         var bands = new int[stops.Count];
-        for (int index = 0; index < bands.Length; index++)
-        {
-            bands[index] = InTour;
-        }
+        List<List<int>> trips = Trips(stops, unitsPerTrip);
+        int span = stops.Count + 2;
+        float elapsed = StartAllowanceSeconds;
 
-        foreach (Arrival arrival in Walk(chest, stops, unitsPerTrip))
+        for (int trip = 0; trip < trips.Count; trip++)
         {
-            if (stops[arrival.Stop].SecondsLeft <= arrival.Seconds)
+            List<int> members = trips[trip];
+            int floor = (trips.Count - trip) * span;
+            var promoted = new List<int>();
+
+            float end;
+            SitePoint last;
+            while (true)
             {
-                bands[arrival.Stop] = WouldGoOut;
+                end = elapsed + TripSeconds(chest, stops, promoted, members, out last);
+                var newly = new List<int>();
+                foreach (int stop in members)
+                {
+                    if (!promoted.Contains(stop) && stops[stop].SecondsLeft <= end)
+                    {
+                        newly.Add(stop);
+                    }
+                }
+
+                if (newly.Count == 0)
+                {
+                    break;
+                }
+
+                promoted.AddRange(newly);
+
+                // Urgency order: the stops arrive most urgent first.
+                promoted.Sort();
             }
+
+            foreach (int stop in members)
+            {
+                bands[stop] = floor;
+            }
+
+            for (int rank = 0; rank < promoted.Count; rank++)
+            {
+                bands[promoted[rank]] = floor + promoted.Count - rank;
+            }
+
+            elapsed = end + (last.HorizontalDistanceTo(chest) / WalkMetresPerSecond) + StartAllowanceSeconds;
         }
 
         return bands;
     }
 
-    /// <summary>The pessimistic walk the promotion is judged on: when each stop is
-    /// reached, in visiting order.</summary>
-    internal static IReadOnlyList<Arrival> Walk(SitePoint chest, IReadOnlyList<LightNeed> stops, int unitsPerTrip)
+    /// <summary>The trips, packed first-fit in urgency order: each trip starts
+    /// with the most urgent stop left and takes every later stop that still fits
+    /// in her hands. So every trip is full - nothing left over could join it - and
+    /// the planner, which may top a trip up from a lower band, has nothing to top it
+    /// up with that would make the trip longer than estimated. Indices into the
+    /// stops given.</summary>
+    internal static List<List<int>> Trips(IReadOnlyList<LightNeed> stops, int unitsPerTrip)
     {
-        var arrivals = new List<Arrival>(stops.Count);
-        var left = new List<int>(stops.Count);
+        var trips = new List<List<int>>();
+        var left = new List<int>();
         for (int index = 0; index < stops.Count; index++)
         {
             left.Add(index);
         }
 
-        SitePoint at = chest;
-        float elapsed = 0f;
-        int carried = 0;
         while (left.Count > 0)
         {
-            int next = Nearest(stops, left, at, carried, unitsPerTrip);
-            if (next < 0)
+            var current = new List<int> { left[0] };
+            int carried = Math.Max(0, stops[left[0]].Units);
+            left.RemoveAt(0);
+            for (int index = 0; index < left.Count;)
             {
-                // Nothing left fits in her hands: back to the chest for the next trip.
-                elapsed += at.HorizontalDistanceTo(chest) / WalkMetresPerSecond;
-                at = chest;
-                carried = 0;
-                continue;
+                int units = Math.Max(0, stops[left[index]].Units);
+                if (unitsPerTrip <= 0 || carried + units <= unitsPerTrip)
+                {
+                    current.Add(left[index]);
+                    carried += units;
+                    left.RemoveAt(index);
+                    continue;
+                }
+
+                index++;
             }
 
-            int stop = left[next];
-            left.RemoveAt(next);
-            SitePoint place = stops[stop].Light.Position;
-            elapsed += at.HorizontalDistanceTo(place) / WalkMetresPerSecond;
-            arrivals.Add(new Arrival(stop, elapsed));
-            elapsed += SecondsPerStop;
-            carried += Math.Max(0, stops[stop].Units);
-            at = place;
+            current.Sort();
+            trips.Add(current);
         }
 
-        return arrivals;
+        return trips;
     }
 
     /// <summary>Total walking distance of visiting the stops in the given order
@@ -127,45 +173,48 @@ internal static class RoundCircuit
         return total;
     }
 
-    private static int Nearest(IReadOnlyList<LightNeed> stops, List<int> left, SitePoint at, int carried, int unitsPerTrip)
+    /// <summary>How long one trip takes on the slow estimate: the promoted stops
+    /// in urgency order, then the rest by nearest neighbour.</summary>
+    private static float TripSeconds(
+        SitePoint chest, IReadOnlyList<LightNeed> stops, List<int> promoted, List<int> members, out SitePoint last)
     {
-        int best = -1;
-        float bestDistance = 0f;
-        for (int index = 0; index < left.Count; index++)
+        float metres = 0f;
+        SitePoint at = chest;
+        foreach (int stop in promoted)
         {
-            LightNeed stop = stops[left[index]];
-            bool fits = unitsPerTrip <= 0 || carried == 0 || carried + Math.Max(0, stop.Units) <= unitsPerTrip;
-            if (!fits)
-            {
-                continue;
-            }
+            metres += at.HorizontalDistanceTo(stops[stop].Light.Position);
+            at = stops[stop].Light.Position;
+        }
 
-            float distance = at.HorizontalDistanceTo(stop.Light.Position);
-            if (best < 0 || distance < bestDistance
-                || (distance == bestDistance
-                    && string.CompareOrdinal(stop.Light.Key.Value, stops[left[best]].Light.Key.Value) < 0))
+        var rest = new List<int>();
+        foreach (int stop in members)
+        {
+            if (!promoted.Contains(stop))
             {
-                best = index;
-                bestDistance = distance;
+                rest.Add(stop);
             }
         }
 
-        return best;
-    }
-
-    /// <summary>When the pessimistic walk reaches one stop.</summary>
-    internal readonly struct Arrival
-    {
-        internal Arrival(int stop, float seconds)
+        while (rest.Count > 0)
         {
-            Stop = stop;
-            Seconds = seconds;
+            int best = 0;
+            for (int index = 1; index < rest.Count; index++)
+            {
+                float here = at.HorizontalDistanceTo(stops[rest[index]].Light.Position);
+                float there = at.HorizontalDistanceTo(stops[rest[best]].Light.Position);
+                if (here < there || (here == there
+                    && string.CompareOrdinal(stops[rest[index]].Light.Key.Value, stops[rest[best]].Light.Key.Value) < 0))
+                {
+                    best = index;
+                }
+            }
+
+            metres += at.HorizontalDistanceTo(stops[rest[best]].Light.Position);
+            at = stops[rest[best]].Light.Position;
+            rest.RemoveAt(best);
         }
 
-        /// <summary>Index into the stops given.</summary>
-        public int Stop { get; }
-
-        /// <summary>Seconds after leaving the chest.</summary>
-        public float Seconds { get; }
+        last = at;
+        return (metres / WalkMetresPerSecond) + (members.Count * SecondsPerStop);
     }
 }

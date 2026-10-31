@@ -201,7 +201,7 @@ internal sealed class MaintenanceJobRole : INpcJobRole
         Func<Designation?> settlement,
         Func<string> epoch,
         MaintenanceThresholds thresholds,
-        int unitsPerTrip = 0)
+        int unitsPerTrip)
     {
         _world = world;
         _unitsPerTrip = unitsPerTrip;
@@ -234,13 +234,22 @@ internal sealed class MaintenanceJobRole : INpcJobRole
         _plannedRound = round;
         _hasPlannedRound = true;
 
-        // #382 "route an efficient circuit": urgency chose these stops; the walk
-        // order is a short circuit from the chest, with only a light that would go
-        // out before it was reached walked first (RoundCircuit).
+        // #382 "route an efficient circuit": urgency chose these stops and which
+        // trip each is in; inside a trip the walk is a short circuit from the chest,
+        // with only a light that might not last the trip walked first (RoundCircuit).
         IReadOnlyList<LightNeed> stops = round.Stops;
-        SitePoint chest = round.Sources.Count > 0
-            ? round.Sources[0].Position
-            : stops.Count > 0 ? stops[0].Light.Position : default;
+        SitePoint chest = stops.Count > 0 ? stops[0].Light.Position : default;
+        foreach (SupplySighting source in round.Sources)
+        {
+            // The first chest she may take from; a deposit-only one is never where a
+            // trip starts. (With several, the planner picks by nearness to where she
+            // stands; StartAllowanceSeconds covers reaching whichever it is.)
+            if (source.CanTake)
+            {
+                chest = source.Position;
+                break;
+            }
+        }
         int[] bands = RoundCircuit.Bands(chest, stops, _unitsPerTrip);
         for (int index = 0; index < stops.Count; index++)
         {

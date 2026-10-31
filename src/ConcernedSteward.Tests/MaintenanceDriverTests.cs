@@ -102,7 +102,7 @@ public sealed class MaintenanceDriverTests
         }
 
         internal MaintenanceJobRole Role() => new MaintenanceJobRole(
-            World, () => Round, Look, () => Settlement, () => Lights.Epoch, Shipped);
+            World, () => Round, Look, () => Settlement, () => Lights.Epoch, Shipped, 50);
 
         /// <summary>Starts a job the way the runtime will: through
         /// <c>DriverFor</c>, over the adoption that registered her.</summary>
@@ -232,9 +232,9 @@ public sealed class MaintenanceDriverTests
         // Thirty seconds left, forty-four metres the wrong way: on the circuit she
         // would reach it after a minute, so it goes first and does not starve.
         var camp = new Camp(
-            Lights.Light("x18", fuel: 2.2f, x: 18f),
-            Lights.Light("x10", fuel: 2.6f, x: 10f),
-            Lights.Light("x2", fuel: 2.8f, x: 2f),
+            Lights.Light("x18", fuel: 3.0f, x: 18f),
+            Lights.Light("x10", fuel: 3.5f, x: 10f),
+            Lights.Light("x2", fuel: 4.0f, x: 2f),
             Lights.Light("far", fuel: 0.5f, x: -24f));
 
         List<PlannedStep> walked = Walk(camp.Driver());
@@ -242,6 +242,45 @@ public sealed class MaintenanceDriverTests
 
         Assert.Equal("far", services[0]);
         Assert.Equal(new[] { "far", "x2", "x10", "x18" }, services);
+    }
+
+    [Fact]
+    public void Lights_that_would_go_out_keep_urgency_order_among_themselves()
+    {
+        // Two lights that might not last: the one with twelve seconds left is far,
+        // the one with a minute left is near. The far one is walked first.
+        var camp = new Camp(
+            Lights.Light("near-doomed", fuel: 1.0f, x: 18f),
+            Lights.Light("far-doomed", fuel: 0.2f, x: -24f),
+            Lights.Light("x10", fuel: 3.5f, x: 10f));
+
+        string[] services = Walk(camp.Driver())
+            .Where(step => !step.IsCollect).Select(step => step.Step.Subject).ToArray();
+
+        Assert.Equal(new[] { "far-doomed", "near-doomed", "x10" }, services);
+    }
+
+    [Fact]
+    public void When_the_round_takes_several_trips_urgency_decides_which_trip_a_light_is_in()
+    {
+        // She can carry one light's fuel at a time, so every light is its own trip.
+        // The most urgent light is forty metres the other way from a chain of less
+        // urgent ones. Seeded by nearness alone, the planner follows the chain and
+        // leaves it for the last trip; seeded by urgency, it is the first.
+        var camp = new Camp(
+            Lights.Light("urgent", fuel: 2.0f, x: -40f),
+            Lights.Light("c28", fuel: 2.5f, x: 28f),
+            Lights.Light("c36", fuel: 3.0f, x: 36f),
+            Lights.Light("c44", fuel: 3.5f, x: 44f),
+            Lights.Light("c52", fuel: 4.0f, x: 52f),
+            Lights.Light("c60", fuel: 4.5f, x: 60f));
+
+        List<PlannedStep> walked = Walk(camp.Driver(unitsPerTrip: 10));
+        string[] services = walked.Where(step => !step.IsCollect).Select(step => step.Step.Subject).ToArray();
+
+        Assert.Equal(6, services.Length);
+        Assert.Equal("urgent", services[0]);
+        Assert.Equal(new[] { "urgent", "c28", "c36", "c44", "c52", "c60" }, services);
     }
 
     [Fact]
@@ -276,9 +315,11 @@ public sealed class MaintenanceDriverTests
     [Fact]
     public void A_light_the_player_refilled_mid_route_is_skipped_and_the_round_carries_on()
     {
+        // Two minutes left each: one circuit band, so the stop for 'b' is handed
+        // out and the player's refill is what skips it.
         var camp = new Camp(
-            Lights.Light("a", fuel: 0f),
-            Lights.Light("b", fuel: 0f, x: 6f));
+            Lights.Light("a", fuel: 2f),
+            Lights.Light("b", fuel: 2f, x: 6f));
 
         NpcJobDriver driver = camp.Driver();
         var reported = new List<string>();
@@ -314,6 +355,38 @@ public sealed class MaintenanceDriverTests
         // Skipped is not owed: somebody else saw to it.
         Assert.True(driver.LastRound.IsComplete);
         Assert.Equal(3, walked.Count);
+    }
+
+    /// <summary>The same refill when both lights were about to go out, so each is
+    /// promoted into a band of its own: the driver re-asks before handing out the
+    /// next band's stop, sees it filled, and never sends her to it.</summary>
+    [Fact]
+    public void A_promoted_light_the_player_refilled_is_skipped_before_she_is_sent()
+    {
+        var camp = new Camp(
+            Lights.Light("a", fuel: 0f),
+            Lights.Light("b", fuel: 0f, x: 6f));
+
+        NpcJobDriver driver = camp.Driver();
+        var tended = new List<string>();
+
+        List<PlannedStep> walked = Walk(driver, at: (pump, step) =>
+        {
+            if (step.IsCollect)
+            {
+                pump.Done();
+                return;
+            }
+
+            camp.Replace(Lights.Light("b", fuel: 10f, x: 6f));
+            camp.Prepare();
+            tended.Add(step.Step.Subject);
+            pump.Done();
+        });
+
+        Assert.Equal(new[] { "a" }, tended);
+        Assert.Equal(NpcJobProgress.Finished, driver.Progress);
+        Assert.True(driver.LastRound.IsComplete);
     }
 
     /// <summary>A torch a troll knocked over between the plan and the stop.
@@ -564,7 +637,7 @@ public sealed class MaintenanceDriverTests
                 default, StewardNpcRole.Id, StewardRole.UpkeepJobId,
                 new SettlementWorkArea(settlement), world, 50),
             new MaintenanceJobRole(
-                world, () => default, _ => null, () => settlement, () => Lights.Epoch, Shipped),
+                world, () => default, _ => null, () => settlement, () => Lights.Epoch, Shipped, 50),
             registry);
 
         Assert.Equal(NpcJobProgress.Stopped, driver.Progress);

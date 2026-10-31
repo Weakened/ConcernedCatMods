@@ -1,10 +1,11 @@
+using System;
 using System.Linq;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 using TheConcernedCat.Settlement.Worker;
 
 namespace TheConcernedCat.ConcernedSteward.Tests;
 
-/// <summary>#382 "route an efficient circuit": the bands one tour is walked in.
+/// <summary>#382 "route an efficient circuit": the bands one round is walked in.
 /// </summary>
 public sealed class RoundCircuitTests
 {
@@ -19,6 +20,9 @@ public sealed class RoundCircuitTests
                 MaintenanceThresholds.Default)
             .Stops.ToArray();
 
+    private static int BandOf(LightNeed[] stops, int[] bands, string key) =>
+        bands[Array.FindIndex(stops, stop => stop.Light.Key.Value == key)];
+
     [Fact]
     public void A_tour_with_time_to_spare_is_one_band()
     {
@@ -29,56 +33,102 @@ public sealed class RoundCircuitTests
 
         int[] bands = RoundCircuit.Bands(Chest, stops, 50);
 
-        Assert.All(bands, band => Assert.Equal(RoundCircuit.InTour, band));
+        Assert.Single(bands.Distinct());
     }
 
     [Fact]
-    public void Only_the_light_that_would_go_out_on_the_way_is_promoted()
+    public void Only_the_light_that_might_not_last_the_trip_is_promoted()
     {
         LightNeed[] stops = Stops(
-            Lights.Light("near", fuel: 0.5f, x: 18f),
+            Lights.Light("near", fuel: 4f, x: 18f),
             Lights.Light("far", fuel: 0.5f, x: -40f),
-            Lights.Light("mid", fuel: 3f, x: 2f));
+            Lights.Light("mid", fuel: 4.5f, x: 2f));
 
         int[] bands = RoundCircuit.Bands(Chest, stops, 50);
-        string Band(string key) => bands[System.Array.FindIndex(stops, s => s.Light.Key.Value == key)].ToString();
 
-        // "near" is reached in two seconds with thirty to spare; "far" is reached
-        // after about a minute with thirty left.
-        Assert.Equal(RoundCircuit.InTour.ToString(), Band("near"));
-        Assert.Equal(RoundCircuit.WouldGoOut.ToString(), Band("far"));
-        Assert.Equal(RoundCircuit.InTour.ToString(), Band("mid"));
+        Assert.True(BandOf(stops, bands, "far") > BandOf(stops, bands, "near"));
+        Assert.Equal(BandOf(stops, bands, "near"), BandOf(stops, bands, "mid"));
     }
 
     [Fact]
-    public void A_return_to_the_chest_between_trips_counts_towards_going_out()
+    public void Promoted_lights_keep_urgency_order()
     {
-        // Two lights that each fill her hands. With room for both, neither is
-        // promoted; with room for one, the walk the promotion is judged on goes back
-        // to the chest before the second, so the second is reached later.
         LightNeed[] stops = Stops(
-            Lights.Light("first", fuel: 0.5f, x: 10f),
-            Lights.Light("second", fuel: 0.8f, x: 0f));
+            Lights.Light("ten-seconds", fuel: 1f / 6f, x: -30f),
+            Lights.Light("a-minute", fuel: 1f, x: 18f));
 
-        Assert.All(RoundCircuit.Bands(Chest, stops, 0), band => Assert.Equal(RoundCircuit.InTour, band));
+        int[] bands = RoundCircuit.Bands(Chest, stops, 50);
 
-        var arrivals = RoundCircuit.Walk(Chest, stops, stops.Max(stop => stop.Units)).ToArray();
-        Assert.Equal(2, arrivals.Length);
-        Assert.True(arrivals[1].Seconds > arrivals[0].Seconds + 20f, "no return trip was counted");
+        Assert.True(BandOf(stops, bands, "ten-seconds") > BandOf(stops, bands, "a-minute"));
     }
 
     [Fact]
-    public void The_same_lights_in_any_order_give_the_same_walk()
+    public void Every_trip_is_above_every_later_one_and_urgency_fills_the_first()
+    {
+        LightNeed[] stops = Stops(
+            Lights.Light("urgent", fuel: 2f, x: -40f),
+            Lights.Light("c28", fuel: 2.5f, x: 28f),
+            Lights.Light("c36", fuel: 3f, x: 36f));
+        int perLight = stops.Max(stop => stop.Units);
+
+        var trips = RoundCircuit.Trips(stops, perLight);
+        int[] bands = RoundCircuit.Bands(Chest, stops, perLight);
+
+        Assert.Equal(3, trips.Count);
+        Assert.Equal("urgent", stops[trips[0][0]].Light.Key.Value);
+        Assert.True(BandOf(stops, bands, "urgent") > BandOf(stops, bands, "c28"));
+        Assert.True(BandOf(stops, bands, "c28") > BandOf(stops, bands, "c36"));
+    }
+
+    [Fact]
+    public void A_return_to_the_chest_between_trips_can_promote_a_later_light()
+    {
+        // In one trip nothing is promoted. With room for one light at a time, the
+        // less urgent light goes on the second trip and waits for a walk back to the
+        // chest and a second collection, which it does not have time for, so it is
+        // promoted within its own trip.
+        LightNeed[] stops = Stops(
+            Lights.Light("later", fuel: 1.5f, x: 10f),
+            Lights.Light("sooner", fuel: 1.3f, x: 0f));
+
+        Assert.Single(RoundCircuit.Bands(Chest, stops, 0).Distinct());
+
+        int perLight = stops.Max(stop => stop.Units);
+        Assert.Equal(2, RoundCircuit.Trips(stops, perLight).Count);
+        int[] apart = RoundCircuit.Bands(Chest, stops, perLight);
+
+        int floorOfSecondTrip = 1 * (stops.Length + 2);
+        Assert.True(BandOf(stops, apart, "later") > floorOfSecondTrip, "the late light was not promoted");
+        Assert.True(BandOf(stops, apart, "sooner") > BandOf(stops, apart, "later"), "trip order lost");
+    }
+
+    [Fact]
+    public void Trips_are_full_so_the_planner_has_nothing_to_add()
+    {
+        // Packed first-fit: a small later stop joins an earlier trip it fits in.
+        LightNeed[] stops = Stops(
+            Lights.Light("big-a", fuel: 0.1f, x: 0f),
+            Lights.Light("big-b", fuel: 0.5f, x: 4f),
+            Lights.Light("small", fuel: 4.5f, maxFuel: 6f, x: 8f));
+
+        int small = Array.FindIndex(stops, stop => stop.Light.Key.Value == "small");
+        int bigA = Array.FindIndex(stops, stop => stop.Light.Key.Value == "big-a");
+        int capacity = stops[bigA].Units + stops[small].Units;
+
+        var trips = RoundCircuit.Trips(stops, capacity);
+
+        Assert.Equal(2, trips.Count);
+        Assert.Contains(small, trips[0]);
+    }
+
+    [Fact]
+    public void The_same_lights_give_the_same_bands()
     {
         LightNeed[] stops = Stops(
             Lights.Light("a", fuel: 2f, x: -14f),
             Lights.Light("b", fuel: 2.5f, x: 6f),
-            Lights.Light("c", fuel: 3f, x: 6f, z: 0f));
-        LightNeed[] reversed = stops.Reverse().ToArray();
+            Lights.Light("c", fuel: 0.2f, x: 6f));
 
-        string[] Order(LightNeed[] given) =>
-            RoundCircuit.Walk(Chest, given, 50).Select(arrival => given[arrival.Stop].Light.Key.Value).ToArray();
-
-        Assert.Equal(Order(stops), Order(reversed));
+        Assert.Equal(RoundCircuit.Bands(Chest, stops, 50), RoundCircuit.Bands(Chest, stops, 50));
     }
 }
