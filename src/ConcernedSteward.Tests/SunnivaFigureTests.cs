@@ -284,6 +284,45 @@ public sealed class SunnivaFigureTests
         Assert.DoesNotContain("AddComponent<Player>", presentation);
     }
 
+    // --- her worker body's hair (owner decision 2026-10-29) ------------------------------------------
+
+    [Fact]
+    public void Her_worker_body_is_asked_for_her_hair_only()
+    {
+        NpcLookSpec spec = SunnivaLookPlan.WorkerSpec(null);
+
+        Assert.Equal("Matronly", spec.Hair!.DisplayName);
+        Assert.Equal("$customization_hair12", spec.Hair.Token);
+        Assert.Null(spec.Beard);
+        Assert.Null(spec.Chest);
+        Assert.Null(spec.Legs);
+        Assert.Equal("Hair3", SunnivaLookPlan.WorkerSpec("Hair3").HairOverride);
+    }
+
+    [Fact]
+    public void Her_worker_body_is_dressed_by_the_library_behind_the_setting_when_it_binds()
+    {
+        string runtime = Runtime("StewardRuntime.cs");
+        string bind = Between(runtime, "private void BindBody(", "private void OnBodyLoaded(");
+        Assert.Contains("_presentation.OnWorkerBodyLoaded(", bind);
+
+        // Unbound, whatever was put on it comes off.
+        string census = Between(runtime, "private void RefreshCensus()", "private void BindBody(");
+        int gone = census.IndexOf("_presentation.OnWorkerBodyGone();", StringComparison.Ordinal);
+        int returns = census.IndexOf("return;", StringComparison.Ordinal);
+        Assert.True(gone >= 0 && returns > gone, "an unbound body keeps her hair reference");
+
+        string presentation = Runtime("SunnivaPresentation.cs");
+        string loaded = Between(presentation, "internal void OnWorkerBodyLoaded(", "internal void OnWorkerBodyGone()");
+        int gate = loaded.IndexOf("!_settings.WorkerLook.Value", StringComparison.Ordinal);
+        int dress = loaded.IndexOf("NpcWorkerDresser.TryDress(", StringComparison.Ordinal);
+        Assert.True(gate >= 0 && dress > gate, "her worker body is dressed with the setting off");
+        Assert.Contains("SunnivaLookPlan.WorkerSpec(", loaded);
+
+        string unload = Between(presentation, "internal void OnWorldUnloaded()", "internal void OnWorkerBodyLoaded(");
+        Assert.Contains("OnWorkerBodyGone();", unload);
+    }
+
     [Fact]
     public void Her_figure_is_dressed_and_placed_only_by_the_library()
     {

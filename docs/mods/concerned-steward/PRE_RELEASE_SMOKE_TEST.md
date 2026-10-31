@@ -94,7 +94,11 @@ Record PASS / FAIL / note against each numbered row.
    `[Appearance] ShowAtHome` off and on. **Expect:** she disappears and reappears
    accordingly, never doubled, and never while her worker body exists.
 4. A second player joined to your game sees no figure (host only).
-5. Note what you see if her worker body dies with nothing open: the figure may
+5. With `[Appearance] WorkerLook` on (the default), watch her worker body: her own
+   Matronly hair should sit on its head, not floating or clipping; record a
+   screenshot, and `cs_steward status` names the worker body look. Turn it off and
+   reload: the plain Dverger look. (OWNER GO-AROUND PENDING)
+6. Note what you see if her worker body dies with nothing open: the figure may
    appear at home while the death ragdoll is still visible where she fell.
 
 ## 4. One round, one trip to the chest — BLOCKS

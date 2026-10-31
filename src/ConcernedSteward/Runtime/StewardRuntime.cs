@@ -415,6 +415,7 @@ internal sealed class StewardRuntime
             // survives the thing it was a hold on.
             _npc.ReleaseBody();
             _body = null;
+            _presentation.OnWorkerBodyGone();
             return;
         }
 
@@ -447,6 +448,10 @@ internal sealed class StewardRuntime
         // VisEquipment is in front of us. Idempotent, so re-binding after a
         // reload costs nothing and a body that arrives undressed is dressed.
         _appearance.Apply(ai.gameObject);
+
+        // Owner decision 2026-10-29: her own hair on her worker body, locally,
+        // behind [Appearance] WorkerLook; plain Dverger when it will not fit.
+        _presentation.OnWorkerBodyLoaded(_census.Live?.Humanoid);
 
         ai.UseSitePolicy(new WorldStewardSitePolicy());
         ai.ErrorLog = message => _log(message);

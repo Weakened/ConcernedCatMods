@@ -35,7 +35,8 @@ internal sealed class StewardSettings
         ConfigEntry<float> refuelToSeconds,
         ConfigEntry<int> mostUnitsPerLight,
         ConfigEntry<int> carryPerTrip,
-        ConfigEntry<bool> showAtHome)
+        ConfigEntry<bool> showAtHome,
+        ConfigEntry<bool> workerLook)
     {
         RuntimeEnabled = runtimeEnabled;
         TendFiresEnabled = tendFiresEnabled;
@@ -53,6 +54,7 @@ internal sealed class StewardSettings
         MostUnitsPerLight = mostUnitsPerLight;
         CarryPerTrip = carryPerTrip;
         ShowAtHome = showAtHome;
+        WorkerLook = workerLook;
     }
 
     /// <summary>The master switch. False by default. With it false the Steward
@@ -149,6 +151,12 @@ internal sealed class StewardSettings
     /// figure, while she has no worker body in the world. On by default; the figure
     /// is local presentation only and changes nothing in the world.</summary>
     public ConfigEntry<bool> ShowAtHome { get; }
+
+    /// <summary>Owner decision 2026-10-29: while she works, her own hair is put
+    /// on her Dverger worker body, locally, by Concerned NPC's
+    /// <c>NpcWorkerDresser</c>. On by default; a piece that will not attach or
+    /// fit is taken off and she keeps the plain look.</summary>
+    public ConfigEntry<bool> WorkerLook { get; }
 
     public static StewardSettings Bind(ConfigFile config)
     {
@@ -287,8 +295,17 @@ internal sealed class StewardSettings
             "is spawned, placed, claimed or saved, and she still walks as her worker body whenever " +
             "\"cs_steward recruit\" brings it back. Turn off to show nothing at rest.");
 
+        ConfigEntry<bool> workerLook = config.Bind(
+            "Appearance",
+            "WorkerLook",
+            true,
+            "While Sunniva works, put her own hair (HairStyle, Matronly by default) on her worker body, " +
+            "locally. The worker body itself is unchanged: same creature, nothing saved, nothing networked. " +
+            "A piece that will not attach or does not fit on that body is taken off and she keeps the plain " +
+            "look. Applies the next time her worker body loads.");
+
         return new StewardSettings(
             runtime, tend, debug, creature, questItem, model, garment, garmentLegs, hairColour,
-            hairStyle, speak, below, to, most, carry, showAtHome);
+            hairStyle, speak, below, to, most, carry, showAtHome, workerLook);
     }
 }
