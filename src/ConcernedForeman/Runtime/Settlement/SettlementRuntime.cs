@@ -113,6 +113,27 @@ internal sealed class SettlementRuntime
         }
     }
 
+    /// <summary>#295 S2: this character's Tools of the Trade stage, or null when
+    /// it cannot be read. Never throws.</summary>
+    internal Domain.Npc.ThorsteinQuestStage? ThorsteinQuestStage()
+    {
+        try
+        {
+            ThorsteinQuest? quest = _designations.Quest;
+            return quest != null && _records.TryOpen(out SettlementRegister register, out SettlementJournal journal)
+                ? quest.StageFor(register, journal)
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>#295 S2: what examining the carpenter's square does - exactly
+    /// what <c>cf_settle quest examine</c> does.</summary>
+    internal string ExamineThorsteinKeepsake() => _designations.Execute(new[] { "quest", "examine" });
+
     /// <summary>The custody runtime collection and cooperation consume
     /// (<c>ICustodyRuntime</c>).</summary>
     internal ForemanCustodyRuntime Custody => _custody;

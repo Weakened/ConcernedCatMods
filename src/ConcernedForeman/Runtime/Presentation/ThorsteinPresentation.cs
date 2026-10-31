@@ -7,6 +7,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.ConcernedForeman.Domain.Presentation;
 using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedNPC.Body.Dressing;
+using TheConcernedCat.ConcernedNPC.Body.Keepsakes;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
@@ -63,6 +64,10 @@ internal sealed class ThorsteinPresentation
     private NpcFigureDresser? _dresser;
     private NpcWorkerDresser? _workerLook;
     private string _workerLookRefusal = string.Empty;
+    private NpcKeepsake? _keepsake;
+    private Vector3 _keepsakeFor;
+    private string _keepsakeRefusal = string.Empty;
+    private bool _keepsakeFailedThisWorld;
     private Vector3 _builtFor;
     private string _figureRefusal = string.Empty;
     private bool _buildFailedThisWorld;
@@ -124,14 +129,17 @@ internal sealed class ThorsteinPresentation
         _sincePass = 0f;
         try
         {
+            KeepsakePass();
             Pass();
         }
         catch (Exception exception)
         {
             // Latched, so a fault is one line and not one a second. The figure
-            // goes and both leases are given up: showing nothing is always safe.
+            // and the carpenter's square go, and both leases are given up:
+            // showing nothing is always safe.
             _faulted = true;
             TakeDown();
+            RemoveKeepsake();
             _bodies.Reconcile(ThorsteinBodyKind.None);
             _log("Thorstein's presentation stopped after a fault and will not be shown again in this world: " +
                 SafeFailure.Brief(exception));
@@ -198,6 +206,8 @@ internal sealed class ThorsteinPresentation
     internal void OnWorldUnloaded()
     {
         TakeDown();
+        RemoveKeepsake();
+        _keepsakeFailedThisWorld = false;
         ForgetWorkerLook();
         _bodies.Reconcile(ThorsteinBodyKind.None);
         _bodies.Forget();
@@ -254,6 +264,7 @@ internal sealed class ThorsteinPresentation
     /// <summary>Plugin teardown.</summary>
     internal void Dispose()
     {
+        RemoveKeepsake();
         ForgetWorkerLook();
         TakeDown();
         _bodies.Reconcile(ThorsteinBodyKind.None);
@@ -283,6 +294,16 @@ internal sealed class ThorsteinPresentation
         if (_dresser != null)
         {
             text += " Look: " + _dresser.Describe() + ".";
+        }
+
+        if (_keepsake != null && _keepsake.IsPlaced)
+        {
+            text += " The carpenter's square lies near your bed (looks like \"" + _keepsake.Source + "\"" +
+                (_keepsake.HoverObserved ? ", hovered" : string.Empty) + ").";
+        }
+        else if (_keepsakeRefusal.Length != 0)
+        {
+            text += " The carpenter's square could not be placed: " + _keepsakeRefusal + ".";
         }
 
         if (_workerLook != null && _workerLook.IsOnBody)
@@ -388,6 +409,106 @@ internal sealed class ThorsteinPresentation
         {
             Build(home, player.transform.position);
         }
+    }
+
+    /// <summary>#295 S2: the worn carpenter's square that opens Tools of the
+    /// Trade. Concerned NPC's shared keepsake: local, never saved or networked,
+    /// examined with the game's own use key. It lies near the respawn anchor
+    /// while this character's introduction has not begun and the settlement
+    /// runtime is on, and is taken away once it has. Examining it does exactly
+    /// what <c>cf_settle quest examine</c> does.</summary>
+    private void KeepsakePass()
+    {
+        Player? player = Player.m_localPlayer;
+        Vector3 home = default;
+        bool homeKnown = player != null && TryGetHome(out home);
+        bool near = homeKnown && IsWithin(player!.transform.position, home,
+            _keepsake != null ? KeepWithinMetres : ShowWithinMetres);
+        bool host = IsHost(ZNet.instance);
+        bool settlementOn = _settlementSettings.SettlementRuntimeEnabled.Value;
+
+        // The story is read only when everything else already says yes, so a
+        // player who has not opted in, or is far from home, pays nothing.
+        ThorsteinQuestStage? stage = host && settlementOn && near ? _settlement.ThorsteinQuestStage() : null;
+        if (!ToolsOfTheTrade.ShowKeepsake(stage, host, settlementOn, homeKnown, near))
+        {
+            RemoveKeepsake();
+            return;
+        }
+
+        if (_keepsake != null && Vector3.Distance(_keepsakeFor, home) > HomeMovedMetres)
+        {
+            RemoveKeepsake();
+        }
+
+        if (_keepsake != null || _keepsakeFailedThisWorld || player == null)
+        {
+            return;
+        }
+
+        Vector3 spot = ChooseSpot(home, player.transform.position, out Vector3 outward);
+        spot += outward.normalized * 0.6f;
+        _keepsake = NpcKeepsake.TryPlace(
+            ToolsOfTheTrade.Keepsake,
+            spot,
+            Quaternion.Euler(0f, 35f, 0f),
+            "CF_ThorsteinSquare",
+            "CF_ThorsteinSquareHarvest",
+            ExamineKeepsake,
+            _log,
+            out string refusal);
+        _keepsakeFor = home;
+        _keepsakeRefusal = refusal;
+        if (_keepsake == null)
+        {
+            _keepsakeFailedThisWorld = true;
+            _log("The carpenter's square could not be placed on this build: " + refusal +
+                ". cf_settle quest examine still opens Thorstein's introduction.");
+        }
+    }
+
+    private void ExamineKeepsake()
+    {
+        string result = _settlement.ExamineThorsteinKeepsake();
+        _log(result.Replace("\n", " "));
+        try
+        {
+            ShowOnScreen(result);
+        }
+        catch (Exception exception)
+        {
+            // A game build whose message screen changed shape loses the lines,
+            // never the examine: the story is already recorded.
+            _log("The introduction could not be shown on screen on this build: " + SafeFailure.Brief(exception));
+        }
+    }
+
+    /// <summary>Kept out of line, so a message-screen signature that changed
+    /// in a game update fails here, where the caller catches it, and not while
+    /// the caller itself is compiled.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ShowOnScreen(string text)
+    {
+        MessageHud hud = MessageHud.instance;
+        if (hud == null)
+        {
+            return;
+        }
+
+        foreach (string line in text.Split('\n'))
+        {
+            if (line.Trim().Length != 0)
+            {
+                hud.ShowMessage(MessageHud.MessageType.TopLeft, line.Trim());
+            }
+        }
+    }
+
+    private void RemoveKeepsake()
+    {
+        _keepsake?.Remove();
+        _keepsake = null;
+        _keepsakeRefusal = string.Empty;
     }
 
     private void Count()
@@ -515,6 +636,21 @@ internal sealed class ThorsteinPresentation
         }
 
         float limit = _figure != null ? KeepWithinMetres : ShowWithinMetres;
+        return IsWithin(player, home, limit);
+    }
+
+    /// <summary>Within <paramref name="limit"/> of home, with home's zone
+    /// loaded. The square uses its own limit, wider once it is placed, so a
+    /// player standing at the edge does not see it built and removed every
+    /// half second.</summary>
+    private static bool IsWithin(Vector3 player, Vector3 home, float limit)
+    {
+        ZoneSystem zones = ZoneSystem.instance;
+        if (zones == null || !zones.IsZoneLoaded(home))
+        {
+            return false;
+        }
+
         return (player - home).sqrMagnitude <= limit * limit;
     }
 
