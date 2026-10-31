@@ -14,7 +14,7 @@ by the #298 sweep; nothing below was rewritten.
 | Character | Product | State |
 |---|---|---|
 | Hulgi | Concerned Cartographer | **Applied.** `AppearancePlan` resolves `Long Braid` and `Handlebar` through the installed game's own localization, not a hardcoded prefab id |
-| Thorstein | Concerned Foreman | **Applied to his presentation body** (#295 step 1, 2026-10-27): `ThorsteinLookPlan` resolves `Mullet` and `Mustache` by the installed game's own label and then by `Hair32`/`Beard22`, and his colours go through the character screen's palette. The figure is shown at home only while he has no worker body. His worker body is still the `Dverger` clone and cannot wear them. **Not observed in game.** See `docs/mods/concerned-foreman/PROJECT.md` |
+| Thorstein | Concerned Foreman | **Applied to his presentation body** (#295 step 1, 2026-10-27): `ThorsteinLookPlan` resolves `Mullet` and `Mustache` by the installed game's own label and then by `Hair32`/`Beard22`, and his colours go through the character screen's palette. The figure is shown at home only while he has no worker body. His worker body is still the `Dverger` clone; since #295 S6 (owner decision 2026-10-29, DECISIONS.md D18) Concerned NPC's `NpcWorkerDresser` puts the same hair and beard pieces on it locally, behind `Thorstein/WorkerLook` (on), keeping the plain look for any piece that does not fit that rig. **Not observed in game.** See `docs/mods/concerned-foreman/PROJECT.md` |
 | Gunnar | Concerned Teamster | **Not applied**, same reason |
 
 Since the #295 lift, the dresser that applies these rows is Concerned NPC's

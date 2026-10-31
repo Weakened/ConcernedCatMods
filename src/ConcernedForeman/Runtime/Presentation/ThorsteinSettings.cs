@@ -17,13 +17,15 @@ internal sealed class ThorsteinSettings
         ConfigEntry<string> hair,
         ConfigEntry<string> beard,
         ConfigEntry<string> chest,
-        ConfigEntry<string> legs)
+        ConfigEntry<string> legs,
+        ConfigEntry<bool> workerLook)
     {
         ShowAtHome = showAtHome;
         Hair = hair;
         Beard = beard;
         ChestGarment = chest;
         LegsGarment = legs;
+        WorkerLook = workerLook;
     }
 
     internal ConfigEntry<bool> ShowAtHome { get; }
@@ -35,6 +37,10 @@ internal sealed class ThorsteinSettings
     internal ConfigEntry<string> ChestGarment { get; }
 
     internal ConfigEntry<string> LegsGarment { get; }
+
+    /// <summary>#295 S6 (owner decision 2026-10-29): his own hair and beard on
+    /// his worker body, locally. On by default so the playtest judges it.</summary>
+    internal ConfigEntry<bool> WorkerLook { get; }
 
     internal static ThorsteinSettings Bind(ConfigFile config)
     {
@@ -73,6 +79,15 @@ internal sealed class ThorsteinSettings
             string.Empty,
             "Empty for the default leather pants. Otherwise a legs item's label or prefab name.");
 
-        return new ThorsteinSettings(show, hair, beard, chest, legs);
+        ConfigEntry<bool> workerLook = config.Bind(
+            "Thorstein",
+            "WorkerLook",
+            true,
+            "While Thorstein works, put his own hair and beard (the Hair and Beard settings above) on his " +
+            "worker body, locally. The worker body itself is unchanged: same creature, nothing saved, nothing " +
+            "networked. A piece that will not attach or does not fit on that body is taken off and he keeps the " +
+            "plain look. Applies the next time his worker body loads.");
+
+        return new ThorsteinSettings(show, hair, beard, chest, legs, workerLook);
     }
 }
