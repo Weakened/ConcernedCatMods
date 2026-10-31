@@ -17,8 +17,8 @@ Added
   - Areas are saved per world in `.work-areas.tsv`, which backups include.
     Other Concerned mods can read them through `concernedcat.workarea/1`.
   - `cc_areas` does the same from the console.
-  - Drawing or saving an area never starts any work. Giving an area to a
-    worker comes later.
+  - Drawing or saving an area never starts any work. Workers are not
+    assigned here; Concerned Foreman, when installed, can use these areas.
 - **Living beside TheGreatestMap, HUDCompass and Round Minimap** (#419). With
   any of them installed, Concerned Cartographer recognises it and changes only
   its own behaviour; it does not need any of them.

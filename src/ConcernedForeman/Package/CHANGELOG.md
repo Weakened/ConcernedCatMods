@@ -11,6 +11,20 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — work areas from your map (#296, slice 3)
+
+- **Thorstein can collect in a work area you drew in Concerned Cartographer.**
+  Choose it with `cf_collect area <name>` or the collection panel's **Next map
+  area** button. He works inside the shape you drew, not the circle around it.
+- **A chosen area that cannot be used refuses the order and says why.** That
+  covers an area that is deleted, too wide (more than 48 m from its middle),
+  from another world, or that Cartographer cannot supply. He never quietly
+  works in the harvest area or the camp circle instead. **Usual area** or
+  `cf_collect area default` goes back to those.
+- Cartographer is optional and detected while the game runs. Without it,
+  nothing changes.
+- Not yet observed in game.
+
 ### Added — Tools of the Trade, the story record (#295, slice S1)
 
 - **Thorstein's introduction has a record now.** It is kept per character and

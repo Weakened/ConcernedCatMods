@@ -95,7 +95,15 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
             }
 
             Vector3 position = view.transform.position;
-            if (scope.Centre.HorizontalDistanceTo(NaturalSourceClassifier.ToSitePoint(position)) > reach)
+            SitePoint point = NaturalSourceClassifier.ToSitePoint(position);
+            if (scope.Centre.HorizontalDistanceTo(point) > reach)
+            {
+                continue;
+            }
+
+            // #296 slice 3: a Cartographer area's circle only bounds the walk;
+            // a source outside the drawn boundary is not in the area.
+            if (scope.OutsideBoundary(point))
             {
                 continue;
             }

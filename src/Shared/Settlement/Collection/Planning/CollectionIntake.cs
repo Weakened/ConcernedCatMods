@@ -357,7 +357,7 @@ internal static class CollectionIntake
             case CollectionIntakeRefusal.ToolHandoverUncertain:
                 return "A tool handover is unresolved. Resolve it first.";
             case CollectionIntakeRefusal.ScopeInvalid:
-                return "The work area could not be established. Mark a harvest area, or claim a bed, and try again.";
+                return "The work area could not be established.";
             case CollectionIntakeRefusal.ScopeUnloaded:
                 return "The work area is not loaded. Go there first.";
             case CollectionIntakeRefusal.PreviewRequired:
