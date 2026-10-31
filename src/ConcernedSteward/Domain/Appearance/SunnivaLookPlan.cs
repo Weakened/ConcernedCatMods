@@ -39,6 +39,28 @@ internal static class SunnivaLookPlan
         shapeFallbacks: new[] { "leather", "pants", "trousers" },
         familyPrefix: "Armor");
 
+    /// <summary>What her worker body is asked to wear while she works (owner
+    /// decision 2026-10-29): her own hair only, put on the existing Dverger
+    /// body by Concerned NPC's <c>NpcWorkerDresser</c>. No beard and no
+    /// garments - the worker body keeps its own clothes, which
+    /// <c>StewardAppearance</c> already sets.</summary>
+    internal static NpcLookSpec WorkerSpec(string? hair) =>
+        new NpcLookSpec(
+            "Sunniva",
+            NpcBodyModel.Female,
+            Hair,
+            null,
+            null,
+            null,
+            SunnivaLookColour.SkinHue,
+            SunnivaLookColour.HairTone,
+            SunnivaLookColour.HairLevel,
+            SunnivaLookColour.HairFallback,
+            hair,
+            null,
+            null,
+            null);
+
     /// <summary>What her figure is asked to look like. The overrides are the
     /// player's own settings; empty means the reference.</summary>
     internal static NpcLookSpec Spec(string? hair, string? chest, string? legs) =>

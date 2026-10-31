@@ -61,6 +61,7 @@ internal sealed class SunnivaPresentation
 {
     internal const string FigureName = "CS_SunnivaFigure";
     internal const string HolderName = "CS_SunnivaHarvest";
+    internal const string WorkerHolderName = "CS_SunnivaWorkerHarvest";
 
     private const float PassSeconds = 0.5f;
     private const float ShowWithinMetres = 48f;
@@ -77,6 +78,9 @@ internal sealed class SunnivaPresentation
 
     private GameObject? _figure;
     private NpcFigureDresser? _dresser;
+    private NpcWorkerDresser? _workerLook;
+    private string _workerLookRefusal = string.Empty;
+    private Humanoid? _workerLookOn;
     private Vector3 _builtFor;
     private string _figureRefusal = string.Empty;
     private bool _buildFailedThisWorld;
@@ -112,6 +116,7 @@ internal sealed class SunnivaPresentation
 
         _sincePass += deltaTime;
         _dresser?.VerifyOnce();
+        _workerLook?.VerifyOnce();
         if (_sincePass < PassSeconds)
         {
             return;
@@ -155,9 +160,67 @@ internal sealed class SunnivaPresentation
     /// figure is down before its lease ends. Also the plugin's teardown.</summary>
     internal void OnWorldUnloaded()
     {
+        OnWorkerBodyGone();
         TakeDown();
         _lease.Release();
         _lease.Forget();
+    }
+
+    /// <summary>Owner decision 2026-10-29: her worker body has just bound.
+    /// Unless the player turned it off, her own hair is put on it, locally, by
+    /// Concerned NPC's <see cref="NpcWorkerDresser"/>, which refuses anything
+    /// that is not her saved worker body and falls back to the plain look when
+    /// a piece will not attach or does not fit. No prefab, saved data or
+    /// network object changes. Idempotent for the same body.</summary>
+    internal void OnWorkerBodyLoaded(Humanoid? body)
+    {
+        if (body != null && ReferenceEquals(body, _workerLookOn))
+        {
+            return;
+        }
+
+        OnWorkerBodyGone();
+        if (body == null || !_settings.WorkerLook.Value || !_npc.IsRegistered)
+        {
+            return;
+        }
+
+        _workerLookOn = body;
+        try
+        {
+            _workerLook = NpcWorkerDresser.TryDress(
+                _npc.Identity,
+                body,
+                SunnivaLookPlan.WorkerSpec(_settings.HairStyle.Value),
+                WorkerHolderName,
+                _log,
+                out string refusal);
+            _workerLookRefusal = refusal;
+            _log(_workerLook != null
+                ? "Sunniva's worker body wears her own hair: " + _workerLook.Describe() + "."
+                : "Sunniva's worker body keeps its plain look: " + refusal + ".");
+        }
+        catch (Exception exception)
+        {
+            _workerLook = null;
+            _workerLookRefusal = "dressing it failed on this build";
+            _log("Sunniva's worker body keeps its plain look: " + SafeFailure.Brief(exception));
+        }
+    }
+
+    /// <summary>Her worker body is gone or unbound: whatever was put on it is
+    /// taken off. Idempotent and cheap when nothing is on.</summary>
+    internal void OnWorkerBodyGone()
+    {
+        if (_workerLook == null && _workerLookOn == null)
+        {
+            return;
+        }
+
+        _workerLook?.TakeOff();
+        _workerLook = null;
+        _workerLookOn = null;
+        _workerLookRefusal = string.Empty;
     }
 
     /// <summary>For <c>cs_steward status</c>.</summary>
@@ -177,6 +240,15 @@ internal sealed class SunnivaPresentation
         if (_dresser != null)
         {
             text += " Look: " + _dresser.Describe() + ".";
+        }
+
+        if (_workerLook != null && _workerLook.IsOnBody)
+        {
+            text += " Worker body look: " + _workerLook.Describe() + ".";
+        }
+        else if (_workerLookRefusal.Length != 0)
+        {
+            text += " Worker body look: plain (" + _workerLookRefusal + ").";
         }
 
         return text;

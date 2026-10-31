@@ -92,6 +92,7 @@ cs_fires                 every light she looked at, and her verdict on each
 | `[Appearance] Garment` | (empty) | A vanilla dress or robe prefab to try before the leather. |
 | `[Appearance] HairStyle` | `$customization_hair12` | Her hair (vanilla's "Matronly"). |
 | `[Appearance] ShowAtHome` | `true` | Show her at her home post as a player-style figure while she has no worker body. |
+| `[Appearance] WorkerLook` | `true` | While she works, put her own hair on her worker body (locally); plain if it will not fit. |
 
 Thresholds are measured in burning time, not fuel, because pieces burn at
 different rates. A threshold that would make her loop is refused and logged.
