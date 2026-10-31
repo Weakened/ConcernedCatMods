@@ -143,7 +143,7 @@ internal sealed class StewardCommand : ConsoleCommand
     public override System.Collections.Generic.List<string> CommandOptionList() =>
         new System.Collections.Generic.List<string>
         {
-            "area", "depot", "clear", "runes", "recruit", "dismiss", "resolve", "status",
+            "area", "depot", "clear", "runes", "recruit", "dismiss", "resolve", "retire", "status",
         };
 }
 
