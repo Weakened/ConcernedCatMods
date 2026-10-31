@@ -45,8 +45,8 @@
          Appearance/, which IS linked and tested here. Its engine writes are
          confined to Body/Dressing/NpcFigureParts.cs and pinned by spelling in
          tools/validate_repo.py ("NPC figure-parts audit"), which also pins
-         that this folder's public surface is exactly NpcFigureDresser and
-         NpcCustomizationPalette - the half of PublicSurfaceTests this
+         that this folder's public surface is exactly NpcFigureDresser,
+         NpcWorkerDresser and NpcCustomizationPalette - the half of PublicSurfaceTests this
          assembly cannot see. The product build in scripts/verify.ps1 compiles
          it against the real game. Before the lift no test project compiled it
          either. -->

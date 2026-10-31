@@ -465,3 +465,27 @@ that is an empty order, not a size judgement - but one or two units are walked t
 change to D15's deposit or D16's death drop. Each of those still needs its own owner decision.
 
 **Never observed in game.** The tour's rows in `GUNNAR_COLLECTION.md` §10 are OWNER GO-AROUND PENDING.
+
+## D18. A worker body may wear its character's own hair and beard, locally (all three companions)
+
+Status: **accepted** (owner decision 2026-10-29, #295 slice S6, option (b), asked by the lead). It applies to
+every companion with a worker body: Thorstein first, and Gunnar and Sunniva when their products use it.
+
+**Decided.** The worker body stays the clone it already is: Foreman's is the `Dverger` creature, under the same
+prefab name and keys. Concerned NPC's `NpcWorkerDresser` attaches the character's own player hair and beard pieces
+on top of it, as **local child objects** under the body's head joint. The pieces are the same ones the presentation
+figure wears, cloned dark and checked first, exactly as the figure's are. Each product offers this behind its own
+setting, **on by default** so the playtest judges it; Foreman's is `Thorstein/WorkerLook`. A piece that will not
+attach, or that is not drawn where it was put on that rig, is taken off, and the body keeps its plain look.
+
+**Not granted:**
+- No prefab rebase, no new prefab name, no saved-body migration.
+- No write to the body's network object, inventory, equipment, renderer or material. Hair and beard pieces are
+  tinted on themselves only.
+- Nothing networked or saved. The pieces leave with the body and come back only when the role dresses it again.
+- Nothing on any object but the registered role's own saved worker body. `NpcWorkerDresser.TryDress` refuses
+  unless the object's saved prefab is the role's contracted worker prefab **and** its saved identity is the role's
+  identity. `tools/validate_repo.py`'s NPC figure-parts audit pins that the guard runs first and still makes both
+  comparisons.
+
+**Never observed in game.** OWNER GO-AROUND PENDING.
