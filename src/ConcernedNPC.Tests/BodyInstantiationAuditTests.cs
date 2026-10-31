@@ -37,14 +37,14 @@ public sealed class BodyInstantiationAuditTests
     };
 
     /// <summary>The files allowed to create anything, and the reason each one
-    /// is: the two body factories, and - since the #295 lift - the dresser's
-    /// harvest helper, which creates no body.
+    /// is: the two body factories, and - since #295 - the dresser's and the
+    /// keepsake's harvest helpers, which create no body.
     ///
-    /// <b>Asserted to be exactly these three.</b> The third was added by the
+    /// <b>Asserted to be exactly these four.</b> The third was added by the
     /// #295 lift, with its reason, in the same change that removed the Foreman
-    /// copy it replaces. Adding a fourth is how this rule
+    /// copy it replaces; the fourth by #295 S2, the shared keepsake. Adding a fifth is how this rule
     /// gets weakened one quiet entry at a time, so the list itself is pinned by
-    /// <see cref="The_allowed_list_is_exactly_the_two_factories_and_the_harvest"/> and a new
+    /// <see cref="The_allowed_list_is_exactly_the_two_factories_and_the_two_harvests"/> and a new
     /// entry is a visible edit with a reason attached rather than a line in a
     /// diff.</summary>
     private static IReadOnlyDictionary<string, string> Allowed =>
@@ -91,7 +91,7 @@ public sealed class BodyInstantiationAuditTests
     }
 
     [Fact]
-    public void The_allowed_list_is_exactly_the_two_factories_and_the_harvest()
+    public void The_allowed_list_is_exactly_the_two_factories_and_the_two_harvests()
     {
         Assert.Equal(
             new[] { "NpcFigureParts.cs", "NpcKeepsakeParts.cs", "NpcPresentationBody.cs", "NpcWorkerPrefabFactory.cs" },

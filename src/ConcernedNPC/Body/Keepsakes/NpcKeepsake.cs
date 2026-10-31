@@ -136,6 +136,7 @@ public sealed class NpcKeepsake
     {
         GameObject holder = NpcKeepsakeParts.Holder(holderName);
         GameObject? clone = null;
+        GameObject? root = null;
         try
         {
             clone = NpcKeepsakeParts.Harvest(prefab, holder);
@@ -162,7 +163,7 @@ public sealed class NpcKeepsake
                 return null;
             }
 
-            GameObject root = NpcKeepsakeParts.Root(rootName, scale);
+            root = NpcKeepsakeParts.Root(rootName, scale);
             foreach (MeshFilter filter in meshes)
             {
                 Transform source = filter.transform;
@@ -175,10 +176,15 @@ public sealed class NpcKeepsake
                     source.lossyScale);
             }
 
-            return root;
+            // Handed over only once every part is on it: a part that threw
+            // leaves no half-built keepsake behind.
+            GameObject built = root;
+            root = null;
+            return built;
         }
         finally
         {
+            NpcKeepsakeParts.Discard(root);
             NpcKeepsakeParts.Discard(clone);
             NpcKeepsakeParts.Discard(holder);
         }

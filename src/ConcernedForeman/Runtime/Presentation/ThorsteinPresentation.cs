@@ -135,9 +135,11 @@ internal sealed class ThorsteinPresentation
         catch (Exception exception)
         {
             // Latched, so a fault is one line and not one a second. The figure
-            // goes and both leases are given up: showing nothing is always safe.
+            // and the carpenter's square go, and both leases are given up:
+            // showing nothing is always safe.
             _faulted = true;
             TakeDown();
+            RemoveKeepsake();
             _bodies.Reconcile(ThorsteinBodyKind.None);
             _log("Thorstein's presentation stopped after a fault and will not be shown again in this world: " +
                 SafeFailure.Brief(exception));
@@ -420,7 +422,8 @@ internal sealed class ThorsteinPresentation
         Player? player = Player.m_localPlayer;
         Vector3 home = default;
         bool homeKnown = player != null && TryGetHome(out home);
-        bool near = homeKnown && IsNear(player!.transform.position, home);
+        bool near = homeKnown && IsWithin(player!.transform.position, home,
+            _keepsake != null ? KeepWithinMetres : ShowWithinMetres);
         bool host = IsHost(ZNet.instance);
         bool settlementOn = _settlementSettings.SettlementRuntimeEnabled.Value;
 
@@ -633,6 +636,21 @@ internal sealed class ThorsteinPresentation
         }
 
         float limit = _figure != null ? KeepWithinMetres : ShowWithinMetres;
+        return IsWithin(player, home, limit);
+    }
+
+    /// <summary>Within <paramref name="limit"/> of home, with home's zone
+    /// loaded. The square uses its own limit, wider once it is placed, so a
+    /// player standing at the edge does not see it built and removed every
+    /// half second.</summary>
+    private static bool IsWithin(Vector3 player, Vector3 home, float limit)
+    {
+        ZoneSystem zones = ZoneSystem.instance;
+        if (zones == null || !zones.IsZoneLoaded(home))
+        {
+            return false;
+        }
+
         return (player - home).sqrMagnitude <= limit * limit;
     }
 

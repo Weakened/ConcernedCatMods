@@ -3321,7 +3321,7 @@ NPC_KEEPSAKE_PUBLIC_TYPES = frozenset({"NpcKeepsake"})
 NPC_KEEPSAKE_PARTS_USES = {
     "Behaviour": 1,
     "Collider": 1,
-    "Discard": 3,
+    "Discard": 4,
     "Drop": 1,
     "Harvest": 1,
     "Holder": 1,

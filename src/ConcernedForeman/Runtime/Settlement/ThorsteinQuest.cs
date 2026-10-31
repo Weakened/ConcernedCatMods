@@ -26,8 +26,9 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// hammer reach him through the existing handover (<c>cf_settle give</c>).
 /// Its only act on the settlement is the register's own recruitment, with the
 /// checks that act already makes (authority, a readable record, a settlement
-/// area). It writes nothing into the world. The carpenter's square is slice S2;
-/// until then <c>cf_settle quest examine</c> stands in for examining it.</summary>
+/// area). It writes nothing into the world. Examining the carpenter's square
+/// (slice S2, Concerned NPC's shared keepsake) runs the same
+/// <c>cf_settle quest examine</c> this class answers.</summary>
 internal sealed class ThorsteinQuest
 {
     private readonly CompanionSidecarStore _store;
