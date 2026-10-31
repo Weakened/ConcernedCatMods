@@ -536,8 +536,11 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
 - **Clearances:** never within 15 m of a player or of a player-built piece, and never through a ward.
 - **Default:** off (`Collection/ThorsteinFellsSmallTrees`).
 - **Decided but unused:** `TreeBase.Damage` and `TreeLog.Damage`. There is no call site.
-  `tools/validate_repo.py`'s #400 Foreman audit refuses both type names, and `RPC_Damage`, `DestroyNow` and
-  `ApplyDamage`, anywhere in Foreman's runtime, until a mature-tree scope is decided.
+- **The validator** (`check_foreman_felling_scope`, "D19 felling audit") covers the whole of Foreman, less `obj/`
+  and `bin/`, plus every shared tree its project file compiles in (read from the project file):
+  - it allows exactly one `.Damage(`: the pinned `tree.Damage(hit)` in the felling port;
+  - it refuses `TreeBase`, `TreeLog`, `DestroyNow`, `ApplyDamage` and `RPC_Damage` anywhere in that scope, until a
+    mature-tree scope is decided.
 - **Excluded:** saplings (cultivation), berry bushes (food), and every other prefab.
 
 **Built in the first leaf (#282).**
@@ -547,8 +550,10 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
   custody granted above.
 - The eligibility rules are game-free in `src/Shared/Workers/Felling/SmallTreeFelling.cs`, so Teamster's Gunnar can
   reuse them. **D19 grants felling to Thorstein only:** Gunnar felling anything still needs its own owner decision.
-- The #400 audit's refusals cover Foreman's `Runtime` folder, which is where the audit walks; code elsewhere in the
-  product is not scanned by it.
+- The felling audit's limit is stated rather than left to be found. It is a text audit with comments stripped, so a
+  call reached through a delegate spells none of these tokens and is invisible to it.
+  `tools/tests/test_foreman_felling_audit.py` plants each escape (in `Runtime/`, `Ui/`, `Plugin.cs`, `Domain/` and two
+  linked shared trees). Each plant is refused by the rule and passes a validator without it.
 
 **Not granted:**
 - full-size trees, logs, stumps, bushes or anything not on the list;

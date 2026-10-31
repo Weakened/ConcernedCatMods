@@ -29,8 +29,9 @@ internal sealed class FellReport
 ///
 /// <b>The single authorised world call.</b> <c>Destructible.Damage</c> on one of
 /// the four allowlisted small trees, once per hit, here and nowhere else in
-/// Foreman's runtime (the #400 audit pins it there; <c>TreeBase</c> and
-/// <c>TreeLog</c> are refused in Foreman's runtime, decided but unused). The hit
+/// Foreman (the D19 felling audit allows exactly this one <c>.Damage(</c> across
+/// the whole product and the shared trees it compiles in, and refuses
+/// <c>TreeBase</c> and <c>TreeLog</c> there: decided but unused). The hit
 /// is built from the axe's own item data along the lines of vanilla's melee hit
 /// (damage, tool tier, item level, skill, the worker as attacker) but without the
 /// attacker's skill factor, attack multipliers or status effects, so it is the

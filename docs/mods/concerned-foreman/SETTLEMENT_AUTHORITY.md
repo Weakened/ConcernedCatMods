@@ -315,7 +315,7 @@ Thorstein may fell exactly four small trees: `Beech_small1`, `Beech_small2`, `Fi
 - **Default.** Off (`Collection/ThorsteinFellsSmallTrees`).
 - **Durability.** The axe follows vanilla's rule, which wears no durability for a non-player attacker.
 - **Drops.** Vanilla's own. In this leaf they stay on the ground. Taking them is granted only as same-call custody of the drops his own hit produced, and is the next leaf's work.
-- **Decided but unused.** `TreeBase` and `TreeLog` damage were decided, but the small trees are not `TreeBase`, so neither has a call site and the #400 audit refuses both names.
+- **Decided but unused.** `TreeBase` and `TreeLog` damage were decided, but the small trees are not `TreeBase`, so neither has a call site. The D19 felling audit refuses both names, and any other `.Damage(`, across all of Foreman and the shared trees it compiles in.
 - **The full record** is `docs/settlement/cart-and-collection/DECISIONS.md` D19.
 
 ## 6. What this decision does not cover
