@@ -59,6 +59,9 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly WorkAreasPanel _areasPanel;
     private readonly WorkAreaEditor _areaEditor;
     private long _areaStampDrawn = -1;
+
+    // #296: Concerned Foreman's orders in the player's work areas, read only.
+    private readonly Interop.WorkOrderProviderDiscovery _workOrders;
     private readonly SurveyPanel _surveyPanel;
     private readonly SharePanel _sharePanel;
     private readonly SettingsPanel _settingsPanel;
@@ -187,12 +190,15 @@ internal sealed class CartographerRuntime : IDisposable
         // world's area file is read-only, so it can never write over areas
         // this build could not read.
         _areaEditor = new WorkAreaEditor(_workAreas, Guid.NewGuid, () => DateTime.UtcNow);
+        _workOrders = new Interop.WorkOrderProviderDiscovery(message => log.LogInfo(message));
         _areasPanel = new WorkAreasPanel(
             log,
             WritableAreaEditor,
             () => _renderer.VectorLayerActive,
-            AfterAreaEdit);
-        _renderer.SetWorkAreaSource(() => WorkAreaOutlines.Collect(_workAreas, _areaEditor));
+            AfterAreaEdit,
+            areaId => WorkAreaOrders.Describe(_workOrders.Latest, areaId),
+            () => _workOrders.Stamp);
+        _renderer.SetWorkAreaSource(() => WorkAreaOutlines.Collect(_workAreas, _areaEditor, _workOrders.Latest));
         _surveyPanel = new SurveyPanel(
             log, settings, ExecuteSurveyCommand,
             () => _surveyEngine.Observations,
@@ -1215,6 +1221,13 @@ internal sealed class CartographerRuntime : IDisposable
             if (_areaEditor.ChangeStamp != _areaStampDrawn)
             {
                 _areaStampDrawn = _areaEditor.ChangeStamp;
+                _renderer.MarkVectorDataDirty();
+            }
+
+            // #296: ask Foreman about orders in the work areas, at most once a
+            // second and only while the map is open; redraw on a change.
+            if (_worldUid is long ordersWorld && _workOrders.Poll(Time.unscaledTime, ordersWorld))
+            {
                 _renderer.MarkVectorDataDirty();
             }
 
@@ -3646,6 +3659,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         _worldUid = uid;
         _areaEditor.CancelDraw();
+        _workOrders.Forget();
         _workAreas.Load(_workAreaPersistence.Load(uid));
         _renderer.MarkVectorDataDirty();
         _atlas = _persistence.Load(uid);

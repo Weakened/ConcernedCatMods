@@ -34,6 +34,7 @@
     <Compile Include="..\Shared\Interop\CapabilityMap.cs" Link="Interop/CapabilityMap.cs" />
     <Compile Include="..\Shared\Interop\Presence\**\*.cs" LinkBase="Interop/Presence" />
     <Compile Include="..\Shared\Interop\WorkArea\**\*.cs" LinkBase="Interop/WorkArea" />
+    <Compile Include="..\Shared\Interop\WorkOrders\**\*.cs" LinkBase="Interop/WorkOrders" />
   </ItemGroup>
 
   <ItemGroup>

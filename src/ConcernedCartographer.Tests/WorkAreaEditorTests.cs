@@ -480,7 +480,7 @@ public class WorkAreaEditorTests
         Assert.Contains("_areasPanel.HandleFrame();", runtime);
         Assert.Contains("_areaEditor.HandleMapFrame(", runtime);
         Assert.Contains("MapInputGate.ConsumeClicks = uiRouteMode || uiAreaMode;", runtime);
-        Assert.Contains("_renderer.SetWorkAreaSource(() => WorkAreaOutlines.Collect(_workAreas, _areaEditor));", runtime);
+        Assert.Contains("_renderer.SetWorkAreaSource(() => WorkAreaOutlines.Collect(_workAreas, _areaEditor, _workOrders.Latest));", runtime);
 
         // The panel is handed no editor while the world's area file is
         // read-only, so the UI can never write over areas it could not read.
