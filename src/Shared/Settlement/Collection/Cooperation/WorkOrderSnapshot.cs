@@ -44,8 +44,12 @@ internal static class WorkOrderSnapshot
         });
     }
 
-    /// <summary>Stopped for a reason the player did not choose.</summary>
+    /// <summary>Stopped for a reason the player did not choose, or unable to
+    /// work at all because the settlement runtime is off or work is not
+    /// authorised here (the panel's reason line already says which).</summary>
     public static bool NeedsAttention(OrderPanelFacts facts) =>
         facts.State == CollectionOrderState.NeedsAttention ||
-        (facts.State == CollectionOrderState.Paused && !facts.PausedByPlayer && facts.Reason != CollectionAttentionReason.Unspecified);
+        (facts.State == CollectionOrderState.Paused && !facts.PausedByPlayer && facts.Reason != CollectionAttentionReason.Unspecified) ||
+        (facts.Order != null && !CollectionOrderStates.IsTerminal(facts.State) &&
+            (!facts.RuntimeEnabled || facts.Authority != TheConcernedCat.Workers.WorkAuthorityVerdict.Granted));
 }

@@ -51,6 +51,11 @@ public class WorkAreaOrderStatusTests
         Assert.Contains("Stone: 4 of 10", text);
         Assert.Contains("Needs attention: Every loose stone here has been picked.", text);
 
+        // The panel box truncates at the bottom: the reason must come before
+        // any progress line, straight after the state.
+        string[] lines = text.Split('\n');
+        Assert.StartsWith("Needs attention:", lines[1]);
+
         Assert.DoesNotContain("Needs attention", WorkAreaOrders.Describe(Lookup(Order("wa-a", attention: false)), "wa-a"));
         Assert.Equal("No worker order runs in this area.", WorkAreaOrders.Describe(lookup, "wa-b"));
     }

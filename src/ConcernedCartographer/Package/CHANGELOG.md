@@ -21,7 +21,8 @@ Added
     assigned here; Concerned Foreman, when installed, can use these areas.
   - With Concerned Foreman's order running in an area, the selected area shows
     the worker, progress and attention reason, and the outline turns green
-    while working or red when it needs attention. Read only.
+    while working or red when it needs attention. Read only. (Concerned Foreman
+    is not published yet, and its collecting is off by default.)
 - **Living beside TheGreatestMap, HUDCompass and Round Minimap** (#419). With
   any of them installed, Concerned Cartographer recognises it and changes only
   its own behaviour; it does not need any of them.

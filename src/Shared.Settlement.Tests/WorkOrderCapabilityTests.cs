@@ -102,6 +102,15 @@ public sealed class WorkOrderCapabilityTests
         Assert.False(WorkOrderSnapshot.NeedsAttention(Facts(Order(scope), CollectionOrderState.Paused, CollectionAttentionReason.ScopeUnloaded, pausedByPlayer: true)));
         Assert.False(WorkOrderSnapshot.NeedsAttention(Facts(Order(scope), CollectionOrderState.Collecting)));
 
+        // Unable to work at all: the runtime is off, or work is not authorised.
+        OrderPanelFacts working = Facts(Order(scope), CollectionOrderState.Collecting);
+        Assert.True(WorkOrderSnapshot.NeedsAttention(new OrderPanelFacts(
+            false, WorkAuthorityVerdict.Granted, true, working.Order, working.State, working.Reason, false, working.Progress,
+            CooperationAvailability.ProviderAbsent, CooperationPhase.Unspecified, string.Empty, 0, false)));
+        Assert.True(WorkOrderSnapshot.NeedsAttention(new OrderPanelFacts(
+            true, WorkAuthorityVerdict.OtherPeersConnected, true, working.Order, working.State, working.Reason, false, working.Progress,
+            CooperationAvailability.ProviderAbsent, CooperationPhase.Unspecified, string.Empty, 0, false)));
+
         PublishedWorkOrder order = Assert.Single(
             Snapshot(Facts(Order(scope), CollectionOrderState.NeedsAttention, CollectionAttentionReason.SourcesExhausted))!.Orders);
         Assert.True(order.NeedsAttention);

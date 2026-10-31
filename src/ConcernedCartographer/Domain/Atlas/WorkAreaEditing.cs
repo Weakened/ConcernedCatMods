@@ -372,7 +372,6 @@ internal enum WorkAreaOutlineEmphasis
     Draft,
 }
 
-/// <summary>One line for the large-map outline layer, in world X/Z.</summary>
 /// <summary>#296: the map badge. What a worker product says about the order
 /// running in an area, if any.</summary>
 internal enum WorkAreaOrderMark
@@ -382,6 +381,7 @@ internal enum WorkAreaOrderMark
     NeedsAttention,
 }
 
+/// <summary>One line for the large-map outline layer, in world X/Z.</summary>
 internal sealed class WorkAreaOutline
 {
     public WorkAreaOutline(
@@ -495,16 +495,19 @@ internal static class WorkAreaOrders
             return AtlasStrings.Get("areas.noOrder");
         }
 
+        // The attention reason comes straight after the state line: the panel
+        // box truncates at the bottom, and the reason is the line that must
+        // never be the one cut off.
         var text = new System.Text.StringBuilder();
         text.Append(AtlasStrings.Format("areas.orderWorker", order.Worker, order.StateLine));
-        foreach (string line in order.ProgressLines)
-        {
-            text.Append('\n').Append(line);
-        }
-
         if (order.NeedsAttention && order.ReasonLine.Length > 0)
         {
             text.Append('\n').Append(AtlasStrings.Format("areas.orderAttention", order.ReasonLine));
+        }
+
+        foreach (string line in order.ProgressLines)
+        {
+            text.Append('\n').Append(line);
         }
 
         return text.ToString();

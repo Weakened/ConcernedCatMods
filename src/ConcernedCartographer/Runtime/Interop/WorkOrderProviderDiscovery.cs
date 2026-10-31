@@ -29,6 +29,7 @@ internal sealed class WorkOrderProviderDiscovery
     private Func<IReadOnlyDictionary<string, string>, IReadOnlyDictionary<string, string>>? _endpoint;
     private float _askedAt = float.NegativeInfinity;
     private string _signature = string.Empty;
+    private string _text = string.Empty;
 
     public WorkOrderProviderDiscovery(Action<string> log)
     {
@@ -41,8 +42,10 @@ internal sealed class WorkOrderProviderDiscovery
     /// <summary>Bumps whenever what the map shows changes.</summary>
     public long Stamp { get; private set; }
 
-    /// <summary>Asks again if a second has passed. True when the answer
-    /// changed what the map shows.</summary>
+    /// <summary>Asks again if a second has passed. <see cref="Stamp"/> bumps on
+    /// any change (the panel text); the return value is true only when an
+    /// outline's colour changed, so progress ticking never rebakes the map.
+    /// </summary>
     public bool Poll(float now, long worldUid)
     {
         if (now - _askedAt < PollSeconds && now >= _askedAt)
@@ -60,15 +63,18 @@ internal sealed class WorkOrderProviderDiscovery
                 Plugin.PluginVersion);
         Latest = latest != null && latest.IsOk ? latest : null;
 
-        string signature = WorkAreaOrders.Signature(Latest) + "#" + Describe(Latest);
-        if (string.Equals(signature, _signature, StringComparison.Ordinal))
+        string signature = WorkAreaOrders.Signature(Latest);
+        string text = Describe(Latest);
+        bool marksChanged = !string.Equals(signature, _signature, StringComparison.Ordinal);
+        if (!marksChanged && string.Equals(text, _text, StringComparison.Ordinal))
         {
             return false;
         }
 
         _signature = signature;
+        _text = text;
         Stamp++;
-        return true;
+        return marksChanged;
     }
 
     /// <summary>The world went away: look again next session, show nothing
@@ -80,6 +86,7 @@ internal sealed class WorkOrderProviderDiscovery
         _askedAt = float.NegativeInfinity;
         Latest = null;
         _signature = string.Empty;
+        _text = string.Empty;
         Stamp++;
     }
 
