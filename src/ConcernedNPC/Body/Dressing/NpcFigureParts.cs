@@ -96,4 +96,30 @@ internal static class NpcFigureParts
     {
         body.sharedMesh = mesh;
     }
+
+    /// <summary>A place to talk to the figure (#295 S3): a child of the
+    /// figure's root carrying a body-sized capsule and the game's own hover and
+    /// use. The collider is for looking at, never walking into: it is put on a
+    /// layer characters walk through, or made a trigger when no such layer
+    /// exists. Only the child's layer changes; the figure's own renderers keep
+    /// theirs.</summary>
+    internal static NpcFigureTalk TalkPoint(GameObject figure, int nonSolidLayer)
+    {
+        var point = new GameObject("talk");
+        point.transform.SetParent(figure.transform, worldPositionStays: false);
+        point.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+        CapsuleCollider collider = point.AddComponent<CapsuleCollider>();
+        collider.height = 1.8f;
+        collider.radius = 0.35f;
+        if (nonSolidLayer >= 0)
+        {
+            point.layer = nonSolidLayer;
+        }
+        else
+        {
+            collider.isTrigger = true;
+        }
+
+        return point.AddComponent<NpcFigureTalk>();
+    }
 }

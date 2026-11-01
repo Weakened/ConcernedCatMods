@@ -2,13 +2,14 @@
 
 ## 0.5.0
 
-Five additive changes share this version:
+Six additive changes share this version:
 * a worker can rest as a presentation figure (#295, #298, Concerned Foreman's Thorstein);
 * a job can say that doing a target leaves the NPC carrying something (#381, Concerned Teamster's Gunnar);
 * that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and Gunnar share it;
 * a worker body can wear its character's own hair and beard, locally (#295 S6, owner decision 2026-10-29);
 * one shared companion keepsake, the small local object that starts an introduction (#295 S2, owner decision
-  2026-10-30).
+  2026-10-30);
+* a presentation figure can be talked to with the use key (#295 S3).
 
 ### A worker may rest as a presentation figure (#295, #298)
 
@@ -103,6 +104,15 @@ Five additive changes share this version:
   "NPC keepsake audit" requires its helpers and behaviour to stay internal, confines the helpers to `NpcKeepsake`,
   pins its public surface, refuses any network view in its folder, and refuses a companion product that builds its
   own render-only keepsake. **Not observed in game.**
+
+### A presentation figure can be talked to (#295 S3)
+
+* `NpcFigureDresser.EnableTalk(name, verb, onTalk, log)` lets the player talk to a figure with the use key. It
+  adds a small child to the dresser's own figure: a body-sized capsule on a layer characters walk through (or a
+  trigger), with the game's own hover and use through the internal `NpcFigureTalk`. Using it calls the role back.
+  Nothing in the world changes, and the point goes when the figure is taken down.
+* Its engine writes are pinned in the NPC census; `NpcFigureTalk` is internal and confined to `Body/Dressing`;
+  `Action` joins the dresser's allowed parameter types for the callback. **Not observed in game.**
 
 ### Versioning
 

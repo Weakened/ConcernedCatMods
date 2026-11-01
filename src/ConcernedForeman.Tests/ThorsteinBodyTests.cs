@@ -30,10 +30,11 @@ public sealed class ThorsteinBodyTests
         int savedWorkerBodies = 0,
         bool resting = true,
         bool homeKnown = true,
-        bool playerNearHome = true) =>
+        bool playerNearHome = true,
+        bool introduced = false) =>
         new ThorsteinBodyFacts(
             registered, worldLoaded, isHost, settlementEnabled, presentationEnabled, recruited,
-            savedWorkerBodies, resting, homeKnown, playerNearHome);
+            savedWorkerBodies, resting, homeKnown, playerNearHome, introduced);
 
     private static ForemanNpcAdoption Adopted(out NpcRoleRegistry registry)
     {
@@ -264,5 +265,46 @@ public sealed class ThorsteinBodyTests
         Assert.Equal(
             Lib.BodyClaimStatus.AlreadyHeld,
             registry.TryClaimBody(adoption.Identity, NpcBodyKind.Presentation, ThorsteinBodies.PresentationHolder).Status);
+    }
+
+    // --- #295 S3: at home from the introduction onwards ----------------------------------------------
+
+    [Fact]
+    public void IntroducedButNotYetRecruitedIsTheFigure()
+    {
+        // He has asked for an axe and a hammer, so he is at home waiting for
+        // them - before the roster has him.
+        Assert.Equal(
+            ThorsteinBodyKind.Presentation,
+            ThorsteinBodyPlan.Decide(AtHome(recruited: false, introduced: true)).Kind);
+    }
+
+    [Fact]
+    public void NeitherIntroducedNorRecruitedIsNobody()
+    {
+        ThorsteinBodyDecision decision = ThorsteinBodyPlan.Decide(AtHome(recruited: false, introduced: false));
+
+        Assert.Equal(ThorsteinBodyKind.None, decision.Kind);
+        Assert.Contains("carpenter's square", decision.Reason, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IntroducedStillYieldsToASavedWorkerBodyAndToEveryOtherGate()
+    {
+        // The introduction opens one gate, the roster's; every other one stays.
+        Assert.NotEqual(ThorsteinBodyKind.Presentation,
+            ThorsteinBodyPlan.Decide(AtHome(recruited: false, introduced: true, savedWorkerBodies: 1)).Kind);
+        foreach (ThorsteinBodyFacts facts in new[]
+                 {
+                     AtHome(recruited: false, introduced: true, isHost: false),
+                     AtHome(recruited: false, introduced: true, settlementEnabled: false),
+                     AtHome(recruited: false, introduced: true, presentationEnabled: false),
+                     AtHome(recruited: false, introduced: true, resting: false),
+                     AtHome(recruited: false, introduced: true, homeKnown: false),
+                     AtHome(recruited: false, introduced: true, playerNearHome: false),
+                 })
+        {
+            Assert.Equal(ThorsteinBodyKind.None, ThorsteinBodyPlan.Decide(facts).Kind);
+        }
     }
 }

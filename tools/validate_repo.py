@@ -2899,6 +2899,7 @@ NPC_FIGURE_PARTS_USES = {
     (NPC_DRESSING_CORE_FILE, "Seat"): 4,
     (NPC_FIGURE_DRESSER_FILE, "Drop"): 1,
     (NPC_FIGURE_DRESSER_FILE, "Place"): 1,
+    (NPC_FIGURE_DRESSER_FILE, "TalkPoint"): 1,
 }
 # Where the shared dressing may be constructed: once by each public dresser.
 NPC_DRESSING_CONSTRUCTIONS = {NPC_FIGURE_DRESSER_FILE: 1, NPC_WORKER_DRESSER_FILE: 1}
@@ -2920,6 +2921,7 @@ NPC_ENGINE_WRITES = (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bnew\s+GameObject\s*\(\s*holderName\s*\)"), 1),
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bnew\s+GameObject\s*\(\s*figureName\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bnew\s+GameObject\s*\(\s*name\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r'\bnew\s+GameObject\s*\(\s*"talk"\s*\)'), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bnew\s+GameObject\s*\(\s*name\s*\)"), 2),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r'\bnew\s+GameObject\s*\(\s*"part"\s*\)'), 1),
     )),
@@ -2944,6 +2946,7 @@ NPC_ENGINE_WRITES = (
     ("SetParent", re.compile(r"\bSetParent\s*\("), (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bvisual\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*root\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpiece\s*\.\s*SetParent\s*\(\s*parent\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*figure\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*transform\s*\.\s*SetParent\s*\(\s*root\s*\.\s*transform\s*,\s*worldPositionStays\s*:\s*false\s*\)"), 1),
     )),
     # Never in the library at all, so nothing is pinned: a figure has no
@@ -2963,6 +2966,7 @@ NPC_ENGINE_WRITES = (
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bbody\s*\.\s*sharedMesh\s*=\s*mesh\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*transform\s*\.\s*localPosition\s*=\s*new\s+Vector3\s*\(\s*0f\s*,\s*0\.9f\s*,\s*0f\s*\)\s*;"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bclone\s*\.\s*transform\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bclone\s*\.\s*transform\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bclone\s*\.\s*transform\s*\.\s*localScale\s*=\s*Vector3\s*\.\s*one\s*;"), 1),
@@ -2983,6 +2987,10 @@ NPC_ENGINE_WRITES = (
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bpart\s*\.\s*AddComponent\s*<\s*MeshRenderer\s*>\s*\(\s*\)"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\broot\s*\.\s*AddComponent\s*<\s*NpcKeepsakeBehaviour\s*>\s*\(\s*\)"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\broot\s*\.\s*AddComponent\s*<\s*SphereCollider\s*>\s*\(\s*\)"), 1),
+        # #295 S3: the figure's talk point - a capsule to look at and the
+        # game's own hover and use, on a child of the figure.
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*AddComponent\s*<\s*CapsuleCollider\s*>\s*\(\s*\)"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*AddComponent\s*<\s*NpcFigureTalk\s*>\s*\(\s*\)"), 1),
     )),
 )
 
@@ -2992,6 +3000,8 @@ NPC_ENGINE_WRITES = (
 # (review of the lift). Whitespace and a trailing `?` are ignored.
 NPC_DRESSER_PARAMETER_TYPES = frozenset({
     "NpcPresentationFigure", "NpcLookSpec", "string", "Action<string>", "Vector3", "Quaternion",
+    # #295 S3: the role's own callback for a press of the use key on its figure.
+    "Action",
 })
 # The worker dresser must be told which body, so it may take one Humanoid and
 # the identity it belongs to - and only through the guard below, which refuses
@@ -3224,6 +3234,21 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
             violations += 1
             fail(f"{label}: {NPC_WORKER_GUARD} no longer makes the comparison {check.pattern!r}; both the "
                  "saved prefab and the saved identity must match the registered role", errors)
+
+    # 2e. #295 S3: the figure's talk behaviour stays internal and is named only
+    # in Body/Dressing, where the dresser puts it on its own figure.
+    talk_declared = [rel for rel, code in sources.items()
+                     if re.search(r"\binternal\s+sealed\s+class\s+NpcFigureTalk\b", code)]
+    if len(talk_declared) != 1:
+        violations += 1
+        fail(f"{label}: NpcFigureTalk must be declared internal sealed, once; found {talk_declared}", errors)
+    for rel, code in sources.items():
+        if rel.startswith(NPC_DRESSING_DIR):
+            continue
+        for match in re.finditer(r"\bNpcFigureTalk\b", code):
+            violations += 1
+            fail(f"{label}: NpcFigureTalk named in src/ConcernedNPC/{rel}:"
+                 f"{code.count(chr(10), 0, match.start()) + 1}; only {NPC_DRESSING_DIR} may use it", errors)
 
     # 3. The door consumers use.
     public_types: set[str] = set()
