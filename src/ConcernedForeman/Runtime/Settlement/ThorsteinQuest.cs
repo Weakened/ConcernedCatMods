@@ -99,6 +99,22 @@ internal sealed class ThorsteinQuest
         return ToolsOfTheTrade.Stage(facts);
     }
 
+    private readonly TheConcernedCat.Companions.Dialogue.DialogueRotation _remarks = ThorsteinTalk.NewRotation();
+
+    /// <summary>#295 S3: what he says to a press of the use key on his figure.
+    /// Reads the real tool ledger, on the press only. Null for nothing to say.
+    /// </summary>
+    internal string? Talk(SettlementRegister register, SettlementJournal journal)
+    {
+        if (!TryOpen(out CompanionProgress progress, out _))
+        {
+            return null;
+        }
+
+        ToolsOfTheTradeFacts facts = Facts(progress, register, journal);
+        return ThorsteinTalk.Line(ToolsOfTheTrade.Stage(facts), facts.AxeHeld, facts.HammerHeld, _remarks);
+    }
+
     /// <summary>Called after every tool handover: if that was the second tool,
     /// this is the moment he joins. Empty when nothing happened.</summary>
     internal string AfterHandover(SettlementRegister register, SettlementJournal journal, Func<string?> saveRecords)

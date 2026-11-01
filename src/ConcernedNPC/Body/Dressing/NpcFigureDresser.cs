@@ -26,6 +26,7 @@ public sealed class NpcFigureDresser
     private readonly GameObject _root;
     private readonly NpcDressing _dressing;
     private bool _takenDown;
+    private NpcFigureTalk? _talk;
 
     /// <param name="figure">A figure <see cref="NpcPresentationBody.TryExtract"/>
     /// built. A refused one is an argument error.</param>
@@ -78,6 +79,50 @@ public sealed class NpcFigureDresser
         {
             _dressing.Apply();
         }
+    }
+
+    /// <summary>True once the game's own hover has reached the figure's talk
+    /// point. False until <see cref="EnableTalk"/> has run.</summary>
+    public bool TalkHovered => _talk != null && _talk.HoverObserved;
+
+    /// <summary>Lets the player talk to the figure with the use key (#295 S3):
+    /// the prompt shows <paramref name="hoverName"/> and
+    /// <paramref name="hoverVerb"/>, and using it calls
+    /// <paramref name="onTalk"/>. The point is a child of this dresser's own
+    /// figure, so it goes when the figure is taken down, and its collider never
+    /// blocks anybody. Once per figure; a second call changes nothing.</summary>
+    public void EnableTalk(string hoverName, string hoverVerb, Action onTalk, Action<string>? log)
+    {
+        if (_takenDown || _talk != null || _root == null || onTalk == null
+            || string.IsNullOrWhiteSpace(hoverName) || string.IsNullOrWhiteSpace(hoverVerb))
+        {
+            return;
+        }
+
+        _talk = NpcFigureParts.TalkPoint(_root, NonSolidLayer());
+        _talk.Configure(hoverName.Trim(), hoverVerb.Trim(), onTalk, log);
+    }
+
+    /// <summary>A layer the game treats as non-solid for characters, or -1.</summary>
+    private static int NonSolidLayer()
+    {
+        foreach (string name in new[] { "piece_nonsolid", "item" })
+        {
+            try
+            {
+                int layer = LayerMask.NameToLayer(name);
+                if (layer >= 0)
+                {
+                    return layer;
+                }
+            }
+            catch (Exception)
+            {
+                // Try the next name.
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Stands the figure at <paramref name="spot"/>, facing

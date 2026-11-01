@@ -25,6 +25,17 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   anything else.
 - Not yet observed in game.
 
+### Added — at home from the introduction, and talking to him (#295 S3)
+
+- **Once you have examined the square, Thorstein is at home** near your bed,
+  waiting for his axe and hammer. Before this he appeared only once recruited.
+  A worker you dismissed is still not shown.
+- **Talk to him** with the use key. While he waits, he answers about the tool
+  he still needs, read from his real handed-over tools. Once he works for you,
+  he has a few house-building remarks, and he does not repeat one until he has
+  said the others. He speaks only when spoken to. A remark about Hulgi waits
+  until the game can tell that you have met Hulgi. **Not observed in game.**
+
 ### Added — the carpenter's square (#295 S2)
 
 - **A worn carpenter's square lies near your bed** while Thorstein's
