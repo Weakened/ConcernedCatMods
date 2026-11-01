@@ -1,4 +1,6 @@
 using System;
+using TheConcernedCat.ConcernedTeamster.Domain.Companions;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using Jotunn.Managers;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,7 +20,7 @@ internal sealed class GunnarRecruitmentPanel
         if (GUIManager.Instance == null || GUIManager.CustomGUIFront == null) return;
         if (_button == null && visible)
         {
-            _button = GUIManager.Instance.CreateButton("Gunnar Introduction", GUIManager.CustomGUIFront.transform,
+            _button = GUIManager.Instance.CreateButton(L("gunnar.recruit.ui.button"), GUIManager.CustomGUIFront.transform,
                 new Vector2(0, .5f), new Vector2(0, .5f), new Vector2(110, 250), 190, 32);
             _button.GetComponent<Button>().onClick.AddListener(Toggle);
         }
@@ -31,9 +33,9 @@ internal sealed class GunnarRecruitmentPanel
         {
             if (_panel == null) Build();
             if (_panel == null) return;
-            if (_panel.activeSelf) _act("cancel");
+            if (_panel.activeSelf) _act(GunnarRecruitmentStrings.Cancel);
             _panel.SetActive(!_panel.activeSelf);
-            if (_panel.activeSelf) Report(_act("status"));
+            if (_panel.activeSelf) Report(_act(GunnarRecruitmentStrings.Status));
         }
         catch (Exception exception) { _fail(exception); }
     }
@@ -42,15 +44,15 @@ internal sealed class GunnarRecruitmentPanel
         var gui = GUIManager.Instance;
         _panel = gui.CreateWoodpanel(GUIManager.CustomGUIFront.transform, new Vector2(.5f, .5f),
             new Vector2(.5f, .5f), Vector2.zero, 540, 360, draggable: true);
-        gui.CreateText("A Fair Load", _panel.transform, new Vector2(.5f, 1), new Vector2(.5f, 1),
+        gui.CreateText(L("gunnar.recruit.ui.title"), _panel.transform, new Vector2(.5f, 1), new Vector2(.5f, 1),
             new Vector2(0, -25), gui.AveriaSerifBold, 20, Color.white, true, Color.black, 430, 30, false);
         _text = gui.CreateText("", _panel.transform, new Vector2(.5f, 1), new Vector2(.5f, 1),
             new Vector2(0, -130), gui.AveriaSerifBold, 16, Color.white, true, Color.black, 490, 170, false).GetComponent<Text>();
-        Button(gui, "Choose Pointed Cart", -130, -240, () => Report(_act("choose")));
-        Button(gui, "Confirm Recruitment", 130, -240, () => Report(_act("confirm")));
-        Button(gui, "Refresh Status", -130, -285, () => Report(_act("status")));
-        Button(gui, "Cancel / Close", 130, -285, () => { _act("cancel"); _panel.SetActive(false); });
-        Button(gui, "First Delivery (Optional)", 0, -330, () => Report(_act("offer")));
+        Button(gui, L("gunnar.recruit.ui.choose"), -130, -240, () => Report(_act(GunnarRecruitmentStrings.Choose)));
+        Button(gui, L("gunnar.recruit.ui.confirm"), 130, -240, () => Report(_act(GunnarRecruitmentStrings.Confirm)));
+        Button(gui, L("gunnar.recruit.ui.status"), -130, -285, () => Report(_act(GunnarRecruitmentStrings.Status)));
+        Button(gui, L("gunnar.recruit.ui.cancel"), 130, -285, () => { _act(GunnarRecruitmentStrings.Cancel); _panel.SetActive(false); });
+        Button(gui, L("gunnar.recruit.ui.offer"), 0, -330, () => Report(_act(GunnarRecruitmentStrings.Offer)));
         _panel.SetActive(false);
     }
     private void Button(GUIManager gui, string label, float x, float y, Action act)
@@ -61,6 +63,7 @@ internal sealed class GunnarRecruitmentPanel
             try { act(); } catch (Exception exception) { _fail(exception); }
         });
     }
+    private static string L(string key) => GunnarRecruitmentStrings.Resolve(key,k=>TeamsterStrings.HasKey(k)?TeamsterStrings.Get(k):k);
     private void Report(string message) { if (_text != null) _text.text = message; }
     internal void Dispose()
     {

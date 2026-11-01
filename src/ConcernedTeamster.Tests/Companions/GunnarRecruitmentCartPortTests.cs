@@ -37,6 +37,13 @@ public sealed class GunnarRecruitmentCartPortTests : IDisposable
         _cart.m_nview.Valid=false; Assert.Equal(GunnarCartCheck.Unloaded,Read().Check);
         Assert.Equal(GunnarCartCheck.Destroyed,GunnarRecruitmentCartPort.Read(null,_epoch,null).Check);
     }
+    [Fact] public void AnExistingParkedAssignmentOfThisSameCartCanCount()
+    {
+        var book=new CartLeaseBook(_epoch);
+        book.Assign("existing",WorkerKey.Gunnar,new CartKey("cart-one",_epoch));
+        Assert.True(book.TryGetActiveForWorker(WorkerKey.Gunnar,out var lease));
+        Assert.Equal(GunnarCartCheck.Usable,GunnarRecruitmentCartPort.Read(_cart,_epoch,lease).Check);
+    }
     [Fact] public void WrongKindDistanceUnknownAndConflictingLeaseRefuse()
     {
         _cart.Kind=new Catapult(); Assert.Equal(GunnarCartCheck.WrongKind,Read().Check); _cart.Kind=new SiegeMachine();

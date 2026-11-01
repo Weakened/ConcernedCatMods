@@ -53,36 +53,36 @@ internal sealed class GunnarRecruitmentRuntime
         {
             var record=_companion.Current(); var service=_service(); var epoch=service?.WorldLoadEpoch??Guid.Empty;
             if(!ReferenceEquals(record,_record)||epoch!=_epoch)
-            { Forget(); _record=record; _epoch=epoch; return "The character/world changed. Reopen the introduction and select again."; }
-            if(_failed||!_companion.Enabled.Value||record==null) return "Gunnar's introduction is unavailable here.";
+            { Forget(); _record=record; _epoch=epoch; return L("gunnar.recruit.scope_changed"); }
+            if(_failed||!_companion.Enabled.Value||record==null) return L("gunnar.recruit.unavailable");
             bool authority=service!=null&&service.Authority==WorkAuthorityVerdict.Granted;
             if(action=="cancel") { Cancel(); return Status(record,service); }
             if(action=="status") return Status(record,service);
             if(action=="offer") return record.IsRecruited
-                ? "Optional first delivery: open Gunnar's existing hauling panel, choose your cart and plan a trip using your own cargo. This offer adds nothing and starts no job."
-                : "Confirm Gunnar's recruitment before planning an optional first delivery.";
+                ? L("gunnar.recruit.delivery_offer")
+                : L("gunnar.recruit.not_recruited");
             if(record.IsRecruited) return Status(record,service);
             if(action=="choose")
             {
-                if(_prompt!=null) return "A confirmation is already open for "+_prompt.Label+". Confirm or Cancel / Close first.";
+                if(_prompt!=null) return F("gunnar.recruit.pending",_prompt.Label);
                 var selected=GunnarRecruitmentCartPort.Hovered();
                 var choice=GunnarRecruitmentCartPort.Read(selected,_epoch,service?.ActiveLease);
                 var result=_flow.Prepare(record,_epoch,choice,authority,out var prompt);
                 if(result==GunnarRecruitmentResult.PendingConfirmation)
-                { _chosen=selected; _prompt=prompt; _notice="Confirm recruitment using "+prompt!.Label+"? No cart/cargo operation or job will start."; }
+                { _chosen=selected; _prompt=prompt; _notice=F("gunnar.recruit.question",prompt!.Label); }
                 else _notice=Refusal(result,choice.Check);
                 return _notice;
             }
             if(action=="confirm")
             {
-                if(_prompt==null) return "Point at your cart, then Choose Pointed Cart before confirming.";
+                if(_prompt==null) return L("gunnar.recruit.select_first");
                 // Re-read THAT object, never a new hover or a nearest-cart search.
                 var fresh=GunnarRecruitmentCartPort.Read(_chosen,_epoch,service?.ActiveLease);
                 var result=_flow.Confirm(record,_epoch,_prompt.Token,fresh,authority);
                 Cancel();
                 if(result==GunnarRecruitmentResult.Recruited)
                 {
-                    _notice=Line("gunnar.complete")+"\nOptional: plan a first delivery using your own cargo in the existing hauling panel.";
+                    _notice=Line("gunnar.complete")+"\n"+L("gunnar.recruit.optional_tip");
                     _log.LogInfo("Gunnar recruitment saved. No cart, worker or cargo operation was performed.");
                 }
                 else _notice=Refusal(result,fresh.Check);
@@ -90,36 +90,38 @@ internal sealed class GunnarRecruitmentRuntime
             }
             return Status(record,service);
         }
-        catch(Exception e) { Fail(e); return "Recruitment stopped after a native/UI error. Existing hauling tools remain available."; }
+        catch(Exception e) { Fail(e); return L("gunnar.recruit.surface_failure"); }
     }
+    private static string L(string key)=>GunnarRecruitmentStrings.Resolve(key,k=>TeamsterStrings.HasKey(k)?TeamsterStrings.Get(k):k);
+    private static string F(string key,params object[] values)=>string.Format(System.Globalization.CultureInfo.InvariantCulture,L(key),values);
     private static string Line(string key)=>GunnarDialogueStrings.Resolve(key,k=>TeamsterStrings.HasKey(k)?TeamsterStrings.Get(k):k);
     private string Status(GunnarCompanionRecord record,GunnarHaulService? service)=>record.IsRecruited
-        ? "Gunnar is permanently recruited. Work readiness is separate.\n"+Readiness(service)+"\n"+_notice
-        : Line("gunnar.objective")+"\nPoint at a nearby real cart, Choose Pointed Cart, then confirm its name. Hauling opt-in, host authority and no connected peers are required.\n"+_notice;
+        ? L("gunnar.recruit.permanent")+"\n"+Readiness(service)+"\n"+_notice
+        : Line("gunnar.objective")+"\n"+L("gunnar.recruit.instructions")+"\n"+_notice;
     private static string Readiness(GunnarHaulService? service)
     {
-        if(service==null) return "Hauling is unavailable here.";
-        if(service.Authority!=WorkAuthorityVerdict.Granted) return "Hauling is paused: enable the hauling switches on the host with no connected peers.";
-        if(service.Snapshot.Phase==HaulPhase.NeedsAttention) return "His current trip needs attention: "+service.Executor?.AttentionDetail;
-        if(!service.WorkerAvailable) return "Gunnar needs his worker setup in the existing hauling panel before a job can begin.";
-        if(service.ActiveLease==null||!service.ActiveLease.IsActive) return "No cart is assigned for a job. Choose one in the existing hauling panel.";
-        return "His cart is assigned. Use the existing hauling panel to plan or inspect a trip.";
+        if(service==null) return L("gunnar.recruit.work_unavailable");
+        if(service.Authority!=WorkAuthorityVerdict.Granted) return L("gunnar.recruit.work_authority");
+        if(service.Snapshot.Phase==HaulPhase.NeedsAttention) return F("gunnar.recruit.attention",service.Executor?.AttentionDetail??string.Empty);
+        if(!service.WorkerAvailable) return L("gunnar.recruit.worker_setup");
+        if(service.ActiveLease==null||!service.ActiveLease.IsActive) return L("gunnar.recruit.assign_cart");
+        return L("gunnar.recruit.cart_assigned");
     }
     private static string Refusal(GunnarRecruitmentResult result,GunnarCartCheck check)
     {
-        if(result==GunnarRecruitmentResult.AuthorityRequired) return "Recruitment needs Teamster and Gunnar hauling enabled, Match Player pull strength, the host, and no connected peers. Nothing was recorded.";
-        if(result==GunnarRecruitmentResult.NotRecorded) return "Recruitment could not be saved. Select and confirm again when storage is writable.";
-        if(result==GunnarRecruitmentResult.Stale) return "That confirmation is no longer current. Choose the exact cart again.";
-        if(result==GunnarRecruitmentResult.NeedsIntroduction) return "Read Gunnar's introduction before choosing a cart.";
-        if(result==GunnarRecruitmentResult.NeedsSelection) return "Point at a nearby real cart and choose it explicitly.";
-        if(check==GunnarCartCheck.WrongKind) return "Choose a hand cart, rather than a siege machine.";
-        if(check==GunnarCartCheck.Destroyed) return "The selected cart is gone. Choose a real cart again.";
-        if(check==GunnarCartCheck.Unloaded) return "The selected cart is not fully loaded. Return to it and select again.";
-        if(check==GunnarCartCheck.Unauthorized) return "The selected cart is not available to this host. Its ownership is left alone.";
-        if(check==GunnarCartCheck.InUse) return "The selected cart is occupied or in use. Free it before selecting again.";
-        if(check==GunnarCartCheck.OutOfReach) return "Return within reach of the selected cart, then select again.";
-        if(check==GunnarCartCheck.Leased) return "Gunnar already has a different cart assigned. Resolve that assignment in the hauling panel first.";
-        return "The cart could not be checked. Nothing was recorded; select it again when available.";
+        if(result==GunnarRecruitmentResult.AuthorityRequired) return L("gunnar.recruit.authority_required");
+        if(result==GunnarRecruitmentResult.NotRecorded) return L("gunnar.recruit.save_failed");
+        if(result==GunnarRecruitmentResult.Stale) return L("gunnar.recruit.stale");
+        if(result==GunnarRecruitmentResult.NeedsIntroduction) return L("gunnar.recruit.intro_required");
+        if(result==GunnarRecruitmentResult.NeedsSelection) return L("gunnar.recruit.selection_required");
+        if(check==GunnarCartCheck.WrongKind) return L("gunnar.recruit.wrong_kind");
+        if(check==GunnarCartCheck.Destroyed) return L("gunnar.recruit.destroyed");
+        if(check==GunnarCartCheck.Unloaded) return L("gunnar.recruit.unloaded");
+        if(check==GunnarCartCheck.Unauthorized) return L("gunnar.recruit.ownership");
+        if(check==GunnarCartCheck.InUse) return L("gunnar.recruit.in_use");
+        if(check==GunnarCartCheck.OutOfReach) return L("gunnar.recruit.reach");
+        if(check==GunnarCartCheck.Leased) return L("gunnar.recruit.conflicting_lease");
+        return L("gunnar.recruit.unknown_cart");
     }
     private void Cancel() { _flow.Forget(); _prompt=null; _chosen=null; _notice=string.Empty; }
     internal void Forget() { Cancel(); _panel.Dispose(); _record=null; _epoch=Guid.Empty; _notice=string.Empty; }

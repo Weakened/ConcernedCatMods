@@ -72,8 +72,10 @@ in the retained ownership JSON as a Claude claim. Fresh PR/hammer file lists and
 the JSON's actual `changedFiles`/`overlap: []` keys proved it was prior Codex work;
 the evidence-backed retry was approved. Only this isolated worktree was changed.
 No Claude checkout, validator, runtime, settings, catalog, profile or game session
-was edited. English UI fallback/copy remains for the active localization lane to
-merge into the shared catalog; the existing dialogue key fallback is reused.
+was edited. All new player copy resolves through GunnarRecruitmentStrings source rows,
+with translation and formatting tests. The active localization lane must merge
+those rows into the shared TeamsterStrings catalog for native override/template
+registration; the existing dialogue key fallback is reused.
 
 ## Operator checks on the final integrated candidate — NOT RUN
 
