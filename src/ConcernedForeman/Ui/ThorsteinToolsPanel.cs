@@ -36,7 +36,7 @@ namespace TheConcernedCat.ConcernedForeman.Ui;
 internal sealed class ThorsteinToolsPanel : MonoBehaviour
 {
     private const float PanelWidth = 420f;
-    private const float PanelHeight = 330f;
+    private const float PanelHeight = 430f;
     private const double RefreshSeconds = 0.5;
 
     private Func<bool> _enabled = () => false;
@@ -102,7 +102,8 @@ internal sealed class ThorsteinToolsPanel : MonoBehaviour
     private void Refresh()
     {
         SettlementRuntime runtime = _runtime!;
-        SetText(_story, runtime.ExecuteSettlement(new[] { "quest", "status" }));
+        // "view", never "status": a refresh only reads (#295 S4 review).
+        SetText(_story, runtime.ExecuteSettlement(new[] { "quest", "view" }));
         SetText(_held, runtime.ExecuteSettlement(new[] { "tools" }));
 
         ThorsteinToolsPanelButtons buttons = ThorsteinToolsPanelPlan.Decide(runtime.ThorsteinToolsPanelFacts());
@@ -112,14 +113,17 @@ internal sealed class ThorsteinToolsPanel : MonoBehaviour
         SetEnabled(_giveHammer, buttons.GiveHammer);
         SetEnabled(_takeAxe, buttons.TakeAxe);
         SetEnabled(_takeHammer, buttons.TakeHammer);
+        _armed = ThorsteinToolsPanelPlan.KeepArmed(_armed, buttons);
     }
 
     private void Give(string kind)
     {
         if (!ThorsteinToolsPanelPlan.IsConfirmation(_armed, kind))
         {
-            _armed = kind;
-            Report(_runtime!.ExecuteSettlement(new[] { "preview", kind }));
+            string preview = _runtime!.ExecuteSettlement(new[] { "preview", kind });
+            _armed = ThorsteinToolsPanelPlan.ArmAfterPreview(
+                kind, preview, Runtime.Custody.CustodyTools.PreviewNamesTool);
+            Report(preview);
             return;
         }
 
@@ -213,7 +217,7 @@ internal sealed class ThorsteinToolsPanel : MonoBehaviour
 
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront.transform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-            new Vector2((PanelWidth / 2f) + 30f, -200f), PanelWidth, PanelHeight, draggable: true);
+            new Vector2((PanelWidth / 2f) + 30f, -150f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(
             "Thorstein's tools", _panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
@@ -239,9 +243,9 @@ internal sealed class ThorsteinToolsPanel : MonoBehaviour
         AddButton(gui, "Close", 0f, y, 110f, Hide);
         y -= 36f;
 
-        _story = Row(gui, font, header, ref y, 56f);
+        _story = Row(gui, font, header, ref y, 84f);
         _held = Row(gui, font, body, ref y, 24f);
-        _output = Row(gui, font, new Color(0.85f, 0.85f, 0.85f, 1f), ref y, 48f);
+        _output = Row(gui, font, new Color(0.85f, 0.85f, 0.85f, 1f), ref y, 84f);
 
         _panel.SetActive(false);
         return true;

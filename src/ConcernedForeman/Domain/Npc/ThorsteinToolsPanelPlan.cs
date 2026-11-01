@@ -80,4 +80,22 @@ internal static class ThorsteinToolsPanelPlan
     /// confirmation").</summary>
     internal static bool IsConfirmation(string? armedKind, string kind) =>
         armedKind != null && armedKind == kind;
+
+    /// <summary>What the first click arms, if anything: only a preview that
+    /// actually named a usable tool in hand (#295 S4 review). A refusal - no
+    /// tool held, a broken one - arms nothing, so a later click is a first
+    /// click again and names whatever is held then.</summary>
+    internal static string? ArmAfterPreview(string kind, string? preview, string namesToolPrefix) =>
+        preview != null && preview.StartsWith(namesToolPrefix, System.StringComparison.Ordinal) ? kind : null;
+
+    /// <summary>An armed give is dropped as soon as its button has nothing to
+    /// do, so a give made elsewhere (the console) cannot leave a one-click give
+    /// behind.</summary>
+    internal static string? KeepArmed(string? armedKind, in ThorsteinToolsPanelButtons buttons) =>
+        armedKind switch
+        {
+            "axe" when !buttons.GiveAxe => null,
+            "hammer" when !buttons.GiveHammer => null,
+            _ => armedKind,
+        };
 }

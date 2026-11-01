@@ -21,8 +21,10 @@ moved: 0.1.0 has never shipped, so these are still its notes.
 - **Talking to him names the real hold-up.** With both tools given but not yet taken on,
   he names what is wrong: no settlement area, a record that cannot be read or saved,
   missing authority, or an unresolved handover. Before, he always asked for the settlement.
-- New console words: `cf_settle preview axe|hammer` and `cf_settle tools`. **Not observed
-  in game.**
+- New console words: `cf_settle preview axe|hammer`, `cf_settle tools` and
+  `cf_settle quest view`. All three only read. The panel refreshes with them, so it
+  never takes anyone on or saves on a timer. A broken tool is refused at the
+  preview. **Not observed in game.**
 
 ### Added — at home from the introduction, and talking to him (#295 S3)
 

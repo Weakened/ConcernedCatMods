@@ -48,4 +48,28 @@ public sealed class ThorsteinToolsPanelTests
         Assert.False(ThorsteinToolsPanelPlan.IsConfirmation("hammer", "axe"));
         Assert.True(ThorsteinToolsPanelPlan.IsConfirmation("axe", "axe"));
     }
+
+    [Fact]
+    public void Only_a_preview_that_named_a_usable_tool_arms_the_second_click()
+    {
+        // S4 review B2: a refusal ("hold the axe first", "it is broken") must not
+        // arm, or the next click would give a tool the player never saw named.
+        const string prefix = "Give him your ";
+        Assert.Equal("axe", ThorsteinToolsPanelPlan.ArmAfterPreview("axe", "Give him your Axe (quality 1, ...", prefix));
+        Assert.Null(ThorsteinToolsPanelPlan.ArmAfterPreview("axe", "Hold the axe you want to give him in your hand first.", prefix));
+        Assert.Null(ThorsteinToolsPanelPlan.ArmAfterPreview("axe", "Your Axe is broken, so he could not work with it.", prefix));
+        Assert.Null(ThorsteinToolsPanelPlan.ArmAfterPreview("axe", null, prefix));
+    }
+
+    [Fact]
+    public void An_armed_give_is_dropped_when_its_button_has_nothing_to_do()
+    {
+        // S4 review B2: a give made from the console between the two clicks must
+        // not leave a one-click give behind.
+        ThorsteinToolsPanelButtons axeGiven = Buttons(axe: true);
+        Assert.Null(ThorsteinToolsPanelPlan.KeepArmed("axe", axeGiven));
+        Assert.Equal("hammer", ThorsteinToolsPanelPlan.KeepArmed("hammer", axeGiven));
+        Assert.Null(ThorsteinToolsPanelPlan.KeepArmed("hammer", Buttons(present: false)));
+        Assert.Null(ThorsteinToolsPanelPlan.KeepArmed(null, Buttons()));
+    }
 }

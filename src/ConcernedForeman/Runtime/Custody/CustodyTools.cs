@@ -39,6 +39,10 @@ internal sealed class CustodyTools
     /// item a give would hand over - the tool of that kind in the player's hand,
     /// with its quality and durability - and moves nothing. The tools panel's
     /// first click on Give is this; only the second is the give.</summary>
+    /// <summary>How a preview that named a tool to give begins. The panel arms
+    /// its second click only on this; a refusal arms nothing.</summary>
+    internal const string PreviewNamesTool = "Give him your ";
+
     internal string Preview(string[]? args)
     {
         if (args == null || args.Length < 2 || !TryParseKind(args[1], out ToolKind kind))
@@ -73,9 +77,13 @@ internal sealed class CustodyTools
                 // The token is still a name; it is only less readable.
             }
 
-            return "Give him your " + name + " (quality " + specimen.Quality.ToString(CultureInfo.InvariantCulture) +
+            if (!ToolClassifier.IsStillUsable(held))
+            {
+                return "Your " + name + " is broken, so he could not work with it. Repair it first.";
+            }
+
+            return PreviewNamesTool + name + " (quality " + specimen.Quality.ToString(CultureInfo.InvariantCulture) +
                 ", durability " + specimen.DurabilityAtIssue.ToString("0", CultureInfo.InvariantCulture) +
-                (ToolClassifier.IsStillUsable(held) ? string.Empty : ", BROKEN") +
                 ")? It stays his real tool until you take it back. Click again to give it.";
         }
 

@@ -267,7 +267,10 @@ Tools of the Trade's status and what the record says he holds, and offers:
 - **Take back axe / Take back hammer:** `cf_settle takeback`.
 
 Every button is a console word, so the panel can neither do nor refuse anything the console
-would not. Buttons with nothing to do are greyed (game-free `ThorsteinToolsPanelPlan`).
+would not. While the panel is open it refreshes twice a second using only read-only words
+(`cf_settle quest view`, `cf_settle tools`), so it never recruits or saves anything on a timer.
+A Give click whose preview refused (no tool in hand, or a broken one) arms nothing, and an
+armed Give is dropped as soon as there is nothing left to give. Buttons with nothing to do are greyed (game-free `ThorsteinToolsPanelPlan`).
 Nothing moves while a handover is unresolved.
 
 Talking to him with both tools held now names the real hold-up: no settlement area, a
