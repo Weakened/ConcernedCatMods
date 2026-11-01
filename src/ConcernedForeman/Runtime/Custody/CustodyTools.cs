@@ -35,14 +35,14 @@ internal sealed class CustodyTools
         _records = records;
     }
 
-    /// <summary><c>cf_settle preview axe|hammer</c> (#295 S4): names the exact
-    /// item a give would hand over - the tool of that kind in the player's hand,
-    /// with its quality and durability - and moves nothing. The tools panel's
-    /// first click on Give is this; only the second is the give.</summary>
     /// <summary>How a preview that named a tool to give begins. The panel arms
     /// its second click only on this; a refusal arms nothing.</summary>
     internal const string PreviewNamesTool = "Give him your ";
 
+    /// <summary><c>cf_settle preview axe|hammer</c> (#295 S4): names the exact
+    /// item a give would hand over - the tool of that kind in the player's hand,
+    /// with its quality and durability - and moves nothing. The tools panel's
+    /// first click on Give is this; only the second is the give.</summary>
     internal string Preview(string[]? args)
     {
         if (args == null || args.Length < 2 || !TryParseKind(args[1], out ToolKind kind))

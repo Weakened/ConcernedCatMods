@@ -53,7 +53,7 @@ internal sealed class ThorsteinQuest
     /// <summary>Drops the open record when a world goes away.</summary>
     internal void Forget() => _progress = null;
 
-    /// <summary><c>cf_settle quest [status|examine]</c>.</summary>
+    /// <summary><c>cf_settle quest [status|view|examine]</c>.</summary>
     internal string Execute(SettlementRegister register, SettlementJournal journal, Func<string?> saveRecords,
         string[]? args)
     {

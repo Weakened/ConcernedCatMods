@@ -136,7 +136,7 @@ internal sealed class DesignationTools
                 return "Unknown subcommand. Try: status, housing, area <radius>, harvest <radius>, " +
                     "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
                     "give axe|hammer, preview axe|hammer, tools, takeback [axe|hammer], release, reconcile, " +
-                    "quest [status|examine], " +
+                    "quest [status|view|examine], " +
                     "resolve <request> mine|his|source|destination [count], resolve <order> lost.";
         }
     }

@@ -26,7 +26,7 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
         "Concerned Foreman settlement designation and custody. Subcommands: status, housing, area <radius>, " +
         "harvest <radius>, supply (look at a chest), recruit [name], dismiss [name], " +
         "clear <area|harvest|supply> [yes], give axe|hammer (hold it, stand by Thorstein), " +
-        "preview axe|hammer, tools, takeback [axe|hammer], release (hands you what he still carries for ended orders), reconcile, quest [status|examine] (Thorstein's introduction), " +
+        "preview axe|hammer, tools, takeback [axe|hammer], release (hands you what he still carries for ended orders), reconcile, quest [status|view|examine] (Thorstein's introduction), " +
         "resolve <request> mine|his|source|destination [count], " +
         "resolve <order> lost. Requires the settlement runtime to be enabled in the config and this " +
         "peer to be the host; custody acts also require nobody else to be connected.";
