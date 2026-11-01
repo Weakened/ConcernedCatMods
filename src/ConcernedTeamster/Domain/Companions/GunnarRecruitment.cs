@@ -27,8 +27,9 @@ internal enum GunnarRecruitmentResult { Unavailable, NeedsIntroduction, Authorit
 
 /// <summary>One explicitly selected in-session cart and one named confirmation.
 /// No cart lease, mutation, persisted native identity, worker start or tutorial cargo.
-/// The owner/lead authority decision is pending: require the existing strict
-/// hauling opt-in + host authority until a wider read-only rule is approved.</summary>
+/// Owner decision 2026-11-01: recruitment requires the existing hauling
+/// opt-in and host authority at both selection and confirmation. Existing
+/// no-peers/custody/work gates remain in force; a hire starts no job.</summary>
 internal sealed class GunnarRecruitment
 {
     private readonly object _gate=new();

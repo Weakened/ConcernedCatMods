@@ -9,10 +9,12 @@ recorded recruitment returns Recruited. A save refusal consumes the confirmation
 but grants nothing; the player selects and confirms again. No nearest-cart guess,
 ZDOID sidecar, cart write, lease, job start or fabricated tutorial cargo exists.
 
-The authority question in #460 remains with the owner/lead. Until a read-only
-recruitment rule is approved, existingHaulingAuthorityGranted must mean the REAL
-Workers opt-in + host/no-peers authority verdict, not the UI's visibility. This
-conservative source policy does not decide the open question for the owner.
+Owner decision, 2026-11-01: "Require hauling opt-in and host authority."
+Recruitment requires both at selection AND confirmation. The existing
+existingHaulingAuthorityGranted input must come from the real worker-authority
+verdict, including its existing no-peers rule, not UI visibility or companion
+presence. Recruitment still starts no job and bypasses no custody/lease check.
+The implementation already enforces this rule; the owner decision confirms it.
 
 Lead-owned native/panel wiring remains required: use the existing pointed-cart
 selection and CartKey world-load epoch. Build a GunnarCartChoice from actual
@@ -29,8 +31,8 @@ worker-body and custody checks. Missing/destroyed/unloaded/in-use/unauthorized
 carts retain exact work NeedsAttention handling there and never undo recruitment.
 
 No active worker/runtime/panel/localization/validator files were edited. The
-existing #317 assign/confirm prompt integration, owner authority decision and
-real-game evidence remain OPEN. The flow is not yet reachable in the installed game.
+existing #317 assign/confirm prompt integration and real-game evidence remain
+OPEN. The recruitment authority decision is resolved as stated above. The flow is not yet reachable in the installed game.
 
 Automated: exact named cart confirmation, every unavailable check, post-prompt
 in-use/unauthorized/leased refusal, two pending assignments, changed identity,

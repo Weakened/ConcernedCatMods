@@ -15,7 +15,7 @@ One dedicated worktree/branch per leaf, stacked for explicit dependencies:
 | #457 | feat/ct-457-gunnar-keepsake | Shared keepsake spec/presenter, durable pickup, placement; verified anchor/probe, other-memento footprints, saved-worker census and native lifecycle wiring remain. |
 | #458 | feat/ct-458-gunnar-presentation | Body decisions, role wrapper, real-library leases, dresser/metadata adapters; existing role registration, same-position worker handover, Teamster figure audit/plants, native presets and visual evidence remain. |
 | #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
-| #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel/authority decision remain. |
+| #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel remain; owner confirmed hauling opt-in + host authority on 2026-11-01. |
 | #461 | feat/ct-461-gunnar-camp | Cached no-allocation targets/range retention/seats; approved public Camp API release/pins, native pose and lifecycle wiring remain. Proposed Camp facade is uncompiled under proposals/. |
 | #462 | feat/ct-462-gunnar-coverage | Cross-feature tests and this matrix; native campaign/evidence remains. |
 
@@ -50,8 +50,8 @@ patch in artifacts/gunnar-handoff. No branch has been merged or published.
 
 1. Reconcile the new-file source stack with current main. Keep Claude's worker,
    settings, localization, validator and release edits; no competing integration.
-2. Wire the contracts described in each GUNNAR_*.md. Resolve authority and Camp
-   release decisions. Add Teamster confinement/plant tests before any native pose
+2. Wire the contracts described in each GUNNAR_*.md. Apply the owner-approved
+   hauling opt-in + host authority rule for recruitment. Resolve the Camp release decision. Add Teamster confinement/plant tests before any native pose
    writes. Read actual installed preset IDs and record what was resolved.
 3. Run scripts/build.ps1 and scripts/verify.ps1 under the shared build mutex;
    record repaired source SHA, library/product versions and gate logs.
