@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
-versionNumber = "1.2.2"
+versionNumber = "1.4.0"
 description = "v1.2.2: Meet Hulgi. A local-only companion, a short introduction, and the living atlas: roads, markers, routes, survey, search and sharing."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
@@ -36,3 +36,7 @@ communities = ["valheim"]
 
 [publish.categories]
 valheim = ["mods", "client-side", "utility", "ai-generated"]
+
+[[build.copy]]
+source = "./HULGI_TEST_CHECKLIST.md"
+target = "/HULGI_TEST_CHECKLIST.md"

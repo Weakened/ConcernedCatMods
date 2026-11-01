@@ -202,7 +202,7 @@ internal sealed class CompanionStoryPanel
             }
 
             Player player = Player.m_localPlayer;
-            if (player == null || player.IsDead())
+            if (player == null || player.IsDead() || player.IsTeleporting() || player.InAttack())
             {
                 return true;
             }
@@ -374,6 +374,7 @@ internal sealed class CompanionStoryPanel
             AtlasStrings.Get(labelKey), _panel!.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x, y), width, 32f);
         var component = button.GetComponent<Button>();
+        button.AddComponent<StoryCancelHandler>().Cancel = Hide;
         component.onClick.AddListener(() =>
         {
             try
