@@ -25,7 +25,7 @@ internal sealed class WorkerLadderReceiver
         var survey=new WorkerLadderLinkSurvey(Network,limits);
         _probe=new WorkerLadderLandingProbe(worker,siteAllowed,log);
         _feed=new WorkerLadderLinkFeed(new ConcernedLaddersWorkerSource(log),_probe,survey);
-        Traversal=new WorkerLadderPathTraversal(new LinkTraversal(Network,capabilities,limits),survey,limits.TraversalSpeedMetresPerSecond);
+        Traversal=new WorkerLadderPathTraversal(new LinkTraversal(Network,capabilities,limits),survey,limits.TraversalSpeedMetresPerSecond,WorkerKey.Thorstein,_probe);
     }
     internal TraversalLinkNetwork Network { get; }
     internal ILadderTraversal Traversal { get; }

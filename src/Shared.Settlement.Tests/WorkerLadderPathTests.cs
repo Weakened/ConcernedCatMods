@@ -18,7 +18,7 @@ public sealed class WorkerLadderPathTests
         Assert.True(TraversalLink.TryCreate("checked-path",TraversalLinkKind.Ladder,_bottom,_top,TraversalCapability.Ladders,limits,out var link));
         _paths.Generation=_network.Publish(link);
         _paths.Path=new WorkerLadderPassage(_bottom,_bottom,new WorkPoint(0,2,.7f),_top);
-        _traversal=new WorkerLadderPathTraversal(new LinkTraversal(_network,caps,limits),_paths,1);
+        _traversal=new WorkerLadderPathTraversal(new LinkTraversal(_network,caps,limits),_paths,1,WorkerKey.Thorstein);
     }
     private TraversalRequest Request(bool down=false)=>TraversalRequest.ForWorker(WorkerKey.Thorstein,"checked-path",down?_top:_bottom,
         authority:WorkAuthorityVerdict.Granted);
@@ -62,6 +62,32 @@ public sealed class WorkerLadderPathTests
         Assert.Equal(TraversalPhase.Lost,_traversal.Traverse(entry.Handle,TraversalIntent.Advance,.05f).Phase);
         Assert.False(_traversal.Exit(entry.Handle,TraversalExitKind.Arrived).PlaceActor);
         Assert.False(_traversal.Enter(Request()).Started);
+    }
+    private sealed class Mount : IWorkerLadderMountProbe
+    { internal bool Allowed=true; public bool CanMount(WorkPoint standing,WorkPoint entry)=>Allowed; }
+    [Fact] public void ACheckedMountStartsAtTheActualBodyInsteadOfSnappingToTheEntry()
+    {
+        var caps=new TraversalCapabilities(true); caps.Grant(WorkerKey.Thorstein,TraversalCapability.Ladders);
+        var mount=new Mount(); var traversal=new WorkerLadderPathTraversal(new LinkTraversal(_network,caps),_paths,1,WorkerKey.Thorstein,mount);
+        var standing=new WorkPoint(0,0,1.2f);
+        var request=TraversalRequest.ForWorker(WorkerKey.Thorstein,"checked-path",standing);
+        Assert.False(_traversal.Enter(request).Started); // no sweep, no approximate-entry permission
+        var entered=traversal.Enter(request); Assert.True(entered.Started);
+        Assert.Equal(standing,traversal.Traverse(entered.Handle,TraversalIntent.Hold,0).EstimatedPosition);
+        var moved=traversal.Traverse(entered.Handle,TraversalIntent.Advance,.05f);
+        Assert.Equal(0,moved.EstimatedPosition.Y); Assert.Equal(1.15f,moved.EstimatedPosition.Z,5);
+        traversal.Traverse(entered.Handle,TraversalIntent.Reverse,.05f);
+        Assert.Equal(standing,traversal.Exit(entered.Handle,TraversalExitKind.TurnedBack).Landing);
+        mount.Allowed=false; Assert.False(traversal.Enter(request).Started);
+    }
+    [Fact] public void TheBoundWorkerCannotBeReplacedAndAnotherEntryCannotResetProgress()
+    {
+        Assert.False(_traversal.Enter(TraversalRequest.ForWorker(WorkerKey.Gunnar,"checked-path",_bottom)).Started);
+        var entry=_traversal.Enter(Request());
+        _traversal.Traverse(entry.Handle,TraversalIntent.Advance,.05f);
+        var second=_traversal.Enter(Request()); Assert.False(second.Started);
+        Assert.Equal(TraversalRefusal.AlreadyTraversing,second.Verdict.Refusal);
+        Assert.Equal(.1f,_traversal.Traverse(entry.Handle,TraversalIntent.Advance,.05f).MetresFromEntry,5);
     }
     [Fact] public void InvalidOrLargeDeltaCannotSkipTheCheckedTrackAndPlayersCannotEnter()
     {

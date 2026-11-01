@@ -58,6 +58,14 @@ public sealed class WorkerLadderLandingProbeTests : IDisposable
         Assert.False(probe.TryBodyShape(out _));
         Assert.Equal(WorkerLadderProbeResult.Unavailable,probe.TryMeasure(Run(),WorkerLadderFace.Front,_shape,out _));
     }
+    [Fact] public void MountSweepRequiresTheActualBodyPositionAndCurrentStandingSupport()
+    {
+        var probe=Probe(); var entry=new WorkPoint(0,0,.67f);
+        Assert.True(probe.CanMount(default,entry));
+        Assert.False(probe.CanMount(new WorkPoint(1,0,0),entry));
+        Physics.Sweeps=_=>new[]{Hit(_floor,new Vector3())};
+        Assert.False(probe.CanMount(default,entry));
+    }
     [Fact] public void MovingDoorOrRigidbodyIsNotReplacedByAnUnderlyingFloor()
     {
         var root=new GameObject("moving-door"); root.Add(new Door()); var door=root.Add(new Collider());

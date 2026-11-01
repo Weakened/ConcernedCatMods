@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Workers;
 using TheConcernedCat.Workers.Traversal;
 using UnityEngine;
@@ -7,7 +8,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 /// supports only; doors and rigidbodies still block clearance, never become a
 /// guaranteed landing. A caller supplies current hazard/permission policy.
 /// This cannot place a worker, alter a collider or invoke a player motor.</summary>
-internal sealed class WorkerLadderLandingProbe : IWorkerLadderSurveyProbe
+internal sealed class WorkerLadderLandingProbe : IWorkerLadderSurveyProbe,IWorkerLadderMountProbe
 {
     private readonly Func<WorkPoint,bool> _siteAllowed;
     private readonly Action<string> _log;
@@ -42,6 +43,22 @@ internal sealed class WorkerLadderLandingProbe : IWorkerLadderSurveyProbe
             shape=new WorkerLadderCapsule(Math.Max(bounds.size.x,bounds.size.z)*.5f,bounds.size.y); return true;
         }
         catch { return false; }
+    }
+    public bool CanMount(WorkPoint actualStanding,WorkPoint checkedEntry)
+    {
+        try
+        {
+            if(!TryBodyShape(out var body)) return false;
+            var actual=_worker.transform.position;
+            float x=actual.x-actualStanding.X,y=actual.y-actualStanding.Y,z=actual.z-actualStanding.Z;
+            if(x*x+y*y+z*z>.0009f||actualStanding.HorizontalDistanceTo(checkedEntry)>1.5f||Math.Abs(actualStanding.Y-checkedEntry.Y)>.35f) return false;
+            BeginSurvey();
+            var supported=Support(actualStanding,body,out var floor);
+            return supported==WorkerLadderProbeResult.Supported&&Math.Abs(floor.Y-actualStanding.Y)<=.08f&&
+                Clear(actualStanding,checkedEntry,body)==WorkerLadderProbeResult.Supported;
+        }
+        catch(Exception exception)
+        { try { _log("Worker ladder mount refused: "+SafeFailure.Brief(exception)); } catch { } return false; }
     }
     public int PhysicsQueries { get; private set; }
     public void BeginSurvey()
@@ -89,7 +106,7 @@ internal sealed class WorkerLadderLandingProbe : IWorkerLadderSurveyProbe
         }
         catch(Exception exception)
         {
-            if(!_reported) { _reported=true; try { _log("Worker ladder landing checks failed ("+exception.GetType().Name+"); no links published. Check game APIs and loaded ground."); } catch { } }
+            if(!_reported) { _reported=true; try { _log("Worker ladder landing checks failed ("+SafeFailure.Brief(exception)+"); no links published. Check game APIs and loaded ground."); } catch { } }
             return WorkerLadderProbeResult.Unavailable;
         }
     }

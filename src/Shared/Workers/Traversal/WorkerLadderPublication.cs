@@ -79,6 +79,10 @@ internal interface IWorkerLadderLandingProbe
 {
     WorkerLadderProbeResult TryMeasure(WorkerLadderRunData run,WorkerLadderFace face,WorkerLadderCapsule capsule,out WorkerLadderPassage passage);
 }
+internal interface IWorkerLadderMountProbe
+{
+    bool CanMount(WorkPoint actualStanding,WorkPoint checkedEntry);
+}
 internal interface IWorkerLadderSurveyProbe : IWorkerLadderLandingProbe { void BeginSurvey(); }
 internal interface IWorkerLadderPublicationSource { bool TryRead(out WorkerLadderPublication publication); }
 internal interface IWorkerLadderPathSource { bool TryPath(string linkId,out WorkerLadderPassage passage,out int generation); }

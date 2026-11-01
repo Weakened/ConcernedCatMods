@@ -101,3 +101,9 @@ loss; cancel, jump/drop-equivalent job interruption, cleanup and relog. Verify
 one motor only, actual actor hold, no body/cart teleport, and no player motor
 claiming a worker. Record actual source/package/DLL identity and performance.
 These tests are not satisfied by metadata inspection or unit stubs.
+
+### Checked admission from an approximate ground arrival
+
+The worker-bound path wrapper never snaps an approximate ground arrival onto the lane. A native mount probe verifies the actual owned body position, current capsule, supported starting floor and a clear sweep to the measured entry. That checked prefix travels at the same bounded speed, holds at the actual starting position, and stops at the entry corner before climbing. Without a native probe, only an exact entry is admitted. Reverse release returns to the checked original start, subject to the ordinary generation and landing gate. The mount probe is not a movement writer; live motor suspension and order binding remain integration CODE rows.
+
+All reflected failure diagnostics use the existing Shared Diagnostics `SafeFailure.Brief` scrubber; consumers must retain that source inclusion.

@@ -64,20 +64,45 @@ internal sealed class WorkerLadderPathTraversal : ILadderTraversal
     private readonly LinkTraversal _gate;
     private readonly IWorkerLadderPathSource _paths;
     private readonly float _speed;
+    private readonly WorkerKey _worker;
+    private readonly IWorkerLadderMountProbe? _mount;
     private sealed class Flight
     {
-        internal Flight(WorkerLadderPassage path) { Path=path; }
-        internal WorkerLadderPassage Path; internal float Metres;
+        internal Flight(WorkerLadderPassage path,WorkPoint standing,TraversalDirection direction)
+        {
+            Path=path; Start=standing; Entry=direction==TraversalDirection.Down?path.Points[3]:path.Points[0];
+            float x=standing.X-Entry.X,y=standing.Y-Entry.Y,z=standing.Z-Entry.Z;
+            Prefix=(float)Math.Sqrt(x*x+y*y+z*z);
+        }
+        internal WorkerLadderPassage Path; internal WorkPoint Start,Entry;
+        internal float Metres,Prefix;
+        internal float Length=>Prefix+Path.Length;
+        internal WorkPoint At(TraversalDirection direction)
+        {
+            if(Prefix>.00001f&&Metres<Prefix)
+            { float t=Metres/Prefix; return new WorkPoint(Start.X+(Entry.X-Start.X)*t,Start.Y+(Entry.Y-Start.Y)*t,Start.Z+(Entry.Z-Start.Z)*t); }
+            return Path.At(Math.Max(0,Metres-Prefix),direction);
+        }
+        internal float Clip(float desired,TraversalDirection direction)
+        {
+            if(desired==Metres) return Metres;
+            if(desired>Metres&&Metres<Prefix-.00001f) return Math.Min(desired,Prefix);
+            if(desired<Metres&&Metres>Prefix+.00001f)
+                return Prefix+Path.ClipStep(Metres-Prefix,Math.Max(0,desired-Prefix),direction);
+            if(desired<Metres&&Metres<=Prefix+.00001f) return Math.Max(0,desired);
+            return Prefix+Path.ClipStep(Math.Max(0,Metres-Prefix),Math.Max(0,desired-Prefix),direction);
+        }
     }
     private readonly Dictionary<TraversalHandle,Flight> _active=new();
-    public WorkerLadderPathTraversal(LinkTraversal gate,IWorkerLadderPathSource paths,float speed)
+    public WorkerLadderPathTraversal(LinkTraversal gate,IWorkerLadderPathSource paths,float speed,WorkerKey worker,IWorkerLadderMountProbe? mount=null)
     {
-        if(!WorkerLadderCapsule.Finite(speed)||speed<=0||speed>10) throw new ArgumentException("Finite worker path speed required.");
-        _gate=gate??throw new ArgumentNullException(nameof(gate)); _paths=paths??throw new ArgumentNullException(nameof(paths)); _speed=speed;
+        if(worker.IsEmpty||!WorkerLadderCapsule.Finite(speed)||speed<=0||speed>10) throw new ArgumentException("Finite worker path speed required.");
+        _gate=gate??throw new ArgumentNullException(nameof(gate)); _paths=paths??throw new ArgumentNullException(nameof(paths)); _speed=speed; _worker=worker; _mount=mount;
     }
     public TraversalVerdict CanTraverse(in TraversalRequest request)
     {
-        if(!request.Actor.IsWorker) return TraversalVerdict.Refuse(TraversalRefusal.NotCapable);
+        if(!request.Actor.IsWorker||!request.Actor.Worker.Equals(_worker)) return TraversalVerdict.Refuse(TraversalRefusal.NotCapable);
+        if(_active.Count!=0) return TraversalVerdict.Refuse(TraversalRefusal.AlreadyTraversing);
         if(request.LinkId==null||!_paths.TryPath(request.LinkId,out var path,out _)) return TraversalVerdict.Refuse(TraversalRefusal.LinkGone);
         var verdict=_gate.CanTraverse(request);
         if(verdict.Allowed&&(!WorkerLadderCapsule.Finite(path.Length)||path.Length<=0||
@@ -92,7 +117,13 @@ internal sealed class WorkerLadderPathTraversal : ILadderTraversal
         if(!entered.Started) return entered;
         if(!_paths.TryPath(entered.Handle.LinkId!,out var path,out int generation)||generation!=entered.Handle.Generation)
         { _gate.Exit(entered.Handle,TraversalExitKind.Interrupted); return TraversalEntry.Refused(TraversalVerdict.Refuse(TraversalRefusal.LinkGone)); }
-        _active[entered.Handle]=new Flight(path); return entered;
+        var flight=new Flight(path,request.Standing,entered.Handle.Direction);
+        // Without a native admission sweep, only an already exact entry is legal.
+        bool mountOkay=flight.Prefix<=.001f;
+        try { if(_mount!=null) mountOkay=_mount.CanMount(request.Standing,flight.Entry); } catch { mountOkay=false; }
+        if(!mountOkay)
+        { _gate.Exit(entered.Handle,TraversalExitKind.Interrupted); return TraversalEntry.Refused(TraversalVerdict.Refuse(TraversalRefusal.NotAtAnEndpoint)); }
+        _active[entered.Handle]=flight; return entered;
     }
     public TraversalProgress Traverse(in TraversalHandle handle,TraversalIntent intent,float deltaSeconds)
     {
@@ -103,19 +134,21 @@ internal sealed class WorkerLadderPathTraversal : ILadderTraversal
         { _active.Remove(handle); _gate.Exit(handle,TraversalExitKind.Interrupted); return TraversalProgress.Lost; }
         float step=WorkerLadderCapsule.Finite(deltaSeconds)&&deltaSeconds>0?_speed*Math.Min(deltaSeconds,.05f):0;
         if(intent==TraversalIntent.Reverse) step=-step; else if(intent!=TraversalIntent.Advance) step=0;
-        flight.Metres=path.ClipStep(flight.Metres,Math.Max(0,Math.Min(path.Length,flight.Metres+step)),handle.Direction);
-        if(step>0&&path.Length-flight.Metres<=.001f) flight.Metres=path.Length;
+        flight.Metres=flight.Clip(Math.Max(0,Math.Min(flight.Length,flight.Metres+step)),handle.Direction);
+        if(step>0&&flight.Length-flight.Metres<=.001f) flight.Metres=flight.Length;
         if(step<0&&flight.Metres<=.001f) flight.Metres=0;
-        var phase=step==0?TraversalPhase.Holding:step>0?(flight.Metres>=path.Length-.001f?TraversalPhase.ReachedFarEnd:TraversalPhase.Advancing):
+        var phase=step==0?TraversalPhase.Holding:step>0?(flight.Metres>=flight.Length-.001f?TraversalPhase.ReachedFarEnd:TraversalPhase.Advancing):
             (flight.Metres<=.001f?TraversalPhase.ReturnedToStart:TraversalPhase.Reversing);
-        return new TraversalProgress(phase,flight.Metres/path.Length,flight.Metres,path.At(flight.Metres,handle.Direction));
+        return new TraversalProgress(phase,flight.Metres/flight.Length,flight.Metres,flight.At(handle.Direction));
     }
     public TraversalRelease Exit(in TraversalHandle handle,TraversalExitKind kind)
     {
         if(!_active.TryGetValue(handle,out var flight)) { _gate.Exit(handle,TraversalExitKind.Interrupted); return TraversalRelease.Release(TraversalExitKind.Interrupted); }
         _active.Remove(handle);
-        if(kind==TraversalExitKind.Arrived&&flight.Metres<flight.Path.Length-.001f||kind==TraversalExitKind.TurnedBack&&flight.Metres>.001f)
+        if(kind==TraversalExitKind.Arrived&&flight.Metres<flight.Length-.001f||kind==TraversalExitKind.TurnedBack&&flight.Metres>.001f)
             kind=TraversalExitKind.Interrupted;
-        return _gate.Exit(handle,kind);
+        var released=_gate.Exit(handle,kind);
+        return released.PlaceActor&&kind==TraversalExitKind.TurnedBack
+            ?TraversalRelease.Step(kind,flight.Start):released;
     }
 }

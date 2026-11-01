@@ -71,8 +71,9 @@ availability, duplicate/over-budget/invalid inputs and schema refusal. The nativ
 registry collector itself is compiled against the installed game by the full
 controlled build; these stubs are not in-game evidence of loaded piece behavior.
 
-Still needed for #334: native receiving/adoption into the worker's link network,
-chain fusion and supported landing probes, native scoped motor and validator pins,
+The receiver, chain fusion, supported landing probes and checked worker paths are
+now implemented; see WORKER_LADDER_RECEIVER_2026_11_01.md. Still needed for #334:
+live worker adoption, native scoped motor and validator pins,
 actual order/runtime integration, and exact-candidate G5 observations. This
 capability is callable in source without installing a tick hook or changing any
 player behavior. Do not mark the remaining rows complete from this publisher.

@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using TheConcernedCat.Diagnostics;
 namespace TheConcernedCat.Workers.Traversal;
 /// <summary>Versioned optional runtime capability. Invokes only its exact BCL
 /// signature; unknown/false/throwing results never reuse the last good snapshot.</summary>
@@ -34,9 +35,7 @@ internal sealed class ReflectedWorkerLadderSource : IWorkerLadderPublicationSour
         catch(Exception exception)
         {
             publication=null!;
-            string name=exception is TargetInvocationException invocation&&invocation.InnerException!=null
-                ?invocation.InnerException.GetType().Name:exception.GetType().Name;
-            return Refuse("Ladder measurement API failed ("+name+"); worker links were withdrawn. Check installed game/mod versions.");
+            return Refuse("Ladder measurement API failed ("+SafeFailure.Brief(exception.GetBaseException())+"); worker links were withdrawn. Check installed game/mod versions.");
         }
     }
     private static bool OutParameters(MethodInfo method)
