@@ -27,6 +27,18 @@ public sealed class GunnarBodyTests
         Assert.True(registry.Register(role).IsRegistered); registry.BeginWorldLoad(out _);
         return (registry, new GunnarBodyLeases(registry, role.Identity), role.Identity);
     }
+    [Fact] public void PendingVisitorPresentationDoesNotGrantRecruitment()
+    {
+        string root=Path.Combine(Path.GetTempPath(),"ct-458-visitor-"+Guid.NewGuid().ToString("N"));
+        try
+        {
+            var record=GunnarCompanionRecord.Open(root,11,22);
+            Assert.True(record.BeginIntroduction()); Assert.True(record.ShouldPresentFigure(true));
+            Assert.False(record.IsRecruited); Assert.False(record.ShouldPresentFigure(false));
+            Assert.True(record.Skip()); Assert.False(record.ShouldPresentFigure(true)); Assert.False(record.IsRecruited);
+        }
+        finally { if(Directory.Exists(root)) Directory.Delete(root,true); }
+    }
     [Fact] public void RoleUpgradePreservesEveryDurableIdentity()
     {
         var old = new WorkerRole(); var role = new GunnarPresentationRole(old);

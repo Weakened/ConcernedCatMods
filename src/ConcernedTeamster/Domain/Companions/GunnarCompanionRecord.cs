@@ -51,7 +51,8 @@ internal sealed class GunnarCompanionRecord
     public bool CanReplayStory => _active && _readable && QuestStateMachine.CanReplayStory(State);
     public bool ShouldPresentMemento(bool enabled) => enabled && _active && _readable &&
         (State == QuestState.Unstarted || State == QuestState.Discovered);
-    public bool ShouldPresentFigure(bool enabled) => enabled && IsRecruited;
+    public bool ShouldPresentFigure(bool enabled) => enabled && _active && _readable &&
+        (State == QuestState.IntroPending || State == QuestState.Recruited);
 
     public static string ResolveDisplayName(string? configured, Func<string, string?>? translate = null)
     {
