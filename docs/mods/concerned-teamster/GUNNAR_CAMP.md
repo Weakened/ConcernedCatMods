@@ -9,17 +9,17 @@ Seat targets carry the actual free-seat attachment point, yaw and animation name
 no seat is claimed. FacingYaw is provided for interaction only. No ambient speech,
 walking, door interaction, cart/cargo port or second movement controller is added.
 
-An additive public NpcCamp/NpcCampView facade in ONE NEW ConcernedNPC file wraps
-its existing internal CampRegistry. This is necessary because the installed source
-Camp types were internal and Teamster consumes the library as an assembly. It
-preserves the existing cached survey, scope/epoch refusals and structural-only
-piece membership. It takes verified piece events; it does not scan or classify
-game objects. A steady survey returns the same public view, not a wrapper per tick.
-No existing NPC source file or Claude's active routing work was edited. The lead
-must include this additive API in its own library candidate; do not ship only
-Teamster against an older DLL that lacks the API.
+Camp API RELEASE BLOCKER: CampRegistry and CampSnapshot are internal. The
+public-surface test and NAMING_CONVENTIONS require a coordinated library release
+and consumer-pin changes before exposing a new API. Those release files belong
+to Claude's active work. A proposed additive facade is saved for review at
+proposals/NpcCamp.cs.txt; it is NOT compiled or shipped. The production routine
+accepts only IGunnarCampView, a read-only projection. No reflection, private-type
+bypass or copied Camp implementation is introduced into Teamster. Tests project
+the real internal Camp source (test-only, not public API provenance). No existing
+or new compiled ConcernedNPC source file changes in this handoff.
 
-Lead wiring: maintain one Camp/routine per character/world, give Camp the shared
+Lead wiring: after the coordinated API release, maintain one Camp/routine per character/world, give Camp the shared
 NpcRoleRegistry epoch, feed observed structural-piece additions/removals, resolve
 the valid current respawn anchor, and pass its cached Survey view into Step.
 Show/Reposition applies the returned local figure target; acknowledge a successful

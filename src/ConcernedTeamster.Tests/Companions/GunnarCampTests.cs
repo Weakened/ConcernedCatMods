@@ -1,3 +1,4 @@
+using ConcernedTeamster.Tests;
 using TheConcernedCat.Companions.Placement;
 using TheConcernedCat.Companions.Quest;
 using TheConcernedCat.ConcernedNPC.Camp;
@@ -5,8 +6,38 @@ using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedTeamster.Domain.Companions;
 namespace TheConcernedCat.ConcernedTeamster.Tests.Companions;
+[Collection(ExactAllocationCollection.Name)]
 public sealed class GunnarCampTests
 {
+    // Test-only projection over the real internal Camp source that this test
+    // assembly links. It is NOT a claim of an externally consumable library API.
+    private sealed class TestCamp
+    {
+        private readonly CampRegistry _registry=new(null);
+        private CampSnapshot? _last; private View? _view;
+        public void BeginWorld(NpcWorldEpoch epoch) => _registry.BeginWorldLoad(epoch);
+        public bool ObservePiece(string key,NpcPoint p,bool structural,NpcWorldEpoch epoch)
+        {
+            var result=_registry.Note(new CampPiece(key,p,structural ? CampPieceClass.Built : CampPieceClass.Unknown,epoch));
+            return result==CampPieceOutcome.Admitted || result==CampPieceOutcome.AlreadyKnown || result==CampPieceOutcome.Moved;
+        }
+        public IGunnarCampView Survey(NpcPoint p,bool known,bool bed)
+        {
+            var snapshot=_registry.Survey(known ? new CampAnchor(bed ? CampAnchorKind.PlayerBed : CampAnchorKind.WorldSpawn,p) : CampAnchor.None);
+            if (!ReferenceEquals(snapshot,_last)) { _last=snapshot; _view=new View(snapshot); }
+            return _view!;
+        }
+        private sealed class View : IGunnarCampView
+        {
+            private readonly CampSnapshot _snapshot;
+            public View(CampSnapshot snapshot) { _snapshot=snapshot; }
+            public bool IsEstablished=>_snapshot.IsEstablished;
+            public int Revision=>_snapshot.Revision;
+            public NpcWorldEpoch Epoch=>_snapshot.Epoch;
+            public bool Contains(NpcPoint p)=>_snapshot.Contains(p);
+            public int Members=>_snapshot.Members;
+        }
+    }
     private sealed class Flat : IPlacementProbe
     {
         public int Calls;
@@ -21,10 +52,10 @@ public sealed class GunnarCampTests
     }
     private static GunnarBodyFacts Facts(bool near=true,int workers=0) =>
         new(true,true,true,true,QuestState.Recruited,workers,true,true,near);
-    private static (NpcCamp,NpcWorldEpoch,CompanionAnchor) Camp()
+    private static (TestCamp,NpcWorldEpoch,CompanionAnchor) Camp()
     {
         var registry=new NpcRoleRegistry(); var epoch=registry.BeginWorldLoad(out _);
-        var camp=new NpcCamp(); camp.BeginWorld(epoch);
+        var camp=new TestCamp(); camp.BeginWorld(epoch);
         return (camp,epoch,new CompanionAnchor(AnchorKind.ClaimedBed,new WorldPoint(0,0,0)));
     }
     [Fact] public void CachedHotPathAllocatesNothingAndDoesNotProbeAgain()
@@ -32,9 +63,9 @@ public sealed class GunnarCampTests
         var(camp,epoch,anchor)=Camp(); var view=camp.Survey(default,true,true); var probe=new Flat(); var routine=new GunnarCampRoutine();
         Assert.Equal(GunnarCampAction.Show,routine.Step(Facts(),anchor,view,epoch,probe).Action); routine.NoteFigureShown(true);
         for(int i=0;i<1000;i++) routine.Step(Facts(),anchor,view,epoch,probe);
-        int calls=probe.Calls; long before=GC.GetAllocatedBytesForCurrentThread();
-        for(int i=0;i<100000;i++) routine.Step(Facts(),anchor,view,epoch,probe);
-        long bytes=GC.GetAllocatedBytesForCurrentThread()-before;
+        int calls=probe.Calls;
+        long bytes=ExactAllocations.Measure(() =>
+        { for(int i=0;i<100000;i++) routine.Step(Facts(),anchor,view,epoch,probe); });
         Assert.Equal(0,bytes); Assert.Equal(calls,probe.Calls); Assert.True(calls<=PlacementPlanner.MaximumCandidates);
     }
     [Fact] public void LeavingAndReturningToRangeRetainsTheSameFigureAndPlan()
@@ -64,7 +95,7 @@ public sealed class GunnarCampTests
         Assert.False(camp.ObservePiece("stale",default,true,new NpcRoleRegistry().BeginWorldLoad(out _)));
         Assert.True(camp.ObservePiece("built",default,true,epoch));
         var first=camp.Survey(default,true,true); Assert.Same(first,camp.Survey(default,true,true));
-        Assert.Equal(1,first.Members);
+        Assert.True(first.IsEstablished);
     }
     [Fact] public void SharedSeatPoseIsCarriedWithoutClaimingASeat()
     {

@@ -1,8 +1,16 @@
 using System;
 using TheConcernedCat.Companions.Placement;
-using TheConcernedCat.ConcernedNPC.Camp;
 using TheConcernedCat.ConcernedNPC.Work;
 namespace TheConcernedCat.ConcernedTeamster.Domain.Companions;
+/// <summary>Read-only projection to be wired after the lead's coordinated Camp
+/// API release. No private library type is reached or reimplemented by Teamster.</summary>
+internal interface IGunnarCampView
+{
+    bool IsEstablished { get; }
+    int Revision { get; }
+    NpcWorldEpoch Epoch { get; }
+    bool Contains(NpcPoint point);
+}
 internal enum GunnarCampAction { None, Show, Retain, Reposition, Hide }
 internal readonly struct GunnarCampStep
 {
@@ -23,7 +31,7 @@ internal sealed class GunnarCampRoutine
     private bool _shown;
     public void NoteFigureShown(bool shown) { _shown=shown; }
     public void Forget() { _shown=false; _planned=false; _revision=-1; _anchor=default; }
-    public GunnarCampStep Step(in GunnarBodyFacts facts,CompanionAnchor anchor,NpcCampView? camp,NpcWorldEpoch epoch,IPlacementProbe probe)
+    public GunnarCampStep Step(in GunnarBodyFacts facts,CompanionAnchor anchor,IGunnarCampView? camp,NpcWorldEpoch epoch,IPlacementProbe probe)
     {
         // Range changes do not destroy an existing eligible local figure. The
         // renderer culls it; returning to range uses the same figure/plan.
@@ -44,7 +52,7 @@ internal sealed class GunnarCampRoutine
         { bool had=_shown; _shown=false; return new GunnarCampStep(had ? GunnarCampAction.Hide : GunnarCampAction.None,_placement); }
         return new GunnarCampStep(!_shown ? GunnarCampAction.Show : changed ? GunnarCampAction.Reposition : GunnarCampAction.Retain,_placement);
     }
-    private PlacementResult Plan(CompanionAnchor anchor,NpcCampView camp,IPlacementProbe probe) =>
+    private PlacementResult Plan(CompanionAnchor anchor,IGunnarCampView camp,IPlacementProbe probe) =>
         _planner.Plan(anchor,probe,accept: sample => !camp.IsEstablished ||
             camp.Contains(new NpcPoint(sample.Position.X,sample.Position.Y,sample.Position.Z)));
     private static bool Finite(WorldPoint p) => !(float.IsNaN(p.X)||float.IsInfinity(p.X)||
