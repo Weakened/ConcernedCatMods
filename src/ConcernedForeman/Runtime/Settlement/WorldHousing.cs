@@ -154,6 +154,48 @@ internal sealed class WorldHousing
             groundIncomplete: !IsGroundFullyLoaded(area));
     }
 
+    /// <summary>Fresh exact-address slots for resident admission. A partial
+    /// survey grants nothing; it must not choose a bed from an incomplete set.
+    /// Never claims a vanilla bed or stores its load-local native identity.</summary>
+    internal bool TryResidentSlots(Designation area, out IReadOnlyList<ResidentHousingSlot> slots)
+    {
+        slots = Array.Empty<ResidentHousingSlot>();
+        if (!IsGroundFullyLoaded(area) ||
+            !TryFindBeds(area, SitePoints.ToVector3(area.Centre), out List<FoundBed> beds, out SurveyLimit limit) ||
+            limit != SurveyLimit.None) return false;
+        var found = new List<ResidentHousingSlot>(beds.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (FoundBed bed in beds)
+        {
+            var slot = new ResidentHousingSlot(SitePoints.ToSitePoint(bed.At), Measure(bed));
+            // Two physical beds at an identical address cannot grant an
+            // unambiguous reservation. Do not silently choose the first.
+            if (!seen.Add(slot.Key)) return false;
+            found.Add(slot);
+        }
+        slots = found;
+        return true;
+    }
+
+    /// <summary>Routine revalidation measures only the reserved bed, not every
+    /// bed's expensive cover rays. Missing means absent from a complete survey.</summary>
+    internal bool TryResidentSlot(Designation area, string key, out ResidentHousingSlot slot, out bool exists)
+    {
+        slot = default; exists = false;
+        if (!IsGroundFullyLoaded(area) ||
+            !TryFindBeds(area, SitePoints.ToVector3(area.Centre), out List<FoundBed> beds, out SurveyLimit limit) ||
+            limit != SurveyLimit.None) return false;
+        foreach (FoundBed bed in beds)
+        {
+            var address = new ResidentHousingSlot(SitePoints.ToSitePoint(bed.At), HousingFacts.Unmeasured(string.Empty));
+            if (address.Key != key) continue;
+            if (exists) return false;
+            exists = true;
+            slot = new ResidentHousingSlot(SitePoints.ToSitePoint(bed.At), Measure(bed));
+        }
+        return true;
+    }
+
     /// <summary>One bed inside the settlement, and the position it was found at.
     ///
     /// <b>"Inside the settlement" is part of the type, not a hope.</b> This is

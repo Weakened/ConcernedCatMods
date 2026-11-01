@@ -112,6 +112,9 @@ internal enum HousingRefusal
     /// working, and this is the one bed a player never wants advice about.
     /// </summary>
     YourOwnBed = 8,
+
+    /// <summary>A complete, loaded resident survey no longer contains its reserved bed.</summary>
+    BedRemoved = 9,
 }
 
 /// <summary>What was actually observed at one bed. Every field is something an
@@ -421,6 +424,8 @@ internal static class HousingSentences
                 return "it is outside the settlement";
             case HousingRefusal.NotMeasured:
                 return "it could not be checked";
+            case HousingRefusal.BedRemoved:
+                return "the reserved bed is no longer there";
             default:
                 return "a reason was recorded that this build does not know; that is a bug";
         }
