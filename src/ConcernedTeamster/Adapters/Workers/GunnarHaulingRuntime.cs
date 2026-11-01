@@ -63,6 +63,8 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     private ICartRoutePlanner _planner = null!;
     private IHaulMotionMonitor _monitor = null!;
     private CartNavigationBridge _navigation = null!;
+    private GunnarIdleHammerPort _hammer = null!;
+    private CartUpkeepDriver _upkeep = null!;
     private CartTelemetryPump? _pump;
     private HaulExecutor? _executor;
     private Guid _epoch;
@@ -306,6 +308,11 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _planner = _navigation.Kit.Planner;
         _monitor = _navigation.Kit.Motion;
         Service = new GunnarHaulService(_authority);
+
+        // D19 (owner decision 2026-10-31): the idle hammer. The driver is
+        // game-free and reaches only his own body's motor and this one port.
+        _hammer = new GunnarIdleHammerPort(message => _log.LogInfo(message));
+        _upkeep = new CartUpkeepDriver(new CartUpkeepIdle(), _body, () => _hammer.PlayOnce(_body.Bound));
         TeamsterWorkerAI.TickHandler = OnWorkerTick;
         TeamsterWorkerAI.ErrorLog = message => _log.LogError(message);
 
@@ -415,7 +422,47 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return;
         }
 
+        // D19: between jobs, beside the cart assigned to him, the idle hammer
+        // may take the tick. Whenever it answers Nothing - a job arrived, the
+        // cart was hitched, a switch or authority went away - the executor gets
+        // the tick as before, and stops him if he is still walking.
+        if (DriveIdleHammer(_executor))
+        {
+            return;
+        }
+
         _executor.Tick();
+    }
+
+    /// <summary>One worker tick of the idle hammer (D19). Answers whether it
+    /// steered him this tick.
+    ///
+    /// Every gate is re-read here, in the tick that acts: Teamster's master
+    /// switch, hauling, the idle hammer's own setting, the start-up capability
+    /// probe (through the seam), and the shared work-authority rule. What the
+    /// routine is told about the job and the cart is copied from the executor's
+    /// getters and its own last frame observation; the driver is handed the
+    /// copy, never the executor.</summary>
+    private bool DriveIdleHammer(HaulExecutor executor)
+    {
+        bool switchedOn;
+        try
+        {
+            switchedOn = _settings.Enabled.Value &&
+                _settings.GunnarHaulingEnabled.Value &&
+                _settings.GunnarIdleHammerEnabled.Value &&
+                _seam.IsAvailable;
+        }
+        catch
+        {
+            switchedOn = false;
+        }
+
+        WorkAuthorityVerdict authority = switchedOn && executor.ActiveLease != null
+            ? _authority.Evaluate()
+            : WorkAuthorityVerdict.Unspecified;
+        CartUpkeepFacts facts = CartUpkeepFacts.Read(switchedOn, authority, executor);
+        return _upkeep.Step(facts, Time.time) != CartUpkeepAction.Nothing;
     }
 
     private void OnWorldLoaded()
@@ -431,6 +478,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         }
 
         _epoch = Guid.NewGuid();
+        _upkeep.Reset();
         _censusComplete = false;
         _censusIndex = 0;
         _persistedBodies.Clear();
@@ -517,6 +565,9 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _body.Bind(null);
         _seam.Forget();
         _selections.Clear();
+
+        // Null only when Initialize itself failed before reaching it.
+        _upkeep?.Reset();
     }
 
     private void EmergencyRelease()
@@ -740,6 +791,9 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         }
 
         text.Append(". Hitch failures ").Append(executor.HitchFailures).Append(", recoveries ").Append(executor.RecoveryFailures).AppendLine();
+        text.Append("Idle hammer: ").Append(_settings.GunnarIdleHammerEnabled.Value ? "on" : "off")
+            .Append(", ").Append(_upkeep.Swings).Append(" swing(s) asked for, ").Append(_hammer.Played)
+            .Append(" played this session").AppendLine();
         text.Append(DescribeEvidence(executor));
         return text.ToString();
     }

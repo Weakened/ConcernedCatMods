@@ -2277,6 +2277,12 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     ".Translate(",
     ".Rotate(",
     ".RotateAround(",
+    # D19's animation trigger (owner decision 2026-10-31), forbidden here so the
+    # one pinned call in the idle hammer port is the only way it reaches the
+    # source tree. Before D19 nothing in Teamster called it and nothing refused
+    # it either: the comments said "not authorized" while the audit let any file
+    # spell it. Refused now in both places, like every other authorized token.
+    ".SetTrigger(",
 )
 
 # Allowed only in the prefab factory, which builds the inactive clone and strips
@@ -2333,6 +2339,9 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
     # ...and nothing may cause the death that reaches it (see the worker list),
     # including by sending vanilla's own damage message.
     "SetHealth", "UseHealth", "SetMaxHealth", ".Damage(", "ApplyDamage", "RPC_Damage", "InvokeRPC",
+    # D19's animation trigger: a helper in Adapters/, Domain/ or a shared tree
+    # must not be able to spell what the idle hammer port may spell once.
+    ".SetTrigger(",
 )
 
 # The one owner-authorized exception to the worker runtime's token list
@@ -2351,8 +2360,10 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
 # already owns, so the port spells no RPC of its own - verified against Foreman's
 # port, which makes exactly one game call and names no `InvokeRPC` anywhere.
 # Felling a tree (`TreeBase.Damage`) and the cosmetic hammer animation
-# (`ZSyncAnimation.SetTrigger`) are separate capabilities, were NOT authorized,
-# and would each need their own owner decision.
+# (`ZSyncAnimation.SetTrigger`) are separate capabilities and were NOT part of
+# this grant. Felling is still unauthorized. The hammer animation got its own
+# owner decision on 2026-10-31 (`DECISIONS.md` D19): one pinned call in its own
+# file, `TEAMSTER_IDLE_HAMMER_PORT_PATH` below, never in this one.
 #
 # So: two tokens, in one file. Every other forbidden token still fails in that
 # file, and both of these still fail in every other file, inside Workers and out.
@@ -2480,12 +2491,28 @@ TEAMSTER_DEATH_DROP_PORT_CALLS = (
      "vanilla's own drop of one carried stack, with its own count, on Gunnar's genuine death only"),
 )
 
+# The idle hammer (owner decision 2026-10-31; `DECISIONS.md` D19). One call,
+# vanilla's own `ZSyncAnimation.SetTrigger`, cosmetic only: a transient,
+# unsaved animation trigger on Gunnar's own body. The argument and receiver
+# names are the pin, as for D16: `animation` is his own body's animation sync
+# and `swing` is the name the vanilla Hammer item itself plays, and
+# `check_teamster_idle_hammer_port` below pins where each of those comes from.
+# A literal trigger name, another body's or the player's animator, or a second
+# call is a different program and fails.
+TEAMSTER_IDLE_HAMMER_PORT_PATH = ("Adapters", "Workers", "GunnarIdleHammerPort.cs")
+TEAMSTER_IDLE_HAMMER_PORT_CALLS = (
+    (".SetTrigger(",
+     re.compile(r"\banimation\s*\.\s*SetTrigger\s*\(\s*swing\s*\)"),
+     "vanilla's own hammer swing, once, on Gunnar's own body, cosmetic only"),
+)
+
 # Which file may spell which authorized calls. A path absent from this table has
-# no allowance at all, which is every file in the product bar these three.
+# no allowance at all, which is every file in the product bar these four.
 TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
     TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
     TEAMSTER_DEATH_DROP_PORT_PATH: TEAMSTER_DEATH_DROP_PORT_CALLS,
+    TEAMSTER_IDLE_HAMMER_PORT_PATH: TEAMSTER_IDLE_HAMMER_PORT_CALLS,
 }
 
 
@@ -2649,7 +2676,11 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"add-then-remove pair that moves part of one); "
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_DEATH_DROP_PORT_CALLS)} "
         f"owner-authorized as one pinned call, verbatim and once, in "
-        f"{'/'.join(TEAMSTER_DEATH_DROP_PORT_PATH)} alone (D16's death drop); all six refused everywhere else in the "
+        f"{'/'.join(TEAMSTER_DEATH_DROP_PORT_PATH)} alone (D16's death drop); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_IDLE_HAMMER_PORT_CALLS)} "
+        f"owner-authorized as one pinned call, verbatim and once, in "
+        f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D19's cosmetic idle hammer swing); all seven refused "
+        f"everywhere else in the "
         f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"(scanned across the product AND the {len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) its "
@@ -3823,6 +3854,111 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
         "inventory; and nothing in Teamster may take health away (SetHealth/UseHealth/Damage/RPC_Damage are "
         "refused by the #313 token pin), so no retire, cancel, unload or teardown verb can reach it or cause "
         "the death that does. A source-text audit: it does not follow delegates or prove control flow "
+        f"({hits} violations)",
+    ]
+
+
+# D19 (owner decision 2026-10-31): the idle hammer. The #313 token pin says the
+# trigger is spelled once, in one file, as `animation.SetTrigger(swing)`. That
+# alone would let `animation` be the player's animator or `swing` be a name the
+# product made up - both one-line changes the token pin cannot see. So the lines
+# that decide WHOSE animator and WHICH animation are pinned here, the way D16
+# pins `_inventory = _humanoid.GetInventory();`:
+#
+# - the port is handed a `TeamsterWorkerAI` - a component only Gunnar's worker
+#   prefab carries - and never reassigns it;
+# - `body` is that worker's own `Character`, assigned once;
+# - `animation` is that body's own `m_zanim`, assigned once;
+# - `swing` is `HammerSwing()`, assigned once, and `HammerSwing` reads the
+#   vanilla Hammer item's own `m_shared.m_attack.m_attackAnimation` out of the
+#   item database, with no string literal of its own;
+# - the body's animator is asked whether it has that trigger, and the port
+#   refuses if not, ABOVE the call;
+# - and the port writes no other animator state: no bool, float, int, speed,
+#   reset, play or cross-fade. `SetBool`/`SetFloat`/`SetInt` on a ZSyncAnimation
+#   write the body's network object, which a trigger does not.
+#
+# A source-text audit: it does not prove control flow or follow delegates.
+TEAMSTER_IDLE_HAMMER_PINS = (
+    ("the port is handed Gunnar's worker and nothing else",
+     re.compile(r"\binternal\s+bool\s+PlayOnce\s*\(\s*TeamsterWorkerAI\s*\?\s*gunnar\s*\)"), 1),
+    ("the worker is never reassigned", re.compile(r"\bgunnar\s*=(?!=)"), 0),
+    ("his body is the worker's own Character",
+     re.compile(r"\bCharacter\s+body\s*=\s*gunnar\s*\.\s*GetComponent\s*<\s*Character\s*>\s*\(\s*\)\s*;"), 1),
+    ("the body is assigned once", re.compile(r"\bbody\s*=(?!=)"), 1),
+    ("the animator is his body's own animation sync",
+     re.compile(r"\bZSyncAnimation\s+animation\s*=\s*body\s*\.\s*m_zanim\s*;"), 1),
+    ("the animator is assigned once", re.compile(r"\banimation\s*=(?!=)"), 1),
+    ("the trigger name is read from the vanilla Hammer",
+     re.compile(r"\bstring\s+swing\s*=\s*HammerSwing\s*\(\s*\)\s*;"), 1),
+    ("the trigger name is assigned once", re.compile(r"\bswing\s*=(?!=)"), 1),
+    ("the item looked up is the Hammer constant",
+     re.compile(r"\bdatabase\s*\.\s*GetItemPrefab\s*\(\s*HammerItem\s*\)"), 1),
+    ("the one item lookup", re.compile(r"\bGetItemPrefab\s*\("), 1),
+    ("the Hammer constant is the vanilla item's prefab name",
+     re.compile(r"\bconst\s+string\s+HammerItem\s*=\s*\"Hammer\"\s*;"), 1),
+    ("the attack is the Hammer's own",
+     re.compile(r"\bAttack\s*\?\s*attack\s*=\s*shared\s*!=\s*null\s*\?\s*shared\s*\.\s*m_attack\s*:\s*null\s*;"), 1),
+    ("the name is the attack's own animation",
+     re.compile(r"\bstring\s*\?\s*name\s*=\s*attack\s*!=\s*null\s*\?\s*attack\s*\.\s*m_attackAnimation\s*:\s*null\s*;"), 1),
+    ("the name is assigned once", re.compile(r"\bname\s*=(?!=)"), 1),
+    ("what HammerSwing returns is that name or nothing",
+     re.compile(r"\breturn\s+string\s*\.\s*IsNullOrEmpty\s*\(\s*name\s*\)\s*\?\s*string\s*\.\s*Empty\s*:\s*name\s*!\s*;"), 1),
+)
+TEAMSTER_IDLE_HAMMER_REFUSAL = re.compile(
+    r"if\s*\(\s*!\s*animation\s*\.\s*HasParameter\s*\(\s*swing\s*,\s*AnimatorControllerParameterType\s*\.\s*Trigger"
+    r"\s*\)\s*\)\s*\{\s*return\s+Refuse\s*\(")
+TEAMSTER_IDLE_HAMMER_SWING_BODY = re.compile(
+    r"private\s+static\s+string\s+HammerSwing\s*\(\s*\)\s*\{(.*?)\n    \}", re.DOTALL)
+TEAMSTER_IDLE_HAMMER_ANIMATOR_WRITES = re.compile(
+    r"\.\s*(?:SetBool|SetFloat|SetInt|SetInteger|SetSpeed|ResetTrigger|Play|PlayInFixedTime|CrossFade|"
+    r"CrossFadeInFixedTime|SetLayerWeight|Rebind|speed\s*=(?!=))")
+
+
+def check_teamster_idle_hammer_port(errors: list[str]) -> list[str]:
+    """Fails when the D19 trigger could play anything but the vanilla Hammer's own
+    swing on Gunnar's own body, or when the port writes other animator state."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    port = teamster_dir.joinpath(*TEAMSTER_IDLE_HAMMER_PORT_PATH)
+    label = "[interop] D19 idle-hammer audit"
+    port_rel = Path(*TEAMSTER_IDLE_HAMMER_PORT_PATH).as_posix()
+    if not port.is_file():
+        fail(f"{label}: missing {port.relative_to(ROOT)} - the idle hammer has no pinned home", errors)
+        return []
+
+    hits = 0
+    code = _strip_cs_comments(port.read_text(encoding="utf-8-sig"))
+    for what, pattern, expected in TEAMSTER_IDLE_HAMMER_PINS:
+        found = len(pattern.findall(code))
+        if found != expected:
+            hits += 1
+            fail(f"{label}: {port_rel} breaks '{what}' (found {found}, expected {expected}) - the trigger "
+                 "must be the vanilla Hammer's own swing, on Gunnar's own body", errors)
+
+    call = TEAMSTER_IDLE_HAMMER_PORT_CALLS[0][1].search(code)
+    refusal = TEAMSTER_IDLE_HAMMER_REFUSAL.search(code)
+    if call is None or refusal is None or refusal.start() > call.start():
+        hits += 1
+        fail(f"{label}: {port_rel} does not refuse, above the trigger, when his body's animator has no such "
+             "trigger (`if (!animation.HasParameter(swing, AnimatorControllerParameterType.Trigger)) "
+             "{ return Refuse(...); }`)", errors)
+
+    swing = TEAMSTER_IDLE_HAMMER_SWING_BODY.search(code)
+    if swing is None or '"' in swing.group(1):
+        hits += 1
+        fail(f"{label}: {port_rel}'s HammerSwing() is missing or spells a string literal - the trigger name "
+             "comes from the item database, never from this product", errors)
+
+    for match in TEAMSTER_IDLE_HAMMER_ANIMATOR_WRITES.finditer(code):
+        hits += 1
+        fail(f"{label}: {port_rel}:{code.count(chr(10), 0, match.start()) + 1} writes other animator state "
+             f"('{match.group(0).strip()}') - D19 authorizes one trigger and nothing else", errors)
+
+    return [
+        f"{label}: the one pinned SetTrigger in {port_rel} plays the vanilla Hammer item's own "
+        "m_shared.m_attack.m_attackAnimation, read from the item database with no literal of the product's "
+        "own, on the ZSyncAnimation of the TeamsterWorkerAI it is handed, after asking that animator whether "
+        "it has the trigger; it writes no other animator state. A source-text audit "
         f"({hits} violations)",
     ]
 
@@ -6614,6 +6750,7 @@ def main() -> int:
     report.extend(check_npc_keepsake_confined(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
+    report.extend(check_teamster_idle_hammer_port(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))

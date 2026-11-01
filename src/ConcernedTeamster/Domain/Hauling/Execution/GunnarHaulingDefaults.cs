@@ -30,6 +30,12 @@ internal static class GunnarHaulingDefaults
     /// on.</summary>
     public const bool HaulingEnabled = false;
 
+    /// <summary><c>Workers/GunnarIdleHammerEnabled</c> (D19). On, because it
+    /// enrols nobody: it is read only while <see cref="HaulingEnabled"/> has been
+    /// turned on by a person, and what it adds is a cosmetic animation on his own
+    /// body that the owner asked for by name.</summary>
+    public const bool IdleHammerEnabled = true;
+
     /// <summary><c>Workers/GunnarPullStrength</c>, the only supported value.
     /// </summary>
     public const GunnarPullStrength PullStrength = GunnarPullStrength.MatchPlayer;
