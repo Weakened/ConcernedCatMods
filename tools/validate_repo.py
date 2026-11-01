@@ -19,6 +19,7 @@ import re
 import struct
 import sys
 import tomllib
+import unicodedata
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -3919,6 +3920,119 @@ TEAMSTER_DESTINATION_WRITES = (
 )
 
 
+# #473 / #480: every Teamster source audit reads text through
+# `_strip_cs_comments` and regular expressions, and four lexical tricks make
+# that text disagree with what the C# compiler sees. Each was reproduced against
+# Teamster source at exit 0 before this rule:
+#
+# - A directive line. The stripper does not know preprocessor lines, so
+#   `#region it's` (an apostrophe it reads as a char literal) or `#region x /*`
+#   throws it out of step and hides real code below. Directives also split the
+#   net48 plugin from the net10.0 test build the way `#if` did in the Steward's
+#   review. Teamster source has none, so none is allowed - #region and #pragma
+#   included - the rule the Steward S1 audit already keeps.
+# - A Unicode escape. `Destr\u006Fy(` is a call to Destroy that spells no
+#   `Destroy(`. Refused anywhere in the raw text; a string that needs a
+#   character can hold the character itself.
+# - A Unicode format character (category Cf: U+200B, U+00AD, U+2060...). The
+#   compiler drops it from an identifier, so `Dest<U+200B>roy(` is Destroy too
+#   (#480). Refused anywhere; a byte-order mark at the very start of a file is
+#   the one allowed, because it is not in the text the compiler reads.
+# - U+0085, U+2028, U+2029. C# ends a `//` comment there and the stripper does
+#   not, so code after one is comment to every count.
+#
+# Scanned: the same set the #313 worker-runtime scope audit scans - all of
+# src/ConcernedTeamster less obj/ and bin/, plus the shared trees its project
+# file compiles in. Raw text, before any stripping. What this still does not
+# see is what no text audit sees: a call reached through a delegate.
+TEAMSTER_LEXICAL_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
+TEAMSTER_LEXICAL_UNICODE_ESCAPE = re.compile(r"\\[uU][0-9A-Fa-f]")
+TEAMSTER_LEXICAL_LINE_END = re.compile("[\u0085\u2028\u2029]")
+
+
+def _teamster_lexical_directive(raw: str) -> str:
+    """The first line of raw C# whose first non-blank character is `#`, or ''."""
+    for line in TEAMSTER_LEXICAL_LINE_TERMINATOR.split(raw):
+        lead = line
+        while lead and (lead[0].isspace() or lead[0] in "\ufeff\x1a"):
+            lead = lead[1:]
+        if lead.startswith("#"):
+            return line.strip()[:60] or "#"
+    return ""
+
+
+def _teamster_lexical_format_character(raw: str) -> int:
+    """Offset of the first Unicode format (Cf) character, a leading BOM aside;
+    -1 when there is none."""
+    for offset, char in enumerate(raw):
+        if offset == 0 and char == "\ufeff":
+            continue
+        if unicodedata.category(char) == "Cf":
+            return offset
+    return -1
+
+
+def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
+    """Fails when Teamster source holds a lexical form that makes its text
+    audits read something other than what the compiler builds (#473, #480)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = "[interop] #473 lexical audit"
+    roots = [(teamster_dir, teamster_dir)]
+    shared_root = ROOT / "src" / "Shared"
+    for name in TEAMSTER_LINKED_SHARED_DIRS:
+        if (shared_root / name).is_dir():
+            roots.append((shared_root / name, shared_root))
+    if len(roots) != 1 + len(TEAMSTER_LINKED_SHARED_DIRS):
+        fail(f"{label}: a shared tree ConcernedTeamster compiles in is missing, so part of the product "
+             "is not being read", errors)
+        return []
+
+    scanned = 0
+    hits = 0
+    for walk, base in roots:
+        for path in sorted(walk.rglob("*.cs")):
+            relative = path.relative_to(walk)
+            if relative.parts and relative.parts[0] in ("obj", "bin"):
+                continue
+            scanned += 1
+            shown = path.relative_to(ROOT).as_posix()
+            raw = path.read_text(encoding="utf-8")
+            directive = _teamster_lexical_directive(raw)
+            if directive:
+                hits += 1
+                fail(f"{label}: {shown} has the directive line `{directive}` - the comment and string "
+                     "stripping every Teamster audit reads does not know directive lines (`#region it's` "
+                     "hides the code below it), and conditional compilation splits the plugin from the "
+                     "tests", errors)
+            escape = TEAMSTER_LEXICAL_UNICODE_ESCAPE.search(raw)
+            if escape is not None:
+                hits += 1
+                fail(f"{label}: {shown} holds the Unicode escape `{escape.group(0)}` at offset "
+                     f"{escape.start()} - in an identifier it spells a name (`Destr\\u006Fy`) that no "
+                     "count can see; write the character itself", errors)
+            format_at = _teamster_lexical_format_character(raw)
+            if format_at >= 0:
+                hits += 1
+                fail(f"{label}: {shown} holds the format character U+{ord(raw[format_at]):04X} at offset "
+                     f"{format_at} - the compiler drops it from an identifier, so it can split a name "
+                     "such as Destroy where no count looks; a string that needs one can build it with (char)0x200B", errors)
+            line_end = TEAMSTER_LEXICAL_LINE_END.search(raw)
+            if line_end is not None:
+                hits += 1
+                fail(f"{label}: {shown} holds U+{ord(line_end.group(0)):04X} at offset {line_end.start()} - "
+                     "C# ends a line there and the comment stripping does not, so code after it is "
+                     "invisible to every count", errors)
+
+    return [
+        f"{label}: {scanned} source(s) - src/ConcernedTeamster less obj/ and bin/, plus the "
+        f"{len(TEAMSTER_LINKED_SHARED_DIRS)} shared tree(s) it compiles in - hold no directive line, no "
+        "\\u/\\U escape, no Unicode format (Cf) character and no U+0085/U+2028/U+2029, so none of those four makes the text a Teamster "
+        "audit reads differ from the text the compiler builds. Still outside every text audit: a call "
+        "through a delegate, and a verbatim identifier (`x.@Interact(`) that the dotted token patterns do "
+        f"not spell ({hits} violations)",
+    ]
+
+
 # #379: Gunnar's collection tour keeps a write-ahead plan (`GunnarTourPlan`,
 # through ConcernedNPC's NpcPlanRun). A write-ahead record is worth something
 # only if it is written BEFORE the world moves: an intent before every pick and
@@ -6593,6 +6707,7 @@ def main() -> int:
     report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))
     report.extend(check_teamster_destination_is_pointed_at(errors))
+    report.extend(check_teamster_source_is_plain(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
