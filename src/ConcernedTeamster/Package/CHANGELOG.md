@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+* **Gunnar keeps busy beside his cart (#381).** While he is idle near the cart you assigned him, he now and then walks
+  over, faces it and swings a hammer at it, using the game's own hammer swing. It is scenery: it repairs nothing,
+  uses nothing and changes nothing about the cart, and it never happens while the cart is hitched to anyone, while he
+  has a job, or for a cart further than 12 m away. A new `Workers/GunnarIdleHammerEnabled` setting, on by default,
+  turns it off; it only ever takes effect while `Workers/GunnarHaulingEnabled` is on, which is still off by default.
+  If the body he is built from cannot play the hammer swing, he walks over, faces the cart and waits, and the log says
+  so once. **Not yet observed in game.**
+
 * **Gunnar's collection tour survives an interruption (#379).** The tour now writes down what it is about to do
   before every pick and every trip to the chest, in one small file per world beside Teamster's other files
   (`teamster_gunnar_tour_<world>.tsv`), never in the world itself. After a reload it checks that record against

@@ -1,6 +1,6 @@
 # Cart pulling and resource collection: contracts
 
-Contract revision **C6** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3, C4, C5 and C6 are documentation only, see §10). The compilable half lives in:
+Contract revision **C7** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3, C4, C5, C6 and C7 are documentation only, see §10). The compilable half lives in:
 
 | Area | Source | Compiled into | Tests |
 |---|---|---|---|
@@ -517,6 +517,17 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 - **Fault injection:** agent D's tests inject failures at every step of §5.2 and §5.3 and replay every journal prefix.
 
 ## 10. Revision log
+
+### C7 (2026-10-31): documentation only
+
+Owner decision given to the lead for #381, recorded in `DECISIONS.md`:
+- **D19:** Gunnar's idle hammer swing is cosmetic. While idle beside his assigned, unhitched cart, with every worker
+  gate open, he may walk to it and face it with his own body's vanilla motor and play the vanilla Hammer's own swing
+  through one pinned `ZSyncAnimation.SetTrigger` on his own body. Behind `Workers/GunnarIdleHammerEnabled`, effective
+  only while `Workers/GunnarHaulingEnabled` is on. `.SetTrigger(` is refused everywhere else in Teamster.
+
+It changes no name, value or transition in this document: the haul phases, leases and identity hold are only read.
+It has not been observed in game.
 
 ### C6 (2026-10-28): documentation only
 

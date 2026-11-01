@@ -284,6 +284,21 @@ $requirements = @(
     @("ZoneSystem", "game", "ZoneSystem.LocationInstance.m_location", 'public ZoneLocation m_location;'),
     @("ZoneSystem", "game", "ZoneSystem.ZoneLocation.m_exteriorRadius", 'public float m_exteriorRadius;'),
 
+    # D19 (owner decision 2026-10-31): the idle hammer swing. Every member
+    # GunnarIdleHammerPort binds, and the FACTS the decision rests on: the
+    # trigger is routed to every client's animator and written nowhere (no ZDO
+    # field, unlike SetBool/SetFloat/SetInt); the animator can be asked whether
+    # it has a trigger; and vanilla itself plays the hammer's own attack
+    # animation when a player repairs with it, which is the name the port reads.
+    @("Character", "game", "Character.m_zanim", 'protected ZSyncAnimation m_zanim;'),
+    @("ZSyncAnimation", "game", "ZSyncAnimation.SetTrigger(string) only routes the trigger", 'public void SetTrigger\(string name\) \{ m_nview\.InvokeRPC\(ZNetView\.Everybody, "SetTrigger", name\); \}'),
+    @("ZSyncAnimation", "game", "the routed trigger only sets the animator's trigger", 'private void RPC_SetTrigger\(long sender, string name\) \{ m_animator\.SetTrigger\(name\); \}'),
+    @("ZSyncAnimation", "game", "ZSyncAnimation.HasParameter(string, AnimatorControllerParameterType)", 'public bool HasParameter\(string name, AnimatorControllerParameterType type\)'),
+    @("ObjectDB", "game", "ObjectDB.instance", 'public static ObjectDB instance => m_instance;'),
+    @("ItemDrop", "game", "ItemData.SharedData.m_attack", 'public Attack m_attack;'),
+    @("Attack", "game", "Attack.m_attackAnimation", 'public string m_attackAnimation = "";'),
+    @("Player", "game", "vanilla's own repair swing plays the tool's attack animation", 'm_zanim\.SetTrigger\(toolItem\.m_shared\.m_attack\.m_attackAnimation\);'),
+
     # Jotunn: registering the worker prefab for every session.
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.OnVanillaPrefabsAvailable", 'public static event Action OnVanillaPrefabsAvailable;'),
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.CreateClonedPrefab(string, GameObject)", 'public GameObject CreateClonedPrefab\(string name, GameObject prefab\)'),
@@ -367,6 +382,16 @@ Assert-OnlyIn 'Vagon::AttachTo' { param($h) $h.Type.StartsWith($workersNamespace
 Assert-OnlyIn 'Vagon::Detach(' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's detach is called only by Gunnar's worker runtime" 2
 # D16: vanilla's own drop, called once, by the death-drop port alone.
 Assert-OnlyIn 'Humanoid::DropItem' { param($h) $h.Type -eq ($workersNamespace + "GunnarDeathDropPort") } "a carried stack is dropped only by the death-drop port, on Gunnar's own death" 1
+# D19: the idle hammer's one trigger, by its port alone; and no other animator
+# write anywhere in Teamster (SetBool/SetFloat/SetInt on ZSyncAnimation write the
+# body's network object, and a direct Animator write is outside the grant).
+Assert-OnlyIn 'ZSyncAnimation::SetTrigger' { param($h) $h.Type -eq ($workersNamespace + "GunnarIdleHammerPort") } "the hammer swing is triggered only by the idle hammer port, on Gunnar's own body" 1
+Assert-OnlyIn 'ZSyncAnimation::SetBool' { param($h) $false } "no Teamster code writes an animator bool" 0
+Assert-OnlyIn 'ZSyncAnimation::SetFloat' { param($h) $false } "no Teamster code writes an animator float" 0
+Assert-OnlyIn 'ZSyncAnimation::SetInt' { param($h) $false } "no Teamster code writes an animator int" 0
+Assert-OnlyIn 'ZSyncAnimation::SetSpeed' { param($h) $false } "no Teamster code changes an animator's speed" 0
+Assert-OnlyIn 'Animator::Set' { param($h) $false } "no Teamster code writes a Unity animator directly" 0
+Assert-OnlyIn 'Animator::Play' { param($h) $false } "no Teamster code plays a Unity animator state directly" 0
 Assert-OnlyIn 'Vagon::DetachAll' { param($h) $false } "no Teamster code detaches every cart on the client" 0
 Assert-OnlyIn 'Rigidbody::set_mass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "a mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'stfld float32 [assembly_valheim]Character::m_originalMass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "the base mass is written only by Gunnar's own calibration" 1

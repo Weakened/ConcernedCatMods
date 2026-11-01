@@ -271,6 +271,9 @@ members verified.`, `Gunnar's worker prefab 'CT_TeamsterWorker' is registered �
 3. Point at the cart, `ct_haul seam`; capture all of it. Expect Gunnar mass = base = calibrated = player base, and
    rotation constraints = the player's.
 4. `ct_haul assign`, then `ct_haul confirm` → lease `gunnar-lease-1`.
+   Since D19 (2026-10-31), if the cart is within 12 m and you wait about 45 s, he walks to it, faces it and plays
+   the hammer swing (`Workers/GunnarIdleHammerEnabled`, `GUNNAR_COLLECTION.md` §8). That is expected, and the `go`
+   below takes him straight out of it.
 5. `ct_haul evidence on`.
 6. `pos` at a point ~20 m away over ground the cart fits along; back at the cart `ct_haul go <x> <z>` → Accepted, with
    the planned length and steepest grade in the log.

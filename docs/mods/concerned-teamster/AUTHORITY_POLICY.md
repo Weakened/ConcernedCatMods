@@ -99,6 +99,26 @@ still holds him nothing is dropped. Exactly what the body holds, once, measured 
 a name; every death - dropped, refused or interrupted - is appended to a per-world death record beside Teamster's
 sidecars as durable reconciliation evidence.
 
+### The 2026-10-31 grant (`DECISIONS.md` D19): the idle hammer swing
+
+**Built, pinned to one file, never observed in game.** Part of `GunnarHauling` rather than a feature of its own: it
+touches no cart, so it needs no `CartAuthorityPolicy` row, and it runs only inside the hauling runtime's worker tick.
+While Gunnar holds a cart lease and is otherwise idle beside that cart - phase `Ready`, no haul, no joint, nobody
+holding his identity, the cart unhitched and within 12 m - he may walk to it and face it with his own body's vanilla
+motor (D14.2) and play the vanilla Hammer's own swing through **one** `ZSyncAnimation.SetTrigger` on his own body, in
+`Adapters/Workers/GunnarIdleHammerPort.cs`. The trigger name is read from the item database
+(`m_shared.m_attack.m_attackAnimation`), never invented, and his animator is asked first whether it has it.
+
+Gated by Teamster's `General/Enabled`, `Workers/GunnarHaulingEnabled` (off by default), `Workers/GunnarIdleHammerEnabled`
+(on by default, so it decides only what an already opted-in Gunnar does between jobs), the start-up capability probe
+and the work-authority rule, all re-read in the tick that acts. Cosmetic: it repairs, consumes, restores and grants
+nothing, writes no network-object field and no other animator state, and reads the cart only through the executor's
+own last observation. Inside vanilla, `SetTrigger` routes the trigger to every client's animator; the product spells
+no RPC of its own, as with `Pickable.Interact`. `.SetTrigger(` is refused everywhere else in Teamster and its linked
+shared trees; the `D19 idle-hammer audit` pins whose animator and which animation; `IdleHammerIsCosmetic` plants the
+escapes; `CartUpkeepDriverTests` proves an hour of it changes no cart, lease, phase, identity hold or carried
+material.
+
 ## Per-actor summary
 
 - **Local player, owns the cart (`Local`):** full observation (fresh) and the

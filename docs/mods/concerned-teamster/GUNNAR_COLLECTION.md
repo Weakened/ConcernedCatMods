@@ -50,7 +50,7 @@ driver already answers.
 | How much he can carry | **Teamster** | `GunnarCarry`, from the game's own numbers |
 | Where every unit of material physically is | **Teamster** | `CargoLedger`, `CollectionAccount` |
 | Whether a manual haul may start | **Teamster** | `HaulRequestGate` |
-| The idle hammer | **Teamster** | `CartUpkeepIdle` |
+| The idle hammer | **Teamster** | `CartUpkeepIdle`, `CartUpkeepDriver`, `GunnarIdleHammerPort` (§8, D19) |
 
 An earlier draft of this work contained a batch planner, a round loop and a tour partitioner of its own. They were
 written before the driver existed and they are **deleted**, not kept beside it: a second answer to "how many trips
@@ -278,10 +278,9 @@ Still deliberately absent, and each for its own reason:
 - **Felling.** Not authorized, and it would not have belonged here even if it were: real damage and drop-table
   semantics belong with #282 rather than riding in on a pickup commit. `CollectableKind` has no fellable value,
   and a test pins the enum so that adding one sends somebody here first.
-- **The idle gesture's one call.** Not authorized. The state machine that decides when he would do it lives in
-  `Domain/Collection/CartUpkeepIdle` — game-free, and proved by test to change nothing — and the single call that
-  would make it visible is deliberately absent, with the reason written where the call would go. It is one line
-  when a decision comes.
+- **The idle gesture's one call.** Not in this file. It was not authorized when this section was written; the owner
+  authorized it on 2026-10-31 (`DECISIONS.md` D19), and it lives in its own pinned file,
+  `Adapters/Workers/GunnarIdleHammerPort.cs`, driven by the hauling runtime rather than by collection (§8).
 - **A `TeamsterFeature` value of its own.** The collection runs under the existing off-by-default worker feature.
   A second one lands if and when collection is separately switchable.
 - **A ground probe.** `INpcJobRole.Probe` is null, with the reason in the code: every candidate is a world object
@@ -1045,18 +1044,85 @@ reason, and stays there. Not a portal, not with a cart, and never to recover a s
 ## 8. The idle hammer is scenery
 
 When Gunnar is idle near his assigned cart he occasionally walks over, faces it and plays the hammer animation.
-It repairs nothing, consumes nothing, restores no hit points and grants no buff.
+It repairs nothing, consumes nothing, restores no hit points and grants no buff. **Built since 2026-10-31**, under
+the owner's decision recorded as `DECISIONS.md` D19; never observed in game.
 
-That is not a promise about the code. `CartUpkeepIdle` can say exactly four things — nothing, walk, face, swing —
-and there is no value for repair, consume, heal or bless, so the code that drives it cannot ask for one. It is
-handed a `CartCondition` and has no way to hand one back: no method returns one, no parameter is by reference, and
-every property is read-only. `An_hour_of_idling_changes_nothing_about_the_cart` runs it for an in-game hour and
-compares the cart before and after; `The_routine_can_only_ever_say_four_things` and
+### The decision, which cannot say anything else
+
+`CartUpkeepIdle` can say exactly four things — nothing, walk, face, swing — and there is no value for repair,
+consume, heal or bless, so the code that drives it cannot ask for one. It is handed a `CartCondition` and has no way
+to hand one back: no method returns one, no parameter is by reference, and every property is read-only.
+`An_hour_of_idling_changes_nothing_about_the_cart` runs it for an in-game hour and compares the cart before and
+after; `The_routine_can_only_ever_say_four_things` and
 `The_routine_is_handed_the_cart_and_has_no_way_to_hand_one_back` are the structural half.
 
 He never does it while the cart is attached to anything, never while a job holds him, never for a cart that is not
-the one he was assigned, and never more often than the interval — and a period of work does not bank a swing he
+the one he was assigned, and never more often than the interval (45 s) — and a period of work does not bank a swing he
 owes.
+
+### The driver, which is game-free
+
+`Domain/Collection/CartUpkeepDriver` turns that answer into action. It is built from the decision, an
+`ICartUpkeepMotor` — three calls on his own body: walk with his own pathfinding, turn, stop — and one `Action` for the
+swing, and it is handed the facts as a value (`CartUpkeepFacts`), never the executor, a cart or an inventory.
+
+- **Walk** walks him toward the cart with an arrival radius of 2 m; **face** keeps walking the last steps and turns
+  him square to the cart; **swing** stops him, turns him to the cart and calls the port.
+- He only notices a cart within **12 m**. Further than that he is not "idle near his cart", the routine is disarmed,
+  and he does not set off across the map.
+- A walk that has not arrived after **20 s** is given up, his motor is stopped, and the interval starts again.
+- **Nothing** means the driver did nothing, and the hauling runtime hands that tick to the haul executor exactly as it
+  did before — which stops him if he is still moving. So every way out of the routine ends in the executor's hands.
+
+`CartUpkeepFacts.Read` copies, from the executor's getters only: a lease exists, phase `Ready`, no haul, no joint, no
+hold, no pending stop, **nobody holds his identity** (the shared arbiter, so a collection pick or tour holding him
+counts), the cart observed is the leased one and resolved, and whether anything is jointed to it. The cart and body
+it reads are the executor's own last frame observation; it observes nothing itself.
+
+`CartUpkeepDriverTests` runs the driver beside a **real** `HaulExecutor` holding a real lease for an in-game hour and
+asserts that the cart, the lease, the phase, the identity hold and its revision, the executor's revision, the seam's
+attach and release counts and a carried-material ledger are exactly what they were, that every port call of the hour
+was his own body walking, turning or stopping, and that swings happened. It also covers each gate (switch, authority,
+a dead body, a far cart, a hitched cart, a held identity, no lease), a job arriving mid-walk, the 20 s give-up, reset,
+and — structurally — that the driver's constructor, fields and motor interface are exactly those listed above.
+
+### The wiring
+
+`GunnarHaulingRuntime.OnWorkerTick`, after the collection tour's turn and before the executor's: when Teamster's
+master switch, `Workers/GunnarHaulingEnabled`, `Workers/GunnarIdleHammerEnabled` and the start-up probe are all on,
+the shared work-authority rule (D3) is asked in that tick, and the driver steps. The routine is reset on every world
+load and teardown. `ct_haul status` prints whether it is on, how many swings it asked for and how many vanilla played.
+
+**`Workers/GunnarIdleHammerEnabled` defaults to on**, and that choice is the lead's to review. It enrols nobody: it is
+read only while `GunnarHaulingEnabled` is on, which is off by default and turned on by a person. What it adds for that
+person is a cosmetic animation the owner asked for by name, and Concerned NPC's worker look (D18) set the precedent
+of a cosmetic worker setting on by default so the playtest judges it. The one thing it does that is not an animation
+is walk him a few metres on his own feet without an order, under the D14.2 carve-out; turn it off and he stands still.
+
+### The one call, and what pins it
+
+`Adapters/Workers/GunnarIdleHammerPort.PlayOnce(TeamsterWorkerAI gunnar)` makes one vanilla call:
+`animation.SetTrigger(swing)`, where `animation` is `gunnar.GetComponent<Character>().m_zanim` and `swing` is the
+vanilla Hammer item's own `m_shared.m_attack.m_attackAnimation`, read through `ObjectDB` — the name vanilla's own repair
+swing plays from the hammer in a player's hand (`Player`, pinned by the API audit). It refuses, and logs why once, for
+no body, a dead or unowned one, no animation sync, no Hammer in the item database, an empty name, or an animator that
+`HasParameter` says has no such trigger.
+
+`.SetTrigger(` is refused everywhere else in Teamster and in its three linked `src/Shared` trees, inside
+`Adapters/Workers` and out — before D19 nothing refused it anywhere, while three documents said it was "not
+authorized". The `D19 idle-hammer audit` pins the receiver's and the name's derivations, the `HasParameter` refusal
+above the call, and the absence of any other animator write in the port. `IdleHammerIsCosmetic` plants the escapes:
+the call in another worker file, in `Domain/`, in `Ui/`, in a shared tree, in a second file of the port's name, behind
+whitespace, twice, on the player's animator, through a different `animation` or `body`, with a literal name in the
+call or in `swing` or inside `HammerSwing`, through another item, with the animator check removed, and with an
+animator bool write beside it. Every one passed the validator from before this change (origin/main `436fdb1`).
+
+### What is not known
+
+Gunnar's body is a clone of `Dverger` by default. Whether that creature's animator has the hammer's trigger could not
+be read from the game's asset bundles without running the game. If it does not, `HasParameter` answers false, the
+port plays nothing and says so once in the log, and he walks to his cart, faces it and stands there — which is the
+fail-closed reading the owner's brief asked for, not a substitute animation. §10 row 49 is the check.
 
 ## 9. Verification
 
@@ -1137,13 +1203,8 @@ Gunnar who already exists still works.
    a reason, and the next order must not conjure replacement cargo.
 9. **No route.** Put the work area across water with no walkable approach: `NeedsAttention`, with a reason, and he
    must stay where he is.
-10. **The idle gesture — a decision to take, not a thing to observe yet.** The one call that would make Gunnar
-    visibly do this is not authorized and is not in the build, so there is nothing to watch. What the owner is
-    being asked is whether to authorize it, knowing two things: it is a transient animation trigger on his own
-    body that saves nothing and touches no other object; and what it would play is vanilla's own `interact`
-    gesture rather than a bespoke hammer swing, because an invented animator parameter warns on every call and
-    animates nothing. Whether that reads as "he is fiddling with his cart" is a thing only a session can answer.
-    One line to change, and nothing durable depends on it.
+10. **The idle gesture — decided.** The owner authorized it on 2026-10-31 (`DECISIONS.md` D19), as the vanilla
+    Hammer's own swing rather than the `interact` gesture this row once proposed. The rows to run are 49-53.
 11. **What he gets from one source.** Pick a single loose stone with Gunnar and with your own character in the same
     world. The counts must match: he is not a Player, so no skill, statistic or bonus-yield branch runs for him.
 
@@ -1271,3 +1332,19 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.
+
+### The idle hammer (§8, D19) - OWNER GO-AROUND PENDING
+
+49. **Does his body have the swing at all?** With `[Workers] GunnarHaulingEnabled = true` and
+    `GunnarIdleHammerEnabled` at its default, assign a cart (`ct_haul assign`, `ct_haul confirm`) and stand back.
+    Within about a minute he walks to it and faces it. Either he swings, or the log says once
+    `Gunnar's idle hammer swing is not played: his body's animator has no '…' trigger…`. Copy that line verbatim:
+    it decides whether the default `Dverger` body can play the hammer at all.
+50. **Nothing changes.** Before and after five minutes of idling, compare the cart's health (hover), its contents,
+    and `ct_haul status` (lease, phase, revision). All identical; the swings line counts up.
+51. **A job takes him.** Mid-walk or mid-swing, `ct_haul go <x> <z>`: he goes to the handle and hauls; no swing
+    happens during the haul, and none the moment it ends.
+52. **A hitched cart is left alone.** Hitch the cart yourself while he is idle: he stops walking to it and never
+    swings at it while you hold it.
+53. **Off means off.** `GunnarIdleHammerEnabled = false`, or a peer joining: he stands still; `ct_haul status` says
+    off, and the swings count does not move.
