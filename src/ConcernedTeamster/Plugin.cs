@@ -114,6 +114,10 @@ public sealed class Plugin : BaseUnityPlugin
             body => _hauling?.ReleaseCartFromDyingBody(body) ?? false,
             // A tour is on foot. No hauling runtime is "held": unknown refuses.
             () => _hauling?.HoldsACart ?? true,
+            // #379: the census's answer, so an interrupted tour's plan is
+            // revalidated only once his body is accounted for. No hauling
+            // runtime is "unspecified", which waits.
+            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,
             _containers,
             Logger);
         if (_hauling != null)

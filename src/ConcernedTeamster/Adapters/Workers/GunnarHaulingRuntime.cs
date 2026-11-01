@@ -78,6 +78,12 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
     internal WorkerIdentityHold? CollectionIdentity => _executor?.Modes;
 
+    /// <summary>Where Gunnar's one body stands, from this runtime's census
+    /// (#379). The collection tour's plan is revalidated only once this says
+    /// Bound, NotFound or Duplicated - Searching would be deciding before the
+    /// census has finished, which is the race a second Gunnar comes from.</summary>
+    internal WorkerBodyStatus BodyStatus => _bodyStatus;
+
     internal GunnarHaulService Service { get; private set; } = null!;
 
     /// <summary>Whether the verified vanilla cart attach/detach seam is usable
