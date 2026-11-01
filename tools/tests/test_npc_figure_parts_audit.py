@@ -286,6 +286,21 @@ class NpcFigurePartsArePinned(unittest.TestCase):
         self.swap_in(PARTS, marker, marker + "\n        point.AddComponent<Rigidbody>();")
         self.assert_refused("the talk point grew a rigidbody and could push or be pushed")
 
+    # --- S3/S4 review: "never blocks" is pinned, not review-only ---------------------------------
+
+    def test_a_talk_point_on_a_solid_layer_is_refused(self):
+        self.swap_in(PARTS, "            point.layer = nonSolidLayer;", "            point.layer = 0;")
+        self.assert_refused("the talk point was put on the Default layer, which blocks a body")
+
+    def test_a_talk_point_whose_trigger_fallback_is_turned_off_is_refused(self):
+        self.swap_in(PARTS, "            collider.isTrigger = true;", "            collider.isTrigger = false;")
+        self.assert_refused("the talk point's no-layer fallback became a solid capsule")
+
+    def test_a_changed_non_solid_layer_list_is_refused(self):
+        dresser = os.path.join(DRESSING, "NpcFigureDresser.cs")
+        self.swap_in(dresser, 'in new[] { "piece_nonsolid", "item" }', 'in new[] { "Default", "piece_nonsolid" }')
+        self.assert_refused("the talk point's layer could be chosen from a solid layer")
+
     def test_a_legitimate_new_constraint_elsewhere_in_the_library_is_not_refused(self):
         # Not a plant: the target-typed `new(` rule is about the two dresser
         # files. Ordinary code elsewhere in the library - a `where T : new()`

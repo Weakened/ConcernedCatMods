@@ -11,6 +11,19 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — Thorstein's tools panel (#295 S4)
+
+- **A "His tools" button** opens a panel showing his introduction and the tools he holds.
+  It offers: bring him over, send him home, give an axe or a hammer, and take either back.
+- **Every button does what the console does**, with the console's checks and reasons.
+- **Giving asks first.** The first click names the exact tool in your hand, with its
+  quality and durability. Only a second click gives it. The tool stays his real equipment.
+- **Talking to him names the real hold-up.** With both tools given but not yet taken on,
+  he names what is wrong: no settlement area, a record that cannot be read or saved,
+  missing authority, or an unresolved handover. Before, he always asked for the settlement.
+- New console words: `cf_settle preview axe|hammer` and `cf_settle tools`. **Not observed
+  in game.**
+
 ### Added — at home from the introduction, and talking to him (#295 S3)
 
 - **Once you have examined the square, Thorstein is at home** near your bed,

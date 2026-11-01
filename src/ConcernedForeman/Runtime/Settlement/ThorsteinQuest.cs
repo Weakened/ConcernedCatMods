@@ -112,7 +112,8 @@ internal sealed class ThorsteinQuest
         }
 
         ToolsOfTheTradeFacts facts = Facts(progress, register, journal);
-        return ThorsteinTalk.Line(ToolsOfTheTrade.Stage(facts), facts.AxeHeld, facts.HammerHeld, _remarks);
+        ToolsOfTheTrade.Decide(facts, out ToolsOfTheTradeWait wait);
+        return ThorsteinTalk.Line(ToolsOfTheTrade.Stage(facts), facts.AxeHeld, facts.HammerHeld, _remarks, wait);
     }
 
     /// <summary>Called after every tool handover: if that was the second tool,

@@ -2992,6 +2992,28 @@ NPC_ENGINE_WRITES = (
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*AddComponent\s*<\s*CapsuleCollider\s*>\s*\(\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*AddComponent\s*<\s*NpcFigureTalk\s*>\s*\(\s*\)"), 1),
     )),
+    # #295 S3/S4 review: "never blocks anybody" is a layer-or-trigger choice,
+    # so the choice is pinned rather than left to review. Every layer and
+    # trigger write in the library is one of these four; a talk point or a
+    # keepsake put on a solid layer, or a trigger turned off, is a different
+    # spelling and fails.
+    ("layer or trigger write", re.compile(r"\.\s*(?:layer|isTrigger)\s*=(?!=)"), (
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bpoint\s*\.\s*layer\s*=\s*nonSolidLayer\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bcollider\s*\.\s*isTrigger\s*=\s*true\s*;"), 1),
+        (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\btarget\s*\.\s*layer\s*=\s*layer\s*;"), 1),
+        ("Body/Keepsakes/NpcKeepsake.cs", _npc_exact(r"\bcollider\s*\.\s*isTrigger\s*=\s*true\s*;"), 1),
+    )),
+    # The only layers that may be chosen are the two the game treats as
+    # non-solid for characters, in this order, looked up by name in exactly
+    # these two places.
+    ("layer lookup", re.compile(r"\bLayerMask\s*\.\s*NameToLayer\s*\("), (
+        ("Body/Dressing/NpcFigureDresser.cs", _npc_exact(r"\bLayerMask\s*\.\s*NameToLayer\s*\(\s*name\s*\)"), 1),
+        ("Body/Keepsakes/NpcKeepsake.cs", _npc_exact(r"\bLayerMask\s*\.\s*NameToLayer\s*\(\s*name\s*\)"), 1),
+    )),
+    ("non-solid layer names", re.compile(r"\bin\s+new\s*\[\s*\]\s*\{[^}]*\}"), (
+        ("Body/Dressing/NpcFigureDresser.cs", _npc_exact(r'\bin\s+new\s*\[\s*\]\s*\{\s*"piece_nonsolid"\s*,\s*"item"\s*\}'), 1),
+        ("Body/Keepsakes/NpcKeepsake.cs", _npc_exact(r'\bin\s+new\s*\[\s*\]\s*\{\s*"piece_nonsolid"\s*,\s*"item"\s*\}'), 1),
+    )),
 )
 
 # The ONLY parameter types a public member of the dresser may take. An allowlist
