@@ -19,6 +19,19 @@ public sealed class GunnarKeepsakeTests : IDisposable
         Assert.Equal(GunnarPickupResult.AlreadyCollected, GunnarKeepsake.Examine(Open(), true, false));
         Assert.False(Open().IsRecruited);
     }
+    [Fact] public void CollectedStorySurvivesSecondWriteFailureWithoutAnotherBuckle()
+    {
+        var record=Open(); Assert.Equal(GunnarPickupResult.Collected,GunnarKeepsake.Examine(record,true,false));
+        string path=Directory.GetFiles(_root,"*.companions.tsv").Single(); Directory.CreateDirectory(path+".tmp");
+        Assert.False(GunnarKeepsakeRecovery.ResumeCollected(record,true));
+        Assert.False(record.ShouldPresentMemento(true)); Assert.False(Open().IsRecruited);
+        Directory.Delete(path+".tmp");
+        Assert.False(GunnarKeepsakeRecovery.ResumeCollected(record,false));
+        Assert.True(GunnarKeepsakeRecovery.ResumeCollected(record,true));
+        Assert.Equal(TheConcernedCat.Companions.Quest.QuestState.IntroPending,Open().State);
+        Assert.False(Open().IsRecruited); Assert.False(Open().ShouldPresentMemento(true));
+        Assert.False(GunnarKeepsakeRecovery.ResumeCollected(Open(),true));
+    }
     [Fact] public void FailedWriteGrantsNothingAndCanRetry()
     {
         var record = Open(); File.WriteAllText(_root, "blocked");

@@ -12,7 +12,7 @@ One dedicated worktree/branch per leaf, stacked for explicit dependencies:
 | Issue | Branch | Scope and exact outstanding integration |
 |---|---|---|
 | #456 | feat/ct-456-gunnar-record | Scoped durable record; adapter/config now installed at the four pinned Plugin lifecycle sites. Native owner checks remain. |
-| #457 | feat/ct-457-gunnar-keepsake | Shared keepsake spec/presenter, durable pickup, placement; verified anchor/probe, other-memento footprints, saved-worker census and native lifecycle wiring remain. |
+| #457 | feat/ct-457-gunnar-keepsake | Shared keepsake now has native plugin wiring, verified-anchor/ground queries, canonical other-memento snapshot and existing-census reads. Actual mesh/physics/game evidence remains. |
 | #458 | feat/ct-458-gunnar-presentation | Body decisions, role wrapper, real-library leases, dresser/metadata adapters; existing role registration, same-position worker handover, Teamster figure audit/plants, native presets and visual evidence remain. |
 | #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
 | #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel remain; owner confirmed hauling opt-in + host authority on 2026-11-01. |
@@ -40,7 +40,7 @@ patch in artifacts/gunnar-handoff. No branch has been merged or published.
 | G11 | Missing optional mods | Talk has no product reference/unsupported knowledge hints; existing hauling interop tests | Pending missing-mod startup |
 | G12 | Full destination; conservation | Existing DepositOrderGateTests, GunnarCargoLedgerTests, GunnarTourPlanKillTests; no transfer added here | Pending laden native delivery |
 | G13 | Once-only pickup, write refusal | KeepsakeTests real sidecar/reopen/retry; RecordTests detached failed save and no in-memory hire | Pending native callback/removal |
-| G14 | No memento collision | Shared planner test supplies compass/flint footprints; unknown snapshot defers | Pending actual cross-product positions |
+| G14 | No memento collision | Shared planner separation plus actual native-reader source tests for compass/shared footprints and own-spot exclusion; full buffers defer | Pending actual cross-product positions |
 | G15 | Appearance | BodyTests labels/palette/overrides; LookSource reads installed metadata only when invoked | Pending IDs and front/side/daylight |
 | G16 | One body; ordered handover | BodyTests real ConcernedNPC arbiter, removal failure, release-before-claim | Pending ct_haul/#317 wiring |
 | G17 | Safe camp/idle/range retention | CampTests real internal Camp via TEST-ONLY projection, seat targets and exact isolated hot-path allocation/probe budget | Pending approved public API and actual poses |

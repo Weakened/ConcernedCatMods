@@ -239,21 +239,28 @@ public sealed class GunnarCompanionRecordTests : IDisposable
             if (file.Contains(Path.DirectorySeparatorChar + "Companions" + Path.DirectorySeparatorChar) ||
                 file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) ||
                 file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
-            string source = File.ReadAllText(file);
+            string source = File.ReadAllText(file).Replace("\r\n","\n");
             if (Path.GetFileName(file)=="Plugin.cs")
             {
-                // Allow exactly the four lifecycle sites. A utility condition,
+                // Allow exactly the isolated record/keepsake lifecycle sites. A utility condition,
                 // hidden second call or a moved/omitted hook still fails.
                 foreach (string hook in new[] {
                     "private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;",
                     "_gunnarCompanion = Adapters.Companions.GunnarCompanionAdapter.Install(Config, Logger);",
                     "_gunnarCompanion?.Tick();",
-                    "_gunnarCompanion?.Forget();" })
+                    "_gunnarCompanion?.Forget();",
+                    "private Adapters.Companions.GunnarKeepsakeRuntime? _gunnarKeepsake;",
+                    "_gunnarKeepsake = Adapters.Companions.GunnarKeepsakeRuntime.Install(_gunnarCompanion,\n"+
+                    "            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,\n"+
+                    "            () => _hauling?.BoundBody != null, Logger);",
+                    "_gunnarKeepsake?.Tick();",
+                    "_gunnarKeepsake?.Forget();" })
                 {
                     Assert.Equal(1, source.Split(hook,StringSplitOptions.None).Length-1);
                     source=source.Replace(hook,"");
                 }
                 Assert.DoesNotContain("_gunnarCompanion",source);
+                Assert.DoesNotContain("_gunnarKeepsake",source);
             }
             Assert.DoesNotContain("GunnarCompanion", source);
             Assert.DoesNotContain("TheConcernedCat.Companions", source);

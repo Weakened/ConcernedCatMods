@@ -31,6 +31,7 @@ public sealed class Plugin : BaseUnityPlugin
     private Adapters.Interop.HaulCapabilityPublisher? _haulCapability;
     private Adapters.Interop.HaulPanelBridge? _haulPanel;
     private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;
+    private Adapters.Companions.GunnarKeepsakeRuntime? _gunnarKeepsake;
 
     private static readonly IReadOnlyDictionary<string, object> NoCapabilities =
         new Dictionary<string, object>();
@@ -57,6 +58,9 @@ public sealed class Plugin : BaseUnityPlugin
 
         // #456: narrative config/state is independent of telemetry and workers.
         _gunnarCompanion = Adapters.Companions.GunnarCompanionAdapter.Install(Config, Logger);
+        _gunnarKeepsake = Adapters.Companions.GunnarKeepsakeRuntime.Install(_gunnarCompanion,
+            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,
+            () => _hauling?.BoundBody != null, Logger);
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironmentBanner();
@@ -152,6 +156,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        _gunnarKeepsake?.Forget();
         _gunnarCompanion?.Forget();
         _haulCapability?.Shutdown();
         // Collection first: it acts through the hauling runtime's bound body, so
@@ -176,6 +181,7 @@ public sealed class Plugin : BaseUnityPlugin
     private void Update()
     {
         _gunnarCompanion?.Tick();
+        _gunnarKeepsake?.Tick();
         bool worldIsUp = Adapters.Workers.GunnarHaulingRuntime.WorldIsUp;
         if (_haulWorldWasUp && !worldIsUp)
         {
