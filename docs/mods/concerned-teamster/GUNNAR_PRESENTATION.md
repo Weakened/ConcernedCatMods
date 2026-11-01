@@ -52,3 +52,7 @@ override policy. These tests do not prove the uninstalled native call sites.
 OWNER GO-AROUND PENDING: native preset IDs, front/side/daylight match, visitor at
 home, no figure beside saved/unloaded worker, spawn/despawn at his prior spot,
 peer/dedicated refusal, missing source assets, logout/relog and cleanup.
+
+Additional lifecycle guards: non-finite placement/yaw refuses the figure; an
+expired presentation lease removes the old figure before a new lease is taken;
+accessory-fit verification waits until a later presentation tick after creation.
