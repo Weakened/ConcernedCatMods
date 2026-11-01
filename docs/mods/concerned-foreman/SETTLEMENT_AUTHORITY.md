@@ -306,6 +306,18 @@ waits for a person with the command that answers it. Uninstalling the mod is the
 one case the record cannot absorb by itself, which is why "Release everything"
 comes before removing it.
 
+## 5b. Addendum: small-tree felling (owner decision 2026-10-31, #282, D19)
+
+Thorstein may fell exactly four small trees: `Beech_small1`, `Beech_small2`, `FirTree_small` and `FirTree_small_dead`. Each is a tool-tier-0 `Destructible` in Valheim 1.0.21, read from the installed bundle.
+- **How.** Through vanilla's own `Destructible.Damage`, with a hit built from his own issued axe, one hit per call, in `Runtime/Collection/WorldFellingPort.cs` alone.
+- **Where.** Only inside an explicit work area: a map area the player chose, or the harvest designation.
+- **Clearances.** Never within 15 m of a player or a player-built piece, and never through a ward.
+- **Default.** Off (`Collection/ThorsteinFellsSmallTrees`).
+- **Durability.** The axe follows vanilla's rule, which wears no durability for a non-player attacker.
+- **Drops.** Vanilla's own. In this leaf they stay on the ground. Taking them is granted only as same-call custody of the drops his own hit produced, and is the next leaf's work.
+- **Decided but unused.** `TreeBase` and `TreeLog` damage were decided, but the small trees are not `TreeBase`, so neither has a call site. The D19 felling audit refuses both names, and any other `.Damage(`, across all of Foreman and the shared trees it compiles in.
+- **The full record** is `docs/settlement/cart-and-collection/DECISIONS.md` D19.
+
 ## 6. What this decision does not cover
 
 Named so a successor does not assume they were considered:

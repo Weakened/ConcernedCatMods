@@ -16,11 +16,19 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
 /// <summary><c>[Collection]</c> settings.</summary>
 internal sealed class CollectionSettings
 {
-    private CollectionSettings(ConfigEntry<float> workerCarryWeight, ConfigEntry<bool> thorsteinCollects)
+    private CollectionSettings(
+        ConfigEntry<float> workerCarryWeight, ConfigEntry<bool> thorsteinCollects, ConfigEntry<bool> thorsteinFellsSmallTrees)
     {
         WorkerCarryWeight = workerCarryWeight;
         ThorsteinCollects = thorsteinCollects;
+        ThorsteinFellsSmallTrees = thorsteinFellsSmallTrees;
     }
+
+    /// <summary><c>Collection/ThorsteinFellsSmallTrees</c> (D19, owner decision
+    /// 2026-10-31). <b>Off by default.</b> With it on, <c>cf_collect fell</c>
+    /// lets Thorstein fell the four allowlisted small trees inside a work area
+    /// you chose or marked, with his own axe; nothing else.</summary>
+    public ConfigEntry<bool> ThorsteinFellsSmallTrees { get; }
 
     /// <summary><c>Collection/WorkerCarryWeight</c> (CONTRACTS.md §5.6).</summary>
     public ConfigEntry<float> WorkerCarryWeight { get; }
@@ -62,7 +70,16 @@ internal sealed class CollectionSettings
                 "abandons an order already running - you can still see it, pause it, resume it and " +
                 "cancel it, so nothing that came out of a chest is stranded. Read when a command is " +
                 "given, so it takes effect at once."));
-        return new CollectionSettings(carry, collects);
+        ConfigEntry<bool> fells = config.Bind(
+            "Collection",
+            "ThorsteinFellsSmallTrees",
+            false,
+            new ConfigDescription(
+                "Whether Thorstein may fell small trees (small beech and small fir only) with his own axe, " +
+                "one hit per cf_collect fell, inside a work area you chose from the map or marked as your " +
+                "harvest area - never in the default camp circle, never within 15 m of a player or anything " +
+                "you built, never through a ward. What falls stays on the ground. Off by default."));
+        return new CollectionSettings(carry, collects, fells);
     }
 }
 

@@ -489,3 +489,83 @@ attach, or that is not drawn where it was put on that rig, is taken off, and the
   comparisons.
 
 **Never observed in game.** OWNER GO-AROUND PENDING.
+
+## D19. Thorstein may fell the four small trees, through vanilla's own damage, inside an explicit work area
+
+Status: **accepted** (owner decision 2026-10-31, #282 and the wood remainder of #296, asked by the lead). It is in
+two parts: the decision as first given, then a correction made once the installed game had been read. Recorded on
+2026-10-31.
+
+**First given.** Small trees only, saplings and small trees, felled through vanilla `TreeBase.Damage` with the real
+issued axe. Felling happens only inside an explicit work area, is off by default, and leaves wood dropping exactly as
+vanilla drops it. The owner added that cutting the log he felled (`TreeLog.Damage`) and picking up only the wood his
+own cuts produced (same-call custody, by instance id) are inside the permission.
+
+**What the installed game says** (Valheim **1.0.21**). The main prefab bundle `SoftRef/Bundles/c4210710` (756,139,651
+bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompiled. Nothing was extracted or committed.
+- **Valheim's small trees are not `TreeBase`.** They are `Destructible` objects with a `DropOnDestroyed` component, and
+  they drop their items in the same call that destroys them. There is no log and no falling physics:
+
+  | Prefab | Tool tier | Health | Drop table |
+  |---|---|---|---|
+  | `Beech_small1` | 0 | 20 | 2-3 picks: Wood (weight 1), Resin (weight 0.2) |
+  | `Beech_small2` | 0 | 20 | 2-3 picks: Wood (weight 1), Resin (weight 0.2) |
+  | `FirTree_small` | 0 | 40 | 4-5 picks: Wood (weight 1), FirCone (weight 0.1), Resin (weight 0.1) |
+  | `FirTree_small_dead` | 0 | 40 | 4-5 picks: Wood (weight 1) |
+
+- **There are no natural saplings.** Every `*_Sapling` is `Destructible` + `Piece` + `Plant`, which is player-planted
+  cultivation.
+- **Berry bushes carry `Pickable`.**
+- **`TreeBase` exists only on full-size trees,** and destroying one always spawns a falling physics `TreeLog`.
+- **An owner-side RPC runs in this process synchronously** (`ZRoutedRpc.InvokeRoutedRPC` with `targetPeerID == m_id`
+  calls `HandleRoutedRPC` directly).
+
+**Corrected decision (owner, option A).**
+- **Granted:** `Destructible.Damage` on exactly the four prefabs above, all tool tier 0, one hit per call.
+  - The call is pinned in the single file `src/ConcernedForeman/Runtime/Collection/WorldFellingPort.cs`.
+  - The hit is built from the issued axe's own item data: its damage, tool tier, item level and skill, with the
+    worker as attacker. It is the axe's plain damage: no skill factor, attack multipliers or status effects are
+    applied. Vanilla's damage handler resolves resistances, tool tier and health.
+  - Durability follows vanilla's own rule. Vanilla wears a weapon on a hit only when the attacker is a player
+    (`Attack`, `if (m_weapon.m_shared.m_useDurability && m_character.IsPlayer())`), so Thorstein's axe is not worn by
+    felling. A broken axe is refused.
+- **Granted, for the drops:** taking only the drops his own hit produced, tracked by instance id in the same call. This
+  is allowed only when this process owns the tree, so the game's handler ran in the call; otherwise it fails closed.
+- **Where:** only inside an explicit work area, meaning a map area the player chose or the harvest designation. The
+  default camp circle never authorises felling.
+- **Clearances:** never within 15 m of a player or of a player-built piece, and never through a ward.
+- **Default:** off (`Collection/ThorsteinFellsSmallTrees`).
+- **Decided but unused:** `TreeBase.Damage` and `TreeLog.Damage`. There is no call site.
+- **The validator** (`check_foreman_felling_scope`, "D19 felling audit") covers the whole of Foreman, less `obj/`
+  and `bin/`, plus every shared tree its project file compiles in (read from the project file):
+  - it allows exactly one `.Damage(`: the pinned `tree.Damage(hit)` in the felling port;
+  - it refuses `TreeBase`, `TreeLog`, `DestroyNow`, `ApplyDamage` and `RPC_Damage` anywhere in that scope, until a
+    mature-tree scope is decided.
+  - a project file that is missing, a shared include it cannot follow, or a linked tree that is missing fails the
+    audit rather than shrinking its scope;
+  - the Concerned NPC library, referenced as a separate project, is outside this walk. It has its own audits and
+    does not fell.
+- **Excluded:** saplings (cultivation), berry bushes (food), and every other prefab.
+
+**Built in the first leaf (#282).**
+- `cf_collect fell` lands one hit on the eligible small tree nearest Thorstein, inside the area an order would use.
+- The drops stay on the ground; nothing is taken or counted yet.
+- Taking the wood, and felling as part of a collection order, belong to the next leaf, which will use the same-call
+  custody granted above.
+- The eligibility rules are game-free in `src/Shared/Workers/Felling/SmallTreeFelling.cs`, so Teamster's Gunnar can
+  reuse them. **D19 grants felling to Thorstein only:** Gunnar felling anything still needs its own owner decision.
+- The felling audit's limit is stated rather than left to be found. It is a text audit with comments stripped, so a
+  call reached through a delegate spells none of these tokens and is invisible to it.
+  `tools/tests/test_foreman_felling_audit.py` plants each escape (in `Runtime/`, `Ui/`, `Plugin.cs`, `Domain/` and two
+  linked shared trees). Each plant is refused by the rule and passes a validator without it.
+
+**Not granted:**
+- full-size trees, logs, stumps, bushes or anything not on the list;
+- felling outside an explicit area;
+- teleporting, forces, or movement of the player;
+- ownership takeover;
+- minted, estimated or replacement wood;
+- a second copy of any drop;
+- mod data in a vanilla object.
+
+**Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F6).

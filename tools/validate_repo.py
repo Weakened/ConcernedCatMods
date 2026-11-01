@@ -3564,6 +3564,96 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
     ]
 
 
+# D19 (owner decision 2026-10-31, #282): Thorstein may fell the four
+# allowlisted small trees through vanilla's Destructible.Damage - one hit per
+# call, in Runtime/Collection/WorldFellingPort.cs and nowhere else. TreeBase and
+# TreeLog were decided but are UNUSED (Valheim 1.0.21's small trees are
+# Destructible), so neither may be named; nor may the instant kill, a direct
+# damage application, or the game's damage handler by name.
+#
+# The scope is the WHOLE product - every folder of src/ConcernedForeman less
+# obj/ and bin/ - and every shared source tree its project file compiles in,
+# read from the project file so a new linked tree is followed. The #400 audit
+# walks Runtime/ alone, which is not the product's boundary (#401's lesson).
+FOREMAN_FELLING_PORT = "src/ConcernedForeman/Runtime/Collection/WorldFellingPort.cs"
+FOREMAN_FELLING_DAMAGE = re.compile(r"\.\s*Damage\s*\(")
+FOREMAN_FELLING_PINNED = re.compile(r"\btree\s*\.\s*Damage\s*\(\s*hit\s*\)")
+FOREMAN_FELLING_FORBIDDEN = (
+    ("TreeBase/TreeLog (decided, unused)", re.compile(r"\b(?:TreeBase|TreeLog)\b")),
+    ("destruction shortcut", re.compile(r"(?:\.\s*(?:DestroyNow|ApplyDamage)\s*\(|\bRPC_Damage\b)")),
+)
+
+
+def _foreman_felling_sources(errors: list[str]) -> tuple[dict[str, str], list[str]]:
+    """The audited scope. Every way it could quietly shrink is a failure."""
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    roots = [foreman_dir]
+    linked: list[str] = []
+    csproj = foreman_dir / "ConcernedForeman.csproj"
+    if not csproj.is_file():
+        fail("[foreman] D19 felling audit: ConcernedForeman.csproj is missing, so the shared trees it compiles in "
+             "cannot be read; the audit refuses rather than shrinking its scope", errors)
+    else:
+        text = csproj.read_text(encoding="utf-8-sig")
+        for raw in re.findall(r'Include="(\.\.[\\/]Shared[\\/][^"]*)"', text):
+            match = re.match(r'\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]', raw)
+            if match is None:
+                fail(f"[foreman] D19 felling audit: a shared include this audit cannot follow: {raw}", errors)
+                continue
+            name = match.group(1)
+            if name not in linked:
+                linked.append(name)
+                roots.append(ROOT / "src" / "Shared" / name)
+        if not linked:
+            fail("[foreman] D19 felling audit: ConcernedForeman.csproj names no shared tree; the audit expected at "
+                 "least one and refuses rather than walking less than the product", errors)
+    sources: dict[str, str] = {}
+    for root in roots:
+        if not root.is_dir():
+            fail(f"[foreman] D19 felling audit: {root.relative_to(ROOT).as_posix()} is compiled in but missing", errors)
+            continue
+        for path in sorted(root.rglob("*.cs")):
+            if any(part in ("obj", "bin") for part in path.relative_to(root).parts):
+                continue
+            sources[path.relative_to(ROOT).as_posix()] = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
+    return sources, linked
+
+
+def check_foreman_felling_scope(errors: list[str]) -> list[str]:
+    """D19: one pinned Destructible.Damage in the whole of Foreman; no tree types, no shortcuts."""
+    sources, linked = _foreman_felling_sources(errors)
+    hits = 0
+    pinned = 0
+    for rel, code in sources.items():
+        spans = [(m.start(), m.end()) for m in FOREMAN_FELLING_PINNED.finditer(code)] if rel == FOREMAN_FELLING_PORT else []
+        pinned += len(spans)
+        for match in FOREMAN_FELLING_DAMAGE.finditer(code):
+            if any(start <= match.start() < end for start, end in spans):
+                continue
+            hits += 1
+            fail(
+                f"[foreman] D19 felling audit: a `.Damage(` outside the one pinned hit, in "
+                f"{rel}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+        for label, pattern in FOREMAN_FELLING_FORBIDDEN:
+            for match in pattern.finditer(code):
+                hits += 1
+                fail(
+                    f"[foreman] D19 felling audit: forbidden {label} in "
+                    f"{rel}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+    if pinned != 1:
+        hits += 1
+        fail(
+            f"[foreman] D19 felling audit: {FOREMAN_FELLING_PORT} has {pinned} pinned "
+            "`tree.Damage(hit)` site(s); the population is exactly 1", errors)
+    return [
+        f"[foreman] D19 felling audit: {len(sources)} source(s) - the whole of src/ConcernedForeman less obj/ and bin/, "
+        f"and the {len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - hold exactly one "
+        "`.Damage(`, the pinned hit in Runtime/Collection/WorldFellingPort.cs; TreeBase, TreeLog, DestroyNow, "
+        "ApplyDamage and RPC_Damage are refused everywhere in that scope. A text audit with comments stripped: "
+        f"a call through a delegate spells none of these ({hits} violations)",
+    ]
+
+
 # #381: the collection port's two lifecycle verbs, pinned so they cannot be
 # swapped. This is a source audit rather than a unit test because the port binds
 # Unity and no test in this repository can load it - and the thing being guarded
@@ -6609,6 +6699,7 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
+    report.extend(check_foreman_felling_scope(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
     report.extend(check_npc_keepsake_confined(errors))
