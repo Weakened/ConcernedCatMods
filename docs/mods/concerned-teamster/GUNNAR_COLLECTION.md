@@ -8,7 +8,8 @@ ground through vanilla's own drop when he genuinely dies, and every death is rec
 material and is named rather than left to be found: the one change whose write to the network object failed**
 (§6c). The
 automatic survey-driven job is **now wired** (§6f): survey a bounded area, plan the whole job in loads he can carry,
-walk each load, take it to the chosen chest in one trip, measure it in, next load. A player can now mark which chests Gunnar may use, and those marks
+walk each load, take it to the chosen chest in one trip, measure it in, next load - and the tour is written down
+before every move it makes, so an interruption no longer forgets it (§6h, #379). A player can now mark which chests Gunnar may use, and those marks
 persist per world (§6d, #374), and **a deposit now consumes one** (§6e, `DECISIONS.md` D15): `ct_collect destination`
 chooses the chest by pointing at it and `ct_collect deposit` moves what he carries into it, measured on both sides.
 The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
@@ -864,7 +865,7 @@ ct_collect stop           (or cancel)
 | runs two jobs | one tour at a time; the identity lease refuses a haul and a tour together; the ordered pick and deposit refuse while a tour runs, and so do choosing another chest or another area |
 | keeps picking into a body it cannot trust | the §6c containment holds for a tour too: a body whose last change did not reach its record, or that never read it, ends the tour at once (checked by name, every tick and every frame), and he is handed nothing more |
 | holds Gunnar after his body is gone | the tour remembers the body it began with (its network id) and ends when the bound body is another, when it is dead, or when no worker tick has come for 5 s - a body that unloaded or died produces no tick to end it from |
-| loses material on a reload | what he carries is persisted in his own body (§6c). A reload ends the tour (the world verb runs); after the chest and the area are chosen again in the new world load, the next `start` begins by taking what he carries to the chest |
+| loses material, or the tour, on a reload | what he carries is persisted in his own body (§6c), and the tour is written down before every move it makes (§6h, #379). A reload ends the running tour (the world verb runs) but not its plan: the plan is revalidated against his body once the census, his record, the switch and the authority can answer, keeps its progress and his measured load, and after the chest and the area are chosen again in the new world load the next `start` continues it by taking what he carries to the chest. A record and a body that disagree stop for a person (`ct_collect resolve`) |
 | lights a guard stone | vanilla's `PrivateArea.CheckAccess` defaults `flash` to **true**, and a flashing query sends `FlashShield` to every peer. Every ward query in Teamster says `flash: false` by name, pinned by the `#381 ward-query audit`; the hauling API audit pins the fact that a flash is an RPC |
 
 ### Capacity
@@ -919,6 +920,119 @@ game's. Every unreadable number is a load of nothing, and a tour that would carr
   a cast, a string-named `GetComponent`, every scene-wide search, the destination set or `??=`-filled from anything
   but the pointed chest, a runtime part under another file name - each verified to pass the validator from before
   this change and refused by this one.
+
+## 6h. The tour survives an interruption (#379, CNPC-008)
+
+**The tour is written down before it acts, and a reload no longer forgets it.** Gunnar is the **second production
+adopter** of ConcernedNPC's interruption layer (`docs/mods/concerned-npc/INTERRUPTION.md`), after the Steward, and
+adopts it the Steward's way: the tour runtime stays the only thing that touches the world, and a game-free plan
+(`Domain/Collection/GunnarTourPlan.cs`) is its write-ahead witness. No ConcernedNPC source changed and its version did
+not move: everything used here is public in 0.5.0, and the product build - which references the library as an
+assembly - is what proves it.
+
+**One plan per Gunnar per world.** The job id is the constant `teamster-collect` and the identity is `teamster/gunnar`,
+so a reload finds the same plan rather than a new one. The file is `teamster_gunnar_tour_<world>.tsv`, beside
+`teamster_worker_deaths_<world>.tsv`, opened at the world-up edge once the world has an id. No id, no file - and a tour
+refuses to start, saying so. Teamster owns the bytes (`GunnarTourPlanCodec`): `format 1`, one `plan` row, one
+`carried` row per material, and the trailer `end <n>`. There is no escaping, so a key with a tab or a line break is
+refused rather than written; an unknown row, a second plan or format row, a duplicate material, rows after the trailer,
+a missing or wrong trailer, and a finished plan that still claims a load all make the record unreadable, never "no
+plan".
+
+**What is persisted.** Identity and job; phase; reservations - always none, because a tour sets nothing aside; what
+he carries, measured from the deposit port's count, one stack per material in name order; sources worked and sources
+started; no vehicle, because a tour is on foot (D17), and a plan naming one is refused both ways; the area as the
+source; the chest's key as the destination, which after a reload is **evidence only** - a network id names something
+else in the next world load (D6, D15), so the player chooses the chest again; and custody.
+
+**Write-ahead, at every movement.** Before each pick's `_port.Begin`, the plan is told (`IntendPick`); a refused write
+is a pick not made, and the tour stops with a sentence. After it, the plan records what he holds now, measured, and
+the source as worked. Before each trip's deposit legs, `IntendDeposit`; after them, the conclusion is **established
+only when every leg was certain and what he holds afterwards could be read** - otherwise the plan stops for a person.
+The two phases the library treats as moving material are reached through Steward's measured no-op: an intent to
+restate what he already holds and a conclusion recording the measurement. The validator's `#379 tour write-ahead
+audit` pins the order in the source (below).
+
+**How a tour ends.** Finished and empty: settled, through reconciling. Stopped and empty: refunded. Still carrying -
+stopped, cancelled, a cart assigned, the authority lost: the plan **stays open** with the reason, so the next start
+takes the load to the chest first. A pick the tour abandons in flight is concluded from a measurement; a trip to the
+chest abandoned in flight (the deposit legs threw) is not, because what reached the chest is exactly what nobody
+measured.
+
+**Revalidation, deliberately deferred.** A plan read back from the disk is not decided until the hauling census has
+finished and found Gunnar Bound, NotFound or Duplicated, his body's inventory record is trusted (read, and its last
+write landed), collection is opted in, and work authority is granted - deciding earlier would decide from evidence
+that is about to change. Until then `ct_collect status` says an interrupted tour is waiting, and why. It uses
+`NpcPlanRecovery.Revalidate`, **not** `Reconstruct`: reconstruction claims the body under a holder name, and Gunnar's
+identity lease would then answer "busy" to the tour that tried to resume. The census answers the body question.
+
+| What it finds | What it does |
+|---|---|
+| Stopped this session, same area and chest, the same load on him | **continue**: same job, same progress, same load, no new beginning |
+| A reload, the same load on him; or the area or the chest chosen again | **re-plan the rest**: back to looking, progress and load kept; at the next start it is re-attached to this world load, its keys rewritten, and walked forward with a measured no-op |
+| A plan holding nothing (a reload, or his body gone) | **refund**: closed; a refund never "refunds" carried material, and a refund the policy offers while he carries something becomes needs-attention, as the Steward's does |
+| A pick or a trip in flight on the disk (pending or uncertain) | **needs attention**: neither repeated nor forgotten |
+| What he holds differs from the record | **needs attention**, and the sentence says a crash rollback - the world going back to its last save while the plan did not - may be why |
+| His load cannot be read | **needs attention** |
+| Two bodies answer to Gunnar | **needs attention** |
+| His body is gone while the plan says he held something (`ct_haul retire force` included) | **needs attention**: nothing is recreated. Decided on reload, and also within the session as soon as the census finds no body for a stopped or re-planned plan |
+| The plan file cannot be read | **needs attention**; the file is left exactly as it is |
+
+**The person's exit: `ct_collect resolve`.** Shaped like `cs_steward resolve`. It needs a live world, exactly one
+Gunnar, and a readable measurement - a resolution recorded against an unknown amount is a guess. An unreadable file is
+moved aside as a `.corrupt` copy first, and if it cannot be moved nothing is written over it. Empty-handed, it writes a
+new plan closed at once as refunded (a tombstone). Carrying something, it writes a new plan whose load is the
+measurement, left where a tour would continue it, so the next `ct_collect start` takes it to the chest. It moves
+nothing and recreates nothing.
+
+**D16.** The death host's `Prepare` writes an intent before vanilla's drop runs; its result is void, so a failed write
+can never refuse the drop. `Died` tells the plan **before** the tour is cancelled: a full, measured drop of exactly
+what the plan says he carried (nothing unresolved, held equal to the recorded load) concludes him empty and closes the
+plan as refunded, with a note naming the death record; anything else stops it for a person. A plan that already
+waited for a person stays waiting.
+
+**Ordered moves wait.** `ct_collect pick` and `ct_collect deposit` refuse while a plan is open - recovered, re-planned,
+stopped with a load, or waiting for a person - with "an interrupted collection tour is open ... ct_collect start
+carries it on, ct_collect resolve settles it". The tour's own deposit is the tour and is unaffected.
+
+**No priority ladder.** ConcernedNPC's activity ladder decides which of two activities gets a body. It does not apply
+here: Gunnar's identity lease lets exactly one job hold him at a time and nothing preempts another. "An interrupted
+job resumes rather than restarts" is the plan staying open while a haul holds him, and being continued when the tour
+is started after it.
+
+**Lead defaults 2026-10-30, owner may override.** The Lane C lead accepted five behaviour questions as defaults:
+(1) a crash rollback - the measured load differing from the record - ends needs-attention; (2) a death whose whole
+load was measured onto the ground concludes the plan empty and ends it Refunded; (3) `ct_haul retire force` with an
+open plan ends needs-attention, as a lost body; (4) an ordered pick and an ordered deposit are refused while a plan is
+open; (5) nothing continues automatically after a reload - the chest and the area must be re-pointed first.
+
+### Tested and pinned
+
+- `GunnarTourPlanTests`: one test per outcome - continue, re-plan keeping progress and the measured load (after a
+  reload, and in the same session with the chest chosen again), refund, and needs-attention for each case in the
+  table; the codec's round trip and each refusal; two relogs mid-load depositing the load exactly once; a settled
+  plan resuming nothing; an uncertain deposit never depositing again until resolved; a crash rollback to fewer units
+  giving the crash sentence; death with a full drop ending refunded and never re-entering, death with units unresolved
+  ending in needs-attention, and a death whose intent could not be written never closing as refunded; and the
+  arbitration test - a stopped tour resumed after a haul held him, with the same job id, progress and load and no new
+  beginning.
+- `GunnarTourPlanKillTests`: a kill injected after every one of the scripted tour's 20 writes (begin, every phase, two
+  picks, one trip, settled), which lands in both kinds of instant - before an announcement, and after the world moved
+  but before the conclusion - plus the two half-way kills named on their own. Every recovery gives a sentence, leaves
+  nothing pending on the disk, may resume only when the record matches the body, stops for a person when it does not,
+  and carried on to the end puts every unit in the chest exactly once. The fixture's own conservation check is shown
+  to catch a replayed deposit.
+- `tools/validate_repo.py` `#379 tour write-ahead audit`: in `GunnarCollectionRuntime.Tour.cs` every `_port.Begin(`
+  and every `DepositLegs(` is preceded in the same member by `if (!_tourPlan.IntendPick(...))` /
+  `IntendDeposit(...)` whose block returns; in `GunnarCollectionRuntime.cs` each is made only by its ordered verb,
+  which passes `interruptedTourOpen: _tourPlan.BlocksOrders`; no other part of the runtime makes either; `Prepare`
+  tells the plan before it returns and `Died` before `CancelTour`. **A text-order check, not control flow**: it
+  establishes what is written above the move, finds members by braces at four spaces of indent, and does not follow a
+  delegate. `tools/tests/test_teamster_carveout.py` `TourWriteAheadIsPinned` plants the escapes - the intent moved
+  after the call, the guard dropped or not leaving, the call lifted into a helper, a move routed through the other
+  half of the runtime or another part of it, the ordered refusal removed, and the death verbs silent - each verified
+  to pass the validator from before this rule and refused by this one.
+- **Not observed in game.** §10 rows 44-48 are OWNER GO-AROUND PENDING.
 
 ## 7. No portals
 
@@ -1122,11 +1236,38 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
     `ct_collect start` must refuse and name the cart.
 41. **Unreachable source.** Put a stone across water with no walkable approach inside the area: after about 12 s
     he gives it up and carries on with the rest; he never jumps or teleports.
-42. **Reload mid-tour.** Save and quit mid-load, reload: the tour is gone, the stones he picked are still in him
-    (§6c), and after `destination` and `area` again, `start` takes them to the chest first.
+42. **Reload mid-tour.** Save and quit mid-load, reload: the running tour is gone but its plan is not -
+    `ct_collect status` says an interrupted tour is waiting, the stones he picked are still in him (§6c), and
+    after `destination` and `area` again, `start` continues the plan (its progress kept, §6h) and takes them to
+    the chest first.
 43. **Death mid-tour (§6g).** Let something kill Gunnar while he walks a load. The tour must stop at once with
     "Gunnar died" in the log (not some seconds later as a silent body), what he picked on that load must be on the
     ground where he fell, and the death record must count it. `ct_collect status` afterwards shows no tour running.
+
+### The tour surviving an interruption (§6h, #379) - OWNER GO-AROUND PENDING
+
+44. **Quit without saving mid-load.** Let him pick a few stones, then quit the game without saving (kill the
+    process, or quit before the autosave), and load the world again. His body comes back from the last save with
+    fewer stones than the plan wrote down: `ct_collect status` must say the tour is stopped for you with the
+    mismatch sentence - it names both amounts and says this may be a crash rollback - and `ct_collect pick`,
+    `deposit` and `start` must all refuse. Look at him, run `ct_collect resolve`: it records what he holds; the
+    next `start` (after `destination` and `area`) takes that to the chest. Count the chest: nothing doubled.
+45. **An uncertain deposit survives a reload.** Make a trip to the chest come back uncertain (the hardest row to
+    stage; the log names it), save and quit, reload. The plan must still be stopped for a person, `start` must
+    refuse, and nothing may go into the chest again until `ct_collect resolve`.
+46. **Stop then start continues.** `ct_collect stop` mid-load, then `ct_collect start` with the same area and
+    chest: the start sentence says the stopped tour carries on, with the sources already worked; the log shows
+    no new plan beginning, and the load he holds goes to the chest first.
+47. **`ct_haul retire force` with an open plan.** Stop a tour with stones on him, then `ct_haul retire force`.
+    Within a moment, with no start needed, the log warns and `ct_collect status` shows the plan stopped for you
+    with the body-gone sentence naming `retire force` (the frame watcher sees the census find no body); nothing
+    is recreated.
+    Spawn him again and `ct_collect resolve`: an empty Gunnar closes the plan; the stones are gone, as
+    `retire force` said they would be.
+48. **A corrupt plan file.** With the game closed, damage `teamster_gunnar_tour_<world>.tsv` beside Teamster's
+    other files (delete its `end` row), and load. `ct_collect status` must say the plan could not be read and was
+    left as it is. `ct_collect resolve` must move it aside as a `.corrupt` copy before writing a new one, and
+    record what he holds.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

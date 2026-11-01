@@ -1267,3 +1267,157 @@ class CollectionTourIsBounded(CarveOutFixture):
         self._planted.append(path)
         self.assert_refused("a runtime part in a differently named file chose the chest",
                             marker="#381 destination audit", contains="assigns the runtime's _destination")
+
+
+# -- #379: the tour writes every move down before it happens --
+
+PICK_GUARD = (
+    "        if (!_tourPlan.IntendPick(\"about to pick \" + expected + \" from a source on the tour\", out string unwritten))\n"
+    "        {\n"
+    "            CancelTour(\"the next pick could not be written down first, so it was not made: \" + unwritten);\n"
+    "            return;\n"
+    "        }\n")
+PICK_CALL_END = "            nowSeconds: Time.time);\n"
+DEPOSIT_GUARD = (
+    "        if (!_tourPlan.IntendDeposit(\"about to take what he carries to the chest\", out string unwritten))\n"
+    "        {\n"
+    "            detail = \"the trip could not be written down first, so nothing was moved: \" + unwritten;\n"
+    "            return TourDepositEnd.Refused;\n"
+    "        }\n")
+DEPOSIT_CALL = "        DepositTally tally = DepositLegs(worker, carried, said);\n"
+TOUR_AUDIT = "#379 tour write-ahead audit"
+
+
+class TourWriteAheadIsPinned(CarveOutFixture):
+    """The collection tour's plan (#379) is only a write-ahead record if the tour
+    asks it BEFORE every pick and every trip to the chest, and tells it about a
+    death before the tour is cancelled. The plan's own tests cannot reach the call
+    site - the runtime binds Unity - so the order is pinned in the source. Each
+    plant below was run against the validator from before this rule (origin/main
+    36025a7), which let every one of them through.
+    """
+
+    _restore_path = TOUR_RUNTIME
+
+    def swap_all(self, path, pairs):
+        """Several exact replacements in one file, restored as one."""
+        with open(path, encoding="utf-8-sig") as handle:
+            original = handle.read()
+        self._restore = original
+        self._restore_path = path
+        changed = original
+        for old, new in pairs:
+            self.assertEqual(1, changed.count(old), "the pinned text moved: " + old)
+            changed = changed.replace(old, new, 1)
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(changed)
+
+    # -- a pick --
+
+    def test_the_pick_intent_may_not_follow_the_pick(self):
+        self.swap_all(TOUR_RUNTIME, [(PICK_GUARD, ""), (PICK_CALL_END, PICK_CALL_END + "\n" + PICK_GUARD)])
+        self.assert_refused("a pick announced after it was made passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendPick(...))")
+
+    def test_the_pick_intent_may_not_be_ignored(self):
+        self.swap_in(TOUR_RUNTIME, PICK_GUARD,
+                     "        _tourPlan.IntendPick(\"about to pick\", out string unwritten);\n")
+        self.assert_refused("a pick whose announcement was not consulted passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendPick(...))")
+
+    def test_a_pick_guard_that_does_not_leave_is_refused(self):
+        self.swap_in(TOUR_RUNTIME, PICK_GUARD, PICK_GUARD.replace("            return;\n", ""))
+        self.assert_refused("a pick guard with no return passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendPick(...))")
+
+    def test_a_pick_may_not_be_lifted_into_a_helper(self):
+        self.swap_in(
+            TOUR_RUNTIME,
+            "    private void PollTourPick(CollectionTour tour)\n",
+            "    private PickRefusal ZzPick(Pickable source, Humanoid worker)\n"
+            "    {\n"
+            "        return _port.Begin(source, worker, featureEnabled: true, seamAvailable: true,\n"
+            "            expectedItemPrefab: \"Stone\", expectedUnits: 1, nowSeconds: Time.time);\n"
+            "    }\n\n"
+            "    private void PollTourPick(CollectionTour tour)\n")
+        self.assert_refused("a pick lifted into an unannounced helper passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendPick(...))")
+
+    # -- a trip to the chest --
+
+    def test_the_deposit_intent_may_not_follow_the_deposit(self):
+        self.swap_all(TOUR_RUNTIME, [(DEPOSIT_GUARD, ""), (DEPOSIT_CALL, DEPOSIT_CALL + DEPOSIT_GUARD)])
+        self.assert_refused("a deposit announced after it was made passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendDeposit(...))")
+
+    def test_the_deposit_intent_may_not_be_ignored(self):
+        self.swap_in(TOUR_RUNTIME, DEPOSIT_GUARD,
+                     "        _tourPlan.IntendDeposit(\"about to deposit\", out string unwritten);\n")
+        self.assert_refused("a deposit whose announcement was not consulted passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendDeposit(...))")
+
+    def test_a_deposit_may_not_be_lifted_into_a_helper(self):
+        self.swap_in(
+            TOUR_RUNTIME,
+            "    private void FinishTour(CollectionTour tour)\n",
+            "    private DepositTally ZzDeposit(Humanoid worker, IReadOnlyList<KeyValuePair<string, int>> carried)\n"
+            "    {\n"
+            "        return DepositLegs(worker, carried, new StringBuilder());\n"
+            "    }\n\n"
+            "    private void FinishTour(CollectionTour tour)\n")
+        self.assert_refused("a deposit lifted into an unannounced helper passed", marker=TOUR_AUDIT,
+                            contains="if (!_tourPlan.IntendDeposit(...))")
+
+    # -- the other half of the runtime --
+
+    def test_the_tour_may_not_route_a_pick_through_the_other_half_of_the_runtime(self):
+        self.swap_in(
+            COLLECTION_RUNTIME,
+            "    private string Designate()\n",
+            "    private PickRefusal ZzRoutedPick(Pickable source, Humanoid worker)\n"
+            "    {\n"
+            "        return _port.Begin(source, worker, featureEnabled: true, seamAvailable: true,\n"
+            "            expectedItemPrefab: \"Stone\", expectedUnits: 1, nowSeconds: Time.time);\n"
+            "    }\n\n"
+            "    private string Designate()\n")
+        self.assert_refused("a second pick in the runtime's other half passed", marker=TOUR_AUDIT,
+                            contains="inside OrderOnePick()")
+
+    def test_another_part_of_the_runtime_may_not_deposit(self):
+        path = os.path.join(WORKERS, "ZzTourPart.cs")
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write("namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;\n"
+                         "internal sealed partial class GunnarCollectionRuntime\n{\n"
+                         "    private void ZzEmpty(Humanoid worker)\n"
+                         "    {\n"
+                         "        DepositLegs(worker, System.Array.Empty<System.Collections.Generic.KeyValuePair<string, int>>(),\n"
+                         "            new System.Text.StringBuilder());\n"
+                         "    }\n}\n")
+        self._planted.append(path)
+        self.assert_refused("a deposit from another part of the runtime passed", marker=TOUR_AUDIT,
+                            contains="is a part of the collection runtime")
+
+    def test_the_ordered_pick_may_not_lose_its_open_plan_refusal(self):
+        self.swap_in(
+            COLLECTION_RUNTIME,
+            "            distanceMetres: FlatDistance(worker, source),\n"
+            "            interruptedTourOpen: _tourPlan.BlocksOrders);\n",
+            "            distanceMetres: FlatDistance(worker, source));\n")
+        self.assert_refused("an ordered pick that ignores an open plan passed", marker=TOUR_AUDIT,
+                            contains="does not pass `interruptedTourOpen")
+
+    # -- D16 --
+
+    def test_prepare_must_tell_the_plan_before_it_returns(self):
+        self.swap_in(COLLECTION_RUNTIME, "                _tourPlan.PrepareForDeath();\n", "")
+        self.assert_refused("a death the plan never heard of passed", marker=TOUR_AUDIT,
+                            contains="Prepare must tell the plan")
+
+    def test_died_must_tell_the_plan_before_the_tour_is_cancelled(self):
+        self.swap_in(
+            COLLECTION_RUNTIME,
+            "            _tourPlan.Died(report.Held, report.Dropped, report.Unresolved, kept);\n",
+            "            CancelTour(\"Gunnar died\");\n"
+            "            _tourPlan.Died(report.Held, report.Dropped, report.Unresolved, kept);\n")
+        self.assert_refused("a tour cancelled before the plan heard of the death passed", marker=TOUR_AUDIT,
+                            contains="Died must tell the plan")

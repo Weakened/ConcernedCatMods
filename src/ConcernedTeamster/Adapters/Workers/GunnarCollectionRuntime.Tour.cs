@@ -187,6 +187,16 @@ internal sealed partial class GunnarCollectionRuntime
         string yieldName = source.m_itemPrefab != null ? source.m_itemPrefab.name : string.Empty;
         string expected = CollectionOrderGate.PrefabNameOf(yieldName);
         int units = source.m_amount;
+
+        // #379: written down before the port is asked. A pick nothing announced
+        // is a pick nothing could say later had happened, so a refused write is
+        // a pick not made.
+        if (!_tourPlan.IntendPick("about to pick " + expected + " from a source on the tour", out string unwritten))
+        {
+            CancelTour("the next pick could not be written down first, so it was not made: " + unwritten);
+            return;
+        }
+
         PickRefusal refusal = _port.Begin(
             source,
             worker,
@@ -195,6 +205,14 @@ internal sealed partial class GunnarCollectionRuntime
             expectedItemPrefab: expected,
             expectedUnits: units,
             nowSeconds: Time.time);
+
+        if (refusal != PickRefusal.None
+            && !_tourPlan.ConcludePick(CarriedForPlan(), "the port refused before touching anything (" + refusal + ")",
+                out string unconcluded))
+        {
+            CancelTour(unconcluded);
+            return;
+        }
 
         switch (refusal)
         {
@@ -225,12 +243,25 @@ internal sealed partial class GunnarCollectionRuntime
     private void PollTourPick(CollectionTour tour)
     {
         PickProgress progress = _port.Poll(Time.time);
+        if (progress.Phase == PickPhase.Gathering)
+        {
+            return;
+        }
+
+        _tourPicking = false;
+
+        // #379: what the pick came to, measured from him, before the tour acts
+        // on it. A measurement that cannot be read stops the plan for a person.
+        if (!_tourPlan.ConcludePick(CarriedForPlan(), "picked " + progress.Taken + " from " + _tourPickSource,
+                out string unconcluded))
+        {
+            CancelTour(unconcluded);
+            return;
+        }
+
         switch (progress.Phase)
         {
-            case PickPhase.Gathering:
-                return;
             case PickPhase.Done:
-                _tourPicking = false;
                 if (progress.Taken > 0 && _tourPickYield.Length != 0)
                 {
                     _account.Record(NextStep("tour-pick"), _tourPickYield, progress.Taken, StopResult.Took());
@@ -239,7 +270,6 @@ internal sealed partial class GunnarCollectionRuntime
                 tour.PickEnded(progress.Taken > 0 ? TourPickEnd.Took : TourPickEnd.NothingReached, progress.Taken);
                 return;
             default:
-                _tourPicking = false;
                 _log?.LogInfo("Gunnar's collection tour: nothing reached him from " + _tourPickSource +
                     "; nothing is assumed about the source.");
                 tour.PickEnded(TourPickEnd.NothingReached, 0);
@@ -290,11 +320,29 @@ internal sealed partial class GunnarCollectionRuntime
                 return TourDepositEnd.Refused;
         }
 
+        // #379: the trip is written down before any leg of it. A refused write is
+        // a trip not made, and he keeps everything.
+        if (!_tourPlan.IntendDeposit("about to take what he carries to the chest", out string unwritten))
+        {
+            detail = "the trip could not be written down first, so nothing was moved: " + unwritten;
+            return TourDepositEnd.Refused;
+        }
+
         var said = new StringBuilder();
         DepositTally tally = DepositLegs(worker, carried, said);
         IReadOnlyList<KeyValuePair<string, int>> after =
             _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readableAfter);
         detail = said.ToString();
+
+        // Established only when every leg was certain and what he holds now
+        // could be read; anything else stops the plan for a person, and nothing
+        // is deposited again until somebody has looked.
+        if (!_tourPlan.ConcludeDeposit(!tally.Uncertain, readableAfter ? after : null,
+                "the trip to the chest moved " + tally.Moved + " unit(s)", out string unconcluded))
+        {
+            detail = detail.Length == 0 ? unconcluded : detail + " " + unconcluded;
+            return TourDepositEnd.Uncertain;
+        }
 
         if (tally.Uncertain || !readableAfter)
         {
@@ -333,8 +381,32 @@ internal sealed partial class GunnarCollectionRuntime
         _tour = null;
         _tourPump = null;
         _tourPicking = false;
-        try { _lifecycle.OrderEnded(); }
-        finally { _lease.Release(); }
+        try
+        {
+            EndTourPlan(tour.Phase == TourPhase.Finished, tour.Reason);
+        }
+        finally
+        {
+            try { _lifecycle.OrderEnded(); }
+            finally { _lease.Release(); }
+        }
+    }
+
+    /// <summary>#379: the tour is over, so its plan is settled, closed, or kept
+    /// open with what he still carries. Measured now; nothing moves.</summary>
+    private void EndTourPlan(bool finished, string reason)
+    {
+        try
+        {
+            if (!_tourPlan.Ended(finished, CarriedForPlan(), reason))
+            {
+                _log?.LogWarning("Gunnar's collection: " + _tourPlan.Describe() + ".");
+            }
+        }
+        catch (Exception exception)
+        {
+            _log?.LogError("Gunnar's collection: the tour's plan could not be closed: " + SafeFailure.Describe(exception));
+        }
     }
 
     /// <summary>Ends a running tour for a reason that is not the world going
@@ -363,6 +435,13 @@ internal sealed partial class GunnarCollectionRuntime
     {
         CollectionTour? tour = _tour;
         _survey.Forget();
+
+        // #379: nothing is written as the world goes - the last record is the
+        // safe resume point, whatever instant this is - and the next world's
+        // plan is its own file, opened at its own world-up edge.
+        _tourPlan.Close();
+        _tourPlanOpened = false;
+        _tourPlanUnnamed = false;
         if (tour == null)
         {
             return;
@@ -511,6 +590,19 @@ internal sealed partial class GunnarCollectionRuntime
             return CollectionTourGate.Describe(refusal, request.Authority);
         }
 
+        // A plan read back from the disk is checked only once everything it is
+        // checked against can answer - the same wait the frame watcher keeps -
+        // so a start never decides it from a census that has not finished.
+        if (_tourPlan.Standing == TourPlanStanding.Recovered)
+        {
+            string waiting = TourPlanWaitingFor();
+            if (waiting.Length != 0)
+            {
+                return "No tour starts yet: the interrupted tour is still waiting to be checked (" + waiting +
+                    "). Try again in a moment; ct_collect status says what it is waiting for.";
+            }
+        }
+
         if (!NpcIdentity.TryParse(WorkerKey.Gunnar.Value, out NpcIdentity identity))
         {
             return "Gunnar's identity could not be read, so no tour starts.";
@@ -519,6 +611,23 @@ internal sealed partial class GunnarCollectionRuntime
         if (!_lease.TryAcquire(_identity()))
         {
             return "Gunnar is busy with another job, or his job authority is unavailable. Finish or cancel that job first.";
+        }
+
+        // #379: the plan is begun, continued or re-planned - and written down -
+        // before he moves. A plan stopped for a person refuses here, with why.
+        string planSaid;
+        try
+        {
+            if (!_tourPlan.TryStart(TourPlanFactsNow(), GunnarTourPlan.AreaKey(_area!), _destinationKey, out planSaid))
+            {
+                _lease.Release();
+                return planSaid;
+            }
+        }
+        catch
+        {
+            _lease.Release();
+            throw;
         }
 
         GunnarTourPump? pump = null;
@@ -544,6 +653,7 @@ internal sealed partial class GunnarCollectionRuntime
             pump = new GunnarTourPump(StartJob, () => job.LastLook);
             if (pump.Driver.Progress == NpcJobProgress.Stopped)
             {
+                EndTourPlan(false, "the tour could not start");
                 _lease.Release();
                 return "The tour could not start: " + pump.Driver.Reason + ".";
             }
@@ -553,6 +663,7 @@ internal sealed partial class GunnarCollectionRuntime
             if (!readable)
             {
                 pump.Abandon();
+                EndTourPlan(false, "what he carries could not be read");
                 _lease.Release();
                 return "What Gunnar is carrying could not be read, so no tour starts.";
             }
@@ -562,6 +673,7 @@ internal sealed partial class GunnarCollectionRuntime
             if (_tourBody == ZDOID.None)
             {
                 pump.Abandon();
+                EndTourPlan(false, "his body could not be named");
                 _lease.Release();
                 return "Gunnar's body has no network record this client can name, so no tour starts.";
             }
@@ -578,7 +690,8 @@ internal sealed partial class GunnarCollectionRuntime
                 capacity.ToString(CultureInfo.InvariantCulture) + " unit(s), each walked in one round and " +
                 "taken to the chest you chose in one trip" +
                 (carrying.Count > 0 ? ", starting with what he is already carrying" : "") +
-                ". 'ct_collect stop' ends it; what he holds stays in him.";
+                ". 'ct_collect stop' ends it; what he holds stays in him." +
+                (planSaid.Length == 0 ? "" : " (" + planSaid + ".)");
         }
         catch
         {
@@ -587,6 +700,7 @@ internal sealed partial class GunnarCollectionRuntime
             catch (Exception) { /* already failing */ }
             _tour = null;
             _tourPump = null;
+            EndTourPlan(false, "the start faulted");
             _lease.Release();
             throw;
         }

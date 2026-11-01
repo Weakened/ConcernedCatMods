@@ -76,6 +76,11 @@ internal enum DepositRefusal
 
     /// <summary>Something could not be read. Unknown refuses.</summary>
     Unreadable = 11,
+
+    /// <summary>An interrupted collection tour is open (#379). An ordered deposit
+    /// would move his load out from under a plan that did not announce it; the
+    /// tour's own trips to the chest are the tour, and are unaffected.</summary>
+    InterruptedTourOpen = 12,
 }
 
 /// <summary>What the runtime read at the moment a deposit was ordered. Every
@@ -98,8 +103,10 @@ internal readonly struct DepositRequest
         bool transferInFlight,
         bool carryingSomething,
         bool destinationDesignated,
-        bool carriedIsReadable)
+        bool carriedIsReadable,
+        bool interruptedTourOpen = false)
     {
+        InterruptedTourOpen = interruptedTourOpen;
         CarriedIsReadable = carriedIsReadable;
         FeatureEnabled = featureEnabled;
         WorldIsUp = worldIsUp;
@@ -156,6 +163,12 @@ internal readonly struct DepositRequest
     /// compile error. A <c>default(DepositRequest)</c> still reads <c>false</c>
     /// here, which is the refusing direction.</summary>
     public bool CarriedIsReadable { get; }
+
+    /// <summary>Whether an interrupted tour's plan is open (#379). Defaults to
+    /// false, because the tour's own deposit asks this gate too and is the tour;
+    /// the ordered deposit passes the plan's own answer, and the validator's #379
+    /// audit pins that it does.</summary>
+    public bool InterruptedTourOpen { get; }
 }
 
 /// <summary>Whether a deposit may start (#381, `DECISIONS.md` D15). The whole
@@ -218,6 +231,11 @@ internal static class DepositOrderGate
             return DepositRefusal.AlreadyWorking;
         }
 
+        if (request.InterruptedTourOpen)
+        {
+            return DepositRefusal.InterruptedTourOpen;
+        }
+
         if (!request.DestinationDesignated)
         {
             return DepositRefusal.NoDestination;
@@ -278,6 +296,8 @@ internal static class DepositSentences
                 return "He is not carrying anything.";
             case DepositRefusal.NoDestination:
                 return "No chest was chosen. Pick the one he should use - he never looks for the nearest one.";
+            case DepositRefusal.InterruptedTourOpen:
+                return GunnarTourPlan.OpenPlanRefusal;
             case DepositRefusal.Unreadable:
                 return "What Gunnar is carrying could not be read, so nothing was moved. He is not " +
                     "empty - the amount is unknown, which is a different thing - and nothing is " +

@@ -39,13 +39,20 @@
          from here could not be (net10.0 cannot reference net48). The validator's
          #374 rule pins it so it stays true rather than being true by accident.
 
-         Three folders, not the whole library: Containers, Storage and Work hold
-         no Unity or Jotunn type at all, so they compile here without dragging
-         the game into a test project that is otherwise provable on a machine
-         with no game installed. Body/ and the rest do, and are not needed. -->
-    <Compile Include="..\ConcernedNPC\Containers\**\*.cs" LinkBase="Library\Containers" />
-    <Compile Include="..\ConcernedNPC\Storage\**\*.cs" LinkBase="Library\Storage" />
-    <Compile Include="..\ConcernedNPC\Work\**\*.cs" LinkBase="Library\Work" />
+         #379 widened this from three folders (Containers, Storage, Work) to
+         everything except Body/ and Plugin.cs, exactly as ConcernedSteward.Tests
+         links it: Gunnar's tour plan (Domain/Collection/GunnarTourPlan.cs) speaks
+         the interruption layer, which needs Roles, Bodies, Custody, Reservations
+         and Persistence beside it. None of those names a Unity, BepInEx or Jotunn
+         type. Body/ does (BaseAI, Humanoid, ZNetView, Jotunn's prefab manager) and
+         Plugin.cs is the BepInEx entry point, so both stay out and this project
+         stays provable on a machine with no game installed. The same caveat as
+         above applies to the widened set: `internal` is visible here, so the
+         product build, not this one, proves the tour plan uses only the
+         library's public surface. -->
+    <Compile Include="..\ConcernedNPC\**\*.cs"
+             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\Body\**\*.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
+             LinkBase="Library" />
   </ItemGroup>
 
   <ItemGroup>
