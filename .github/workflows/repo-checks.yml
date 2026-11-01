@@ -30,9 +30,13 @@ jobs:
 
       - name: Discover test classes
         id: discover
+        # Plain assignments, so a failing discovery fails this step under bash -e
+        # (a command substitution inside echo's arguments would not).
         run: |
-          echo "classes=$(python tools/ci_plant_matrix.py)" >> "$GITHUB_OUTPUT"
-          echo "total=$(python tools/ci_plant_matrix.py --count)" >> "$GITHUB_OUTPUT"
+          classes=$(python tools/ci_plant_matrix.py)
+          total=$(python tools/ci_plant_matrix.py --count)
+          echo "classes=$classes" >> "$GITHUB_OUTPUT"
+          echo "total=$total" >> "$GITHUB_OUTPUT"
 
   plant-suite:
     needs: discover-plant-suites

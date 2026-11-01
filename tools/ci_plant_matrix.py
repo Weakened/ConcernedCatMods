@@ -45,6 +45,12 @@ def discover():
                 found += 1
         if not found:
             raise SystemExit(f"{path.name} has no runnable test class; refusing to drop it from CI.")
+    # The matrix must run everything the old single `unittest discover` step ran.
+    # A TestCase imported from a helper module, or a load_tests hook, would be
+    # missed above; this makes that a failure rather than a smaller green.
+    expected = loader.discover(str(TESTS), "test_*.py").countTestCases()
+    if total != expected:
+        raise SystemExit(f"matrix covers {total} tests but unittest discover finds {expected}; refusing.")
     return entries, total
 
 
