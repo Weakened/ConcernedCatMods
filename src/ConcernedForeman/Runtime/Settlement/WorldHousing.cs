@@ -193,6 +193,8 @@ internal sealed class WorldHousing
             exists = true;
             slot = new ResidentHousingSlot(SitePoints.ToSitePoint(bed.At), Measure(bed));
         }
+        if (!exists) slot = new ResidentHousingSlot(default,
+            new HousingFacts(key, true, true, false, 0f, false, BedClaim.Unclaimed, exists: false));
         return true;
     }
 

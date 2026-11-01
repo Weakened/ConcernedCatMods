@@ -129,7 +129,8 @@ internal readonly struct HousingFacts
         bool underRoof,
         float coverPercentage,
         bool warm,
-        BedClaim claim)
+        BedClaim claim,
+        bool exists = true)
     {
         BedKey = bedKey ?? string.Empty;
         Measured = measured;
@@ -138,6 +139,7 @@ internal readonly struct HousingFacts
         CoverPercentage = coverPercentage;
         Warm = warm;
         Claim = claim;
+        Exists = exists;
     }
 
     /// <summary>Where the bed is, in words a player can walk to. Not a name and
@@ -148,6 +150,9 @@ internal readonly struct HousingFacts
     /// <summary>The adapter actually took the measurement. False means every
     /// other field is meaningless.</summary>
     public bool Measured { get; }
+
+    /// <summary>False only after a complete loaded survey established that the reserved bed is gone.</summary>
+    public bool Exists { get; }
 
     public bool InsideSettlement { get; }
 
@@ -189,6 +194,8 @@ internal static class HousingRules
         {
             return HousingRefusal.NotMeasured;
         }
+
+        if (!facts.Exists) return HousingRefusal.BedRemoved;
 
         if (!facts.InsideSettlement)
         {

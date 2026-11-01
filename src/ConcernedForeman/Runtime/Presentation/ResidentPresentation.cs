@@ -89,7 +89,7 @@ internal sealed class ResidentPresentation : IDisposable
             if (!_housing.TryResidentSlot(area, _resident.Slot!, out var slot, out bool exists))
             { RecordHousing(HousingRefusal.NotMeasured); return; }
             // Only a complete loaded survey can establish a removed bed.
-            if (!RecordHousing(!exists ? HousingRefusal.BedRemoved : HousingRules.Judge(slot.Facts))) return;
+            if (!RecordHousing(HousingRules.Judge(slot.Facts))) return;
             if (_resident.Phase != ResidentJournalPhase.Admitted || _resident.HousingUnverified) return;
             if (_dresser == null && !_figureRefused) Show(slot);
         }
