@@ -3931,7 +3931,7 @@ TEAMSTER_DESTINATION_WRITES = (
 #   net48 plugin from the net10.0 test build the way `#if` did in the Steward's
 #   review. Teamster source has none, so none is allowed - #region and #pragma
 #   included - the rule the Steward S1 audit already keeps.
-# - A Unicode escape. `Destroy(` is a call to Destroy that spells no
+# - A Unicode escape. `Destr\u006Fy(` is a call to Destroy that spells no
 #   `Destroy(`. Refused anywhere in the raw text; a string that needs a
 #   character can hold the character itself.
 # - A Unicode format character (category Cf: U+200B, U+00AD, U+2060...). The
@@ -3945,16 +3945,16 @@ TEAMSTER_DESTINATION_WRITES = (
 # src/ConcernedTeamster less obj/ and bin/, plus the shared trees its project
 # file compiles in. Raw text, before any stripping. What this still does not
 # see is what no text audit sees: a call reached through a delegate.
-TEAMSTER_LEXICAL_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085  ]")
+TEAMSTER_LEXICAL_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
 TEAMSTER_LEXICAL_UNICODE_ESCAPE = re.compile(r"\\[uU][0-9A-Fa-f]")
-TEAMSTER_LEXICAL_LINE_END = re.compile("[\u0085  ]")
+TEAMSTER_LEXICAL_LINE_END = re.compile("[\u0085\u2028\u2029]")
 
 
 def _teamster_lexical_directive(raw: str) -> str:
     """The first line of raw C# whose first non-blank character is `#`, or ''."""
     for line in TEAMSTER_LEXICAL_LINE_TERMINATOR.split(raw):
         lead = line
-        while lead and (lead[0].isspace() or lead[0] in "﻿\x1a"):
+        while lead and (lead[0].isspace() or lead[0] in "\ufeff\x1a"):
             lead = lead[1:]
         if lead.startswith("#"):
             return line.strip()[:60] or "#"
@@ -3965,7 +3965,7 @@ def _teamster_lexical_format_character(raw: str) -> int:
     """Offset of the first Unicode format (Cf) character, a leading BOM aside;
     -1 when there is none."""
     for offset, char in enumerate(raw):
-        if offset == 0 and char == "﻿":
+        if offset == 0 and char == "\ufeff":
             continue
         if unicodedata.category(char) == "Cf":
             return offset
@@ -4015,7 +4015,7 @@ def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
                 hits += 1
                 fail(f"{label}: {shown} holds the format character U+{ord(raw[format_at]):04X} at offset "
                      f"{format_at} - the compiler drops it from an identifier, so it can split a name "
-                     "such as Destroy where no count looks", errors)
+                     "such as Destroy where no count looks; a string that needs one can build it with (char)0x200B", errors)
             line_end = TEAMSTER_LEXICAL_LINE_END.search(raw)
             if line_end is not None:
                 hits += 1
@@ -4026,9 +4026,10 @@ def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
     return [
         f"{label}: {scanned} source(s) - src/ConcernedTeamster less obj/ and bin/, plus the "
         f"{len(TEAMSTER_LINKED_SHARED_DIRS)} shared tree(s) it compiles in - hold no directive line, no "
-        "\\u/\\U escape, no Unicode format (Cf) character and no U+0085/U+2028/U+2029, so the text every "
-        f"Teamster audit reads is the text the compiler builds. A call through a delegate is still "
-        f"outside every text audit ({hits} violations)",
+        "\\u/\\U escape, no Unicode format (Cf) character and no U+0085/U+2028/U+2029, so none of those four makes the text a Teamster "
+        "audit reads differ from the text the compiler builds. Still outside every text audit: a call "
+        "through a delegate, and a verbatim identifier (`x.@Interact(`) that the dotted token patterns do "
+        f"not spell ({hits} violations)",
     ]
 
 
