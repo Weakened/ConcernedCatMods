@@ -272,7 +272,7 @@ internal static class MaintenanceRound
             }
         }
 
-        // Greedy, in the order she would walk them: the most urgent light that
+        // Greedy, in urgency order: the most urgent light that
         // can be paid for in full goes into this round, and one that cannot
         // waits for the next. Greedy rather than best-fit because "she saw to
         // the three that were about to go out and came back for the rest" is

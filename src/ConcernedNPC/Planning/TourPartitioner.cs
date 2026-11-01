@@ -389,7 +389,12 @@ internal static class TourPartitioner
     }
 
     /// <summary>The nearest target that still fits, optionally restricted to one
-    /// priority band.</summary>
+    /// priority band. Outside the band, the highest band with a target that fits
+    /// comes first and the nearest within it second: a trip topped up from below
+    /// its seed's band takes the next most important targets, never a far less
+    /// important one that merely happens to be near (#382 - a role that packs its
+    /// own trips by priority would otherwise see one trip's stop pushed out by a
+    /// later trip's).</summary>
     private static int Next(
         List<JobTarget> left, NpcPoint cursor, NpcCarryCapacity capacity, int carried, int band, bool inBand)
     {
@@ -418,6 +423,17 @@ internal static class TourPartitioner
             }
 
             float distance = cursor.HorizontalDistanceTo(candidate.At);
+            if (!inBand && best >= 0 && candidate.Priority != left[best].Priority)
+            {
+                if (candidate.Priority > left[best].Priority)
+                {
+                    best = index;
+                    bestDistance = distance;
+                }
+
+                continue;
+            }
+
             if (best < 0 || distance < bestDistance ||
                 (distance == bestDistance && string.CompareOrdinal(candidate.Key, left[best].Key) < 0))
             {
