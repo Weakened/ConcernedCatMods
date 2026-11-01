@@ -1,4 +1,4 @@
-# Gunnar: A Fair Load â€” companion foundation (#297 / #456)
+# Gunnar: A Fair Load — companion foundation (#297 / #456)
 
 ## Delivery and ownership
 
@@ -112,7 +112,7 @@ python tools/validate_repo.py
 # The full game build/verify must use the shared build mutex; see handoff receipt.
 ```
 
-## Owner checklist â€” all pending on an integrated candidate
+## Owner checklist — all pending on an integrated candidate
 
 | Row | Action and expected result |
 |---|---|
