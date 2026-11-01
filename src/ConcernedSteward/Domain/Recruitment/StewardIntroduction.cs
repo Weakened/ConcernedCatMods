@@ -336,7 +336,7 @@ internal static class StewardSentences
 
             case IntroductionStage.Engaged:
                 return StewardRole.DisplayNameFallbackCapitalised +
-                    " has taken the work. Turn on \"cs_steward tend on\" when you want her to start.";
+                    " has taken the work. Set [Steward] TendFiresEnabled = true in the config when you want her to start.";
 
             default:
                 return "Nothing has happened yet.";

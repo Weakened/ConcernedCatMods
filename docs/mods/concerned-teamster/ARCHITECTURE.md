@@ -252,6 +252,18 @@ Atomic writes (temp file + rename), versioned headers, malformed-row skipping,
 and backup-before-migration — the same rules Cartographer's persistence proved.
 No writes to Valheim save files.
 
+### Gunnar's collection tour survives an interruption (#379)
+
+Gunnar's on-foot collection tour is the **second production adopter** of ConcernedNPC's interruption layer, after
+Concerned Steward. The tour runtime (`Adapters/Workers/GunnarCollectionRuntime*.cs`) constructs the shared job
+driver and stays the only thing that touches the world; `Domain/Collection/GunnarTourPlan.cs` is its game-free
+write-ahead witness, and `GunnarTourPlanCodec` owns the bytes of `teamster_gunnar_tour_<world>.tsv`, one per world
+beside the death record. Every pick and trip to the chest is announced to the plan before it happens and concluded
+from a measurement afterwards (pinned by the validator's `#379 tour write-ahead audit`); a reloaded plan is
+revalidated against the body census and the measured load, and continues, re-plans its remaining work, closes
+because it holds nothing, or stops for a person with a sentence and `ct_collect resolve` as the exit. No library
+source changed. `GUNNAR_COLLECTION.md` §6h has the detail.
+
 ### Recovery, config migration, and support bundle (CT-039)
 
 Sidecar backups (`SidecarFileStore.TryBackup`) rotate a bounded set of
