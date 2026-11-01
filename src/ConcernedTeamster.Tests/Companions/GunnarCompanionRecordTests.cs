@@ -240,6 +240,21 @@ public sealed class GunnarCompanionRecordTests : IDisposable
                 file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) ||
                 file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
             string source = File.ReadAllText(file);
+            if (Path.GetFileName(file)=="Plugin.cs")
+            {
+                // Allow exactly the four lifecycle sites. A utility condition,
+                // hidden second call or a moved/omitted hook still fails.
+                foreach (string hook in new[] {
+                    "private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;",
+                    "_gunnarCompanion = Adapters.Companions.GunnarCompanionAdapter.Install(Config, Logger);",
+                    "_gunnarCompanion?.Tick();",
+                    "_gunnarCompanion?.Forget();" })
+                {
+                    Assert.Equal(1, source.Split(hook,StringSplitOptions.None).Length-1);
+                    source=source.Replace(hook,"");
+                }
+                Assert.DoesNotContain("_gunnarCompanion",source);
+            }
             Assert.DoesNotContain("GunnarCompanion", source);
             Assert.DoesNotContain("TheConcernedCat.Companions", source);
         }

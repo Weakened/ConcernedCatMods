@@ -3,15 +3,16 @@
 ## Delivery and ownership
 
 This branch implements #456's game-free record, its source includes, a scope/session
-owner and a configuration/game-identity adapter. It does **not** install the adapter
-in Plugin.cs: Claude's active Gunnar integration retains that entry point and
-TeamsterSettings.cs. No worker, shared NPC, validator, package, profile or game
-operation is changed here. #456 remains open until the lead wires the adapter and
-verifies the integrated result. All in-game rows are OWNER GO-AROUND PENDING.
+owner and a configuration/game-identity adapter. The adapter is now installed in
+Plugin.Awake, refreshed in Update and forgotten on teardown. This isolated wiring
+is outside the files in Claude's current PRs and active Gunnar hammer diff. It
+changes no worker, shared NPC, validator, package, profile or game operation.
+#456 remains pending integrated owner checks; config/lifecycle wiring is complete. All in-game rows are OWNER GO-AROUND PENDING.
 
 Owned files: Domain/Companions/GunnarCompanion{Record,Session}.cs,
 Adapters/Companions/GunnarCompanionAdapter.cs, the two Teamster project source
-includes, Tests/Companions/GunnarCompanionRecordTests.cs and this document.
+includes, Tests/Companions/GunnarCompanionRecordTests.cs, the four pinned Plugin
+lifecycle sites and this document. TeamsterSettings.cs remains untouched.
 
 ## Identity and project
 
@@ -65,7 +66,7 @@ A damaged record may hide the figure but cannot remove access to existing tools.
 
 Absolute worktree root:
 `C:\Users\erenc\.codex\worktrees\ct-456-gunnar-record\ConcernedCatMods`.
-The adapter is intentionally compiled but uninstalled in this source handoff.
+The adapter is installed in this source revision; it has not been deployed to a live profile.
 
 In the lead-owned Plugin.cs:
 
@@ -85,7 +86,7 @@ In the lead-owned Plugin.cs:
 6. Surface the record's Notice on the intro UI/log when present, including save
    failures; no success announcement or presentation removal after a false result.
 
-These are integration instructions, not claims that the call sites already exist.
+Steps 1-3 are now wired by Plugin; steps 4-6 describe downstream presentation/recruitment integration.
 Do not ship this foundation alone as a complete Gunnar introduction.
 
 ## Compatibility and tests

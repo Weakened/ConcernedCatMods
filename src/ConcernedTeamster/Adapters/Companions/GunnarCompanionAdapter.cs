@@ -5,14 +5,16 @@ using TheConcernedCat.ConcernedTeamster.Domain.Companions;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Companions;
 
-/// <summary>Read-only game identity seam for #456. The lead wires Bind from
-/// Plugin.Awake when integrating the intro; no worker settings are read or
+/// <summary>Read-only game identity seam for #456, installed from Plugin.Awake
+/// and refreshed by its Update/teardown lifecycle. No worker settings are read or
 /// changed. No body, memento, cart, inventory or world object is created here.</summary>
 internal sealed class GunnarCompanionAdapter
 {
     private readonly GunnarCompanionSession _session;
     private readonly ManualLogSource _log;
     private bool _scopeFailureReported;
+    private GunnarCompanionRecord? _lastRecord;
+    private string? _lastNotice;
 
     private GunnarCompanionAdapter(ConfigFile config, ManualLogSource log)
     {
@@ -25,6 +27,26 @@ internal sealed class GunnarCompanionAdapter
     }
 
     public static GunnarCompanionAdapter Bind(ConfigFile config, ManualLogSource log) => new(config, log);
+
+    public static GunnarCompanionAdapter? Install(ConfigFile config, ManualLogSource log)
+    {
+        try { return Bind(config,log); }
+        catch (Exception exception)
+        {
+            log.LogWarning("Gunnar companion configuration is unavailable ("+exception.GetType().Name+
+                "). Check the Companions section in Teamster config. Existing cart tools remain available.");
+            return null;
+        }
+    }
+
+    public void Tick()
+    {
+        GunnarCompanionRecord? record=Current();
+        if (!ReferenceEquals(record,_lastRecord)) { _lastRecord=record; _lastNotice=null; }
+        string? notice=record?.Notice;
+        if (notice!=null && !string.Equals(notice,_lastNotice,StringComparison.Ordinal))
+        { _lastNotice=notice; _log.LogWarning("Gunnar companion record: "+notice); }
+    }
     public ConfigEntry<bool> Enabled { get; }
     public ConfigEntry<string> DisplayName { get; }
 
@@ -53,5 +75,8 @@ internal sealed class GunnarCompanionAdapter
         }
     }
 
-    public void Forget() => _session.Forget();
+    public void Forget()
+    {
+        _session.Forget(); _lastRecord=null; _lastNotice=null; _scopeFailureReported=false;
+    }
 }

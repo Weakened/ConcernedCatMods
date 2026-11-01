@@ -11,7 +11,7 @@ One dedicated worktree/branch per leaf, stacked for explicit dependencies:
 
 | Issue | Branch | Scope and exact outstanding integration |
 |---|---|---|
-| #456 | feat/ct-456-gunnar-record | Scoped durable record; bind adapter/lifecycle/config in lead-owned Plugin. |
+| #456 | feat/ct-456-gunnar-record | Scoped durable record; adapter/config now installed at the four pinned Plugin lifecycle sites. Native owner checks remain. |
 | #457 | feat/ct-457-gunnar-keepsake | Shared keepsake spec/presenter, durable pickup, placement; verified anchor/probe, other-memento footprints, saved-worker census and native lifecycle wiring remain. |
 | #458 | feat/ct-458-gunnar-presentation | Body decisions, role wrapper, real-library leases, dresser/metadata adapters; existing role registration, same-position worker handover, Teamster figure audit/plants, native presets and visual evidence remain. |
 | #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
