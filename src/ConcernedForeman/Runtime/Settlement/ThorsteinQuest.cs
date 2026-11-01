@@ -53,7 +53,7 @@ internal sealed class ThorsteinQuest
     /// <summary>Drops the open record when a world goes away.</summary>
     internal void Forget() => _progress = null;
 
-    /// <summary><c>cf_settle quest [status|examine]</c>.</summary>
+    /// <summary><c>cf_settle quest [status|view|examine]</c>.</summary>
     internal string Execute(SettlementRegister register, SettlementJournal journal, Func<string?> saveRecords,
         string[]? args)
     {
@@ -67,10 +67,15 @@ internal sealed class ThorsteinQuest
         {
             case "status":
                 return Describe(progress, register, journal) + Settle(progress, register, journal, saveRecords);
+            case "view":
+                // #295 S4: the same description, and nothing else. The tools
+                // panel reads this twice a second; "status" may recruit and
+                // write, which must only ever follow a player's act.
+                return Describe(progress, register, journal);
             case "examine":
                 return Examine(progress, register, journal, saveRecords);
             default:
-                return "Usage: cf_settle quest [status|examine]. examine does what examining the carpenter's " +
+                return "Usage: cf_settle quest [status|view|examine]. view only reads; examine does what examining the carpenter's " +
                     "square near your bed does.";
         }
     }
@@ -112,7 +117,8 @@ internal sealed class ThorsteinQuest
         }
 
         ToolsOfTheTradeFacts facts = Facts(progress, register, journal);
-        return ThorsteinTalk.Line(ToolsOfTheTrade.Stage(facts), facts.AxeHeld, facts.HammerHeld, _remarks);
+        ToolsOfTheTrade.Decide(facts, out ToolsOfTheTradeWait wait);
+        return ThorsteinTalk.Line(ToolsOfTheTrade.Stage(facts), facts.AxeHeld, facts.HammerHeld, _remarks, wait);
     }
 
     /// <summary>Called after every tool handover: if that was the second tool,

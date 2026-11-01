@@ -35,6 +35,78 @@ internal sealed class CustodyTools
         _records = records;
     }
 
+    /// <summary>How a preview that named a tool to give begins. The panel arms
+    /// its second click only on this; a refusal arms nothing.</summary>
+    internal const string PreviewNamesTool = "Give him your ";
+
+    /// <summary><c>cf_settle preview axe|hammer</c> (#295 S4): names the exact
+    /// item a give would hand over - the tool of that kind in the player's hand,
+    /// with its quality and durability - and moves nothing. The tools panel's
+    /// first click on Give is this; only the second is the give.</summary>
+    internal string Preview(string[]? args)
+    {
+        if (args == null || args.Length < 2 || !TryParseKind(args[1], out ToolKind kind))
+        {
+            return "Usage: cf_settle preview axe|hammer.";
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player == null)
+        {
+            return "There is no local player.";
+        }
+
+        foreach (ItemDrop.ItemData? held in new[] { player.RightItem, player.LeftItem })
+        {
+            if (held == null || ToolClassifier.Classify(held) != kind
+                || !ToolClassifier.TryDescribe(held, out ToolSpecimen specimen))
+            {
+                continue;
+            }
+
+            string name = held.m_shared.m_name;
+            try
+            {
+                if (Localization.instance != null)
+                {
+                    name = Localization.instance.Localize(name);
+                }
+            }
+            catch (Exception)
+            {
+                // The token is still a name; it is only less readable.
+            }
+
+            if (!ToolClassifier.IsStillUsable(held))
+            {
+                return "Your " + name + " is broken, so he could not work with it. Repair it first.";
+            }
+
+            return PreviewNamesTool + name + " (quality " + specimen.Quality.ToString(CultureInfo.InvariantCulture) +
+                ", durability " + specimen.DurabilityAtIssue.ToString("0", CultureInfo.InvariantCulture) +
+                ")? It stays his real tool until you take it back. Click again to give it.";
+        }
+
+        return "Hold the " + kind.ToString().ToLowerInvariant() + " you want to give him in your hand first.";
+    }
+
+    /// <summary><c>cf_settle tools</c> (#295 S4): what the record says he holds
+    /// for you, by kind and request. Read-only.</summary>
+    internal string Held(SettlementJournal journal)
+    {
+        var lines = new List<string>();
+        foreach (ToolHolding holding in journal.Replay().Tools.HeldBy(_custody.ToolWorker))
+        {
+            lines.Add(holding.Tool.Kind.ToString().ToLowerInvariant() + " (quality " +
+                holding.Tool.Quality.ToString(CultureInfo.InvariantCulture) + ", request " +
+                holding.Transaction.Value + ")");
+        }
+
+        return lines.Count == 0
+            ? "Thorstein holds none of your tools."
+            : "Thorstein holds: " + string.Join(", ", lines.ToArray()) + ".";
+    }
+
     /// <summary><c>cf_settle give axe|hammer</c>: the tool the player is holding
     /// in hand, which must be the named kind — an explicit selection twice over.
     /// </summary>

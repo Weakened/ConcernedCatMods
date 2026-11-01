@@ -130,6 +130,35 @@ internal sealed class SettlementRuntime
         }
     }
 
+    /// <summary>#295 S4: what the tools panel needs to grey out the buttons
+    /// with nothing to do: his worker body is here, and which tools the record
+    /// says he holds. Unknown reads as "not here, holds nothing". Never throws.
+    /// </summary>
+    internal Domain.Npc.ThorsteinToolsPanelFacts ThorsteinToolsPanelFacts()
+    {
+        try
+        {
+            ForemanWorkerAI? ai = Worker;
+            WorkerBody? body = ai == null ? null : ai.GetComponent<WorkerBody>();
+            bool present = body != null && body.IsLoaded;
+            if (!_records.TryOpen(out SettlementRegister _, out SettlementJournal journal))
+            {
+                return new Domain.Npc.ThorsteinToolsPanelFacts(present, false, false, false);
+            }
+
+            ToolLedger ledger = journal.Replay().Tools;
+            return new Domain.Npc.ThorsteinToolsPanelFacts(
+                present,
+                ledger.TryGetHeld(_custody.ToolWorker, ToolKind.Axe, out _),
+                ledger.TryGetHeld(_custody.ToolWorker, ToolKind.Hammer, out _),
+                ledger.HasUncertainHandover(_custody.ToolWorker));
+        }
+        catch (Exception)
+        {
+            return new Domain.Npc.ThorsteinToolsPanelFacts(false, false, false, false);
+        }
+    }
+
     /// <summary>#295 S3: Thorstein's answer to being talked to, or null. Never
     /// throws.</summary>
     internal string? ThorsteinTalk()

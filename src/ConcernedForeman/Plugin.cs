@@ -201,6 +201,10 @@ public sealed class Plugin : BaseUnityPlugin
         gameObject.AddComponent<Ui.BuildOrderPanel>().Initialize(
             () => settings.SettlementRuntimeEnabled.Value, buildOrders, Logger);
 
+        // #295 S4: the visible hand-over. Every button is a console word.
+        gameObject.AddComponent<Ui.ThorsteinToolsPanel>().Initialize(
+            () => settings.SettlementRuntimeEnabled.Value, _settlement, Logger);
+
         gameObject.AddComponent<Ui.CollectionOrderPanel>().Initialize(
             () => settings.SettlementRuntimeEnabled.Value,
             arguments => collection.Execute(arguments),

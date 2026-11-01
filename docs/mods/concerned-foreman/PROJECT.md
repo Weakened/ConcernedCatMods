@@ -248,6 +248,45 @@ under `<config>/ConcernedCatMods/ConcernedForeman/companions`). The game-free
    he asks for the hammer.
 3. Once he has joined, talk four times: three different remarks, then they start again.
 
+**For the owner to judge in this playtest** (left as they are on purpose):
+- **Layer order.** The talk point and the carpenter's square try the `piece_nonsolid` layer
+  first, then `item`. The game's build placement can land on `piece_nonsolid`, so a piece
+  placed against his invisible capsule could be built onto it. `item` first would avoid
+  that. Try building right next to him.
+- **Talk reach.** His prompt's hover offset is 2.1, Hulgi's is 1.6. Say whether he can
+  be talked to from too far away.
+
+### Thorstein's tools panel (slice S4)
+
+A **"His tools"** button joins the Foreman buttons (settlement runtime on). Its panel shows
+Tools of the Trade's status and what the record says he holds, and offers:
+- **Bring him over / Send him home:** `cf_worker spawn` and `cf_worker despawn`.
+- **Give axe / Give hammer:** two clicks. The first names the exact tool in your hand, with
+  its quality, durability and whether it is broken, and moves nothing (`cf_settle preview`).
+  The second gives it, through the existing handover (`cf_settle give`).
+- **Take back axe / Take back hammer:** `cf_settle takeback`.
+
+Every button is a console word, so the panel can neither do nor refuse anything the console
+would not. While the panel is open it refreshes twice a second using only read-only words
+(`cf_settle quest view`, `cf_settle tools`), so it never recruits or saves anything on a timer.
+A Give click whose preview refused (no tool in hand, or a broken one) arms nothing, and an
+armed Give is dropped as soon as there is nothing left to give. Buttons with nothing to do are greyed (game-free `ThorsteinToolsPanelPlan`).
+Nothing moves while a handover is unresolved.
+
+Talking to him with both tools held now names the real hold-up: no settlement area, a
+record that cannot be read or saved, missing authority, or an unresolved handover.
+
+**OWNER GO-AROUND PENDING:**
+1. Open "His tools" before the square: give and take are greyed; "Bring him over" is live.
+2. Examine the square, then use "Bring him over": his figure goes and his worker body stands
+   there.
+3. Hold an axe and click "Give axe" once: the panel names your axe and nothing moves. Click
+   again: the axe is his, the panel lists it, and your hand is empty. Do the same with a
+   hammer: he joins.
+4. "Take back axe": it comes back with the durability it has now.
+5. With both tools given but the settlement records read-only (or with no settlement area),
+   talk to him. He names that cause.
+
 ### His look while working, slice S6 (owner decision 2026-10-29, DECISIONS.md D18)
 
 His worker body stays the `Dverger` clone, with the same prefab, the same saved data and
