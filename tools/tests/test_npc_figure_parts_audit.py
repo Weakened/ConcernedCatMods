@@ -269,6 +269,23 @@ class NpcFigurePartsArePinned(unittest.TestCase):
                      "        _wholeFigure = wholeFigure;\n        TintBody(0, NpcLookRgb.White, \"skin tone\");\n")
         self.assert_refused("a body tint outside Apply reached a worker body")
 
+    # --- #295 S3: the figure's talk point -----------------------------------------------------------
+
+    def test_the_talk_behaviour_named_outside_the_dressing_folder_is_refused(self):
+        self.plant_file(LIBRARY, ("Body", "ZzTalkAnything.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Body;\n"
+                        "internal static class ZzTalkAnything\n"
+                        "{\n"
+                        "    internal static object? Run(UnityEngine.GameObject anyone) =>\n"
+                        "        anyone.GetComponent<Dressing.NpcFigureTalk>();\n"
+                        "}\n")
+        self.assert_refused("the talk behaviour was reached from outside Body/Dressing")
+
+    def test_a_second_talk_point_component_is_refused(self):
+        marker = "        CapsuleCollider collider = point.AddComponent<CapsuleCollider>();"
+        self.swap_in(PARTS, marker, marker + "\n        point.AddComponent<Rigidbody>();")
+        self.assert_refused("the talk point grew a rigidbody and could push or be pushed")
+
     def test_a_legitimate_new_constraint_elsewhere_in_the_library_is_not_refused(self):
         # Not a plant: the target-typed `new(` rule is about the two dresser
         # files. Ordinary code elsewhere in the library - a `where T : new()`

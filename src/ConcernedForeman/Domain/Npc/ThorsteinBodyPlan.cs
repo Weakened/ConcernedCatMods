@@ -33,7 +33,8 @@ internal readonly struct ThorsteinBodyFacts
         int savedWorkerBodies,
         bool resting,
         bool homeKnown,
-        bool playerNearHome)
+        bool playerNearHome,
+        bool introduced = false)
     {
         Registered = registered;
         WorldLoaded = worldLoaded;
@@ -45,7 +46,14 @@ internal readonly struct ThorsteinBodyFacts
         Resting = resting;
         HomeKnown = homeKnown;
         PlayerNearHome = playerNearHome;
+        Introduced = introduced;
     }
+
+    /// <summary>#295 S3: this character has examined the carpenter's square and
+    /// he is waiting for an axe and a hammer, so he is at home before he is on
+    /// the roster. A finished story without employment (a dismissed worker) is
+    /// not this: it shows nobody.</summary>
+    internal bool Introduced { get; }
 
     /// <summary>Concerned NPC accepted his role. Without it no lease can be
     /// held, so nothing of him may be built.</summary>
@@ -176,10 +184,12 @@ internal static class ThorsteinBodyPlan
             return new ThorsteinBodyDecision(ThorsteinBodyKind.None, "Thorstein/ShowAtHome is off");
         }
 
-        if (!facts.Recruited)
+        if (!facts.Recruited && !facts.Introduced)
         {
             return new ThorsteinBodyDecision(
-                ThorsteinBodyKind.None, "he is not on this settlement's roster (cf_settle recruit)");
+                ThorsteinBodyKind.None,
+                "he has not introduced himself yet (examine the carpenter's square) and is not on this " +
+                "settlement's roster");
         }
 
         if (!facts.Resting)
