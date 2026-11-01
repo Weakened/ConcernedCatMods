@@ -91,6 +91,14 @@ internal enum CollectionOrderRefusal
     /// is unaffected. The comment excusing that said "the useful sentence there is
     /// a different one"; no different sentence existed. This is it.</summary>
     WorkerRecordUnreadable = 13,
+
+    /// <summary>An interrupted collection tour is open (#379): stopped with a
+    /// load on him, waiting to be checked after a reload, or stopped for a
+    /// person. An ordered pick would change what he carries under a plan that
+    /// did not announce it, which is exactly the disagreement the plan is there
+    /// to catch - so the order refuses and says which two verbs deal with the
+    /// tour. The tour's own picks are the tour, and are unaffected.</summary>
+    InterruptedTourOpen = 14,
 }
 
 /// <summary>What the runtime read at the moment a pick was ordered. Every field
@@ -116,8 +124,10 @@ internal readonly struct CollectionOrderRequest
         string? yieldItemPrefabName,
         int yieldUnits,
         float reachMetres,
-        float distanceMetres)
+        float distanceMetres,
+        bool interruptedTourOpen = false)
     {
+        InterruptedTourOpen = interruptedTourOpen;
         FeatureEnabled = featureEnabled;
         WorldIsUp = worldIsUp;
         Authority = authority;
@@ -170,6 +180,12 @@ internal readonly struct CollectionOrderRequest
     public bool WorkerRecordUnreadable { get; }
 
     public bool PickInFlight { get; }
+
+    /// <summary>Whether an interrupted tour's plan is open (#379). Defaults to
+    /// false so existing callers compile; the runtime's ordered pick passes the
+    /// plan's own answer, and the validator's #379 audit pins that it does.
+    /// </summary>
+    public bool InterruptedTourOpen { get; }
 
     public bool PointedAtASource { get; }
 
@@ -258,6 +274,11 @@ internal static class CollectionOrderGate
         if (request.PickInFlight)
         {
             return CollectionOrderRefusal.AlreadyWorking;
+        }
+
+        if (request.InterruptedTourOpen)
+        {
+            return CollectionOrderRefusal.InterruptedTourOpen;
         }
 
         if (!request.PointedAtASource)
@@ -377,6 +398,8 @@ internal static class CollectionOrderGate
                 return "Something about that could not be read, so he does nothing.";
             case CollectionOrderRefusal.WorldIsGoingAway:
                 return "There is no world for him to work in right now.";
+            case CollectionOrderRefusal.InterruptedTourOpen:
+                return GunnarTourPlan.OpenPlanRefusal;
             default:
                 return "Refused for a reason nobody recorded; that is a bug.";
         }

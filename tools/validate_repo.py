@@ -3944,6 +3944,204 @@ TEAMSTER_DESTINATION_WRITES = (
 )
 
 
+# #379: Gunnar's collection tour keeps a write-ahead plan (`GunnarTourPlan`,
+# through ConcernedNPC's NpcPlanRun). A write-ahead record is worth something
+# only if it is written BEFORE the world moves: an intent before every pick and
+# every trip to the chest, so a reload or a kill half-way finds custody pending
+# and stops for a person instead of picking or depositing the same material
+# twice. The plan's own tests cannot reach the call sites - the runtime binds
+# Unity - so this pins the order in the source:
+#
+# - In the tour half (`GunnarCollectionRuntime.Tour.cs`), every method that
+#   calls `_port.Begin(` has an `if (!_tourPlan.IntendPick(...))` guard above the
+#   call whose block returns, and every method that calls `DepositLegs(` has an
+#   `if (!_tourPlan.IntendDeposit(...))` guard above it whose block returns. A
+#   helper that lifts either call out of its guarded method fails, because the
+#   helper is a method with the call and no guard.
+# - In the other half (`GunnarCollectionRuntime.cs`), `_port.Begin(` is called
+#   inside OrderOnePick() alone and `DepositLegs(` inside Deposit() alone - the
+#   two player-ordered verbs - and each of them passes
+#   `interruptedTourOpen: _tourPlan.BlocksOrders` to its gate, so neither can
+#   change his load while an interrupted tour's plan is open.
+# - No other part of the partial class calls either.
+# - D16: the death host tells the plan in Prepare before it returns, and in
+#   Died before the tour is cancelled (cancelling ends the plan as a stopped
+#   tour, which would claim his load is still on him).
+#
+# A source-text audit of ORDER, on comment-masked text: it does not follow a
+# delegate or prove control flow, and a brace inside a string literal in one of
+# these methods would confuse its block counting. `GunnarTourPlanTests` and
+# `GunnarTourPlanKillTests` prove the plan; a reviewer proves the rest.
+TEAMSTER_TOUR_PLAN_LABEL = "[interop] #379 tour write-ahead audit"
+TEAMSTER_TOUR_PLAN_TOUR_FILE = "Adapters/Workers/GunnarCollectionRuntime.Tour.cs"
+TEAMSTER_TOUR_PLAN_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.cs"
+TEAMSTER_TOUR_PLAN_PART = re.compile(r"\bpartial\s+class\s+GunnarCollectionRuntime\b")
+TEAMSTER_TOUR_PLAN_PICK = re.compile(r"\b_port\s*\.\s*Begin\s*\(")
+TEAMSTER_TOUR_PLAN_DEPOSIT = re.compile(r"(?<![\w.])DepositLegs\s*\(")
+TEAMSTER_TOUR_PLAN_DEPOSIT_DECLARATION = re.compile(r"\bDepositTally\s+DepositLegs\s*\(")
+TEAMSTER_TOUR_PLAN_PICK_GUARD = re.compile(r"\bif\s*\(\s*!\s*_tourPlan\s*\.\s*IntendPick\s*\(")
+TEAMSTER_TOUR_PLAN_DEPOSIT_GUARD = re.compile(r"\bif\s*\(\s*!\s*_tourPlan\s*\.\s*IntendDeposit\s*\(")
+TEAMSTER_TOUR_PLAN_ORDERS_BLOCKED = re.compile(r"\binterruptedTourOpen\s*:\s*_tourPlan\s*\.\s*BlocksOrders\b")
+TEAMSTER_TOUR_PLAN_PREPARE = re.compile(r"\bDeathDropFacts\s+IGunnarDeathDropHost\s*\.\s*Prepare\s*\(")
+TEAMSTER_TOUR_PLAN_DIED = re.compile(r"\bvoid\s+IGunnarDeathDropHost\s*\.\s*Died\s*\(")
+TEAMSTER_TOUR_PLAN_PREPARE_TELLS = re.compile(r"\b_tourPlan\s*\.\s*PrepareForDeath\s*\(\s*\)\s*;")
+TEAMSTER_TOUR_PLAN_DIED_TELLS = re.compile(r"\b_tourPlan\s*\.\s*Died\s*\(")
+TEAMSTER_TOUR_PLAN_CANCEL = re.compile(r"\bCancelTour\s*\(")
+# A member header at the class's own indentation: four spaces, then anything
+# that is not a statement, with a parameter list and no terminating semicolon.
+TEAMSTER_TOUR_PLAN_MEMBER = re.compile(
+    r"^    (?!\s)(?!(?:if|for|foreach|while|switch|return|using|lock|else|catch|try)\b)[^;=]*?\b[\w.]+\s*\([^;]*$")
+
+
+def _teamster_tour_plan_methods(code: str) -> list[tuple[str, int, list[str]]]:
+    """(header, first line index, body lines) for every member that opens a
+    braced block, on comment-masked text."""
+    lines = code.splitlines()
+    methods = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if TEAMSTER_TOUR_PLAN_MEMBER.match(line):
+            block = _cs_block(lines, index)
+            if any("{" in text for text in block):
+                methods.append((line.strip(), index, block))
+                index += len(block)
+                continue
+        index += 1
+    return methods
+
+
+def _teamster_tour_plan_guarded(block: list[str], call: re.Pattern, guard: re.Pattern,
+                                skip: "re.Pattern | None" = None) -> list[int]:
+    """Line offsets (within the method) of each call with no returning guard
+    written above it in the same method."""
+    unguarded = []
+    guards = []
+    for offset, text in enumerate(block):
+        if guard.search(text):
+            guard_block = _cs_block(block, offset)
+            if any(re.search(r"\breturn\b", line) for line in guard_block[1:]) or \
+                    re.search(r"\breturn\b", "".join(guard_block).split("{", 1)[-1]):
+                guards.append(offset)
+    for offset, text in enumerate(block):
+        if skip is not None and skip.search(text):
+            continue
+        for _ in call.finditer(text):
+            if not any(g < offset for g in guards):
+                unguarded.append(offset)
+    return unguarded
+
+
+def check_teamster_tour_writes_ahead(errors: list[str]) -> list[str]:
+    """Fails when the collection tour can pick or deposit without writing its
+    plan first, or when the death host stops telling the plan (#379)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = TEAMSTER_TOUR_PLAN_LABEL
+    hits = 0
+    tour_path = teamster_dir / TEAMSTER_TOUR_PLAN_TOUR_FILE
+    runtime_path = teamster_dir / TEAMSTER_TOUR_PLAN_RUNTIME_FILE
+    for required in (tour_path, runtime_path):
+        if not required.is_file():
+            fail(f"{label}: missing src/ConcernedTeamster/{required.relative_to(teamster_dir).as_posix()}", errors)
+            return []
+
+    tour_code = _strip_cs_comments(tour_path.read_text(encoding="utf-8-sig"))
+    picks = deposits = 0
+    for header, start, block in _teamster_tour_plan_methods(tour_code):
+        for offset in _teamster_tour_plan_guarded(block, TEAMSTER_TOUR_PLAN_PICK, TEAMSTER_TOUR_PLAN_PICK_GUARD):
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TOUR_PLAN_TOUR_FILE}:{start + offset + 1} calls "
+                 f"_port.Begin( in `{header}` with no `if (!_tourPlan.IntendPick(...))` guard that returns "
+                 "written above it in the same method - a pick the plan was not told about first", errors)
+        for offset in _teamster_tour_plan_guarded(block, TEAMSTER_TOUR_PLAN_DEPOSIT, TEAMSTER_TOUR_PLAN_DEPOSIT_GUARD,
+                                                  skip=TEAMSTER_TOUR_PLAN_DEPOSIT_DECLARATION):
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TOUR_PLAN_TOUR_FILE}:{start + offset + 1} calls "
+                 f"DepositLegs( in `{header}` with no `if (!_tourPlan.IntendDeposit(...))` guard that returns "
+                 "written above it in the same method - a trip to the chest the plan was not told about first",
+                 errors)
+        picks += sum(len(TEAMSTER_TOUR_PLAN_PICK.findall(text)) for text in block)
+        deposits += sum(len(TEAMSTER_TOUR_PLAN_DEPOSIT.findall(text)) for text in block
+                        if not TEAMSTER_TOUR_PLAN_DEPOSIT_DECLARATION.search(text))
+    if picks == 0 or deposits == 0:
+        hits += 1
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TOUR_PLAN_TOUR_FILE} no longer picks ({picks}) or deposits "
+             f"({deposits}) where this audit can see it - the tour's write-ahead is unpinned", errors)
+
+    runtime_code = _strip_cs_comments(runtime_path.read_text(encoding="utf-8-sig"))
+    allowed = {"pick": "OrderOnePick()", "deposit": "Deposit()"}
+    blocked_in = set()
+    prepare_seen = died_seen = False
+    for header, start, block in _teamster_tour_plan_methods(runtime_code):
+        name = re.search(r"([\w.]+)\s*\(", header)
+        member = (name.group(1).split(".")[-1] + "()") if name else header
+        body = "\n".join(block)
+        for offset, text in enumerate(block):
+            if TEAMSTER_TOUR_PLAN_PICK.search(text) and member != allowed["pick"]:
+                hits += 1
+                fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TOUR_PLAN_RUNTIME_FILE}:{start + offset + 1} calls "
+                     f"_port.Begin( in `{header}` - outside the tour half a pick is made inside OrderOnePick() "
+                     "alone, the player's ordered pick, which an open plan refuses", errors)
+            if TEAMSTER_TOUR_PLAN_DEPOSIT.search(text) and not TEAMSTER_TOUR_PLAN_DEPOSIT_DECLARATION.search(text) \
+                    and member != allowed["deposit"]:
+                hits += 1
+                fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TOUR_PLAN_RUNTIME_FILE}:{start + offset + 1} calls "
+                     f"DepositLegs( in `{header}` - outside the tour half a deposit is made inside Deposit() "
+                     "alone, the player's ordered deposit, which an open plan refuses", errors)
+        if member in allowed.values() and TEAMSTER_TOUR_PLAN_ORDERS_BLOCKED.search(body):
+            blocked_in.add(member)
+        if TEAMSTER_TOUR_PLAN_PREPARE.search(header):
+            prepare_seen = True
+            tells = TEAMSTER_TOUR_PLAN_PREPARE_TELLS.search(body)
+            returns = [m.start() for m in re.finditer(r"\breturn\b", body)]
+            if tells is None or not returns or tells.start() > returns[-1]:
+                hits += 1
+                fail(f"{label}: {TEAMSTER_TOUR_PLAN_RUNTIME_FILE}: Prepare must tell the plan "
+                     "(`_tourPlan.PrepareForDeath();`) before it returns - a death drop the plan never heard of "
+                     "is a move with no intent before it", errors)
+        if TEAMSTER_TOUR_PLAN_DIED.search(header):
+            died_seen = True
+            tells = TEAMSTER_TOUR_PLAN_DIED_TELLS.search(body)
+            cancel = TEAMSTER_TOUR_PLAN_CANCEL.search(body)
+            if tells is None or (cancel is not None and cancel.start() < tells.start()):
+                hits += 1
+                fail(f"{label}: {TEAMSTER_TOUR_PLAN_RUNTIME_FILE}: Died must tell the plan "
+                     "(`_tourPlan.Died(...)`) before CancelTour - cancelling first ends the plan as a stopped "
+                     "tour, which says his load is still on him", errors)
+    for member in allowed.values():
+        if member not in blocked_in:
+            hits += 1
+            fail(f"{label}: {TEAMSTER_TOUR_PLAN_RUNTIME_FILE}: {member} does not pass "
+                 "`interruptedTourOpen: _tourPlan.BlocksOrders` to its gate, so it could change his load while an "
+                 "interrupted tour's plan is open", errors)
+    if not prepare_seen or not died_seen:
+        hits += 1
+        fail(f"{label}: {TEAMSTER_TOUR_PLAN_RUNTIME_FILE}: the death host's Prepare and Died were not found, so "
+             "the plan's part in a death is unpinned", errors)
+
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        rel = path.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin") or rel in (TEAMSTER_TOUR_PLAN_TOUR_FILE, TEAMSTER_TOUR_PLAN_RUNTIME_FILE):
+            continue
+        code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+        if not TEAMSTER_TOUR_PLAN_PART.search(code):
+            continue
+        if TEAMSTER_TOUR_PLAN_PICK.search(code) or TEAMSTER_TOUR_PLAN_DEPOSIT.search(code):
+            hits += 1
+            fail(f"{label}: src/ConcernedTeamster/{rel} is a part of the collection runtime and picks or deposits; "
+                 f"only {TEAMSTER_TOUR_PLAN_TOUR_FILE} (behind the plan's intents) and the two ordered verbs in "
+                 f"{TEAMSTER_TOUR_PLAN_RUNTIME_FILE} may", errors)
+
+    return [
+        f"{label}: every pick and every trip to the chest in the tour has a returning "
+        "`if (!_tourPlan.IntendPick/IntendDeposit(...))` above it in the same method; outside the tour a pick is "
+        "made only in OrderOnePick() and a deposit only in Deposit(), each refused while a plan is open; no other "
+        "part of the runtime does either; and the death host tells the plan in Prepare before it returns and in "
+        "Died before the tour is cancelled. A text audit of order: it does not follow delegates or prove control "
+        f"flow ({hits} violations)",
+    ]
+
+
 def check_teamster_destination_is_pointed_at(errors: list[str]) -> list[str]:
     """Fails when Teamster could reach a container other than by the player
     pointing at it - the shape a nearest-chest fallback would take (#381, D15)."""
@@ -6420,6 +6618,7 @@ def main() -> int:
     report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))
     report.extend(check_teamster_destination_is_pointed_at(errors))
+    report.extend(check_teamster_tour_writes_ahead(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))

@@ -86,8 +86,8 @@ Six additive changes share this version:
 ### One shared companion keepsake (#295 S2, owner decision 2026-10-30)
 
 * `Body.Keepsakes.NpcKeepsake` places the small object a player examines to start a companion's introduction.
-  It is lifted from Concerned Cartographer's Broken Compass, so Thorstein's carpenter's square, Gunnar's buckle
-  (#457) and Sunniva's flint are one copy. Hulgi's own compass predates the library and stays in Cartographer.
+  It is lifted from Concerned Cartographer's Broken Compass so companions can share one copy; Concerned Foreman's
+  carpenter's square uses it. Gunnar's buckle (#457) and Sunniva's flint have not moved to it yet. Hulgi's own compass predates the library and stays in Cartographer.
 * The role supplies `Keepsakes.NpcKeepsakeSpec`: the name, the verb, the game prefabs whose look it borrows, and a
   scale.
 * **Local in the strongest sense.**
