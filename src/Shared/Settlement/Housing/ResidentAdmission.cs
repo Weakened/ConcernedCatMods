@@ -16,6 +16,9 @@ internal readonly struct ResidentHousingSlot
         Key=position.X.ToString("R",CultureInfo.InvariantCulture)+";"+position.Y.ToString("R",CultureInfo.InvariantCulture)+";"+
             position.Z.ToString("R",CultureInfo.InvariantCulture); Facts=facts;
     }
+    private ResidentHousingSlot(string key, HousingFacts facts) { Key=key; Facts=facts; }
+    internal static ResidentHousingSlot Missing(string key) => new ResidentHousingSlot(key,
+        new HousingFacts(key,true,true,false,0f,false,BedClaim.Unclaimed,exists:false));
     public string Key { get; }
     public HousingFacts Facts { get; }
     public bool IsHabitable=>!string.IsNullOrEmpty(Key)&&HousingRules.Judge(Facts)==HousingRefusal.None;

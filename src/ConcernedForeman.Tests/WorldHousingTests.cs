@@ -135,8 +135,10 @@ public sealed class WorldHousingTests : IDisposable
         Assert.True(exists); Assert.True(fresh.IsHabitable);
         Assert.False(Survey(false).TryResidentSlot(Area(), key, out _, out _));
         Piece.s_allPieces.Clear();
-        Assert.True(Survey().TryResidentSlot(Area(), key, out _, out exists));
+        Assert.True(Survey().TryResidentSlot(Area(), key, out var missing, out exists));
         Assert.False(exists);
+        Assert.Equal(key, missing.Key);
+        Assert.Equal(HousingRefusal.BedRemoved, HousingRules.Judge(missing.Facts));
         PlaceBed(1, 1); PlaceBed(1, 1);
         Assert.False(Survey().TryResidentSlot(Area(), key, out _, out _));
     }
