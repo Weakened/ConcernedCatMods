@@ -26,7 +26,7 @@ internal enum GunnarRecruitmentResult { Unavailable, NeedsIntroduction, Authorit
     PendingConfirmation, Busy, Stale, CartUnavailable, NotRecorded, Recruited, AlreadyRecruited }
 
 /// <summary>One explicitly selected in-session cart and one named confirmation.
-/// No cart lease, mutation, persisted ZDOID, worker start or tutorial cargo.
+/// No cart lease, mutation, persisted native identity, worker start or tutorial cargo.
 /// The owner/lead authority decision is pending: require the existing strict
 /// hauling opt-in + host authority until a wider read-only rule is approved.</summary>
 internal sealed class GunnarRecruitment
