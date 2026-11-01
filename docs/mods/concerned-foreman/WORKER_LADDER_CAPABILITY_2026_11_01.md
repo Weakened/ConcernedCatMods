@@ -58,7 +58,9 @@ correct worker/body/lease and a scoped native motor with ground walking suspende
 - Every returned array is detached and caller-owned. Editing it cannot alter
   cached geometry or the live ladder. No caller-owned list is retained.
 - Call at a bounded worker-survey cadence, not per render tick. Maximum output
-  is 2048 rows of 12 floats. No per-frame object search, I/O or log stream is added.
+  is 2048 rows of 12 floats. No per-frame object search or I/O is added. A native API exception emits one
+  actionable warning per failure type until a successful read; ordinary unloaded
+  state stays quiet. False results always clear all output fields.
 
 ## Verification and remaining rows
 

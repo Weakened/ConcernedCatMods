@@ -45,6 +45,22 @@ public sealed class WorkerLadderSnapshotTests : IDisposable
         RuntimeBoundary.Ready=true; Assert.True(Read(out var restored,out _,out _,out _)); Assert.NotEqual(next,restored);
     }
     [Fact]
+    public void NativeFailureWithdrawsEverythingAndReportsOnceUntilRecovery()
+    {
+        Assert.True(Read(out _,out _,out _,out _));
+        RuntimeBoundary.Throw=true;
+        for(int i=0;i<2;i++)
+        {
+            Assert.False(Read(out var epoch,out var generation,out var ids,out var rows));
+            Assert.Empty(epoch); Assert.Equal(0,generation); Assert.Empty(ids); Assert.Empty(rows);
+        }
+        Assert.Single(UnityEngine.Debug.Warnings);
+        Assert.Contains("revalidate",UnityEngine.Debug.Warnings[0]);
+        RuntimeBoundary.Throw=false; Assert.True(Read(out _,out _,out _,out _));
+        RuntimeBoundary.Throw=true; Assert.False(Read(out _,out _,out _,out _));
+        Assert.Equal(2,UnityEngine.Debug.Warnings.Count);
+    }
+    [Fact]
     public void DuplicateOverBudgetInvalidOrUnknownSchemaRefusesEntireSnapshot()
     {
         RuntimeBoundary.Sections.Add(Section()); RuntimeBoundary.Sections.Add(Section());
@@ -58,6 +74,7 @@ public sealed class WorkerLadderSnapshotTests : IDisposable
 internal static class RuntimeBoundary
 {
     internal static bool Ready=true;
+    internal static bool Throw;
     internal static readonly List<WorkerLadderSection> Sections=new();
-    internal static void Reset() { Ready=true; Sections.Clear(); }
+    internal static void Reset() { Ready=true; Throw=false; Sections.Clear(); UnityEngine.Debug.Warnings.Clear(); }
 }
