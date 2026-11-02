@@ -117,6 +117,13 @@ internal static class NpcActivityArbiter
         NpcActivityPriority.BackgroundMaintenance or NpcActivityPriority.RequiredRoleWork or
         NpcActivityPriority.PlayerOrder or NpcActivityPriority.Danger or NpcActivityPriority.LifecycleSafety;
 
+    // Existing public Suspend is the narrow role-work suspension facade.
+    // It grants no engine authority and exposes no new priority/API types.
+    internal static NpcPlanSave SuspendRoleWork(NpcPlanRun run, string? note) =>
+        MayInterrupt(NpcActivityPriority.RequiredRoleWork, NpcActivityPriority.PlayerOrder)
+            ? run.WriteSuspensionNote(note)
+            : NpcPlanSave.Refused("The interruption does not outrank the running role work.");
+
     /// <summary>Hands the body from one activity to another, leaving the plan
     /// exactly as it stands and noting why.
     ///
@@ -145,7 +152,7 @@ internal static class NpcActivityArbiter
         }
 
         NpcPlanState suspended = run.State;
-        NpcPlanSave written = run.Suspend(note);
+        NpcPlanSave written = run.WriteSuspensionNote(note);
 
         // The state is read back from the run rather than reused from above, so
         // that the plan handed over is the one the run is actually in - and the

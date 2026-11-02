@@ -840,6 +840,24 @@ internal sealed class StewardRuntime
             _runtime.SaveRecord(_runtime._journal.UnresolvedIntents, stage, furthest);
     }
 
+    internal string PauseWork()
+    {
+        string? blocked = WhyNotAvailable();
+        if (blocked != null) return blocked;
+        return _loop.PauseForOrder(out string refusal)
+            ? "Sunniva will hold her current work. Use cs_steward resume to continue the same plan."
+            : refusal;
+    }
+
+    internal string ResumeWork()
+    {
+        string? blocked = WhyNotAvailable();
+        if (blocked != null) return blocked;
+        return _loop.ResumeOrder(out string refusal)
+            ? "Sunniva will recheck the current conditions and continue her paused work."
+            : refusal;
+    }
+
     internal string Dismiss()
     {
         string? blocked = WhyNotAvailable();
@@ -998,6 +1016,7 @@ internal sealed class StewardRuntime
         text.AppendLine("  Scope: " + _scope.Resolve().Describe());
         text.AppendLine("  Body: " + _census.Describe());
         text.AppendLine("  " + _presentation.Describe());
+        if (_loop.IsOrderPaused) text.AppendLine("  Paused by your order; cs_steward resume continues the same work.");
         text.AppendLine("  Doing: " + _loop.Phase + " — " + _loop.Explanation);
         if (_loop.Attention.Length != 0)
         {

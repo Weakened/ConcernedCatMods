@@ -21,9 +21,11 @@ make no codec write, record no note, and leave the real journal bytes identical.
 The 58 existing arbitration cases also pass (126 focused cases total). These
 compile and call the actual library policy, not a copied implementation.
 
-Scope: one internal policy, regression tests and documentation. No public API,
-version, keys, migration, motor, native spawn, product executor, validator,
-profile, package or live game is changed. No new runtime authority is granted.
+The initial repair touched only the internal policy. This branch now also
+binds one production suspension/resumption path in the existing Steward executor,
+through the unchanged NpcPlanRun.Suspend API. No public API/version, saved key,
+migration, native spawn, validator, profile or package changes. No new movement
+or custody authority is granted. See STEWARD_ORDERED_PAUSE_2026_11_01.md.
 
 ## Requirement coverage and remaining work
 
@@ -31,14 +33,16 @@ profile, package or live game is changed. No new runtime authority is granted.
   existing journals and mutation ordering are not changed here.
 - Seven-rung arbitration model and preservation tests exist; this repair closes
   its undefined-value admission hole.
-- NpcActivityPriority, NpcActivityArbiter and NpcActivityHandover remain internal
-  and have no production product caller. This source repair does not claim a
-  shipped NPC now interrupts and resumes work through that policy.
-- Production priority adoption and Thorstein's shared-interruption adoption
-  remain CODE rows. Exposing a reviewed cross-assembly surface and binding the
-  actual executor must preserve its durable state and authority. Claude owns
-  currently changing caller/audit files; do not work around them with a second
-  executor, duplicated priority policy or unchecked reflection.
+- Priority types remain internal. The existing public NpcPlanRun.Suspend now
+  invokes the shared priority rule for role work interrupted by an external
+  order; its internal write primitive prevents recursive arbitration. No public
+  surface exposure or version-pin change is needed. Steward's real pause/resume
+  commands preserve the existing executor and its cursor, rather than starting
+  another executor or using reflected access to internal types.
+- The concrete player-order-over-role-work pair has a production path; all
+  seven ranks remain model-tested, not seven newly added native behaviors.
+  Thorstein's shared-interruption adoption remains CODE and intersects active
+  integration files. Nothing here replaces his current durable journals.
 - Exact-candidate gameplay remains unverified. Existing adopted-role game rows
   are on #470; remaining source rows cannot be represented as observations.
 

@@ -17,7 +17,7 @@ namespace TheConcernedCat.ConcernedSteward.Tests;
 /// The assertions are deliberately about both records and world-side counts:
 /// a plan file that looks tidy while a second executor duplicated wood would
 /// not satisfy any of these tests.</summary>
-public sealed class StewardMaintenancePlanTests
+public sealed partial class StewardMaintenancePlanTests
 {
     private const string Wood = StewardFixture.Wood;
 
