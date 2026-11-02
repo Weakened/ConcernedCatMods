@@ -30,7 +30,7 @@ public sealed class PublicMemberSurfaceTests
             string.Join("\n", actual) + "\nACTUAL_END");
     }
 
-    private static string[] Describe(IEnumerable<Type> types)
+    internal static string[] Describe(IEnumerable<Type> types)
     {
         var rows = new List<string>();
         foreach (Type type in types.OrderBy(Name, StringComparer.Ordinal))
@@ -71,7 +71,7 @@ public sealed class PublicMemberSurfaceTests
     private static string Literal(object? value) => value == null ? "null" : value is string text ?
         "string:" + text.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t") :
         value.GetType().FullName + ":" + Convert.ToString(value, CultureInfo.InvariantCulture);
-    private static string Repository()
+    internal static string Repository()
     {
         for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
             if (File.Exists(Path.Combine(directory.FullName, "ConcernedCatMods.sln"))) return directory.FullName;

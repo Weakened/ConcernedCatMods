@@ -1,0 +1,868 @@
+TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel field Female : TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel field Male : TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice ctor(prefabName:System.String None,displayName:System.String None,match:TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice property DisplayName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice property Match() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice property MatchesReference() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice property None() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice property PrefabName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookColour method Hair(palette:TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette& In,hairTone:System.Single None,hairLevel:System.Single None,fallback:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb None) : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookColour method Skin(palette:TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette& In,skinHue:System.Single None) : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookColour method SkinOrNone(palette:TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette& In,skinHue:System.Nullable`1<System.Single> None) : System.Nullable`1<TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb> Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field DisplayName : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field Family : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field None : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field Override : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field PrefabName : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field Shape : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field Token : TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption ctor(prefabName:System.String None,displayName:System.String Optional, HasDefault=null,token:System.String Optional, HasDefault=null) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption property DisplayName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption property PrefabName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption property Token() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette ctor(skinLow:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb None,skinHigh:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb None,hairLow:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb None,hairHigh:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb None,minimumLevel:System.Single None,maximumLevel:System.Single None,observed:System.Boolean None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property HairHigh() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property HairLow() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property MaximumLevel() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property MinimumLevel() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property Observed() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property SkinHigh() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property SkinLow() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette property Unobserved() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookPlan method Choose(available:System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption> None,request:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest None,playerOverride:System.String Optional, HasDefault=null) : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest ctor(displayName:System.String None,prefabCandidates:System.Collections.Generic.IReadOnlyList`1<System.String> None,shapeFallbacks:System.Collections.Generic.IReadOnlyList`1<System.String> None,familyPrefix:System.String None,token:System.String Optional, HasDefault=null) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest property DisplayName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest property FamilyPrefix() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest property PrefabCandidates() : System.Collections.Generic.IReadOnlyList`1<System.String> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest property ShapeFallbacks() : System.Collections.Generic.IReadOnlyList`1<System.String> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest property Token() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb ctor(r:System.Single None,g:System.Single None,b:System.Single None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb property B() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb property G() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb property R() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb property White() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec ctor(who:System.String None,model:TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel None,hair:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest None,beard:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest None,chest:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest None,legs:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest None,skinHue:System.Nullable`1<System.Single> None,hairTone:System.Single None,hairLevel:System.Single None,hairFallback:TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb None,hairOverride:System.String Optional, HasDefault=null,beardOverride:System.String Optional, HasDefault=null,chestOverride:System.String Optional, HasDefault=null,legsOverride:System.String Optional, HasDefault=null) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec method HairColour(palette:TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette& In) : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb Public, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec method SkinColour(palette:TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette& In) : System.Nullable`1<TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb> Public, HideBySig
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property Beard() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property BeardOverride() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property Chest() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property ChestOverride() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property Hair() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property HairFallback() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property HairLevel() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property HairOverride() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property HairTone() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property Legs() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property LegsOverride() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property Model() : TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property SkinHue() : System.Nullable`1<System.Single> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec property Who() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field Paused : TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field Recovering : TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field Resting : TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field Surveying : TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field Unspecified : TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field Working : TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Bodies.ActorMode field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field AlreadyInMode : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field Entered : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field NotHeld : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field RefusedBusy : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field Released : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field Unspecified : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner method IsHeldBy(jobId:System.String None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner property MayRelocateHome() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner property MayRetireBody() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner property Mode() : TheConcernedCat.ConcernedNPC.Bodies.ActorMode get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner property Revision() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property Holder() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property IsGranted() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property Kind() : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property Lease() : TheConcernedCat.ConcernedNPC.Bodies.BodyLease get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property Reason() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaim property Status() : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field AlreadyHeld : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field Claimed : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field NotHeld : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:9
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field RefusedHolderConflict : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field RefusedKindNotContracted : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field RefusedNoHolder : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:7
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field RefusedNoWorld : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:10
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field RefusedNotRegistered : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field RefusedOtherKindExists : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field Released : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:8
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field Unspecified : TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Bodies.BodyLease method Dispose() : System.Void Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Bodies.BodyLease method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Bodies.BodyLease property Holder() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyLease property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyLease property IsActive() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Bodies.BodyLease property Kind() : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcCustomizationPalette method Poll(unscaledDeltaTime:System.Single None,log:System.Action`1<System.String> None) : System.Void Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcCustomizationPalette method Read(log:System.Action`1<System.String> None) : TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcCustomizationPalette property Observed() : System.Boolean get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser ctor(figure:TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure& In,spec:TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec None,holderName:System.String None,log:System.Action`1<System.String> None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method Apply() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method Describe() : System.String Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method EnableTalk(hoverName:System.String None,hoverVerb:System.String None,onTalk:System.Action None,log:System.Action`1<System.String> None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method StandAt(spot:UnityEngine.Vector3 None,facing:UnityEngine.Quaternion None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method TakeDown() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method VerifyOnce() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Beard() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property BeardWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Chest() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property ChestWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Fit() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Hair() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property HairWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Legs() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property LegsWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property ModelApplied() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property PaletteObserved() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property SkinApplied() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property TalkHovered() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser method Describe() : System.String Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser method TakeOff() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser method TryDress(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,body:Humanoid None,spec:TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec None,holderName:System.String None,log:System.Action`1<System.String> None,refusal:System.String& Out) : TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser method VerifyOnce() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property Beard() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property BeardWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property Fit() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property Hair() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property HairWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property IsOnBody() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser property PaletteObserved() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor method Face(direction:UnityEngine.Vector3 None) : System.Void Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor method Halt() : System.Void Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor method SteerToward(point:UnityEngine.Vector3 None) : System.Void Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor method TryFindPath(point:UnityEngine.Vector3 None) : System.Boolean Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor method WalkTo(point:UnityEngine.Vector3 None,arrivalRadiusMetres:System.Single None) : System.Void Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor property HasFoundPath() : System.Boolean get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor property IsFaulted() : System.Boolean get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor property IsOwnedAndValid() : System.Boolean get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor property MotorCommanded() : System.Boolean get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake method Remove() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake method TryPlace(spec:TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec None,spot:UnityEngine.Vector3 None,facing:UnityEngine.Quaternion None,rootName:System.String None,holderName:System.String None,onExamine:System.Action None,log:System.Action`1<System.String> None,refusal:System.String& Out) : TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake property HoverObserved() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake property IsPlaced() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake property OnNonSolidLayer() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake property Source() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody ctor() Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBody event Died : System.Action`3<TheConcernedCat.ConcernedNPC.Body.NpcBody,System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem>,UnityEngine.Vector3> add=Public, Static, HideBySig, SpecialName remove=Public, Static, HideBySig, SpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBody event ErrorLog : System.Action`1<System.String> add=Public, Static, HideBySig, SpecialName remove=Public, Static, HideBySig, SpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBody event Loaded : System.Action`1<TheConcernedCat.ConcernedNPC.Body.NpcBody> add=Public, Static, HideBySig, SpecialName remove=Public, Static, HideBySig, SpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBody method FindLive(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None,identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : TheConcernedCat.ConcernedNPC.Body.NpcBody Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBody method ForgetAll(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None) : System.Void Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBody method LiveFor(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None) : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Body.NpcBody> Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBody method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBody method TryPersist() : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBody property Fault() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property Humanoid() : Humanoid get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property Inventory() : Inventory get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property IsLoaded() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property IsOwned() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property ItemCount() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property Keeps() : TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property LastChangePersisted() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property PrefabName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property Revision() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBody property StoredKey() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps field IdentityAndInventory : TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps field IdentityOnly : TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps field Unspecified : TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind ctor() Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind event ErrorLog : System.Action`1<System.String> add=Public, Static, HideBySig, SpecialName remove=Public, Static, HideBySig, SpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind method Awake() : System.Void Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind method LiveFor(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None) : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Body.NpcBodyMind> Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind method OnDisable() : System.Void Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind method OnEnable() : System.Void Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind method TryDrive(lease:TheConcernedCat.ConcernedNPC.Bodies.BodyLease None,motor:TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor& Out,reason:System.String& Out) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind method UpdateAI(dt:System.Single None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property DebugLog() : System.Action`1<System.String> get=Public, HideBySig, SpecialName set=Public, HideBySig, SpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property HasFoundPath() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property IsFaulted() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property IsOwnedAndValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property MotorCommanded() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyMind property WorkTick() : System.Action`2<TheConcernedCat.ConcernedNPC.Body.NpcBodyMind,System.Single> get=Public, HideBySig, SpecialName set=Public, HideBySig, SpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field Duplicated : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field Faulted : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field Missing : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field NotLoaded : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field Present : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field Searching : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field Unspecified : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property IsDuplicated() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property LoadedBodies() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property LoadedIsFaulted() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property MaySpawn() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property Presence() : TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property SavedBodies() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property ScanComplete() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcBodyTally property Unidentified() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem property Count() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem property Item() : ItemDrop+ItemData get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem property PrefabName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem property Quality() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem property SharedName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem property Variant() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationBody method TryExtract(source:UnityEngine.GameObject None,candidateName:System.String None,figureName:System.String None,holderName:System.String None,ownNamespacePrefix:System.String None,log:System.Action`1<System.String> None) : TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property Animator() : UnityEngine.Animator get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property BodyModel() : UnityEngine.SkinnedMeshRenderer get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property HelmetJoint() : UnityEngine.Transform get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property IsBuilt() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property QuietedNames() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property QuietedScripts() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property Refusal() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property RightHandJoint() : UnityEngine.Transform get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure property Root() : UnityEngine.GameObject get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory method Install(baseCreature:System.String None,log:System.Action`1<System.String> None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory method TryFor(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None,options:TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions None,factory:TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory& Out,reason:System.String& Out) : System.Boolean Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory method TrySpawn(lease:TheConcernedCat.ConcernedNPC.Bodies.BodyLease None,tally:TheConcernedCat.ConcernedNPC.Body.NpcBodyTally None,position:UnityEngine.Vector3 None,rotation:UnityEngine.Quaternion None,failure:System.String& Out) : TheConcernedCat.ConcernedNPC.Body.NpcBodyMind Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory property Contract() : TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory property IsReady() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory property LastFailure() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions method Keeping(keeps:TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps None) : TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions method Named(displayName:System.String None) : TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method Advance() : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method Forget(id:ZDOID None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method Prune(stillExists:System.Func`2<ZDOID,System.Boolean> None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method Restart() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method RunToCompletion(maximumSteps:System.Int32 Optional, HasDefault=System.Int32:100000) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method SavedBodiesFor(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method TallyFor(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,loadedBodies:System.Int32 None,loadedIsFaulted:System.Boolean None) : TheConcernedCat.ConcernedNPC.Body.NpcBodyTally Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method TryFor(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None,keeps:TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps None,census:TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies& Out,reason:System.String& Out) : System.Boolean Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies property IsComplete() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies property Unidentified() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Access() : TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Describe() : System.String get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Key() : System.String get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Position() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess ctor(allowed:TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse None,refusal:TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess method Permits(use:TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess property Allowed() : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess property CanDeposit() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess property CanTake() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess property Refusal() : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field Gone : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field InUse : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:7
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field None : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field NotDesignated : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field NotEnabled : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field NotOwnedHere : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field NotThisContainer : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field OutOfReach : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:10
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field PrivacyDenied : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:9
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field UseNotAllowed : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field WardDenied : TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Static, Literal, HasDefault = System.Int32:8
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Both : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Deposit : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Off : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Take : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial ctor(itemName:System.String None,quality:System.Int32 None,variant:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method Equals(other:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method Of(itemName:System.String None) : TheConcernedCat.ConcernedNPC.Custody.NpcMaterial Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial property IsNamed() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial property ItemName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial property Quality() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterial property Variant() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack ctor(material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None,count:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack method Equals(other:TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack property Count() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack property Material() : TheConcernedCat.ConcernedNPC.Custody.NpcMaterial get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy method Decide(interruption:TheConcernedCat.ConcernedNPC.Interruption.Interruption& In) : TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Interruption.INpcPlanCodec method Encode(state:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None) : System.Collections.Generic.IReadOnlyList`1<System.String> Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Interruption.INpcPlanCodec method TryDecode(lines:System.Collections.Generic.IReadOnlyList`1<System.String> None,state:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState& Out,reason:System.String& Out) : System.Boolean Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Interruption.Interruption ctor(cause:TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause None,jobId:System.String None,planStepIndex:System.Int32 None,planIsStale:System.Boolean None,anythingHeld:System.Boolean None,anythingUncertain:System.Boolean None,at:System.Single None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property AnythingHeld() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property AnythingUncertain() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property At() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property Cause() : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property PlanIsStale() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.Interruption property PlanStepIndex() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field AreaChanged : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field AreaInvalid : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field AuthorityLost : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:9
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field BodyDied : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field BodyDuplicated : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field BodyLost : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field ContainerRefused : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:7
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field PausedByPlayer : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:10
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field RouteRefused : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:8
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field TransferUncertain : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:11
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field Unspecified : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field WorldReloaded : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome ctor(response:TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse None,cause:TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause None,notBefore:System.Single None,reason:System.String None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome property Cause() : TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome property MayResume() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome property NotBefore() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome property Reason() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome property Response() : TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse field Continue : TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse field NeedsAttention : TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse field Refund : TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse field Replan : TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse field Unspecified : TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody field Clear : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody field Pending : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody field Uncertain : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody field Unspecified : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence ctor(world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,bodiesAnswering:System.Int32 None,bodyDied:System.Boolean None,areaIsReadable:System.Boolean None,areaMoved:System.Boolean None,mayWork:System.Boolean None,containersAvailable:System.Boolean None,routeAvailable:System.Boolean None,playerPaused:System.Boolean None,at:System.Single None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property AreaIsReadable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property AreaMoved() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property At() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property BodiesAnswering() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property BodyDied() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property ContainersAvailable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property MayWork() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property PlayerPaused() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property RouteAvailable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence property World() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal method Load() : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal method TryOpen(absolutePath:System.String None,codec:TheConcernedCat.ConcernedNPC.Interruption.INpcPlanCodec None,journal:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal& Out,reason:System.String& Out) : System.Boolean Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal method TryQuarantine() : System.String Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal property Exists() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad property Failure() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad property IsAbsent() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad property IsLoaded() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad property IsUnreadable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad property Plan() : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Executing : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:7
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Manifested : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field NeedsAttention : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:11
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Observing : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Planned : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Provisioned : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Reconciling : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:8
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Refunded : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:10
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Reserved : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Routed : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Settled : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:9
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field Unspecified : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered property Claim() : TheConcernedCat.ConcernedNPC.Bodies.BodyClaim get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered property Next() : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered property Outcome() : TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered property WasAlreadyOver() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovery method Reconstruct(registry:TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry None,plan:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None,kind:TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind None,holder:System.String None,evidence:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence& In,policy:TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovery method Revalidate(plan:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None,evidence:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence& In,policy:TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Adopt(revalidated:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None,decision:TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome& In) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Advance(to:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase None,note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Begin(journal:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal None,opening:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None,written:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave& Out) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Conclude(established:System.Boolean None,carried:System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack> None,targetsDone:System.Int32 None,note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Intend(note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Reattach(now:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Record(proposed:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Resume(journal:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal None,recovered:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Stop(ending:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase None,note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun method Suspend(note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun property MayAct() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun property State() : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave property CompleteCopyPath() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave property Failure() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave property IsSaved() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState ctor(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,jobId:System.String None,phase:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase None,custody:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody None,reservations:System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Reservations.ReservationId> None,carried:System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack> None,targetsDone:System.Int32 None,targetsTotal:System.Int32 None,sourceKey:System.String None,destinationKey:System.String None,vehicleKey:System.String None,world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,attempt:System.Int32 None,note:System.String None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method CarriesTheSameLoadAs(other:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method CarriesTheSameWorkAs(other:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method IsLiveIn(now:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method Opening(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,jobId:System.String None,world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,targetsTotal:System.Int32 None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method WithCustody(custody:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody None,note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method WithHoldings(reservations:System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Reservations.ReservationId> None,carried:System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack> None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method WithPhase(phase:TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase None,note:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method WithProgress(targetsDone:System.Int32 None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method WithRoute(sourceKey:System.String None,destinationKey:System.String None,vehicleKey:System.String None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState method WithWorld(world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Attempt() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Carried() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property CarriedUnits() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Custody() : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property DestinationKey() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property HoldsAnything() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property IsNamed() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property IsUncertain() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Note() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Phase() : TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property Reservations() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Reservations.ReservationId> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property SourceKey() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property TargetsDone() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property TargetsTotal() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property VehicleKey() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState property World() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Interruption.NpcWorkInterruptionPolicy method Decide(interruption:TheConcernedCat.ConcernedNPC.Interruption.Interruption& In) : TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome Public, HideBySig
+TheConcernedCat.ConcernedNPC.Interruption.NpcWorkInterruptionPolicy property Instance() : TheConcernedCat.ConcernedNPC.Interruption.NpcWorkInterruptionPolicy get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole method Candidates(world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Planning.JobTarget> Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole method Sources(world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Planning.SourceStock> Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole property Availability() : TheConcernedCat.ConcernedNPC.Planning.INpcSourceAvailability get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole property Probe() : TheConcernedCat.ConcernedNPC.Work.INpcAreaProbe get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance property HasStep() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance property Progress() : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance property Reason() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance property Step() : TheConcernedCat.ConcernedNPC.Planning.PlannedStep get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance property Verdict() : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver method Abandon() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver method Done() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver method Failed() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver method For(order:TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder& In,role:TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole None,registry:TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry None) : TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver method Next(standingAt:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance Public, HideBySig
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver method Skipped() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Carrying() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property CompletedRounds() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property LastLook() : TheConcernedCat.ConcernedNPC.Work.AreaScanReport get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property LastRound() : TheConcernedCat.ConcernedNPC.Planning.JobReconciliation get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property LeftForAnotherRound() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Manifest() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Progress() : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Reason() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Rounds() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Shortfall() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property SkippedThisRound() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Steps() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Planning.PlannedStep> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver property Verdict() : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder ctor(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,jobId:System.String None,area:TheConcernedCat.ConcernedNPC.Work.INpcWorkArea None,world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,capacity:TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity None,actions:TheConcernedCat.ConcernedNPC.Planning.JobStepActions None,ceiling:TheConcernedCat.ConcernedNPC.Planning.JobManifest Optional, HasDefault=null,rounds:System.Int32 Optional, HasDefault=System.Int32:8,allowance:System.Int32 Optional, HasDefault=System.Int32:512,waits:System.Int32 Optional, HasDefault=System.Int32:300) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder field DefaultRounds : System.Int32 Public, Static, Literal, HasDefault = System.Int32:8
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder field DefaultWaits : System.Int32 Public, Static, Literal, HasDefault = System.Int32:300
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Actions() : TheConcernedCat.ConcernedNPC.Planning.JobStepActions get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Allowance() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Area() : TheConcernedCat.ConcernedNPC.Work.INpcWorkArea get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Capacity() : TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Ceiling() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Rounds() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property Waits() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder property World() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress field Do : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress field Finished : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress field Stopped : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress field Unspecified : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress field Waiting : TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec ctor(hoverName:System.String None,hoverVerb:System.String None,prefabCandidates:System.Collections.Generic.IReadOnlyList`1<System.String> None,scale:System.Single None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec property HoverName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec property HoverVerb() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec property PrefabCandidates() : System.Collections.Generic.IReadOnlyList`1<System.String> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec property Scale() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.INpcSourceAvailability method AvailableIn(containerKey:System.String None,item:System.String None,observed:System.Int32 None) : System.Int32 Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Planning.JobManifest ctor(lines:System.Collections.Generic.IEnumerable`1<TheConcernedCat.ConcernedNPC.Planning.JobManifestLine> None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.JobManifest method RequiredOf(item:System.String None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.JobManifest property Empty() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobManifest property IsEmpty() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobManifest property Lines() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Planning.JobManifestLine> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobManifest property TotalUnits() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobManifestLine ctor(item:System.String None,required:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.JobManifestLine method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.JobManifestLine property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobManifestLine property Item() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobManifestLine property Required() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field AreaInvalid : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field BudgetExhausted : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field NothingToDo : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field Planned : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field Refused : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field ShortOfMaterial : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field Unspecified : TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property Done() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property Failed() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property HasUnfinishedWork() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property IsComplete() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property LeftForAnotherRound() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property LeftOver() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property LookingFinished() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property NotReached() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property Outstanding() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property Planned() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobReconciliation property Skipped() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStep property Action() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStep property At() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStep property HasPlace() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStep property Index() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStep property Subject() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStep property Units() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStepActions ctor(collect:System.String None,service:System.String None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.JobStepActions property Collect() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStepActions property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobStepActions property Service() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget ctor(key:System.String None,epoch:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,at:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,action:System.String None,priority:System.Int32 None,needs:TheConcernedCat.ConcernedNPC.Planning.JobManifest None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.JobTarget ctor(key:System.String None,epoch:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,at:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,action:System.String None,priority:System.Int32 None,needs:TheConcernedCat.ConcernedNPC.Planning.JobManifest None,carries:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.JobTarget method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.JobTarget method Equals(other:TheConcernedCat.ConcernedNPC.Planning.JobTarget None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Planning.JobTarget method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.JobTarget method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Action() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property At() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Carries() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, Final, Virtual, HideBySig, VtableLayoutMask, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Key() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Needs() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Priority() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.JobTarget property Units() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity ctor(unitsPerTour:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity method FewestToursFor(units:System.Int32 None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity method Fits(manifest:TheConcernedCat.ConcernedNPC.Planning.JobManifest None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity method RoomFor(carried:System.Int32 None,units:System.Int32 None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity property IsUnlimited() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity property UnitsPerTour() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity property Unlimited() : TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.PlannedStep property IsCollect() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.PlannedStep property Moves() : TheConcernedCat.ConcernedNPC.Planning.JobManifest get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.PlannedStep property Source() : TheConcernedCat.ConcernedNPC.Planning.SourceStock get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.PlannedStep property Step() : TheConcernedCat.ConcernedNPC.Planning.JobStep get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.PlannedStep property Target() : TheConcernedCat.ConcernedNPC.Planning.JobTarget get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.PlannedStep property Tour() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.SourceStock ctor(container:TheConcernedCat.ConcernedNPC.Containers.INpcContainer None,lines:System.Collections.Generic.IEnumerable`1<TheConcernedCat.ConcernedNPC.Planning.StockLine> None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.SourceStock method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.SourceStock method UnitsOf(item:System.String None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.SourceStock property Container() : TheConcernedCat.ConcernedNPC.Containers.INpcContainer get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.SourceStock property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, Final, Virtual, HideBySig, VtableLayoutMask, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.SourceStock property IsUsable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.SourceStock property Key() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.SourceStock property Lines() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Planning.StockLine> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.SourceStock property Position() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.StockLine ctor(item:System.String None,units:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Planning.StockLine method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Planning.StockLine property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.StockLine property Item() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Planning.StockLine property Units() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Plugin ctor() Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Plugin field PluginGuid : System.String Public, Static, Literal, HasDefault = string:com.theconcernedcat.valheim.concernednpc
+TheConcernedCat.ConcernedNPC.Plugin field PluginName : System.String Public, Static, Literal, HasDefault = string:Concerned NPC
+TheConcernedCat.ConcernedNPC.Plugin field PluginVersion : System.String Public, Static, Literal, HasDefault = string:0.5.0
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId method Equals(other:TheConcernedCat.ConcernedNPC.Reservations.ReservationId None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId method For(jobId:System.String None,step:System.Int32 None) : TheConcernedCat.ConcernedNPC.Reservations.ReservationId Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId method TryParse(text:System.String None,id:TheConcernedCat.ConcernedNPC.Reservations.ReservationId& Out) : System.Boolean Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId property IsEmpty() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId property Step() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Reservations.ReservationId property Value() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths method TryResolveFile(purpose:System.String None,absolutePath:System.String& Out) : System.Boolean Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths property Root() : System.String get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.INpcRole property Body() : TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.INpcRole property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.INpcRole property Paths() : TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract method Admits(kind:TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract method ForPresentation() : TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract method ForWorker(prefabName:System.String None,zdoKeyPrefix:System.String None) : TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract method ForWorkerWithPresentation(prefabName:System.String None,zdoKeyPrefix:System.String None) : TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract method TryValidate(reason:System.String& Out) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract property Kind() : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract property PrefabName() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract property ZdoKeyPrefix() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind field Presentation : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind field Unspecified : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind field Worker : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity ctor(product:System.String None,role:System.String None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity method Equals(other:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity method TryParse(text:System.String None,identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity& Out) : System.Boolean Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity operator op_Equality(left:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,right:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : System.Boolean
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity operator op_Inequality(left:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,right:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : System.Boolean
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity property IsEmpty() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity property Product() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity property Role() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcIdentity property Value() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method BeginWorldLoad(forgotten:System.Int32& Out) : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method CurrentBodyKind(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method EndWorldLoad() : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method EnterMode(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,mode:TheConcernedCat.ConcernedNPC.Bodies.ActorMode None,jobId:System.String None) : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method ModeOf(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None) : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method Register(role:TheConcernedCat.ConcernedNPC.Roles.INpcRole None) : TheConcernedCat.ConcernedNPC.Roles.RoleRegistration Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method ReleaseBody(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,kind:TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind None,holder:System.String None) : TheConcernedCat.ConcernedNPC.Bodies.BodyClaim Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method ReleaseMode(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,jobId:System.String None) : TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method TryClaimBody(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,kind:TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind None,holder:System.String None) : TheConcernedCat.ConcernedNPC.Bodies.BodyClaim Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry method TryGetRole(identity:TheConcernedCat.ConcernedNPC.Roles.NpcIdentity None,role:TheConcernedCat.ConcernedNPC.Roles.INpcRole& Out) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry property CurrentWorld() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry property Identities() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Roles.NpcIdentity> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry property RoleCount() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry property Shared() : TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistration method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistration property Identity() : TheConcernedCat.ConcernedNPC.Roles.NpcIdentity get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistration property IsRegistered() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistration property Reason() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistration property Status() : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field DuplicateIdentity : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field DuplicatePrefabName : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:7
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field InvalidBodyContract : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field InvalidDataPaths : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field InvalidIdentity : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field NoRole : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field Registered : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field Unspecified : TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Routing.IStopObserver method Observe(stop:TheConcernedCat.ConcernedNPC.Routing.RouteStop& In) : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Routing.RouteStop method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Routing.RouteStop method Equals(other:TheConcernedCat.ConcernedNPC.Routing.RouteStop None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Routing.RouteStop method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Routing.RouteStop method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Routing.RouteStop property At() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Routing.RouteStop property IsReachable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Routing.RouteStop property IsValid() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Routing.RouteStop property Key() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Routing.RouteStop property Priority() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field Actionable : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field AlreadyDone : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field Gone : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field Moved : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field Refused : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field Unreachable : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field Unreadable : TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Routing.StopStatus field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field Completed : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field Nothing : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field Partial : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field Refused : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field Uncertain : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field Unspecified : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult method Record(permit:TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit None,world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,plan:TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan None,leftTheSource:System.Int32 None,arrivedAtTheTarget:System.Int32 None) : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult property Discrepancy() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult property Evidence() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult property IsSettled() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult property Moved() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult property Outcome() : TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision ctor(x:System.Single None,y:System.Single None,z:System.Single None,prefab:System.Int32 None,allowed:TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision property Allowed() : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision property Prefab() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision property X() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision property Y() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision property Z() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk ctor() Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method Allowance(position:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,prefab:System.Int32 None) : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method CanBeRemembered(position:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : System.Boolean Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method Clear() : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method Cycle(position:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,prefab:System.Int32 None) : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method MarkClean() : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method NextState(current:TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse None) : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method Restore(records:System.Collections.Generic.IEnumerable`1<TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision> None,dropped:System.Int32& Out) : TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk method SetAllowance(position:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,prefab:System.Int32 None,allowed:TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk property Count() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk property Decisions() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk property IsDirty() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit method IsValidIn(world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit method Issue(container:TheConcernedCat.ConcernedNPC.Containers.INpcContainer None,use:TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse None,world:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,refusal:TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal& Out) : TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit method TryConsume() : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit property ContainerKey() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit property Describe() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit property IsSpent() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit property Use() : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan method For(wanted:System.Int32 None,availableAtSource:System.Int32 None,roomAtDestination:System.Int32 None) : TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan Public, Static, HideBySig
+TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan property IsEmpty() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan property IsWhole() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan property Shortfall() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan property Units() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan property Wanted() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field Hazard : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:16
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field None : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field Occupied : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:8
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field OutsideArea : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:32
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field TooSteep : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field Unsupported : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field Water : TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Work.AreaRejection field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Work.AreaSample ctor(verdict:TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict None,ground:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,rejection:TheConcernedCat.ConcernedNPC.Work.AreaRejection None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Work.AreaSample property Ground() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaSample property IsStandable() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaSample property Rejection() : TheConcernedCat.ConcernedNPC.Work.AreaRejection get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaSample property Verdict() : TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict field NotLoaded : TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict field Rejected : TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict field Standable : TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict field Unreadable : TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field AreaInvalid : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field Empty : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field Exhausted : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field Found : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field Incomplete : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field NotLoaded : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field Unspecified : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property CountsAgree() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property Examined() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property Exhausted() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property IsConclusive() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property NotLoaded() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property Outcome() : TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property Rejected() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property TruncatedByBudget() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.AreaScanReport property Unreadable() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.INpcAreaProbe method Probe(point:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : TheConcernedCat.ConcernedNPC.Work.AreaSample Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.INpcWorkArea method Contains(point:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : System.Boolean Public, Virtual, HideBySig, VtableLayoutMask, Abstract
+TheConcernedCat.ConcernedNPC.Work.INpcWorkArea property BoundingCentre() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.INpcWorkArea property BoundingRadiusMetres() : System.Single get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.INpcWorkArea property Describe() : System.String get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.INpcWorkArea property Revision() : System.Int32 get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcPoint ctor(x:System.Single None,y:System.Single None,z:System.Single None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Work.NpcPoint method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcPoint method Equals(other:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Work.NpcPoint method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcPoint method HorizontalDistanceTo(other:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : System.Single Public, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcPoint method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcPoint method VerticalDistanceTo(other:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : System.Single Public, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcPoint property IsFinite() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcPoint property X() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcPoint property Y() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcPoint property Z() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch method Equals(other:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch method Matches(other:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch operator op_Equality(left:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,right:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch operator op_Inequality(left:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None,right:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch property IsUnknown() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch property Unknown() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, Static, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch property Value() : System.Guid get=Public, HideBySig, SpecialName set=-
+type TheConcernedCat.ConcernedNPC.Appearance.NpcBodyModel Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookColour Public, Abstract, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookMatch Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookOption Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookPalette Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookPlan Public, Abstract, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookRequest Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookRgb Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Bodies.ActorMode Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Bodies.BodyClaim Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Bodies.BodyLease Public, Sealed, BeforeFieldInit : System.Object interfaces=System.IDisposable
+type TheConcernedCat.ConcernedNPC.Body.Dressing.NpcCustomizationPalette Public, Abstract, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Body.INpcBodyMotor Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Body.Keepsakes.NpcKeepsake Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcBody Public, Sealed, BeforeFieldInit : UnityEngine.MonoBehaviour interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Body.NpcBodyMind Public, Sealed, BeforeFieldInit : BaseAI interfaces=IUpdateAI
+type TheConcernedCat.ConcernedNPC.Body.NpcBodyPresence Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Body.NpcBodyTally Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcDroppedItem Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcPresentationBody Public, Abstract, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Containers.INpcContainer Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped
+type TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Custody.NpcMaterial Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterial>
+type TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack>
+type TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.INpcPlanCodec Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.Interruption Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovery Public, Abstract, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Interruption.NpcWorkInterruptionPolicy Public, Sealed, BeforeFieldInit : System.Object interfaces=TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy
+type TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=TheConcernedCat.ConcernedNPC.Routing.IStopObserver
+type TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Keepsakes.NpcKeepsakeSpec Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.INpcSourceAvailability Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.JobManifest Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.JobManifestLine Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Planning.JobReconciliation Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.JobStep Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.JobStepActions Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.JobTarget Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Planning.JobTarget>,TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped
+type TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.PlannedStep Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Planning.SourceStock Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped
+type TheConcernedCat.ConcernedNPC.Planning.StockLine Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Plugin Public, Sealed, BeforeFieldInit : BepInEx.BaseUnityPlugin interfaces=
+type TheConcernedCat.ConcernedNPC.Reservations.ReservationId Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Reservations.ReservationId>
+type TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Roles.INpcRole Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Roles.NpcBodyKind Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Roles.NpcIdentity Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Roles.NpcIdentity>
+type TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Roles.RoleRegistration Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Routing.IStopObserver Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Routing.RouteStop Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Routing.RouteStop>
+type TheConcernedCat.ConcernedNPC.Routing.StopStatus Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Work.AreaRejection Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Work.AreaSample Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Work.AreaScanReport Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
+type TheConcernedCat.ConcernedNPC.Work.INpcAreaProbe Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Work.INpcWorkArea Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=
+type TheConcernedCat.ConcernedNPC.Work.NpcPoint Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Work.NpcPoint>
+type TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch>

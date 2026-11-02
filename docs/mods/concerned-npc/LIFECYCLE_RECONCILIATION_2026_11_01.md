@@ -1,8 +1,9 @@
 # #372 lifecycle/persistence reconciliation — 2026-11-01
 
 Reviewed baseline: main 523c895ca12b61623df543e28cc589c1438e276b.
-This issue branch changes tests and this record only. No native source, keys,
-package pins, worker runtime, validator or game profile is changed.
+This issue branch changes API tests, the controlled gate and this record. No
+shipped native source, keys, package pins, worker runtime, validator or game
+profile is changed. The negative native-helper plant restores its source bytes.
 
 ## Requirement coverage before closure
 
@@ -15,7 +16,7 @@ package pins, worker runtime, validator or game profile is changed.
 | Factory takes an active BodyLease and checks immediately before construction | NpcWorkerPrefabFactory.TrySpawn takes BodyLease and calls NpcBodyBuildGate.May before its single Instantiate; BodyInstantiationAuditTests pin the last active check and refusal ordering. | MET for that library factory; NOT enforced on legacy product spawning |
 | Consumer instantiation confined, with planted violation caught | check_library_consumers_do_not_bypass_the_arbiter refuses ActorModeOwner, not Instantiate. Library engine-write census and BodyInstantiationAuditTests scan the library. Foreman's runtime audit pins its existing product-local Instantiate. Neither is a general consumer body-factory confinement rule. | NOT MET; do not close on a differently scoped audit |
 | Public type namespace escape fixed | PublicSurfaceTests checks exported global stubs separately and compares every non-stub/non-test exported type, not just the library namespace prefix. | Already met |
-| Public members pinned, not only type names | This branch adds PublicMemberSurfaceTests plus the reviewed 819-row fixture for 97 actually linked library types. It includes constructors, methods/operators, parameter names/types/defaults, accessor visibility, fields/enum values, interfaces, generic constraints and events. A negative case changes an existing type's parameter/default/accessor. | Improved; rendering-only sources excluded by the test project still require native-assembly member coverage |
+| Public members pinned, not only type names | This branch adds PublicMemberSurfaceTests plus the reviewed 819-row fixture for 97 actually linked library types. It includes constructors, methods/operators, parameter names/types/defaults, accessor visibility, fields/enum values, interfaces, generic constraints and events. A negative case changes an existing type's parameter/default/accessor. | MET for current public-member contract: the linked 819-row guard is complemented by a mandatory native metadata guard, 868 rows / 102 exported types, including rendering helpers and real inherited interfaces |
 | Authoritative gate green | Exact committed issue gate is recorded in the shared handoff, not inferred from an old main gate. | See handoff receipt |
 
 ## Production persistence trace
@@ -59,7 +60,50 @@ is introduced to avoid that ownership boundary.
 ## Outcome
 
 #372 remains OPEN. Its persistence blocker is resolved in current source, and the
-member guard now catches changes within the linked public types. Complete body
-factory adoption, consumer confinement/plant proof and rendering-helper public
-member coverage remain. This report does not approve an installed candidate or
+member guards now cover both the linked public types and the compiled native
+assembly. Complete body factory adoption and consumer confinement/plant proof
+remain. This report does not approve an installed candidate or
 substitute a source test for gameplay, compiler provenance or package identity.
+
+## Complete compiled API contract
+
+`NativePublicMemberSurfaceTests` reads the actual `ConcernedNPC/bin/<configuration>/net48/TheConcernedCat.ConcernedNPC.dll`
+using `MetadataLoadContext`. It does not execute Unity, game, BepInEx or plugin
+code. Its resolver reads assembly identities because publicized game DLL
+filenames differ from the assembly names their signatures reference. No reference
+binary is renamed, copied, committed or packaged by this check.
+
+The reviewed `Fixtures/native-public-members.txt` has 868 rows covering all 102
+exported types, including NpcFigureDresser, NpcWorkerDresser,
+NpcCustomizationPalette, NpcKeepsake and Plugin. It also records NpcBodyMind's
+actual IUpdateAI interface, which the source-linked BaseAI stub cannot expose.
+Every old linked row appears in the native contract except the intentionally
+more complete real NpcBodyMind interface row. Namespace escapes fail separately.
+The same formatter pins methods, constructors, fields/constants, properties,
+events, operators, parameter defaults and generic constraints. This contract
+covers declared public members and visible type metadata, not implementation
+behavior, method bodies, custom attributes or an installed consumer's execution.
+
+`pwsh ./scripts/verify.ps1` enables this test after its native build and selects
+the matching Debug/Release output; it restores the caller's environment in
+finally. A missing assembly or metadata dependency refuses rather than skipping.
+Plain game-free test runs visibly skip this one native test, preserving portable
+CI without claiming coverage of a native binary. The source-linked checks still
+run there.
+
+Commands, from this worktree:
+
+- Normal controlled gate: `pwsh ./scripts/verify.ps1` (under the shared build lock).
+- Existing native-output recheck: `pwsh ./scripts/check-npc-native-api.ps1`.
+- Negative proof: `pwsh ./scripts/test-npc-native-api-plant.ps1`. This acquires
+  the same machine-wide mutex, temporarily changes NpcFigureDresser.VerifyOnce
+  to accept an optional int defaulting to 17, builds through build.ps1, requires
+  the exact changed signature to be rejected, restores original source bytes
+  in finally, rebuilds, and requires the baseline to pass. No profile is imported
+  or game operated. A failed build is never counted as a caught API violation.
+
+For an intentional API change, review consumer/version implications first.
+The failed comparison emits ACTUAL_BEGIN/ACTUAL_END contract rows; compare them
+with the fixture and update only after reviewing the differences. No command
+silently blesses a new binary. The full exact-head gate and plant evidence are
+recorded in the integration handoff.
