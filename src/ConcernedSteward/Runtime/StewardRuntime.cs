@@ -322,6 +322,13 @@ internal sealed class StewardRuntime
     {
         if (!_settings.RuntimeEnabled.Value || !StewardWorldFacts.WorldIsUp)
         {
+            // This branch precedes the loop's live safety checks. Do not
+            // retain a paused cursor across runtime disablement/world loss.
+            if (_loop.IsOrderPaused)
+            {
+                _loop.Stop("The paused job stopped because the runtime or world is unavailable.");
+                _motion.Stop(); // existing adapter refuses invalid/unowned bodies
+            }
             // Nothing of hers is shown while the runtime is off.
             _presentation.YieldToWorker();
             return;

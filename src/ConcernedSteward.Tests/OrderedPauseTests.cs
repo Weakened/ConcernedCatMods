@@ -127,6 +127,24 @@ public sealed partial class StewardMaintenancePlanTests
         Assert.Empty(f.Fires.Fed);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stop_or_attention_outranks_an_existing_pause_without_losing_held_fuel(bool attention)
+    {
+        using var folder=new TemporaryFolder(); var context=Open(folder.Path);
+        var f=new StewardFixture(plan:context.Plan,sharedDriver:true,adoption:context.Adoption);
+        f.Thresholds=new MaintenanceThresholds(600,600,10);
+        context.Plan.OnWorldLoaded(context.Scope,Evidence(context.World),f.Pack,Wood);
+        f.AddFire("fire-1",fuel:5f);
+        for(int i=0;i<50 && f.Loop.Phase!=UpkeepPhase.ToTarget;i++) f.Run();
+        Assert.True(f.Loop.PauseForOrder(out _));
+        if(attention) f.Loop.RequireAttention("inspect this job"); else f.Loop.Stop("runtime disabled");
+        Assert.False(f.Loop.IsOrderPaused); Assert.False(f.Loop.ResumeOrder(out _));
+        Assert.Equal(45,f.Depot.Count(Wood)); Assert.Equal(5,f.Pack.Count(Wood));
+        Assert.Empty(f.Fires.Fed); f.AssertConserved(50);
+    }
+
     private sealed class PauseNoteCodec : INpcPlanCodec
     {
         private readonly StewardPlanCodec _inner=new(StewardNpcRole.Id,StewardRole.UpkeepJobId);
