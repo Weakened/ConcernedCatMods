@@ -103,9 +103,20 @@ try {
         # The TRX files name every test and its outcome per assembly, which is
         # what the console summary alone could not do once it had scrolled away.
         $testResults = Join-Path $runDirectory "TestResults"
-        $testLog = & dotnet test $solution --configuration $Configuration --no-build --nologo `
-            --logger "trx" --results-directory $testResults 2>&1
-        $testExit = $LASTEXITCODE
+        # #372: game-free CI skips the native metadata contract; this gate has
+        # just built the real library, so its complete API check is mandatory.
+        $priorNativeApi = $env:CC_NPC_NATIVE_API
+        $priorNativeConfiguration = $env:CC_NPC_NATIVE_CONFIGURATION
+        try {
+            $env:CC_NPC_NATIVE_API = "1"
+            $env:CC_NPC_NATIVE_CONFIGURATION = $Configuration
+            $testLog = & dotnet test $solution --configuration $Configuration --no-build --nologo `
+                --logger "trx" --results-directory $testResults 2>&1
+            $testExit = $LASTEXITCODE
+        } finally {
+            $env:CC_NPC_NATIVE_API = $priorNativeApi
+            $env:CC_NPC_NATIVE_CONFIGURATION = $priorNativeConfiguration
+        }
         $testLog | Set-Content -Path (Join-Path $runDirectory "tests.log") -Encoding utf8
         $testLog | ForEach-Object { Write-Host $_ }
         if ($testExit -ne 0) {
