@@ -77,16 +77,11 @@ internal enum NpcActivityPriority
 /// programmer's error that shows up as an NPC that will not change task rather
 /// than as a silently corrupted plan.
 ///
-/// <b>Only one half of that guard does any work today, and saying so is the
-/// point.</b> An earlier version of this paragraph claimed symmetric protection; a
-/// review showed it exists on one side only. <c>Unspecified</c> is zero, which is
-/// below every rung, so <c>arriving &gt; running</c> already refuses an unnamed
-/// arrival on its own - deleting the arriving half of
-/// <see cref="NpcActivityArbiter.MayInterrupt"/>'s guard leaves every test green,
-/// while deleting the running half turns them red. The arriving half is kept as
-/// defence against a renumbering that moved <c>Unspecified</c> off the bottom, so
-/// the numbering it leans on is what a test pins:
-/// <c>Unspecified_is_numbered_below_every_rung_so_the_comparison_alone_refuses_it</c>.
+/// <b>Only named rungs participate.</b> An enum can contain an arbitrary
+/// integer. Values above lifecycle safety must not outrank safety, and negative
+/// values must not make an unknown running activity yield to every named one.
+/// Both operands are checked against the seven named activities before comparing
+/// them. Zero remains unnamed regardless of its numeric position.
 ///
 /// <b>What an interruption preserves, and how that is guaranteed rather than
 /// intended.</b> Everything: inventory, reservations, custody, the plan, the
@@ -109,19 +104,18 @@ internal static class NpcActivityArbiter
     /// <paramref name="running"/>.</summary>
     internal static bool MayInterrupt(NpcActivityPriority running, NpcActivityPriority arriving)
     {
-        // The running half of this guard is the one that does the work: without
-        // it, an activity nobody named would be displaced by anything at all,
-        // including while it was making the record safe again. The arriving half
-        // is already implied by the comparison below while Unspecified is the
-        // lowest value, and is kept as defence against a renumbering; see the
-        // type's own summary, which used to claim more than this.
-        if (running == NpcActivityPriority.Unspecified || arriving == NpcActivityPriority.Unspecified)
+        if (!IsNamed(running) || !IsNamed(arriving))
         {
             return false;
         }
 
         return arriving > running;
     }
+
+    private static bool IsNamed(NpcActivityPriority priority) => priority is
+        NpcActivityPriority.CampBorderStroll or NpcActivityPriority.SocialIdle or
+        NpcActivityPriority.BackgroundMaintenance or NpcActivityPriority.RequiredRoleWork or
+        NpcActivityPriority.PlayerOrder or NpcActivityPriority.Danger or NpcActivityPriority.LifecycleSafety;
 
     /// <summary>Hands the body from one activity to another, leaving the plan
     /// exactly as it stands and noting why.
@@ -138,8 +132,8 @@ internal static class NpcActivityArbiter
             return NpcActivityHandover.Refused(
                 running,
                 arriving,
-                running == NpcActivityPriority.Unspecified || arriving == NpcActivityPriority.Unspecified
-                    ? "one of the two activities did not say what it was, and an activity nobody named neither "
+                !IsNamed(running) || !IsNamed(arriving)
+                    ? "one of the two activities has no recognized priority, and an activity nobody named neither "
                         + "takes a body nor gives one up"
                     : "what he is doing already matters at least as much as what is asking for him",
                 run?.State);
