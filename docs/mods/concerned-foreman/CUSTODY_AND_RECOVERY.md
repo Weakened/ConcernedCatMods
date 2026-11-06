@@ -311,6 +311,9 @@ inventory.
 | `cf_settle resolve <request> mine\|his` | a person's answer about an unsettled tool handover: `mine` means you have it, `his` means he does | settlement authority |
 | `cf_settle give axe\|hammer` | a tool handover (§5). Hold the tool and stand within 4 m of him | work authority; a writable record |
 | `cf_settle takeback [axe\|hammer]` | a return of every tool the record says he holds (of that kind) | as above |
+| `cf_settle preview axe\|hammer` | nothing (#295 S4): names the tool of that kind in your hand, with its quality and durability, or says it is broken | nothing; read-only |
+| `cf_settle tools` | nothing: lists the tools the record says he holds | nothing; read-only |
+| `cf_settle quest view` | nothing: Tools of the Trade's status (`quest status` may also recruit; `view` never does) | nothing; read-only |
 | `cf_settle release` | hands you everything the record says he still carries for orders that have **ended**, and for an order **holding for you**, as ordinary transfers. Each hand-over is written to the record as it goes, which is the only thing that ends a hold order (review R2, M1). Refused while any other order is still open, so nothing is taken from under a running job | as above |
 
 - **Settlement authority:** `[Settlement] SettlementRuntimeEnabled = true`, and this peer is the host.

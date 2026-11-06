@@ -36,6 +36,21 @@ internal static class ThorsteinTalk
     internal const string WaitingOnSettlement =
         "Both tools, and good ones. Show me where the settlement is and I'll get to work.";
 
+    internal const string WaitingOnRecords =
+        "Both tools, and good ones. But your settlement's records can't be read right now, and I'll not be " +
+        "taken on over a smudged page.";
+
+    internal const string WaitingOnUnsavedRecords =
+        "Both tools, and good ones. Your settlement's records won't save just now; once they do, I'm yours.";
+
+    internal const string WaitingOnAuthority =
+        "Both tools, and good ones. Only the one hosting this world can take me on.";
+
+    internal const string WaitingOnHandover =
+        "One of those handovers hasn't settled. Let's square it first - I'll not work on a guess.";
+
+    internal const string WaitingBriefly = "Both tools, and good ones. Give me a moment.";
+
     /// <summary>The remarks after he is taken on, by stable key.</summary>
     internal static readonly IReadOnlyDictionary<string, string> Remarks = new Dictionary<string, string>
     {
@@ -57,7 +72,12 @@ internal static class ThorsteinTalk
     }
 
     /// <summary>The line for a press of the use key, or null for none.</summary>
-    internal static string? Line(ThorsteinQuestStage stage, bool axeHeld, bool hammerHeld, DialogueRotation rotation)
+    /// <param name="wait">Why recruitment is waiting, from
+    /// <see cref="ToolsOfTheTrade.Decide"/>: with both tools held, the line
+    /// names that cause rather than guessing one.</param>
+    internal static string? Line(
+        ThorsteinQuestStage stage, bool axeHeld, bool hammerHeld, DialogueRotation rotation,
+        ToolsOfTheTradeWait wait = ToolsOfTheTradeWait.None)
     {
         switch (stage)
         {
@@ -72,9 +92,28 @@ internal static class ThorsteinTalk
                     return NeedsAxe;
                 }
 
-                // Both held but not yet taken on: the recruitment is waiting on
-                // something the settlement must fix, which cf_settle quest names.
-                return axeHeld ? WaitingOnSettlement : BothTools;
+                if (!axeHeld)
+                {
+                    return BothTools;
+                }
+
+                // Both held but not yet taken on: say the real reason, the one
+                // ToolsOfTheTrade.Decide gave (S3 review).
+                switch (wait)
+                {
+                    case ToolsOfTheTradeWait.NoSettlementArea:
+                        return WaitingOnSettlement;
+                    case ToolsOfTheTradeWait.RecordsReadOnly:
+                        return WaitingOnRecords;
+                    case ToolsOfTheTradeWait.RecordsUnsaved:
+                        return WaitingOnUnsavedRecords;
+                    case ToolsOfTheTradeWait.NoAuthority:
+                        return WaitingOnAuthority;
+                    case ToolsOfTheTradeWait.HandoverUncertain:
+                        return WaitingOnHandover;
+                    default:
+                        return WaitingBriefly;
+                }
 
             case ThorsteinQuestStage.Recruited:
                 return rotation.TryNext(null, DialogueContext.Empty, out DialogueLine line)
