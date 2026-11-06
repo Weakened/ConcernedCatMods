@@ -4398,12 +4398,16 @@ def _destruction_receiver(text: str, start: int) -> str:
 #   body has held nothing for any length of time.
 # - Plugin.cs: the plugin's own container facade component in OnDestroy. Unity's
 #   static, on a component this plugin created; no body and no network object.
+# - Ui/Companions/GunnarRecruitmentPanel.cs: the panel and button GameObjects the
+#   panel itself created, in Dispose. Unity's qualified static; UI only, no body,
+#   no network object (#460).
 TEAMSTER_DESTRUCTION_SITES = {
     "Adapters/Workers/GunnarCollectionRuntime.cs": 1,
     "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
     "Adapters/Workers/TeamsterWorkerBody.cs": 1,
     "Adapters/Workers/TeamsterWorkerPrefab.cs": 6,
     "Plugin.cs": 1,
+    "Ui/Companions/GunnarRecruitmentPanel.cs": 2,
 }
 
 # How many of those destructions are routed through an INSTANCE rather than
