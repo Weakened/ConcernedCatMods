@@ -14,6 +14,7 @@ exactly that rule's registration removed and requires the same plant to pass:
 that is the proof the escape existed before the rule and that no other rule
 catches it. tearDown restores every file and re-runs the clean validator.
 """
+import importlib.util
 import os
 import subprocess
 import sys
@@ -160,6 +161,32 @@ class FellingAudit(unittest.TestCase):
         self.append_to(SCOPES, "\ninternal static class ZzHandler\n{\n"
                        "    internal const string Name = \"RPC_Damage\";\n}\n")
         self.assert_refused("RPC_Damage named in code")
+
+    # --- the summary counts a shrunken scope (#498) ------------------------------------------------
+
+    def test_a_scope_failure_is_counted_in_the_summary(self):
+        # The validator prints its summaries only when it passes, so this calls the
+        # audit itself: the line it returns must not say "(0 violations)" beside a
+        # failure the scope reported.
+        csproj = os.path.join(FOREMAN, "ConcernedForeman.csproj")
+        with open(csproj, "rb") as handle:
+            original = handle.read()
+        old, new = rb'Include="..\Shared\Ladders\**\*.cs"', rb'Include="..\Shared\*.cs"'
+        self.assertEqual(1, original.count(old), "pinned text moved in the project file")
+        try:
+            with open(csproj, "wb") as handle:
+                handle.write(original.replace(old, new, 1))
+            spec = importlib.util.spec_from_file_location("_zz_validate_repo_498", VALIDATOR)
+            validator = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(validator)
+            errors = []
+            summary = validator.check_foreman_felling_scope(errors)
+        finally:
+            with open(csproj, "wb") as handle:
+                handle.write(original)
+        self.assertTrue(any("a shared include this audit cannot follow" in e for e in errors), errors)
+        self.assertEqual(1, len(summary), summary)
+        self.assertNotIn("(0 violations)", summary[0], "the scope failure was not counted: " + summary[0])
 
 
 if __name__ == "__main__":
