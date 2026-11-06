@@ -199,7 +199,10 @@ public sealed class NpcPlanRun
     /// safe resume point it was a moment ago - which is the property the ordering
     /// rule at the top of this file buys, and the reason an urgent interruption
     /// does not have to wait on a disk.</summary>
-    public NpcPlanSave Suspend(string? note) => Record(_state.WithPhase(_state.Phase, note));
+    public NpcPlanSave Suspend(string? note) =>
+        NpcActivityArbiter.SuspendRoleWork(this, note);
+
+    internal NpcPlanSave WriteSuspensionNote(string? note) => Record(_state.WithPhase(_state.Phase, note));
 
     /// <summary>Adopts a revalidated state after a reconstruction, once a
     /// recovery decision has been made about it.

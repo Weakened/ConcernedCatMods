@@ -207,6 +207,36 @@ internal sealed class UpkeepLoop
     private int _jobFetched;
     private string _attention = string.Empty;
     private float _now;
+    private readonly UpkeepActiveClock _activeClock = new();
+    private bool _orderPaused;
+    private bool _pauseStopNeeded;
+    public bool IsOrderPaused => _orderPaused;
+
+    public bool PauseForOrder(out string refusal)
+    {
+        refusal = string.Empty;
+        if (_orderPaused) return true;
+        if (!IsWorking || _plan == null || !_plan.TryPauseForOrder(out refusal))
+        {
+            if (refusal.Length == 0) refusal = "There is no active maintenance work to pause.";
+            return false;
+        }
+        _orderPaused = true; _pauseStopNeeded = true;
+        return true;
+    }
+
+    public bool ResumeOrder(out string refusal)
+    {
+        refusal = string.Empty;
+        if (!_orderPaused || _phase == UpkeepPhase.NeedsAttention || (_plan != null && _plan.IsBlocked))
+        {
+            refusal = "No paused safe job can resume; inspect cs_steward status.";
+            return false;
+        }
+        _orderPaused = false;
+        return true;
+    }
+
     private string _shortSubject = string.Empty;
 
     /// <summary>Builds the loop.
@@ -285,8 +315,11 @@ internal sealed class UpkeepLoop
     public RoundOutcome? LastOutcome { get; private set; }
 
     /// <summary>Advances the trip by at most one step.</summary>
-    public void Tick(in UpkeepTick tick)
+    public void Tick(in UpkeepTick input)
     {
+        bool clockValid = _activeClock.Read(input.Now, _orderPaused, out float now);
+        var tick = new UpkeepTick(now, input.TendingEnabled, input.Authority, input.Scope,
+            input.Fires, input.Depot, input.Carrier, input.Motion, input.PlanWorld, input.Thresholds);
         _now = tick.Now;
         if (_phase == UpkeepPhase.NeedsAttention)
         {
@@ -306,6 +339,15 @@ internal sealed class UpkeepLoop
             // and the ledger keeps saying so. The next tick that is allowed
             // resumes from Idle, which deposits before doing anything else.
             StopAndIdle(tick, refusal);
+            return;
+        }
+
+        // Live safety checks above outrank the player's pause. A pause never
+        // abandons the driver, releases reservations or restarts the trip.
+        if (_orderPaused || !clockValid)
+        {
+            if (_pauseStopNeeded || !clockValid) tick.Motion.Stop();
+            _pauseStopNeeded = false;
             return;
         }
 
@@ -2034,6 +2076,8 @@ internal sealed class UpkeepLoop
     /// — costs one walk back to the chest and nothing else.</summary>
     public void OnWorldLoaded(IItemStorePort? carrier, string? fuelItemName)
     {
+        _orderPaused = _pauseStopNeeded = false;
+        _activeClock.Reset();
         // A direct reload callback must not retain an in-memory driver cursor.
         // The durable plan and measured pack are the only restart authorities;
         // replaying a pre-reload step after the remainder is returned would
@@ -2176,6 +2220,7 @@ internal sealed class UpkeepLoop
     /// ledger keeps saying so.</summary>
     public void Stop(string reason)
     {
+        _orderPaused = _pauseStopNeeded = false;
         _driver?.Abandon();
         _driver = null;
         _hasActiveStep = false;
@@ -2284,6 +2329,7 @@ internal sealed class UpkeepLoop
 
     private void StopAndIdle(in UpkeepTick tick, string reason)
     {
+        _orderPaused = _pauseStopNeeded = false;
         _driver?.Abandon();
         _driver = null;
         _hasActiveStep = false;
@@ -2333,6 +2379,7 @@ internal sealed class UpkeepLoop
     /// out is <see cref="Acknowledge"/>.</summary>
     private void Halt(string reason)
     {
+        _orderPaused = _pauseStopNeeded = false;
         _driver?.Abandon();
         _driver = null;
         _hasActiveStep = false;
