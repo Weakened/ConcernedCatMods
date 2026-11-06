@@ -38,6 +38,14 @@ public sealed class GunnarRecruitmentTests : IDisposable
         Assert.Equal(GunnarRecruitmentResult.Stale,flow.Confirm(r,Guid.NewGuid(),p!.Token,Cart(),true));
         Assert.False(Record().IsRecruited);
     }
+    [Fact] public void AChangedCartLabelNeedsANewNamedConfirmation()
+    {
+        var flow=new GunnarRecruitment(); var r=Intro(); var cart=Cart();
+        flow.Prepare(r,_epoch,cart,true,out var prompt);
+        var renamed=new GunnarCartChoice(cart.Key,"A different displayed name",GunnarCartCheck.Usable);
+        Assert.Equal(GunnarRecruitmentResult.Stale,flow.Confirm(r,_epoch,prompt!.Token,renamed,true));
+        Assert.False(Record().IsRecruited);
+    }
     [Fact] public void TwoSimultaneousAssignmentsCannotReplaceTheNamedPrompt()
     {
         var flow=new GunnarRecruitment(); var r=Intro();

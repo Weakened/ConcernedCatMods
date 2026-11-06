@@ -54,7 +54,7 @@ internal sealed class GunnarRecruitment
         {
             if (_pending==null || token==Guid.Empty || _pending.Token!=token || record==null ||
                 !_pending.Scope.Equals(record.Scope) || !_pending.Cart.IsFromEpoch(epoch) ||
-                !_pending.Cart.Equals(freshExactCart.Key))
+                !_pending.Cart.Equals(freshExactCart.Key) || !string.Equals(_pending.Label,freshExactCart.Label,StringComparison.Ordinal))
             { _pending=null; return GunnarRecruitmentResult.Stale; }
             GunnarRecruitmentResult eligible=Eligibility(record,epoch,freshExactCart,existingHaulingAuthorityGranted);
             if (eligible!=GunnarRecruitmentResult.PendingConfirmation) { _pending=null; return eligible; }

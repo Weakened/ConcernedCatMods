@@ -15,6 +15,7 @@
     <!-- #457: run the actual native-query adapter against deterministic API stubs.
          The product build still proves it compiles against the installed game. -->
     <Compile Include="..\ConcernedTeamster\Adapters\Companions\GunnarKeepsakeEnvironment.cs" LinkBase="NativeEnvironment" />
+    <Compile Include="..\ConcernedTeamster\Adapters\Workers\GunnarRecruitmentCartPort.cs" LinkBase="NativeRecruitment" />
     <!-- #456: game-free companion identity and scoped quest persistence. -->
     <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />

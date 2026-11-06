@@ -32,6 +32,7 @@ public sealed class Plugin : BaseUnityPlugin
     private Adapters.Interop.HaulPanelBridge? _haulPanel;
     private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;
     private Adapters.Companions.GunnarKeepsakeRuntime? _gunnarKeepsake;
+    private Adapters.Companions.GunnarRecruitmentRuntime? _gunnarRecruitment;
 
     private static readonly IReadOnlyDictionary<string, object> NoCapabilities =
         new Dictionary<string, object>();
@@ -90,6 +91,7 @@ public sealed class Plugin : BaseUnityPlugin
         // with Gunnar in it keeps his body; it touches no cart until
         // Workers/GunnarHaulingEnabled is on and a cart is explicitly assigned.
         _hauling = Adapters.Workers.GunnarHaulingRuntime.Install(gameObject, settings, Logger);
+        _gunnarRecruitment = Adapters.Companions.GunnarRecruitmentRuntime.Install(_gunnarCompanion, () => _hauling?.Service, Logger);
 
         // #381: Gunnar's opt-in collection runtime — the call site of the owner's
         // pickup carve-out. Always installed for the same reason the hauling
@@ -156,6 +158,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        _gunnarRecruitment?.Forget();
         _gunnarKeepsake?.Forget();
         _gunnarCompanion?.Forget();
         _haulCapability?.Shutdown();
@@ -182,6 +185,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         _gunnarCompanion?.Tick();
         _gunnarKeepsake?.Tick();
+        _gunnarRecruitment?.Tick();
         bool worldIsUp = Adapters.Workers.GunnarHaulingRuntime.WorldIsUp;
         if (_haulWorldWasUp && !worldIsUp)
         {
