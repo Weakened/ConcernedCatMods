@@ -30,6 +30,8 @@ public sealed class Plugin : BaseUnityPlugin
     private Adapters.Workers.ContainerPermissionRuntime? _containers;
     private Adapters.Interop.HaulCapabilityPublisher? _haulCapability;
     private Adapters.Interop.HaulPanelBridge? _haulPanel;
+    private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;
+    private Adapters.Companions.GunnarKeepsakeRuntime? _gunnarKeepsake;
 
     private static readonly IReadOnlyDictionary<string, object> NoCapabilities =
         new Dictionary<string, object>();
@@ -53,6 +55,12 @@ public sealed class Plugin : BaseUnityPlugin
         // CT-032: write the translator template and load any teamster-strings.tsv
         // overrides before UI strings are resolved; English is the fallback.
         Adapters.LocalizationFiles.Initialize(Logger);
+
+        // #456: narrative config/state is independent of telemetry and workers.
+        _gunnarCompanion = Adapters.Companions.GunnarCompanionAdapter.Install(Config, Logger);
+        _gunnarKeepsake = Adapters.Companions.GunnarKeepsakeRuntime.Install(_gunnarCompanion,
+            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,
+            () => _hauling?.BoundBody != null, Logger);
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironmentBanner();
@@ -148,6 +156,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        _gunnarKeepsake?.Forget();
+        _gunnarCompanion?.Forget();
         _haulCapability?.Shutdown();
         // Collection first: it acts through the hauling runtime's bound body, so
         // it stands down before the thing that owns that body does.
@@ -170,6 +180,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Update()
     {
+        _gunnarCompanion?.Tick();
+        _gunnarKeepsake?.Tick();
         bool worldIsUp = Adapters.Workers.GunnarHaulingRuntime.WorldIsUp;
         if (_haulWorldWasUp && !worldIsUp)
         {
