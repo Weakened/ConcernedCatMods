@@ -242,7 +242,7 @@ public sealed class GunnarCompanionRecordTests : IDisposable
             string source = File.ReadAllText(file).Replace("\r\n","\n");
             if (Path.GetFileName(file)=="Plugin.cs")
             {
-                // Allow exactly the isolated record/keepsake lifecycle sites. A utility condition,
+                // Allow exactly the isolated record/keepsake/recruitment lifecycle sites. A utility condition,
                 // hidden second call or a moved/omitted hook still fails.
                 foreach (string hook in new[] {
                     "private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;",
@@ -254,13 +254,18 @@ public sealed class GunnarCompanionRecordTests : IDisposable
                     "            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,\n"+
                     "            () => _hauling?.BoundBody != null, Logger);",
                     "_gunnarKeepsake?.Tick();",
-                    "_gunnarKeepsake?.Forget();" })
+                    "_gunnarKeepsake?.Forget();",
+                    "private Adapters.Companions.GunnarRecruitmentRuntime? _gunnarRecruitment;",
+                    "_gunnarRecruitment = Adapters.Companions.GunnarRecruitmentRuntime.Install(_gunnarCompanion, () => _hauling?.Service, Logger);",
+                    "_gunnarRecruitment?.Tick();",
+                    "_gunnarRecruitment?.Forget();" })
                 {
                     Assert.Equal(1, source.Split(hook,StringSplitOptions.None).Length-1);
                     source=source.Replace(hook,"");
                 }
                 Assert.DoesNotContain("_gunnarCompanion",source);
                 Assert.DoesNotContain("_gunnarKeepsake",source);
+                Assert.DoesNotContain("_gunnarRecruitment",source);
             }
             Assert.DoesNotContain("GunnarCompanion", source);
             Assert.DoesNotContain("TheConcernedCat.Companions", source);
