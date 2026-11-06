@@ -19,6 +19,7 @@ import re
 import struct
 import sys
 import tomllib
+import unicodedata
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -3586,6 +3587,96 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
     ]
 
 
+# D19 (owner decision 2026-10-31, #282): Thorstein may fell the four
+# allowlisted small trees through vanilla's Destructible.Damage - one hit per
+# call, in Runtime/Collection/WorldFellingPort.cs and nowhere else. TreeBase and
+# TreeLog were decided but are UNUSED (Valheim 1.0.21's small trees are
+# Destructible), so neither may be named; nor may the instant kill, a direct
+# damage application, or the game's damage handler by name.
+#
+# The scope is the WHOLE product - every folder of src/ConcernedForeman less
+# obj/ and bin/ - and every shared source tree its project file compiles in,
+# read from the project file so a new linked tree is followed. The #400 audit
+# walks Runtime/ alone, which is not the product's boundary (#401's lesson).
+FOREMAN_FELLING_PORT = "src/ConcernedForeman/Runtime/Collection/WorldFellingPort.cs"
+FOREMAN_FELLING_DAMAGE = re.compile(r"\.\s*Damage\s*\(")
+FOREMAN_FELLING_PINNED = re.compile(r"\btree\s*\.\s*Damage\s*\(\s*hit\s*\)")
+FOREMAN_FELLING_FORBIDDEN = (
+    ("TreeBase/TreeLog (decided, unused)", re.compile(r"\b(?:TreeBase|TreeLog)\b")),
+    ("destruction shortcut", re.compile(r"(?:\.\s*(?:DestroyNow|ApplyDamage)\s*\(|\bRPC_Damage\b)")),
+)
+
+
+def _foreman_felling_sources(errors: list[str]) -> tuple[dict[str, str], list[str]]:
+    """The audited scope. Every way it could quietly shrink is a failure."""
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    roots = [foreman_dir]
+    linked: list[str] = []
+    csproj = foreman_dir / "ConcernedForeman.csproj"
+    if not csproj.is_file():
+        fail("[foreman] D19 felling audit: ConcernedForeman.csproj is missing, so the shared trees it compiles in "
+             "cannot be read; the audit refuses rather than shrinking its scope", errors)
+    else:
+        text = csproj.read_text(encoding="utf-8-sig")
+        for raw in re.findall(r'Include="(\.\.[\\/]Shared[\\/][^"]*)"', text):
+            match = re.match(r'\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]', raw)
+            if match is None:
+                fail(f"[foreman] D19 felling audit: a shared include this audit cannot follow: {raw}", errors)
+                continue
+            name = match.group(1)
+            if name not in linked:
+                linked.append(name)
+                roots.append(ROOT / "src" / "Shared" / name)
+        if not linked:
+            fail("[foreman] D19 felling audit: ConcernedForeman.csproj names no shared tree; the audit expected at "
+                 "least one and refuses rather than walking less than the product", errors)
+    sources: dict[str, str] = {}
+    for root in roots:
+        if not root.is_dir():
+            fail(f"[foreman] D19 felling audit: {root.relative_to(ROOT).as_posix()} is compiled in but missing", errors)
+            continue
+        for path in sorted(root.rglob("*.cs")):
+            if any(part in ("obj", "bin") for part in path.relative_to(root).parts):
+                continue
+            sources[path.relative_to(ROOT).as_posix()] = _strip_foreman_cs_comments(path.read_text(encoding="utf-8-sig"))
+    return sources, linked
+
+
+def check_foreman_felling_scope(errors: list[str]) -> list[str]:
+    """D19: one pinned Destructible.Damage in the whole of Foreman; no tree types, no shortcuts."""
+    sources, linked = _foreman_felling_sources(errors)
+    hits = 0
+    pinned = 0
+    for rel, code in sources.items():
+        spans = [(m.start(), m.end()) for m in FOREMAN_FELLING_PINNED.finditer(code)] if rel == FOREMAN_FELLING_PORT else []
+        pinned += len(spans)
+        for match in FOREMAN_FELLING_DAMAGE.finditer(code):
+            if any(start <= match.start() < end for start, end in spans):
+                continue
+            hits += 1
+            fail(
+                f"[foreman] D19 felling audit: a `.Damage(` outside the one pinned hit, in "
+                f"{rel}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+        for label, pattern in FOREMAN_FELLING_FORBIDDEN:
+            for match in pattern.finditer(code):
+                hits += 1
+                fail(
+                    f"[foreman] D19 felling audit: forbidden {label} in "
+                    f"{rel}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+    if pinned != 1:
+        hits += 1
+        fail(
+            f"[foreman] D19 felling audit: {FOREMAN_FELLING_PORT} has {pinned} pinned "
+            "`tree.Damage(hit)` site(s); the population is exactly 1", errors)
+    return [
+        f"[foreman] D19 felling audit: {len(sources)} source(s) - the whole of src/ConcernedForeman less obj/ and bin/, "
+        f"and the {len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - hold exactly one "
+        "`.Damage(`, the pinned hit in Runtime/Collection/WorldFellingPort.cs; TreeBase, TreeLog, DestroyNow, "
+        "ApplyDamage and RPC_Damage are refused everywhere in that scope. A text audit with comments stripped: "
+        f"a call through a delegate spells none of these ({hits} violations)",
+    ]
+
+
 # #381: the collection port's two lifecycle verbs, pinned so they cannot be
 # swapped. This is a source audit rather than a unit test because the port binds
 # Unity and no test in this repository can load it - and the thing being guarded
@@ -3964,6 +4055,119 @@ TEAMSTER_DESTINATION_WRITES = (
     re.compile(r"\b_destination\s*=\s*chest\s*;"),
     re.compile(r"\b_destination\s*=\s*null\s*;"),
 )
+
+
+# #473 / #480: every Teamster source audit reads text through
+# `_strip_cs_comments` and regular expressions, and four lexical tricks make
+# that text disagree with what the C# compiler sees. Each was reproduced against
+# Teamster source at exit 0 before this rule:
+#
+# - A directive line. The stripper does not know preprocessor lines, so
+#   `#region it's` (an apostrophe it reads as a char literal) or `#region x /*`
+#   throws it out of step and hides real code below. Directives also split the
+#   net48 plugin from the net10.0 test build the way `#if` did in the Steward's
+#   review. Teamster source has none, so none is allowed - #region and #pragma
+#   included - the rule the Steward S1 audit already keeps.
+# - A Unicode escape. `Destr\u006Fy(` is a call to Destroy that spells no
+#   `Destroy(`. Refused anywhere in the raw text; a string that needs a
+#   character can hold the character itself.
+# - A Unicode format character (category Cf: U+200B, U+00AD, U+2060...). The
+#   compiler drops it from an identifier, so `Dest<U+200B>roy(` is Destroy too
+#   (#480). Refused anywhere; a byte-order mark at the very start of a file is
+#   the one allowed, because it is not in the text the compiler reads.
+# - U+0085, U+2028, U+2029. C# ends a `//` comment there and the stripper does
+#   not, so code after one is comment to every count.
+#
+# Scanned: the same set the #313 worker-runtime scope audit scans - all of
+# src/ConcernedTeamster less obj/ and bin/, plus the shared trees its project
+# file compiles in. Raw text, before any stripping. What this still does not
+# see is what no text audit sees: a call reached through a delegate.
+TEAMSTER_LEXICAL_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
+TEAMSTER_LEXICAL_UNICODE_ESCAPE = re.compile(r"\\[uU][0-9A-Fa-f]")
+TEAMSTER_LEXICAL_LINE_END = re.compile("[\u0085\u2028\u2029]")
+
+
+def _teamster_lexical_directive(raw: str) -> str:
+    """The first line of raw C# whose first non-blank character is `#`, or ''."""
+    for line in TEAMSTER_LEXICAL_LINE_TERMINATOR.split(raw):
+        lead = line
+        while lead and (lead[0].isspace() or lead[0] in "\ufeff\x1a"):
+            lead = lead[1:]
+        if lead.startswith("#"):
+            return line.strip()[:60] or "#"
+    return ""
+
+
+def _teamster_lexical_format_character(raw: str) -> int:
+    """Offset of the first Unicode format (Cf) character, a leading BOM aside;
+    -1 when there is none."""
+    for offset, char in enumerate(raw):
+        if offset == 0 and char == "\ufeff":
+            continue
+        if unicodedata.category(char) == "Cf":
+            return offset
+    return -1
+
+
+def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
+    """Fails when Teamster source holds a lexical form that makes its text
+    audits read something other than what the compiler builds (#473, #480)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = "[interop] #473 lexical audit"
+    roots = [(teamster_dir, teamster_dir)]
+    shared_root = ROOT / "src" / "Shared"
+    for name in TEAMSTER_LINKED_SHARED_DIRS:
+        if (shared_root / name).is_dir():
+            roots.append((shared_root / name, shared_root))
+    if len(roots) != 1 + len(TEAMSTER_LINKED_SHARED_DIRS):
+        fail(f"{label}: a shared tree ConcernedTeamster compiles in is missing, so part of the product "
+             "is not being read", errors)
+        return []
+
+    scanned = 0
+    hits = 0
+    for walk, base in roots:
+        for path in sorted(walk.rglob("*.cs")):
+            relative = path.relative_to(walk)
+            if relative.parts and relative.parts[0] in ("obj", "bin"):
+                continue
+            scanned += 1
+            shown = path.relative_to(ROOT).as_posix()
+            raw = path.read_text(encoding="utf-8")
+            directive = _teamster_lexical_directive(raw)
+            if directive:
+                hits += 1
+                fail(f"{label}: {shown} has the directive line `{directive}` - the comment and string "
+                     "stripping every Teamster audit reads does not know directive lines (`#region it's` "
+                     "hides the code below it), and conditional compilation splits the plugin from the "
+                     "tests", errors)
+            escape = TEAMSTER_LEXICAL_UNICODE_ESCAPE.search(raw)
+            if escape is not None:
+                hits += 1
+                fail(f"{label}: {shown} holds the Unicode escape `{escape.group(0)}` at offset "
+                     f"{escape.start()} - in an identifier it spells a name (`Destr\\u006Fy`) that no "
+                     "count can see; write the character itself", errors)
+            format_at = _teamster_lexical_format_character(raw)
+            if format_at >= 0:
+                hits += 1
+                fail(f"{label}: {shown} holds the format character U+{ord(raw[format_at]):04X} at offset "
+                     f"{format_at} - the compiler drops it from an identifier, so it can split a name "
+                     "such as Destroy where no count looks; a string that needs one can build it with (char)0x200B", errors)
+            line_end = TEAMSTER_LEXICAL_LINE_END.search(raw)
+            if line_end is not None:
+                hits += 1
+                fail(f"{label}: {shown} holds U+{ord(line_end.group(0)):04X} at offset {line_end.start()} - "
+                     "C# ends a line there and the comment stripping does not, so code after it is "
+                     "invisible to every count", errors)
+
+    return [
+        f"{label}: {scanned} source(s) - src/ConcernedTeamster less obj/ and bin/, plus the "
+        f"{len(TEAMSTER_LINKED_SHARED_DIRS)} shared tree(s) it compiles in - hold no directive line, no "
+        "\\u/\\U escape, no Unicode format (Cf) character and no U+0085/U+2028/U+2029, so none of those four makes the text a Teamster "
+        "audit reads differ from the text the compiler builds. Still outside every text audit: a call "
+        "through a delegate, and a verbatim identifier (`x.@Interact(`) that the dotted token patterns do "
+        f"not spell ({hits} violations)",
+    ]
 
 
 # #379: Gunnar's collection tour keeps a write-ahead plan (`GunnarTourPlan`,
@@ -6631,6 +6835,7 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
+    report.extend(check_foreman_felling_scope(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
     report.extend(check_npc_keepsake_confined(errors))
@@ -6640,6 +6845,7 @@ def main() -> int:
     report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))
     report.extend(check_teamster_destination_is_pointed_at(errors))
+    report.extend(check_teamster_source_is_plain(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))

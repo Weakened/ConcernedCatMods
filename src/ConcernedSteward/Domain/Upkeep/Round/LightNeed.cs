@@ -154,8 +154,9 @@ internal static class LightNeeds
     /// with the same time left are separated by their key, ordinally, because
     /// otherwise the order would depend on whatever order the engine happened to
     /// enumerate pieces in and "deterministic" would be true of the sort and
-    /// false of the result. The planner re-orders by geography within a priority
-    /// band; this decides the bands.</summary>
+    /// false of the result. This order decides which lights are funded and which
+    /// trip each is in; the walk order inside a trip is <see cref="RoundCircuit"/>'s.
+    /// </summary>
     internal static List<LightNeed> Assess(
         IReadOnlyList<FuelTargetObservation>? lights,
         Designation? settlement,

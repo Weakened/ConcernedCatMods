@@ -112,7 +112,9 @@ Record PASS / FAIL / note against each numbered row.
    of one fuel kind, then walks a circuit of them, feeding each. **The failure to
    watch for is her going back to the chest between lights.**
 4. With a mix of wood and resin lights: expect one chest visit per fuel kind,
-   never one per light; the kind whose light is closest to going out goes first.
+   never one per light; the trip for the fuel of the light closest to going out
+   comes first. Within a trip she walks a short circuit, not a zigzag between the
+   most and least urgent; only a light about to go out is visited out of turn.
 5. Lights that are full are never walked to.
 6. Count the chest before and after, and the fuel on each light: what left the
    chest equals what went into the lights plus what she brought back. Nothing
