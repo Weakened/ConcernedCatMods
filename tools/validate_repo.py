@@ -4077,6 +4077,15 @@ TEAMSTER_DESTINATION_WRITES = (
 #   the one allowed, because it is not in the text the compiler reads.
 # - U+0085, U+2028, U+2029. C# ends a `//` comment there and the stripper does
 #   not, so code after one is comment to every count.
+# - A verbatim identifier (#494). `x.@Interact(`, `x.@Pickup(`,
+#   `inventory.@AddItem(` and `view.@Destroy()` are the calls the dotted token
+#   patterns pin, spelled so that none of them matches. Refused anywhere in the
+#   raw text, as the escape is: `@` followed by a letter or `_`, which is how an
+#   identifier starts (`@0.1.0` in a version string is not one). `@"..."` and
+#   `$@"..."` are strings, not identifiers, and stay allowed. Comments and
+#   string contents are not exempted on purpose - a literal masker can be put out
+#   of step by a verbatim string such as `@"\"`, the same trap the directive rule
+#   closes - and a string that needs the text can join "@" + "x".
 #
 # Scanned: the same set the #313 worker-runtime scope audit scans - all of
 # src/ConcernedTeamster less obj/ and bin/, plus the shared trees its project
@@ -4085,6 +4094,7 @@ TEAMSTER_DESTINATION_WRITES = (
 TEAMSTER_LEXICAL_LINE_TERMINATOR = re.compile("\r\n|[\r\n\u0085\u2028\u2029]")
 TEAMSTER_LEXICAL_UNICODE_ESCAPE = re.compile(r"\\[uU][0-9A-Fa-f]")
 TEAMSTER_LEXICAL_LINE_END = re.compile("[\u0085\u2028\u2029]")
+TEAMSTER_LEXICAL_VERBATIM_IDENTIFIER = re.compile(r"@[^\W\d]")
 
 
 def _teamster_lexical_directive(raw: str) -> str:
@@ -4159,14 +4169,20 @@ def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
                 fail(f"{label}: {shown} holds U+{ord(line_end.group(0)):04X} at offset {line_end.start()} - "
                      "C# ends a line there and the comment stripping does not, so code after it is "
                      "invisible to every count", errors)
+            verbatim = TEAMSTER_LEXICAL_VERBATIM_IDENTIFIER.search(raw)
+            if verbatim is not None:
+                hits += 1
+                fail(f"{label}: {shown} holds the verbatim identifier `{verbatim.group(0)}` at line "
+                     f"{raw.count(chr(10), 0, verbatim.start()) + 1} - `x.@Interact(` is a call to Interact "
+                     "that no dotted token pattern spells (#494); write the name without `@`, and build a "
+                     "string that needs the text as \"@\" + \"x\"", errors)
 
     return [
         f"{label}: {scanned} source(s) - src/ConcernedTeamster less obj/ and bin/, plus the "
         f"{len(TEAMSTER_LINKED_SHARED_DIRS)} shared tree(s) it compiles in - hold no directive line, no "
-        "\\u/\\U escape, no Unicode format (Cf) character and no U+0085/U+2028/U+2029, so none of those four makes the text a Teamster "
-        "audit reads differ from the text the compiler builds. Still outside every text audit: a call "
-        "through a delegate, and a verbatim identifier (`x.@Interact(`) that the dotted token patterns do "
-        f"not spell ({hits} violations)",
+        "\\u/\\U escape, no Unicode format (Cf) character, no U+0085/U+2028/U+2029 and no verbatim identifier "
+        "(`x.@Interact(`), so none of those five makes the text a Teamster audit reads differ from the "
+        f"text the compiler builds. Still outside every text audit: a call through a delegate ({hits} violations)",
     ]
 
 
