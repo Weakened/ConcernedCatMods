@@ -93,9 +93,9 @@ class ProviderFloorsAreShipped(unittest.TestCase):
                             contains="RestockProviderGate.FloorVersion is 2.0.0")
 
     def test_the_presence_floor_is_held_to_the_same_rule(self):
-        self.swap(PRESENCE_GATE, "new System.Version(1, 2, 2)", "new System.Version(1, 2, 3)")
+        self.swap(PRESENCE_GATE, "new System.Version(1, 2, 2)", "new System.Version(9, 0, 0)")
         self.assert_refused("a presence floor above the shipped Cartographer passed",
-                            contains="PresenceProviderGate.FloorVersion is 1.2.3")
+                            contains="PresenceProviderGate.FloorVersion is 9.0.0")
 
     def test_the_cartographer_contract_floor_is_held_to_the_same_rule(self):
         self.swap(CARTOGRAPHER_CONTRACT, "new System.Version(0, 10, 0)", "new System.Version(9, 0, 0)")
