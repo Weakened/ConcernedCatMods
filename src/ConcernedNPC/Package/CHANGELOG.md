@@ -35,6 +35,10 @@ Six additive changes share this version:
   one trip whatever the NPC could carry. It now comes back as the fewest loads that fit, never one target a trip, and
   `PlannedStep.Tour` says which load each stop belongs to.
 * The library still never learns what was gathered or where it goes: what happens at the end of a load is the role's.
+* A trip topped up from below its first target's priority band now takes the highest band that still fits before
+  the nearest (#382). Targets that all share one priority - as Concerned Teamster's collection does - are partitioned
+  exactly as before; a role that packs its own trips by priority, as Concerned Steward now does, gets those trips back
+  instead of one trip's target pushed out by a nearer, less important one.
 
 ### A figure can be dressed, and the one dresser lives here (#295, lifted from Concerned Foreman)
 

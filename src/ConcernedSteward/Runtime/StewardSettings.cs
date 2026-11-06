@@ -260,8 +260,9 @@ internal sealed class StewardSettings
             "RefuelBelowSeconds",
             Domain.Upkeep.Round.MaintenanceThresholds.Default.RefuelBelowSeconds,
             "A light with less burning time left than this many seconds is due for fuel. Lights " +
-            "closest to going out are tended first. Measured in time, not fuel, because pieces " +
-            "burn at different rates.");
+            "closest to going out are chosen and supplied first; she walks them as a short circuit, " +
+            "and one that might go out before she reaches it is visited first. Measured in time, " +
+            "not fuel, because pieces burn at different rates.");
 
         ConfigEntry<float> to = config.Bind(
             "Upkeep",
