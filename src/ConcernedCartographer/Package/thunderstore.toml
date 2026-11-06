@@ -4,8 +4,8 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
-versionNumber = "1.2.2"
-description = "v1.2.2: Meet Hulgi. A local-only companion, a short introduction, and the living atlas: roads, markers, routes, survey, search and sharing."
+versionNumber = "1.4.0"
+description = "1.4.0 internal test: Hulgi, the Broken Compass and story-input fixes, with current main-branch atlas features. Gameplay checks pending."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 
@@ -29,6 +29,10 @@ target = "CHANGELOG.md"
 [[build.copy]]
 source = "../../../LICENSE"
 target = "LICENSE"
+
+[[build.copy]]
+source = "./HULGI_TEST_CHECKLIST.md"
+target = "HULGI_TEST_CHECKLIST.md"
 
 [publish]
 repository = "https://thunderstore.io"
