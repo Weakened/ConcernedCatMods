@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 — internal test candidate
+
+- Hulgi story input is handled once per frame across keyboard and focused UI callbacks. Revealing the final page cannot also accept its choice. Replay cannot complete recruitment.
+- Native UI Cancel closes the story; death, teleport and player attack also release its modal input.
+- Includes the unreleased main-branch features below. Full gameplay acceptance, controller behavior and companion appearance/seating remain to be verified on these bytes.
+
 ## Unreleased
 
 Everything below is on `main` and in no published build. 1.3.0 and 1.3.1 were

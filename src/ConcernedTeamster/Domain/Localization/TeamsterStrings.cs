@@ -31,14 +31,14 @@ public static class TeamsterStrings
         ["containers.now.take"] = "Gunnar may take from this container.",
         ["containers.now.deposit"] = "Gunnar may put things into this container.",
         ["containers.now.both"] = "Gunnar may take from and put into this container.",
-        ["containers.notSaved"] = "{0} \u2014 but it could NOT be saved, so it will be gone next session.",
+        ["containers.notSaved"] = "{0} — but it could NOT be saved, so it will be gone next session.",
         ["containers.moves"] =
             "That container moves, so a permission for it could not be found again. Only a chest "
             + "that stays put can be enabled.",
         ["containers.noPlace"] =
             "That container has no position this build can read, so it cannot be enabled.",
         ["containers.noKind"] =
-            "That container's kind could not be read on this build, so it cannot be enabled \u2014 a "
+            "That container's kind could not be read on this build, so it cannot be enabled — a "
             + "permission that matched any container on that spot would be wrong.",
 
         // Route picker (CT-022)

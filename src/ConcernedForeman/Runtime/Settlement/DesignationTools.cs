@@ -128,12 +128,15 @@ internal sealed class DesignationTools
                 ? "Thorstein's introduction is not available in this build."
                 : Quest.Execute(register, journal, _records.Save, args);
             case "takeback": return _custody == null ? NoCustody : _custody.TakeBack(journal, args);
+            case "preview": return _custody == null ? NoCustody : _custody.Preview(args);
+            case "tools": return _custody == null ? NoCustody : _custody.Held(journal);
             case "release": return _custody == null ? NoCustody : _custody.Release();
             case "reconcile": return _custody == null ? NoCustody : _custody.Reconcile();
             default:
                 return "Unknown subcommand. Try: status, housing, area <radius>, harvest <radius>, " +
                     "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
-                    "give axe|hammer, takeback [axe|hammer], release, reconcile, quest [status|examine], " +
+                    "give axe|hammer, preview axe|hammer, tools, takeback [axe|hammer], release, reconcile, " +
+                    "quest [status|view|examine], " +
                     "resolve <request> mine|his|source|destination [count], resolve <order> lost.";
         }
     }

@@ -29,7 +29,31 @@ public sealed class ThorsteinTalkTests
         Assert.Equal(ThorsteinTalk.NeedsAxe,
             ThorsteinTalk.Line(ThorsteinQuestStage.WaitingForTools, false, true, rotation));
         Assert.Equal(ThorsteinTalk.WaitingOnSettlement,
-            ThorsteinTalk.Line(ThorsteinQuestStage.WaitingForTools, true, true, rotation));
+            ThorsteinTalk.Line(ThorsteinQuestStage.WaitingForTools, true, true, rotation,
+                ToolsOfTheTradeWait.NoSettlementArea));
+    }
+
+    [Fact]
+    public void With_both_tools_he_names_the_real_cause_of_the_wait()
+    {
+        // S3 review: "show me the settlement" was said whatever held him up.
+        DialogueRotation rotation = ThorsteinTalk.NewRotation();
+        string? Said(ToolsOfTheTradeWait wait) =>
+            ThorsteinTalk.Line(ThorsteinQuestStage.WaitingForTools, true, true, rotation, wait);
+
+        Assert.Equal(ThorsteinTalk.WaitingOnSettlement, Said(ToolsOfTheTradeWait.NoSettlementArea));
+        Assert.Equal(ThorsteinTalk.WaitingOnRecords, Said(ToolsOfTheTradeWait.RecordsReadOnly));
+        Assert.Equal(ThorsteinTalk.WaitingOnUnsavedRecords, Said(ToolsOfTheTradeWait.RecordsUnsaved));
+        Assert.Equal(ThorsteinTalk.WaitingOnAuthority, Said(ToolsOfTheTradeWait.NoAuthority));
+        Assert.Equal(ThorsteinTalk.WaitingOnHandover, Said(ToolsOfTheTradeWait.HandoverUncertain));
+        Assert.Equal(ThorsteinTalk.WaitingBriefly, Said(ToolsOfTheTradeWait.None));
+
+        var lines = new[]
+        {
+            ThorsteinTalk.WaitingOnSettlement, ThorsteinTalk.WaitingOnRecords, ThorsteinTalk.WaitingOnUnsavedRecords,
+            ThorsteinTalk.WaitingOnAuthority, ThorsteinTalk.WaitingOnHandover, ThorsteinTalk.WaitingBriefly,
+        };
+        Assert.Equal(lines.Length, lines.Distinct().Count());
     }
 
     [Fact]

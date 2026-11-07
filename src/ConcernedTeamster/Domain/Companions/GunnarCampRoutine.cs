@@ -1,0 +1,66 @@
+using System;
+using TheConcernedCat.Companions.Placement;
+using TheConcernedCat.ConcernedNPC.Work;
+namespace TheConcernedCat.ConcernedTeamster.Domain.Companions;
+/// <summary>Read-only projection to be wired after the lead's coordinated Camp
+/// API release. No private library type is reached or reimplemented by Teamster.</summary>
+internal interface IGunnarCampView
+{
+    bool IsEstablished { get; }
+    int Revision { get; }
+    NpcWorldEpoch Epoch { get; }
+    bool Contains(NpcPoint point);
+}
+internal enum GunnarCampAction { None, Show, Retain, Reposition, Hide }
+internal readonly struct GunnarCampStep
+{
+    public GunnarCampStep(GunnarCampAction action,PlacementResult placement) { Action=action; Placement=placement; }
+    public GunnarCampAction Action { get; }
+    public PlacementResult Placement { get; }
+}
+
+/// <summary>Cached local presentation targets only. No worker/cart/door/motor
+/// port exists here. A changed bed invalidates only this figure's plan.</summary>
+internal sealed class GunnarCampRoutine
+{
+    private readonly PlacementPlanner _planner=new();
+    private CompanionAnchor _anchor;
+    private PlacementResult _placement;
+    private int _revision=-1;
+    private bool _planned;
+    private bool _shown;
+    public void NoteFigureShown(bool shown) { _shown=shown; }
+    public void Forget() { _shown=false; _planned=false; _revision=-1; _anchor=default; }
+    public GunnarCampStep Step(in GunnarBodyFacts facts,CompanionAnchor anchor,IGunnarCampView? camp,NpcWorldEpoch epoch,IPlacementProbe probe)
+    {
+        // Range changes do not destroy an existing eligible local figure. The
+        // renderer culls it; returning to range uses the same figure/plan.
+        var atHome=new GunnarBodyFacts(facts.Registered,facts.WorldLoaded,facts.Host,facts.Enabled,
+            facts.Stage,facts.SavedWorkers,facts.Resting,facts.AnchorKnown,facts.Near || _shown);
+        if (GunnarBodyPlan.Decide(atHome)!=GunnarBodyKind.Presentation || !anchor.IsValid || camp==null || !camp.Epoch.Matches(epoch) || !Finite(anchor.Position))
+        { bool had=_shown; Forget(); return new GunnarCampStep(had ? GunnarCampAction.Hide : GunnarCampAction.None,default); }
+        if (!facts.Near) return new GunnarCampStep(_shown ? GunnarCampAction.Retain : GunnarCampAction.None,_placement);
+        bool changed=!_planned || anchor.DiffersFrom(_anchor,PlacementRules.DefaultAnchorMoveTolerance) || camp.Revision!=_revision;
+        if (changed)
+        {
+            // Camp membership constrains an established home; the valid world
+            // start is still usable before any residence has been built.
+            _placement=Plan(anchor,camp,probe);
+            _anchor=anchor; _revision=camp.Revision; _planned=true;
+        }
+        if (!_placement.Found)
+        { bool had=_shown; _shown=false; return new GunnarCampStep(had ? GunnarCampAction.Hide : GunnarCampAction.None,_placement); }
+        return new GunnarCampStep(!_shown ? GunnarCampAction.Show : changed ? GunnarCampAction.Reposition : GunnarCampAction.Retain,_placement);
+    }
+    private PlacementResult Plan(CompanionAnchor anchor,IGunnarCampView camp,IPlacementProbe probe) =>
+        _planner.Plan(anchor,probe,accept: sample => !camp.IsEstablished ||
+            camp.Contains(new NpcPoint(sample.Position.X,sample.Position.Y,sample.Position.Z)));
+    private static bool Finite(WorldPoint p) => !(float.IsNaN(p.X)||float.IsInfinity(p.X)||
+        float.IsNaN(p.Y)||float.IsInfinity(p.Y)||float.IsNaN(p.Z)||float.IsInfinity(p.Z));
+    public static float? FacingYaw(WorldPoint figure,WorldPoint player)
+    {
+        float x=player.X-figure.X,z=player.Z-figure.Z;
+        if (float.IsNaN(x)||float.IsInfinity(x)||float.IsNaN(z)||float.IsInfinity(z)||x*x+z*z<0.0001f) return null;
+        return (float)(Math.Atan2(x,z)*180.0/Math.PI);
+    }
+}
