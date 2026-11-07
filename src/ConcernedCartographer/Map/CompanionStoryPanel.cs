@@ -45,9 +45,7 @@ internal sealed class CompanionStoryPanel
     private Button? _welcomeButton;
     private Button? _toolsOnlyButton;
     private bool _failed;
-    private bool _choicesAllowed = true;
-
-    private StoryReader _reader = new StoryReader();
+    private readonly StoryInteraction _interaction = new StoryInteraction();
 
     public CompanionStoryPanel(ManualLogSource log)
     {
@@ -74,7 +72,7 @@ internal sealed class CompanionStoryPanel
 
     /// <summary>Which page the reader is on, so the owner can resume the story
     /// at the same place inside one session.</summary>
-    public int PageIndex => _reader.PageIndex;
+    public int PageIndex => _interaction.PageIndex;
 
     /// <summary>Opens the introduction.</summary>
     /// <param name="resumeAtPage">Where to resume, clamped. Negative starts at
@@ -92,9 +90,7 @@ internal sealed class CompanionStoryPanel
 
         try
         {
-            _choicesAllowed = allowChoices;
-            _reader = new StoryReader();
-            _reader.Resume(resumeAtPage);
+            _interaction.Open(resumeAtPage, allowChoices, Time.frameCount);
 
             _panel!.transform.localScale = Vector3.one * UiScale;
             _panel.SetActive(true);
@@ -109,8 +105,9 @@ internal sealed class CompanionStoryPanel
 
     public void Hide()
     {
-        // The input block is released first and unconditionally. Whatever else
-        // goes wrong below, the player gets their controls back.
+        _interaction.Close();
+        // Release input before touching the GameObject or invoking close handlers.
+        // Whatever else goes wrong below, the player gets their controls back.
         _inputBlock.Release();
 
         if (_panel != null && _panel.activeSelf)
@@ -141,6 +138,15 @@ internal sealed class CompanionStoryPanel
             return;
         }
 
+        Request(StoryAction.None);
+    }
+
+    // Both direct keyboard handling and EventSystem button callbacks enter here.
+    // Reading the keyboard in either path gives paging/Cancel the same meaning
+    // regardless of which Unity update runs first.
+    private void Request(StoryAction requested)
+    {
+        if (!IsVisible) { return; }
         try
         {
             if (ShouldCloseForSafety())
@@ -149,35 +155,38 @@ internal sealed class CompanionStoryPanel
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Escape))
+            StoryAction accepted = _interaction.Apply(requested, ReadKeyboardInput(), Time.frameCount);
+            switch (accepted)
             {
-                Hide();
-                return;
-            }
-
-            if (Input.GetKeyDown(KeyCode.LeftArrow))
-            {
-                _reader.Back();
-                Refresh();
-                return;
-            }
-
-            if (Input.GetKeyDown(KeyCode.RightArrow) ||
-                Input.GetKeyDown(KeyCode.Return) ||
-                Input.GetKeyDown(KeyCode.KeypadEnter))
-            {
-                if (_reader.Next())
-                {
+                case StoryAction.Back:
+                case StoryAction.Next:
                     Refresh();
-                }
-
-                return;
+                    break;
+                case StoryAction.Welcome:
+                    Choose(WelcomeChosen);
+                    break;
+                case StoryAction.ToolsOnly:
+                    Choose(ToolsOnlyChosen);
+                    break;
+                case StoryAction.Close:
+                    Hide();
+                    break;
             }
         }
         catch (Exception exception)
         {
             Fail(exception);
         }
+    }
+
+    private static StoryInput ReadKeyboardInput()
+    {
+        StoryInput input = StoryInput.None;
+        if (Input.GetKeyDown(KeyCode.Escape)) { input |= StoryInput.Close; }
+        if (Input.GetKeyDown(KeyCode.LeftArrow)) { input |= StoryInput.Back; }
+        if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.Return) ||
+            Input.GetKeyDown(KeyCode.KeypadEnter)) { input |= StoryInput.Forward; }
+        return input;
     }
 
     /// <summary>The states where a story panel has no business being on
@@ -193,7 +202,7 @@ internal sealed class CompanionStoryPanel
             }
 
             Player player = Player.m_localPlayer;
-            if (player == null || player.IsDead())
+            if (player == null || player.IsDead() || player.IsTeleporting() || player.InAttack())
             {
                 return true;
             }
@@ -215,7 +224,7 @@ internal sealed class CompanionStoryPanel
             return;
         }
 
-        StoryPage page = CompanionStory.Pages[_reader.PageIndex];
+        StoryPage page = CompanionStory.Pages[_interaction.PageIndex];
         if (_speaker != null)
         {
             _speaker.text = AtlasStrings.Get(page.SpeakerKey);
@@ -229,14 +238,14 @@ internal sealed class CompanionStoryPanel
         if (_pageLabel != null)
         {
             _pageLabel.text = AtlasStrings.Format(
-                "story.page", _reader.PageNumber, _reader.PageCount);
+                "story.page", _interaction.PageNumber, _interaction.PageCount);
         }
 
-        bool onLastPage = _reader.IsLastPage;
-        SetActive(_backButton, !_reader.IsFirstPage);
+        bool onLastPage = _interaction.IsLastPage;
+        SetActive(_backButton, !_interaction.IsFirstPage);
         SetActive(_nextButton, !onLastPage);
-        SetActive(_welcomeButton, onLastPage && _choicesAllowed);
-        SetActive(_toolsOnlyButton, onLastPage && _choicesAllowed);
+        SetActive(_welcomeButton, _interaction.CanChoose);
+        SetActive(_toolsOnlyButton, _interaction.CanChoose);
 
         FocusFirstControl();
     }
@@ -346,25 +355,15 @@ internal sealed class CompanionStoryPanel
             .GetComponent<Text>();
         _pageLabel.alignment = TextAnchor.MiddleCenter;
 
-        _backButton = CreateButton("story.back", -150f, -330f, 130f, () =>
-        {
-            _reader.Back();
-            Refresh();
-        });
-
-        _nextButton = CreateButton("story.next", 150f, -330f, 130f, () =>
-        {
-            _reader.Next();
-            Refresh();
-        });
-
+        _backButton = CreateButton("story.back", -150f, -330f, 130f,
+            () => Request(StoryAction.Back));
+        _nextButton = CreateButton("story.next", 150f, -330f, 130f,
+            () => Request(StoryAction.Next));
         _welcomeButton = CreateButton("story.welcome", -110f, -330f, 200f,
-            () => Choose(WelcomeChosen));
-
+            () => Request(StoryAction.Welcome));
         _toolsOnlyButton = CreateButton("story.toolsOnly", 110f, -330f, 200f,
-            () => Choose(ToolsOnlyChosen));
-
-        CreateButton("story.close", 0f, -372f, 130f, Hide);
+            () => Request(StoryAction.ToolsOnly));
+        CreateButton("story.close", 0f, -372f, 130f, () => Request(StoryAction.Close));
 
         _panel.SetActive(false);
     }
@@ -375,6 +374,7 @@ internal sealed class CompanionStoryPanel
             AtlasStrings.Get(labelKey), _panel!.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x, y), width, 32f);
         var component = button.GetComponent<Button>();
+        button.AddComponent<StoryCancelHandler>().Cancel = Hide;
         component.onClick.AddListener(() =>
         {
             try
@@ -392,6 +392,7 @@ internal sealed class CompanionStoryPanel
     private void Fail(Exception exception)
     {
         _failed = true;
+        _interaction.Close();
         _inputBlock.Release();
         if (_panel != null)
         {
@@ -408,6 +409,7 @@ internal sealed class CompanionStoryPanel
     /// itself on the next open.</summary>
     public void ResetForSceneChange()
     {
+        _interaction.Close();
         _inputBlock.Release();
         _panel = null;
         _speaker = null;

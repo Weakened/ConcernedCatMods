@@ -1,6 +1,6 @@
-# Concerned Cartographer V1.2.2
+# Concerned Cartographer 1.4.0 — internal test candidate
 
-**V1.2.2 by The Concerned Cat brings Hulgi: a drowned cartographer who lives at your camp, introduces the atlas, and has some common sense about it — by the fire nearest your bed with a drink now and then, under a roof at night, asleep in a spare bed if you have one. He is local only: no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Every atlas feature from 1.0.4 is unchanged. Audited against Valheim 1.0.12.**
+**For owner testing, not a release.** Includes the current main-branch features and Hulgi story-input corrections. Automated checks are separate from gameplay acceptance. See `HULGI_TEST_CHECKLIST.md` in this package for all unverified checks and test instructions. Use an isolated mod-manager profile, disposable character and world.
 
 ![Hulgi sitting on a log by the campfire beside the player, saying "The meadows are kind. That is how they talk you into wandering." over his head](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/4b154a596ee4b762c5c9dc23cfad4b2e22846e67/docs/media/concerned-cartographer/hulgi-campfire.jpg)
 

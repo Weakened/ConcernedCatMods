@@ -149,6 +149,15 @@ sidecars as durable reconciliation evidence.
   `Destroy…(` at all is still outside a text audit, and the pins establish that
   a refusal is *written above* each removal, not that control flow obeys it —
   `WorkerRetirementTests` and a reviewer own that.
+  Four lexical forms that would make that text differ from what the compiler
+  builds are refused outright by the `#473 lexical audit` (#473, #480), over the
+  product and the three shared trees it compiles in: any directive line (the
+  comment stripper does not know them, so `#region it's` hid a destruction),
+  any `\u`/`\U` escape (`Destr\u006Fy(` is `Destroy(`), any Unicode format
+  (Cf) character (`Dest` + U+200B + `roy(` is too; a leading BOM aside), and
+  U+0085/U+2028/U+2029, which end a `//` comment for the compiler only. Each
+  was reproduced at exit 0 before the rule and is planted in
+  `LexicalEscapesAreRefused`.
 
 - `ConcernedTeamster.Tests` proves matrix completeness, the mutation truth
   table, fail-closed resolution, and that the brake's authority gate equals

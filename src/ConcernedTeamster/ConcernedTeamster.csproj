@@ -22,6 +22,8 @@
   <ItemGroup>
     <!-- Game-free shared source for the Gunnar worker runtime (docs/settlement/cart-and-collection):
          worker identities, authority, retries, and the cross-product capability contracts. -->
+    <!-- #456: game-free companion identity and scoped quest persistence. -->
+    <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
     <!-- #411: the one path scrubber and the one failure wording, shared as

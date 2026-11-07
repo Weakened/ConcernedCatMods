@@ -578,6 +578,20 @@ internal sealed class StewardMaintenancePlan
         return true;
     }
 
+    internal bool TryPauseForOrder(out string refusal)
+    {
+        refusal = string.Empty;
+        if (IsBlocked || !HasActivePlan || _run == null || !_run.MayAct)
+        {
+            refusal = IsBlocked ? BlockedReason : "No safe active maintenance plan can be paused now.";
+            return false;
+        }
+        // The prior durable resume point remains valid even if this optional
+        // note fails. No mutation is authorized by a suspension note.
+        _run.Suspend("Paused by the player's explicit order.");
+        return true;
+    }
+
     internal void Suspend(string note)
     {
         if (_run != null && HasActivePlan)

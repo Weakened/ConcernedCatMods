@@ -253,13 +253,17 @@ not. An activity nobody named neither interrupts nor is interrupted: an arrival 
 claim, and a running activity with no stated priority might be any rung, including the one making the record safe
 again.
 
-**Only one half of the guard that says so does any work.** This section used to claim both directions fail closed.
-They do not, symmetrically: `Unspecified` is zero, which is below every rung, so `arriving > running` already refuses
-an unnamed arrival. Deleting the arriving half of the guard leaves every test green; deleting the running half turns
-them red. The arriving half is kept as defence against a renumbering that moved `Unspecified` off the bottom, and the
-numbering it leans on is pinned by
-`ActivityArbitrationTests.Unspecified_is_numbered_below_every_rung_so_the_comparison_alone_refuses_it` rather than
-assumed.
+**Both operands must be one of the seven named rungs.** `Unspecified` and
+undefined enum integers are refused before comparing priorities. An incoming 8
+or int.MaxValue cannot outrank lifecycle safety; a negative running value cannot
+be displaced as though it were a low-priority stroll. Refusal writes no note and
+preserves the exact current plan and durable record.
+
+The older observation that `arriving > running` alone already refuses an arriving
+zero is still true, and its numbering test remains. It does not cover arbitrary
+enum integers. `UnknownActivityPriorityTests` exercises both directions across
+all seven known rungs, and every durable plan phase, with negative, positive and
+integer-boundary unknown values. No new public API or caller is introduced here.
 
 An interruption preserves inventory, reservations, custody, the plan, the cart, progress, source, destination and
 identity - guaranteed by there being no path in the handover that edits a plan. The cart is in that list honestly
