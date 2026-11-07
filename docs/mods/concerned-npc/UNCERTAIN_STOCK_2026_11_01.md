@@ -26,6 +26,16 @@ Held subtraction and self-exclusion still work; known Committed/Refunded claims
 still release their availability. HasUncertain remains true, and automatic
 Refund, Commit and RefundAllFor cannot resolve an uncertain claim.
 
+**The planning path (lead review fix).** Planning does not call the book's
+AvailableIn: SourceStock asks INpcSourceAvailability, implemented by
+NpcReservedSourceAvailability, which answers a plain count. It now answers 0
+for an item whose container key holds an Uncertain claim of that item name,
+whatever exceptThis says, so the planner reports a shortfall instead of
+planning the units twice. 0 rather than "unknown" because the seam's signature
+has no unknown; the planner's key and item name are coarser than the book's
+identity, so this errs toward refusing. Tested through the planner in
+SourceAvailabilityTests.
+
 ReservedIn still reports known Held quantities, not a guessed quantity for an
 uncertain outcome. Reserve remains a journal of supplied claims, not a capacity
 or movement authority. A caller must use AvailableIn/HasUncertain and its actual
