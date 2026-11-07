@@ -4189,6 +4189,41 @@ def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
     ]
 
 
+# #480: the #473 rule above refuses Unicode format (Cf) characters in Teamster's
+# scope only, yet the Steward S1 retire audit and every Foreman audit read names
+# as text the same way, and the compiler drops a Cf character from an identifier,
+# so `Dest<U+00AD>roy(` is Destroy to C# and to no pattern. This refuses one in
+# every product and library source under src/ - every non-test project, and the
+# shared trees, which some product compiles - rather than audit by audit: a rule
+# per audit would leave whatever audit is written next uncovered. Test projects
+# are outside on purpose; a test may need the character as data, and no audit
+# reads a test project as product code. A byte-order mark at the very start of a
+# file is allowed, as in the #473 rule, whose detector this reuses.
+def check_source_has_no_format_characters(errors: list[str]) -> list[str]:
+    """Fails when product or library C# under src/ holds a Cf character (#480)."""
+    label = "[interop] #480 format-character audit"
+    src = ROOT / "src"
+    scanned = 0
+    hits = 0
+    for path in sorted(src.rglob("*.cs")):
+        parts = path.relative_to(src).parts
+        if parts[0].endswith(".Tests") or any(part in ("obj", "bin") for part in parts):
+            continue
+        scanned += 1
+        raw = path.read_text(encoding="utf-8")
+        at = _teamster_lexical_format_character(raw)
+        if at >= 0:
+            hits += 1
+            fail(f"{label}: {path.relative_to(ROOT).as_posix()} holds the format character "
+                 f"U+{ord(raw[at]):04X} at line {raw.count(chr(10), 0, at) + 1} - the compiler drops it "
+                 "from an identifier, so it can split a name such as Destroy where no text audit looks; "
+                 "a string that needs one can build it with (char)0x200B", errors)
+    return [
+        f"{label}: {scanned} product and library source(s) under src/ (test projects, obj/ and bin/ "
+        f"aside) hold no Unicode format (Cf) character but a leading byte-order mark ({hits} violations)",
+    ]
+
+
 # #379: Gunnar's collection tour keeps a write-ahead plan (`GunnarTourPlan`,
 # through ConcernedNPC's NpcPlanRun). A write-ahead record is worth something
 # only if it is written BEFORE the world moves: an intent before every pick and
@@ -6869,6 +6904,7 @@ def main() -> int:
     report.extend(check_teamster_ward_queries_are_quiet(errors))
     report.extend(check_teamster_destination_is_pointed_at(errors))
     report.extend(check_teamster_source_is_plain(errors))
+    report.extend(check_source_has_no_format_characters(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
