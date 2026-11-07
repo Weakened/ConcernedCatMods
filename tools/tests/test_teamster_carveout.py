@@ -1327,6 +1327,41 @@ class LexicalEscapesAreRefused(CarveOutFixture):
                             contains="holds U+2028")
 
 
+    # #494: a verbatim identifier is the same name to the compiler and a
+    # different spelling to every dotted token pattern. Each of these four was run
+    # against the validator from before the rule (origin/main 82bbe7f).
+
+    def test_a_verbatim_interact_is_refused(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ((dynamic)null).@Interact(null, false, false);\n")
+        self.assert_refused("x.@Interact( passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@I`")
+
+    def test_a_verbatim_pickup_is_refused(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ((dynamic)null).@Pickup(null, true, true);\n")
+        self.assert_refused("x.@Pickup( passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@P`")
+
+    def test_a_verbatim_add_item_is_refused(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ((dynamic)null).@AddItem(null);\n")
+        self.assert_refused("inventory.@AddItem( passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@A`")
+
+    def test_a_verbatim_destroy_is_refused(self):
+        # Not in the worker file: a new `Destroy(` there is already counted by
+        # the #381 destruction pin. The escape is a SUBSTITUTION in a file whose
+        # one destruction is pinned as Unity's static - the destruction count
+        # still sees one, and the routed and body-removal pins, which look for
+        # `.Destroy(`, see none, so a network object goes at exit 0.
+        self.swap_in(os.path.join(TEAMSTER, "Plugin.cs"),
+                     "UnityEngine.Object.Destroy(_containers);",
+                     "((dynamic)_containers).@Destroy();")
+        self.assert_refused("view.@Destroy() passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@D`")
+
+
 # -- #379: the tour writes every move down before it happens --
 
 PICK_GUARD = (
