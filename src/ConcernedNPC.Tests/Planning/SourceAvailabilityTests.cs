@@ -377,6 +377,39 @@ public sealed class SourceAvailabilityTests
         Assert.Equal(0, availability.Agreement.UnitsSubtracted);
     }
 
+    /// <summary>#376 through the planner, not only the book: a commit that went
+    /// uncertain leaves its chest showing the units, and a plan made against
+    /// that sight would spend them a second time if the commit did land.</summary>
+    [Fact]
+    public void An_uncertain_commit_keeps_its_material_out_of_a_plan()
+    {
+        var book = new NpcMaterialReservationBook();
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
+        var sources = new[] { Jobs.Stock(chest, ("wood", 100)) };
+        ReservationId held = Reserve(book, "a", 0, "chest", "wood", 40);
+        Assert.Equal(NpcCustodyOutcome.Applied, book.MarkUncertain(held));
+
+        JobTourPlan refused = PlanFor(
+            "b", new[] { Jobs.Target("fence", 20f, 0f, 0, ("wood", 10)) }, sources, book);
+
+        Assert.Equal(JobPlanVerdict.ShortOfMaterial, refused.Plan.Verdict);
+        Assert.False(refused.Plan.IsActionable);
+        Assert.Equal(10, refused.Shortfall.RequiredOf("wood"));
+    }
+
+    [Fact]
+    public void An_uncertain_commit_answers_none_even_to_its_own_claim_and_only_for_its_chest_and_item()
+    {
+        var book = new NpcMaterialReservationBook();
+        ReservationId held = Reserve(book, "a", 0, "chest", "wood", 40);
+        Assert.Equal(NpcCustodyOutcome.Applied, book.MarkUncertain(held));
+
+        Assert.Equal(0, new NpcReservedSourceAvailability(book).AvailableIn("chest", "wood", 100));
+        Assert.Equal(0, new NpcReservedSourceAvailability(book, held).AvailableIn("chest", "wood", 100));
+        Assert.Equal(100, new NpcReservedSourceAvailability(book).AvailableIn("other", "wood", 100));
+        Assert.Equal(100, new NpcReservedSourceAvailability(book).AvailableIn("chest", "stone", 100));
+    }
+
     private static ReservationId Reserve(
         NpcMaterialReservationBook book, string jobId, int step, string containerKey, string item, int units)
     {
