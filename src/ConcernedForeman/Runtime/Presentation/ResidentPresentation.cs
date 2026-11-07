@@ -49,7 +49,7 @@ internal sealed class ResidentPresentation : IDisposable
     private NpcFigureDresser? _dresser;
     private ResidentPose? _pose;
     private float _sinceSurvey;
-    private bool _registered, _faulted, _figureRefused;
+    private bool _registered, _faulted, _figureRefused, _away;
     private string _notice = "Reserve a usable bed within four metres, then confirm admission. No jobs are offered.";
     internal ResidentPresentation(Func<bool> enabled, NpcRoleRegistry registry, SettlementRuntime settlement, Action<string> log)
     {
@@ -72,9 +72,15 @@ internal sealed class ResidentPresentation : IDisposable
                 (ZoneSystem.instance == null || !ZoneSystem.instance.IsZoneLoaded(home) ||
                  (Player.m_localPlayer.transform.position - home).sqrMagnitude > 64f * 64f))
             {
-                // Unload only the local visual, never the saved resident.
-                TakeDown(); RecordHousing(HousingRefusal.NotMeasured); return;
+                // Unload only the local visual, never the saved resident. Recorded
+                // once on the way out, not every frame: Revalidate re-folds the
+                // journal, which is an allocation per frame for as long as the
+                // player is away, and nothing it reads changes until they return.
+                TakeDown();
+                if (!_away) { _away = true; RecordHousing(HousingRefusal.NotMeasured); }
+                return;
             }
+            _away = false;
             _dresser?.VerifyOnce();
             _pose?.Apply(ResidentRoutine.At(EnvMan.instance != null ? EnvMan.instance.GetDayFraction() : float.NaN,
                 _resident != null && _resident.Phase == ResidentJournalPhase.Admitted,
@@ -100,6 +106,10 @@ internal sealed class ResidentPresentation : IDisposable
         if (_resident == null) return false;
         var result = _resident.Revalidate(refusal);
         if (refusal == HousingRefusal.None) return true;
+        // A real refusal (homeless, outside the settlement) takes the figure
+        // down: posed at a bed that is gone, it would stand frozen where the bed
+        // was. "Cannot be checked" only pauses the routine and keeps it up.
+        if (refusal != HousingRefusal.NotMeasured) TakeDown();
         _notice = refusal == HousingRefusal.NotMeasured
             ? "Housing cannot currently be checked. The resident keeps their reservation; the routine is paused."
             : result == ResidentAdmissionResult.NotRecorded
@@ -229,7 +239,7 @@ internal sealed class ResidentPresentation : IDisposable
     private void TakeDown() { _pose = null; _dresser?.TakeDown(); _dresser = null; _lease?.Dispose(); _lease = null; }
     internal void Forget()
     {
-        TakeDown(); _panel.Dispose(); _resident = null; _store = null; _world = 0; _sinceSurvey = 0; _figureRefused = false;
+        TakeDown(); _panel.Dispose(); _resident = null; _store = null; _world = 0; _sinceSurvey = 0; _figureRefused = false; _away = false;
         _notice = "Reserve a usable bed nearby, then confirm admission. No jobs are offered.";
     }
     public void Dispose() => Forget();
