@@ -48,9 +48,17 @@ internal sealed class WorkerRouteRunner
     private TraversalHandle _handle;
     private WorkerRoutePhase _terminal;
     private bool _continueAfterRestore;
+    // #501 review: a walk leg that makes no progress ends instead of holding the
+    // route and the identity forever (a wedged body, an unloaded zone). Progress
+    // is the best distance to the leg's end improving by at least the step.
+    private readonly float _walkStallSeconds;
+    private const float WalkProgressMetres=0.25f;
+    private float _walkBest=float.PositiveInfinity,_walkStalled;
     public WorkerRouteRunner(TraversalLinkNetwork network,ILadderTraversal traversal,IWorkerRoutePort port,
-        WorkerKey worker,float horizontalTolerance=1f,float heightTolerance=0.35f)
+        WorkerKey worker,float horizontalTolerance=1f,float heightTolerance=0.35f,float walkStallSeconds=10f)
     {
+        if(!(walkStallSeconds>0)||float.IsInfinity(walkStallSeconds)) throw new ArgumentException("A finite stall budget is required.");
+        _walkStallSeconds=walkStallSeconds;
         if(worker.IsEmpty||!(horizontalTolerance>0)||float.IsInfinity(horizontalTolerance)||
             !(heightTolerance>0)||float.IsInfinity(heightTolerance)) throw new ArgumentException("A worker and finite arrival bounds are required.");
         _network=network; _traversal=traversal; _port=port; _worker=worker;
@@ -72,6 +80,7 @@ internal sealed class WorkerRouteRunner
         _hold=_port.TryHoldRoute(orderId);
         if(_hold==null||!_hold.IsActive) { _hold?.Dispose(); _hold=null; Phase=WorkerRoutePhase.Refused; StopReason=WorkerRouteStop.IdentityLost; return false; }
         _plan=plan; _bodyEpoch=_port.BodyEpoch; LegIndex=0; StopReason=WorkerRouteStop.None; Phase=WorkerRoutePhase.Walking;
+        ResetWalkWatch();
         return true;
     }
     public void Tick(float deltaSeconds)
@@ -91,6 +100,7 @@ internal sealed class WorkerRouteRunner
             {
                 Phase=WorkerRoutePhase.Walking;
                 if(leg.HasArrived(_port.Position,_horizontalTolerance,_heightTolerance)) { Advance(); return; }
+                if(Stalled(leg,deltaSeconds)) { End(WorkerRoutePhase.Refused,WorkerRouteStop.WalkBlocked); return; }
                 if(!_port.WalkToward(leg.To,deltaSeconds)) End(WorkerRoutePhase.Refused,WorkerRouteStop.WalkBlocked);
                 return;
             }
@@ -132,8 +142,18 @@ internal sealed class WorkerRouteRunner
             (!_network.TryGet(leg.LinkId,out _,out int generation)||generation!=leg.Generation)) return false; }
         return true;
     }
+    private bool Stalled(WorkerRouteLeg leg,float deltaSeconds)
+    {
+        WorkPoint at=_port.Position;
+        float distance=at.HorizontalDistanceTo(leg.To)+at.VerticalDistanceTo(leg.To);
+        if(distance<=_walkBest-WalkProgressMetres) { _walkBest=distance; _walkStalled=0; return false; }
+        _walkStalled+=deltaSeconds;
+        return _walkStalled>=_walkStallSeconds;
+    }
+    private void ResetWalkWatch() { _walkBest=float.PositiveInfinity; _walkStalled=0; }
     private void Advance()
     {
+        ResetWalkWatch();
         LegIndex++;
         if(LegIndex==_plan!.Legs.Count) End(WorkerRoutePhase.Complete,WorkerRouteStop.None);
         else Phase=WorkerRoutePhase.Walking;

@@ -65,9 +65,9 @@ public sealed class WorkerRouteSearchTests
     {
         var(network,caps)=Network(); var search=Search(network,caps); var probe=new Floors { Pending=true };
         Assert.Equal(WorkerRouteSearchState.AwaitingWalkEvidence,search.Advance(probe,WorkAuthorityVerdict.Granted,true,true));
-        Assert.Equal(1,search.Queries); Assert.Null(search.Plan);
+        Assert.Equal(0,search.Queries); Assert.Equal(1,search.PendingAnswers); Assert.Null(search.Plan);
         Assert.Equal(WorkerRouteSearchState.Searching,search.Advance(probe,WorkAuthorityVerdict.Granted,true,true,0));
-        Assert.Equal(1,search.Queries); probe.Pending=false; Finish(search,probe);
+        Assert.Equal(0,search.Queries); Assert.Equal(1,probe.Calls); probe.Pending=false; Finish(search,probe);
         Assert.Equal(WorkerRouteSearchState.Complete,search.State);
     }
     [Fact] public void DisabledUnorderedAndUnauthorizedRequestsAskNoWalkQuestions()
@@ -98,8 +98,24 @@ public sealed class WorkerRouteSearchTests
     [Fact] public void OneWholeRouteBudgetCannotResetAtEachLegOrUnknownRetry()
     {
         var(network,caps)=Network(); var search=Search(network,caps,new WorkerRouteBudget(maximumQueries:2));
-        Finish(search,new Floors { Pending=true }); Assert.Equal(WorkerRouteRefusal.QueryBudget,search.Refusal);
+        Finish(search,new Floors()); Assert.Equal(WorkerRouteRefusal.QueryBudget,search.Refusal);
         Assert.Equal(2,search.Queries); Assert.Null(search.Plan);
+
+        // Waiting is bounded too, by its own cap and with its own reason, so a
+        // search that never hears back still ends - and is not told it ran out
+        // of queries it never spent (#501 review).
+        var waiting=Search(network,caps,new WorkerRouteBudget(maximumQueries:2,maximumPendingAnswers:3));
+        var silent=new Floors { Pending=true }; Finish(waiting,silent);
+        Assert.Equal(WorkerRouteRefusal.EvidenceTimedOut,waiting.Refusal);
+        Assert.Equal(0,waiting.Queries); Assert.Equal(4,silent.Calls); Assert.Null(waiting.Plan);
+    }
+    [Fact] public void GroundThatLoadsLateStillGetsARouteWithinTheQueryBudget()
+    {
+        var(network,caps)=Network(); var search=Search(network,caps); var probe=new Floors { Pending=true };
+        for(int tick=0;tick<600;tick++) search.Advance(probe,WorkAuthorityVerdict.Granted,true,true);
+        Assert.Equal(WorkerRouteSearchState.AwaitingWalkEvidence,search.State); Assert.Equal(0,search.Queries);
+        probe.Pending=false; Finish(search,probe);
+        Assert.Equal(WorkerRouteSearchState.Complete,search.State); Assert.NotNull(search.Plan);
     }
     [Fact] public void SearchAndLegBoundsRefuseBeforeProducingAPartialPlan()
     {

@@ -5,7 +5,7 @@ namespace TheConcernedCat.Workers.Traversal;
 
 internal enum WorkerRouteSearchState { Searching, AwaitingWalkEvidence, Complete, Refused }
 internal enum WorkerRouteRefusal { None, Disabled, NotAnOrderedWorker, NoAuthority, InvalidInput,
-    TooFar, TooManyLinks, QueryBudget, NoRoute, TooManyLegs, LinkChanged }
+    TooFar, TooManyLinks, QueryBudget, NoRoute, TooManyLegs, LinkChanged, EvidenceTimedOut }
 internal enum WorkerWalkEvidenceKind { Unknown, Blocked, Reachable }
 internal readonly struct WorkerWalkEvidence
 {
@@ -46,16 +46,22 @@ internal sealed class WorkerRoutePlan
 }
 internal sealed class WorkerRouteBudget
 {
-    public WorkerRouteBudget(int maximumLinks=16,int maximumLegs=12,int maximumQueries=512,float horizonMetres=64)
+    // A pending answer is not a spent query (#501 review): ground that has not
+    // loaded yet would otherwise burn the query budget and come back as a
+    // permanent QueryBudget refusal. Waiting has its own cap and its own reason.
+    public WorkerRouteBudget(int maximumLinks=16,int maximumLegs=12,int maximumQueries=512,float horizonMetres=64,
+        int maximumPendingAnswers=4096)
     {
-        if(maximumLinks<1||maximumLinks>64||maximumLegs<1||maximumLegs>128||maximumQueries<1||
+        if(maximumLinks<1||maximumLinks>64||maximumLegs<1||maximumLegs>128||maximumQueries<1||maximumPendingAnswers<1||
             !(horizonMetres>0)||float.IsInfinity(horizonMetres)) throw new ArgumentOutOfRangeException(nameof(maximumLinks));
         MaximumLinks=maximumLinks; MaximumLegs=maximumLegs; MaximumQueries=maximumQueries; HorizonMetres=horizonMetres;
+        MaximumPendingAnswers=maximumPendingAnswers;
     }
     public int MaximumLinks { get; }
     public int MaximumLegs { get; }
     public int MaximumQueries { get; }
     public float HorizonMetres { get; }
+    public int MaximumPendingAnswers { get; }
 }
 
 /// <summary>#334: a deterministic, incremental Dijkstra search over published
@@ -100,6 +106,7 @@ internal sealed class WorkerRouteSearch
     public WorkerRouteSearchState State { get; private set; }
     public WorkerRouteRefusal Refusal { get; private set; }
     public int Queries { get; private set; }
+    public int PendingAnswers { get; private set; }
     public WorkerRoutePlan? Plan { get; private set; }
     public WorkerRouteSearchState Advance(IWorkerWalkProbe probe,WorkAuthorityVerdict authority,
         bool featureEnabled,bool explicitOrderActive,int maximumChecksThisTick=1)
@@ -136,7 +143,11 @@ internal sealed class WorkerRouteSearch
             checks++; Queries++;
             WorkerWalkEvidence evidence=probe.Check(_nodes[_current],_nodes[target]);
             if(evidence.Kind==WorkerWalkEvidenceKind.Unknown)
-            { State=WorkerRouteSearchState.AwaitingWalkEvidence; return State; }
+            {
+                Queries--;
+                if(++PendingAnswers>_budget.MaximumPendingAnswers) return Refuse(WorkerRouteRefusal.EvidenceTimedOut);
+                State=WorkerRouteSearchState.AwaitingWalkEvidence; return State;
+            }
             if(evidence.Kind==WorkerWalkEvidenceKind.Reachable)
             {
                 float minimum=Distance(_nodes[_current],_nodes[target]);

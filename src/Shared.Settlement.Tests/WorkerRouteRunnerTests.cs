@@ -18,12 +18,18 @@ public sealed class WorkerRouteRunnerTests
         public bool ActorReady {get;set;}=true;
         public WorkAuthorityVerdict Authority {get;set;}=WorkAuthorityVerdict.Granted;
         public bool GroundMotorSuspended {get;private set;}
-        public bool LandingSafe=true,RestoreAllowed=true;
+        public bool LandingSafe=true,RestoreAllowed=true,Wedged;
+        public float Creep;
         public int WalkCalls,PlaceCalls,RestoreCalls;
         public readonly List<string> Trace=new(); public readonly Hold Held=new();
         public IWorkerRouteHold? TryHoldRoute(string orderId)=>Held;
         public bool WalkToward(WorkPoint target,float delta)
-        { Assert.False(GroundMotorSuspended); WalkCalls++; Position=target; Trace.Add("walk"); return true; }
+        {
+            Assert.False(GroundMotorSuspended); WalkCalls++; Trace.Add("walk");
+            if(Creep>0) Position=new WorkPoint(Position.X+Creep,Position.Y,Position.Z);
+            else if(!Wedged) Position=target;
+            return true;
+        }
         public void StopWalkingForRoute(){ Trace.Add("stop walk"); }
         public IWorkerLadderMotor? TrySuspendGroundMotor(WorkerKey worker,Guid epoch)
         { Assert.Equal(Worker,worker); Assert.Equal(BodyEpoch,epoch); Trace.Add("suspend"); GroundMotorSuspended=true; return this; }
@@ -106,5 +112,24 @@ public sealed class WorkerRouteRunnerTests
         var high=new WorkerRoutePlan(new[]{new WorkerRouteLeg(WorkerRouteLegKind.Walk,default,new WorkPoint(0,4,0))},4);
         Assert.True(runner.Start(high,"ordered-job")); runner.Tick(0.1f);
         Assert.Equal(1,port.WalkCalls); Assert.Equal(WorkerRoutePhase.Walking,runner.Phase);
+    }
+    [Fact] public void AWedgedWalkEndsBlockedAndReleasesItsHold()
+    {
+        var(network,traversal,_)=Setup(); var port=new Port{Position=new WorkPoint(-8,0,0),Wedged=true};
+        var leg=new WorkerRoutePlan(new[]{new WorkerRouteLeg(WorkerRouteLegKind.Walk,new WorkPoint(-8,0,0),new WorkPoint(-2,0,0))},6);
+        var runner=new WorkerRouteRunner(network,traversal,port,WorkerKey.Thorstein); Assert.True(runner.Start(leg,"ordered-job"));
+        for(int i=0;i<19;i++) runner.Tick(0.5f);
+        Assert.Equal(WorkerRoutePhase.Walking,runner.Phase); Assert.Equal(0,port.Held.Releases);
+        for(int i=0;i<4&&runner.ControlsRoute;i++) runner.Tick(0.5f);
+        Assert.Equal(WorkerRoutePhase.Refused,runner.Phase); Assert.Equal(WorkerRouteStop.WalkBlocked,runner.StopReason);
+        Assert.Equal(1,port.Held.Releases);
+    }
+    [Fact] public void ASlowWalkThatKeepsGainingIsNotStopped()
+    {
+        var(network,traversal,_)=Setup(); var port=new Port{Position=new WorkPoint(-30,0,0),Creep=0.3f};
+        var leg=new WorkerRoutePlan(new[]{new WorkerRouteLeg(WorkerRouteLegKind.Walk,new WorkPoint(-30,0,0),new WorkPoint(-2,0,0))},28);
+        var runner=new WorkerRouteRunner(network,traversal,port,WorkerKey.Thorstein); Assert.True(runner.Start(leg,"ordered-job"));
+        for(int i=0;i<200&&runner.ControlsRoute;i++) runner.Tick(0.5f);
+        Assert.Equal(WorkerRoutePhase.Complete,runner.Phase); Assert.Equal(WorkerRouteStop.None,runner.StopReason);
     }
 }
