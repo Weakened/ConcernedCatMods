@@ -3644,8 +3644,11 @@ def _foreman_felling_sources(errors: list[str]) -> tuple[dict[str, str], list[st
 
 def check_foreman_felling_scope(errors: list[str]) -> list[str]:
     """D19: one pinned Destructible.Damage in the whole of Foreman; no tree types, no shortcuts."""
+    before = len(errors)
     sources, linked = _foreman_felling_sources(errors)
-    hits = 0
+    # A scope failure is a violation too (#498): the summary must not say
+    # "(0 violations)" while the scope it describes has shrunk.
+    hits = len(errors) - before
     pinned = 0
     for rel, code in sources.items():
         spans = [(m.start(), m.end()) for m in FOREMAN_FELLING_PINNED.finditer(code)] if rel == FOREMAN_FELLING_PORT else []
