@@ -18,7 +18,7 @@ namespace TheConcernedCat.ConcernedLadders.Runtime;
 /// <para>Motion: <see cref="HatchMotion.Step{TProbe}"/> over the donor's own swing time
 /// (<see cref="SwingSeconds"/>, set by the piece adapter from <c>DoorFamily.SwingSeconds</c>), in checked poses at
 /// most 5 degrees apart. Each check is one <c>Physics.OverlapBoxNonAlloc</c> of the lid collider's own box at that
-/// angle into a shared buffer; the lid stops at the last clear pose when anything but fixed world or the hatch
+/// angle, shrunk by a 1 cm skin so contact is not overlap, into a shared buffer; the lid stops at the last clear pose when anything but fixed world or the hatch
 /// itself is in the way (<see cref="Occupied"/>). It turns by setting the transform, never by velocity or
 /// <c>MoveRotation</c>, so it gives nothing a push; and since it only ever stops at a pose that was clear, it is never
 /// placed into a character, a dynamic body or a piece it checked.</para>
@@ -110,41 +110,61 @@ internal sealed class TrapdoorLid : MonoBehaviour, IHatchOccupancy
         hinge.localRotation = Quaternion.identity;
         _boxCentreInHinge = hinge.InverseTransformPoint(box.transform.TransformPoint(box.center));
         _boxRotationInHinge = Quaternion.Inverse(hinge.rotation) * box.transform.rotation;
-        _boxHalfExtents = Vector3.Scale(box.size, box.transform.lossyScale) * 0.5f;
+        // Shrunk by the skin on every side: touching is not overlapping (HatchMotion.QuerySkinMetres).
+        Vector3 half = Vector3.Scale(box.size, box.transform.lossyScale) * 0.5f;
+        float skin = HatchMotion.QuerySkinMetres;
+        _boxHalfExtents = new Vector3(Mathf.Max(0.005f, half.x - skin), Mathf.Max(0.005f, half.y - skin), Mathf.Max(0.005f, half.z - skin));
         if (!(SwingSeconds >= HatchMotion.MinimumSwingSeconds && SwingSeconds <= HatchMotion.MaximumSwingSeconds))
         {
             SwingSeconds = DoorFamilies.LightSwing;
         }
     }
 
+    /// <summary>Settles before the first physics step after the piece appears, where the ZDO is already readable, so
+    /// a lid stored open is not briefly a closed collider. A ghost or an icon render has no ZDO and settles never.</summary>
+    private void Start()
+    {
+        try { TrySettle(); }
+        catch (Exception exception) { Stop(exception); }
+    }
+
     private void Update()
     {
         try
         {
+            if (!_settled) { TrySettle(); return; }
             ZNetView? view = _view;
             if (view == null || !view.IsValid() || _hinge == null) { return; }
             bool open = HatchMotion.IsOpenState(view.GetZDO().GetInt(ZDOVars.s_state));
-            if (!_settled)
-            {
-                _settled = true;
-                _progress = HatchMotion.Settle(open, this);
-                Apply();
-                return;
-            }
-
             if (!HatchMotion.IsMoving(_progress, open)) { return; }
             _progress = HatchMotion.Step(_progress, open, Time.deltaTime, SwingSeconds, this);
             Apply();
         }
         catch (Exception exception)
         {
-            // A fault stops this lid where it is, once, rather than throwing every frame.
-            enabled = false;
-            if (_faultLogged) { return; }
-            _faultLogged = true;
-            try { Log?.Invoke("Trapdoor lid stopped (" + SafeFailure.Brief(exception) + "); it stays where it is."); }
-            catch (Exception) { }
+            Stop(exception);
         }
+    }
+
+    /// <summary>The first pose, once, from the stored native state (<see cref="HatchMotion.Settle{TProbe}"/>).</summary>
+    private void TrySettle()
+    {
+        ZNetView? view = _view;
+        if (view == null || !view.IsValid() || _hinge == null) { return; }
+        bool open = HatchMotion.IsOpenState(view.GetZDO().GetInt(ZDOVars.s_state));
+        _settled = true;
+        _progress = HatchMotion.Settle(open, this);
+        Apply();
+    }
+
+    /// <summary>A fault stops this lid where it is, logged once per session, rather than throwing every frame.</summary>
+    private void Stop(Exception exception)
+    {
+        enabled = false;
+        if (_faultLogged) { return; }
+        _faultLogged = true;
+        try { Log?.Invoke("Trapdoor lid stopped (" + SafeFailure.Brief(exception) + "); it stays where it is."); }
+        catch (Exception) { }
     }
 
     private void Apply()

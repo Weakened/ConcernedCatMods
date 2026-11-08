@@ -62,15 +62,25 @@ public sealed class TrapdoorLidTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void AThinObstacleIsNeverSteppedOver(bool open)
+    public void AnObstacleWiderThanTheCheckSpacingIsNeverSteppedOver(bool open)
     {
-        // Something occupies only a narrow band of the sweep (a dropped item, a pole): a later clear pose must not
-        // carry the lid past it within the same frame or any later one.
-        var probe = new ScriptedProbe(angle => angle >= 40f && angle <= 41f);
-        float progress = open ? 0f : 1f;
-        for (int frame = 0; frame < 600; ++frame) { progress = HatchMotion.Step(progress, open, HatchMotion.MaximumStepSeconds, 0.1f, probe); }
-        float held = HatchMotion.Angle(progress);
-        Assert.True(open ? held < 40f : held > 41f, $"The lid passed through the obstacle to {held} degrees.");
+        // The guarantee is the check spacing: no two checked poses are more than 5 degrees apart, so anything that
+        // spans just over that much of the sweep is always seen, wherever it lies and at the fastest swing and the
+        // longest frame. (Something narrower can pass between two checked poses; HatchMotion's doc says so.) A
+        // later clear pose must never carry the lid past it, within the same frame or any later one.
+        const float width = HatchMotion.MaximumAngleStepDegrees + 0.05f;
+        foreach (float swing in new[] { HatchMotion.MinimumSwingSeconds, 0.5f, 2f })
+        {
+            for (float from = 0.5f; from + width < HatchGeometry.OpenAngleDegrees - 0.5f; from += 0.75f)
+            {
+                float low = from, high = from + width;
+                var probe = new ScriptedProbe(angle => angle >= low && angle <= high);
+                float progress = open ? 0f : 1f;
+                for (int frame = 0; frame < 400; ++frame) { progress = HatchMotion.Step(progress, open, HatchMotion.MaximumStepSeconds, swing, probe); }
+                float held = HatchMotion.Angle(progress);
+                Assert.True(open ? held < low : held > high, $"{swing}s: the lid passed [{low}, {high}] to {held} degrees.");
+            }
+        }
     }
 
     [Fact]
@@ -144,8 +154,51 @@ public sealed class TrapdoorLidTests
         float stored = open ? HatchGeometry.OpenAngleDegrees : 0f;
         var probe = new ScriptedProbe(angle => Math.Abs(angle - stored) < 1e-3f ? storedOccupied : otherOccupied);
         Assert.Equal(expected, HatchMotion.Settle(open, probe));
-        Assert.Equal(storedOccupied ? 2 : 1, probe.Asked.Count);
+        int asked = !storedOccupied ? 1 : !otherOccupied ? 2 : 2 + (HatchMotion.SettleScanPoses - 1);
+        Assert.Equal(asked, probe.Asked.Count);
         Assert.Equal(stored, probe.Asked[0], 4);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WithBothEndsOccupiedTheLidSettlesAtTheClearPoseNearestItsStoredState(bool open)
+    {
+        // Both ends occupied; only the poses between 30 and 60 degrees are clear.
+        var probe = new ScriptedProbe(angle => angle < 30f - 1e-3f || angle > 60f + 1e-3f);
+        float settled = HatchMotion.Settle(open, probe);
+        Assert.Equal(open ? 60f : 30f, HatchMotion.Angle(settled), 2);
+        Assert.Contains(HatchMotion.Angle(settled), probe.ClearAnswers);
+        // Nothing clear anywhere: the stored end, the pose the network agrees on.
+        Assert.Equal(open ? 1f : 0f, HatchMotion.Settle(open, new ScriptedProbe(_ => true)));
+    }
+
+    [Fact]
+    public void TheSettleScanCoversTheSwingAtTheCheckSpacing()
+    {
+        Assert.Equal(18, HatchMotion.SettleScanPoses);
+        for (int pose = 0; pose <= HatchMotion.SettleScanPoses; ++pose)
+        {
+            float angle = HatchGeometry.OpenAngleDegrees * pose / HatchMotion.SettleScanPoses;
+            Assert.Equal(angle, HatchMotion.Angle(HatchMotion.ProgressForAngle(angle)), 3);
+        }
+    }
+
+    [Fact]
+    public void TheRuntimeQueryHasASkinSoContactIsNotOccupancy()
+    {
+        // Something resting on a closed lid touches it. Without the skin a zone load would read the stored closed
+        // pose as occupied and settle the lid open under it (independent review of d195449, blocker 1).
+        Assert.InRange(HatchMotion.QuerySkinMetres, 0.005f, HatchGeometry.LidThickness / 4f);
+        string lid = Code(Source("Runtime/TrapdoorLid.cs"));
+        Assert.Matches(new Regex(@"float\s+skin\s*=\s*HatchMotion\s*\.\s*QuerySkinMetres\s*;"), lid);
+        foreach (string axis in new[] { "x", "y", "z" })
+        {
+            Assert.Matches(new Regex(@"Mathf\s*\.\s*Max\s*\(\s*0\.005f\s*,\s*half\s*\.\s*" + axis + @"\s*-\s*skin\s*\)"), lid);
+        }
+
+        Assert.Matches(new Regex(@"OverlapBoxNonAlloc\s*\(\s*centre\s*,\s*_boxHalfExtents\s*,"), lid);
+        Assert.Single(Regex.Matches(lid, @"_boxHalfExtents\s*=(?!=)"));
     }
 
     [Fact]
@@ -193,7 +246,9 @@ public sealed class TrapdoorLidTests
     public void TheLidReadsTheNativeDoorStateAndWritesNothingToTheNetwork()
     {
         string lid = Code(Source("Runtime/TrapdoorLid.cs"));
-        Assert.Single(Regex.Matches(lid, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)"));
+        // Two reads of the one native value: the first pose (TrySettle) and each frame (Update). Both after IsValid().
+        Assert.Equal(2, Regex.Matches(lid, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
+        Assert.Equal(2, Regex.Matches(lid, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
         foreach (string forbidden in new[]
                  {
                      @"\bInvokeRPC\b", @"\bRoutedRPC\b", @"\.\s*Register\s*<", @"\.\s*Register\s*\(", @"\.\s*Set\s*\(",

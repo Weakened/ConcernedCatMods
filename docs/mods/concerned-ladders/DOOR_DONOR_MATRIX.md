@@ -219,7 +219,13 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   slower, not a jump.
 - **Implemented in slice 3** (`Runtime/TrapdoorLid.cs`, on every clone; the frame step is the game-free
   `HatchMotion.Step` and `HatchMotion.Settle`). Each checked pose is one `Physics.OverlapBoxNonAlloc` of the lid
-  collider's own box at that angle into a 32-entry shared buffer, triggers ignored; a full buffer counts as occupied.
+  collider's own box at that angle, shrunk by a 1 cm skin on every side (`HatchMotion.QuerySkinMetres`) so that
+  touching is not overlapping, into a 32-entry shared buffer, triggers ignored; a full buffer counts as occupied.
+  Because of the skin, the lid can close at most 1 cm past a surface it touches before the next checked pose sees it;
+  a body resting on a closed lid is seen by the first 5-degree sub-step everywhere beyond about 0.12 m from the hinge
+  and by the second nearer to it. The guarantee is the check spacing: no two checked poses are more than 5 degrees
+  apart, so anything spanning more than that much of the sweep is always seen; something thinner (a small falling
+  item) can pass between two checked poses.
   The hatch's own colliders never count. On the `character`, `character_net`, `character_ghost`, `character_noenv`,
   `hitbox`, `vehicle`, `item`, `piece` and `piece_nonsolid` layers any collider blocks; on `Default` and `Default_small`
   only a dynamic (non-kinematic) body does; terrain and `static_solid` are not queried, so an open lid may stand into a
@@ -228,10 +234,14 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   never by velocity or `MoveRotation`, so it imparts no push, and it only ever stops at a pose that was checked clear.
   A fault stops that lid where it is and logs once.
 - **The first pose** (a piece placed, loaded with its zone, or seen by a late joiner) is the stored state's end of the
-  swing when that pose is clear, which is what every other client shows. When it is not (someone stands where a
-  loaded-closed lid would lie), the lid starts at the other end if that is clear and the checked motion carries it to
-  the stored state once the way is clear. Only when both ends are occupied does it take the stored end anyway; that
-  needs something both in the opening and where the upright lid stands. Lead default pending owner confirmation.
+  swing when that pose is clear, which is what every other client shows. Contact is not occupancy (the skin above),
+  so a closed lid with an item, a creature or a player resting on it loads closed under them (independent review of
+  d195449, blocker 1: without the skin it would have loaded open and dropped them). When the stored pose is really
+  occupied (someone stands in the opening where a loaded-closed lid would lie), the lid starts at the other end if that
+  is clear, and the checked motion carries it to the stored state once the way is clear. When both ends are occupied
+  it takes the clear pose nearest the stored end, scanning every 5 degrees, and only if no pose is clear does it take
+  the stored end anyway. It settles in `Start`, before the first physics step after the piece appears, so a lid stored
+  open is not briefly a closed collider. Lead default pending owner confirmation.
 - **What this means for the person at the hatch** (a consequence of the policy, not an observation): a player standing
   with part of their body over the opening, for example on the 0.2 m frame band at the front, is in the lid's sweep, so
   the lid waits until they step back. A wall or other piece built over the rear frame band, where the upright lid
