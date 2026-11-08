@@ -80,7 +80,7 @@ support from them, as with their donors.
   `Piece.m_resources` against them**: Jötunn's clone keeps donor requirements when the array is empty, so an empty array
   is never a way to clear them.
 - **Health, material, burn, roof wear, support, damage modifiers, effects, ward behaviour**: inherited from the cloned
-  donor, unchanged. The adapter checks the clone's health and material against the pinned matrix and refuses the
+  donor, unchanged. The adapter checks the installed donor's health, material, burn, station, cost and door fields against the pinned matrix before cloning, and refuses the
   family (logged, not registered) if the installed donor changed, instead of guessing.
 - **Repair, deconstruction refunds, guard stones**: native, through the cloned `Piece`, `WearNTear` and
   `Door.m_checkGuardStone`. Nothing is added: no key, no ownership lock, no automatic closing.
@@ -93,6 +93,13 @@ support from them, as with their donors.
   and leaves a 2 m x 2 m hole in the floor; reinstalling does not restore them. The README says so beside the
   setting. The same happens to a placed trapdoor when `Trapdoors/Enabled` is turned off again, or when its family is
   refused at start-up (a changed donor), because the prefab is then not registered in that session.
+- **Multiplayer: the setting must match on every machine** (found in the slice-2 review). `Trapdoors/Enabled` is a
+  local setting that nothing synchronizes, and Jötunn's version check does not compare it. A host or dedicated server
+  that cannot create an object takes ownership and destroys its ZDO (`ZNetScene.CreateObjectsSorted`, decompiled
+  1.0.21: `Destroyed invalid prefab ZDO`), during the session, not only at the next load. So a client that turns it on
+  while the host or server has it off loses every trapdoor it places, with no refund, and a client with it off sees an
+  open hole with no collision where another player's trapdoor stands. Lead default pending owner confirmation:
+  document this and keep the setting local; a server-synchronized setting is a decision for the owner, not taken here.
 - **Off by default (slice 2)**: the pieces are registered only with `Trapdoors/Enabled` on (`TrapdoorSettings`,
   default false). With it off nothing is cloned, no token is added and the hammer menu is unchanged. Each family is
   checked and built on its own; a refused family is logged with every difference and never registered, and the other
@@ -163,7 +170,8 @@ a `lid_hinge` pivot on the hinge axis carrying a kinematic `Rigidbody`, the lid'
 leaf's material and two hinge straps (a darkened copy of that material) that mark the hinge side in the ghost; the
 four corner snap points; `Door.m_name` and `Piece.m_name` = the trapdoor's token. The materials are found by name in
 the donor's own renderers before anything is stripped. The lid's collider sits on a rigidbody, so `WearNTear` leaves it
-out of support bounds and the build ray ignores it: pieces cannot be built onto a lid, as onto a native door leaf.
+out of support bounds, and the build ray fails when the first thing it hits is on a rigidbody: aiming at a lid places
+nothing, as aiming at a native door leaf does.
 Support comes from the frame bands.
 
 ## 5. Floor hatch geometry (`HatchGeometry`)
@@ -183,7 +191,7 @@ points at (±1, 0, ±1), collider top **y = 0.0968**, bottom **y = -0.0329**.
 | Snap points | the four wood_floor corners with the native `$hud_snappoint_corner` token: a hatch takes a floor tile's place beside wood floors, and sits beside stone flooring exactly as a wood floor does (stone floors snap at their own top, 0.5 m) |
 | Ladder | hung inside the opening from its **front** edge, facing the hinge: section origin (0, -2, -0.87), rails' back face 0.01 m inside the frame, top level with the snap plane as `LadderEdgeSnap` hangs one from a floor; the closed lid's underside is 1.7 cm above the ladder top. A front-lane climber (lane from `ClimbPolicy.LaneDepth`) of capsule radius r clears the front band by 0.23 m, the open lid by 1.28 - 2r and the sides by 0.8 - r: 0.48 m and 0.40 m at r = 0.4 (`ClimberMargins`). |
 | Passage lane | front lane only. The rear lane's capsule centre (z -0.85 - r) lies under the front frame band and the floor beyond it, so a climber on the back of the ladder meets the floor, as on any ladder hung from a floor edge. |
-| Ghost | the rotation decides the hinge side; the hinge is always the piece's rear edge (shown in the ghost by the frame's hinge hardware, next slice) |
+| Ghost | the rotation decides the hinge side; the hinge is always the piece's rear edge (shown in the ghost by the two hinge straps on the lid's rear edge, slice 2) |
 
 The ladder's top exit leaves forward over the front frame band onto the floor beyond it; the open lid stands behind the
 climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spawns no ladder.
@@ -208,7 +216,7 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   is committed through a lid that was just asked to close); the lid is a landing only when closed and staying closed
   (`IsLanding`). A moving or held lid is never the top exit's destination. A closed lid
   is solid collision on the piece layer, so ascent is blocked by the existing capsule sweep.
-- **Interaction from the ladder** (next slice): an attached climber whose native hover target is a door uses the door,
+- **Interaction from the ladder** (slice 4): an attached climber whose native hover target is a door uses the door,
   and the same press does not also dismount.
 
 ## 7. Intentional differences from the donors

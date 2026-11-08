@@ -50,7 +50,13 @@ public sealed class Plugin : BaseUnityPlugin
         if (_trapdoorsEnabled.Value)
         {
             _trapdoors = new TrapdoorPieceRegistration(message => Logger.LogInfo(message));
-            _trapdoors.Install();
+            try { _trapdoors.Install(); }
+            catch (Exception exception)
+            {
+                Logger.LogError("Trapdoors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
+                try { _trapdoors.Dispose(); } catch { /* Unsubscribe only. */ }
+                _trapdoors = null;
+            }
         }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
         _skill = new LadderSkill(message => Logger.LogInfo(message));

@@ -18,7 +18,9 @@ internal static class TrapdoorSettings
     internal const string Description =
         "UNFINISHED (CL-004): adds the nine floor trapdoors to the hammer's Building tab. Their lids do not open yet. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed trapdoor the next " +
-        "time a world loads, with no refund. Restart after changing it.";
+        "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
+        "value: a host or server with it off deletes the trapdoors other players place, during the session. " +
+        "Restart after changing it.";
 }
 
 /// <summary>What a trapdoor part is for. Visual parts carry a renderer and no collider; collider parts carry a box

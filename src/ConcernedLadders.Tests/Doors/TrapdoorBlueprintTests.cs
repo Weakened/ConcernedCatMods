@@ -29,7 +29,8 @@ public sealed class TrapdoorBlueprintTests
         Assert.Matches(new Regex(@"Config\s*\.\s*Bind\s*\(\s*TrapdoorSettings\s*\.\s*Section\s*,\s*TrapdoorSettings\s*\.\s*Key\s*,\s*TrapdoorSettings\s*\.\s*EnabledByDefault\s*,"), plugin);
         // The one construction of the registration sits inside the setting's own branch.
         Assert.Single(Regex.Matches(plugin, @"new\s+TrapdoorPieceRegistration\s*\("));
-        Assert.Matches(new Regex(@"if\s*\(\s*_trapdoorsEnabled\s*\.\s*Value\s*\)\s*\{\s*_trapdoors\s*=\s*new\s+TrapdoorPieceRegistration\s*\([^;]*\)\s*;\s*_trapdoors\s*\.\s*Install\s*\(\s*\)\s*;\s*\}"), plugin);
+        Assert.Matches(new Regex(@"if\s*\(\s*_trapdoorsEnabled\s*\.\s*Value\s*\)\s*\{\s*_trapdoors\s*=\s*new\s+TrapdoorPieceRegistration\s*\([^;]*\)\s*;\s*try\s*\{\s*_trapdoors\s*\.\s*Install\s*\(\s*\)\s*;\s*\}\s*catch"), plugin);
+        Assert.Single(Regex.Matches(plugin, @"_trapdoors\s*\.\s*Install\s*\("));
         Assert.Matches(new Regex(@"_trapdoors\s*\?\s*\.\s*Dispose\s*\(\s*\)\s*;"), plugin);
 
         // Nothing else in the product registers a trapdoor or its localization.
@@ -41,6 +42,26 @@ public sealed class TrapdoorBlueprintTests
             if (relative != "Plugin.cs") { Assert.DoesNotMatch(new Regex(@"new\s+TrapdoorPieceRegistration\s*\("), text); }
             if (relative != "Pieces/TrapdoorPieceRegistration.cs") { Assert.DoesNotMatch(new Regex(@"TrapdoorLocalization\s*\.\s*Register\s*\("), text); }
         }
+    }
+
+    [Fact]
+    public void TheAdapterChecksTheDonorAndReadsTheCloneBackBeforeAddingThePiece()
+    {
+        // Source order in Add(): the donor check and its refusal come before the clone is made; the clone's
+        // requirements are read back and refused on a difference; the hierarchy is verified; only then is it added.
+        string adapter = Source(Path.Combine("Pieces", "TrapdoorPieceRegistration.cs"));
+        int donorCheck = Index(adapter, @"TrapdoorBlueprint\s*\.\s*DonorMismatches\s*\(\s*family\s*,\s*donor\s*==\s*null\s*\?\s*null\s*:\s*Read\s*\(\s*donor\s*\)\s*\)");
+        int donorRefuse = Index(adapter, @"if\s*\(\s*problems\s*\.\s*Count\s*>\s*0\s*\)\s*\{\s*Refuse\s*\(");
+        int clone = Index(adapter, @"new\s+CustomPiece\s*\(");
+        int readBack = Index(adapter, @"TrapdoorBlueprint\s*\.\s*RequirementMismatches\s*\(\s*family\s*,\s*Requirements\s*\(\s*piece\s*\)\s*\)");
+        int readBackRefuse = Index(adapter, @"if\s*\(\s*recipe\s*\.\s*Count\s*>\s*0\s*\)\s*throw");
+        int verify = Index(adapter, @"\bVerify\s*\(\s*prefab\s*,\s*wear\s*\)\s*;");
+        int add = Index(adapter, @"PieceManager\s*\.\s*Instance\s*\.\s*AddPiece\s*\(");
+        Assert.True(donorCheck < donorRefuse && donorRefuse < clone && clone < readBack && readBack < readBackRefuse &&
+                    readBackRefuse < verify && verify < add, "Add() lost its check order.");
+        Assert.Single(Regex.Matches(adapter, @"new\s+CustomPiece\s*\("));
+        Assert.Single(Regex.Matches(adapter, @"AddPiece\s*\("));
+        Assert.Single(Regex.Matches(adapter, @"new\s+RequirementConfig\s*\(\s*family\s*\.\s*Costs\s*\[\s*index\s*\]\s*\.\s*Item\s*,\s*family\s*\.\s*Costs\s*\[\s*index\s*\]\s*\.\s*Amount\s*,\s*0\s*,\s*true\s*\)"));
     }
 
     [Fact]
@@ -299,6 +320,13 @@ public sealed class TrapdoorBlueprintTests
         Assert.Equal(expected.X, actual.X, 4);
         Assert.Equal(expected.Y, actual.Y, 4);
         Assert.Equal(expected.Z, actual.Z, 4);
+    }
+
+    private static int Index(string text, string pattern)
+    {
+        Match match = Regex.Match(text, pattern);
+        Assert.True(match.Success, "Missing: " + pattern);
+        return match.Index;
     }
 
     private static string Source(string relative) => File.ReadAllText(Path.Combine(ProductRoot, relative));

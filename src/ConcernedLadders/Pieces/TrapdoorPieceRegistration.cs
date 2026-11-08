@@ -101,8 +101,9 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
             prefab.layer = layer;
             door.m_name = "$" + family.TrapdoorToken;
 
-            // Presentation roots by wear state, as the donor had them: two where the donor has a worn material, one
-            // (all three references the same object) where the donor itself uses one root.
+            // Presentation roots by wear state: two where the donor has a worn material (m_broken shares the worn root;
+            // stave_gate's own broken root used the same worn material), one (all three references the same object)
+            // where the donor itself uses one root.
             GameObject fresh = FrameRoot(prefab.transform, TrapdoorBlueprint.NewRoot, frame, layer);
             GameObject worn = frameWorn == null ? fresh : FrameRoot(prefab.transform, TrapdoorBlueprint.WornRoot, frameWorn, layer);
             wear.m_new = fresh;
