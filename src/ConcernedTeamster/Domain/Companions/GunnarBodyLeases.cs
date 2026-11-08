@@ -107,7 +107,15 @@ internal sealed class GunnarBodyLeases
     public bool TryTakeWorker(Action removeFigure, out string refusal)
     {
         ReleasePresentation(removeFigure);
-        if (HoldsWorker) { refusal = string.Empty; LastRefusal = string.Empty; return true; }
+        if (HoldsWorker)
+        {
+            // A body was just placed and the census has not counted it yet: a
+            // second one now would be the duplicate the census exists to catch.
+            refusal = "a worker body was just placed and has not been counted yet; try again in a moment";
+            LastRefusal = refusal;
+            return false;
+        }
+
         _arrival = null;
         BodyClaim claim = _registry.TryClaimBody(_identity, NpcBodyKind.Worker, ArrivalHolder);
         if (claim.IsGranted && claim.Lease != null)

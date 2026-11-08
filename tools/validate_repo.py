@@ -3558,35 +3558,49 @@ TEAMSTER_COMPANIONS_PREFIX = "Adapters/Companions/"
 TEAMSTER_FIGURE_LIBRARY_NAME = re.compile(
     r"\b(?:NpcPresentationBody|NpcPresentationFigure|NpcFigureDresser|NpcFigureParts|NpcFigureTalk)\b")
 TEAMSTER_FIGURE_NEVER = re.compile(r"\bNpcWorkerDresser\b")
+# The library's public body builders. The companion layer is presentation, so
+# a networked or saved body built from it would be the worker runtime's job
+# done in the wrong folder.
+TEAMSTER_COMPANIONS_NO_BODY = re.compile(r"\b(?:NpcWorkerPrefabFactory|NpcWorkerPrefabOptions|NpcWorldBodies|NpcBody)\b")
+# Unity's generic overloads put a type argument before the parenthesis.
+_TEAMSTER_GENERIC = r"\s*(?:<[^(){};]*>\s*)?\("
 # what, broad spelling, exact spelling, population
 TEAMSTER_FIGURE_CALLS = (
-    ("the extraction", re.compile(r"\bTryExtract\s*\("),
+    ("the extraction", re.compile(r"\bTryExtract" + _TEAMSTER_GENERIC),
      re.compile(r"\bNpcPresentationBody\s*\.\s*TryExtract\s*\(\s*source\s*,\s*\"Player\"\s*,"
                 r"\s*\"CT_GunnarFigure\"\s*,\s*\"CT_GunnarFigure_Source\"\s*,\s*string\s*\.\s*Empty\s*,"
                 r"\s*_log\s*\)"), 1),
-    ("the dresser", re.compile(r"\bnew\s+NpcFigureDresser\s*\("),
-     re.compile(r"\bnew\s+NpcFigureDresser\s*\(\s*figure\s*,\s*look\s*,\s*\"CT_GunnarFigure_Look\"\s*,\s*_log\s*\)"), 1),
-    ("standing it", re.compile(r"\.\s*StandAt\s*\("),
+    # Counted by the type's name rather than by `new NpcFigureDresser(`, so a
+    # target-typed `NpcFigureDresser second = new(...)` is a second site too:
+    # the field's declaration and the one construction are the whole population.
+    ("the dresser", re.compile(r"\bNpcFigureDresser\b"),
+     re.compile(r"\bprivate\s+NpcFigureDresser\s*\?\s*_dresser\s*;|"
+                r"\bnew\s+NpcFigureDresser\s*\(\s*figure\s*,\s*look\s*,\s*\"CT_GunnarFigure_Look\"\s*,\s*_log\s*\)"), 2),
+    ("standing it", re.compile(r"\.\s*StandAt\b"),
      re.compile(r"\b_dresser\s*\.\s*StandAt\s*\(\s*spot\s*,\s*facing\s*\)"), 2),
-    ("dressing it", re.compile(r"\.\s*Apply\s*\("),
+    ("dressing it", re.compile(r"\.\s*Apply\b"),
      re.compile(r"\b_dresser\s*\.\s*Apply\s*\(\s*\)"), 1),
-    ("its talk point", re.compile(r"\.\s*EnableTalk\s*\("),
+    ("its talk point", re.compile(r"\.\s*EnableTalk\b"),
      re.compile(r"\b_dresser\s*\.\s*EnableTalk\s*\(\s*displayName\s*,\s*\"Talk\"\s*,\s*talk\s*,\s*_log\s*\)"), 1),
-    ("taking it down", re.compile(r"\.\s*TakeDown\s*\("),
+    ("taking it down", re.compile(r"\.\s*TakeDown\b"),
      re.compile(r"\b_dresser\s*\?\s*\.\s*TakeDown\s*\(\s*\)"), 1),
 )
 TEAMSTER_FIGURE_CREATION = (
-    ("an instantiation", re.compile(r"\bInstantiate\s*\(")),
+    ("an instantiation", re.compile(r"\bInstantiate" + _TEAMSTER_GENERIC)),
+    ("a new object", re.compile(r"\bCreatePrimitive\b|\bnew\s+(?:UnityEngine\s*\.\s*)?GameObject\s*\(")),
+    ("an object lookup", re.compile(r"\bGameObject\s*\.\s*Find\w*\b|\bFind\w*ObjectsOfType\b|\bFindObjectOfType\b|"
+                                    r"\bFindFirstObjectByType\b|\bFindAnyObjectByType\b|\bFindObjectsByType\b")),
     ("a component addition", re.compile(r"\bAddComponent\b")),
-    ("a re-parent", re.compile(r"\bSetParent\s*\(|\.\s*parent\s*=(?!=)")),
-    ("an activation", re.compile(r"\bSetActive\s*\(|\.\s*enabled\s*=(?!=)")),
+    ("a re-parent", re.compile(r"\bSetParent\b|\.\s*parent\s*=(?!=)")),
+    ("an activation", re.compile(r"\bSetActive\b|\.\s*enabled\s*=(?!=)")),
     ("a persistent object", re.compile(r"\bDontDestroyOnLoad\b")),
     ("a pose or layer write", re.compile(
         r"\.\s*(?:position|rotation|localPosition|localRotation|localScale|eulerAngles|localEulerAngles|layer)"
-        r"\s*[-+*/]?=(?!=)")),
+        r"\s*[-+*/]?=(?!=)|\b(?:SetPositionAndRotation|SetLocalPositionAndRotation|Translate|Rotate|RotateAround|"
+        r"LookAt)\s*\(")),
 )
 TEAMSTER_FIGURE_FILE_FORBIDDEN = TEAMSTER_FIGURE_CREATION + (
-    ("a destruction", re.compile(r"\bDestroy\w*\s*\(")),
+    ("a destruction", re.compile(r"\bDestroy\w*\b")),
     ("a component lookup", re.compile(r"\bGetComponent\w*\b")),
     ("a network view or object", re.compile(r"\b(?:ZNetView|ZNetScene|ZDO\w*|ZRoutedRpc)\b")),
     ("a physics component", re.compile(r"\b(?:\w*Collider|Rigidbody\w*|CharacterController)\b")),
@@ -3594,18 +3608,65 @@ TEAMSTER_FIGURE_FILE_FORBIDDEN = TEAMSTER_FIGURE_CREATION + (
     ("a transform", re.compile(r"\.\s*transform\b|\bTransform\b")),
     ("the figure's own object", re.compile(r"\.\s*(?:Root|gameObject|Animator|BodyModel|HelmetJoint|RightHandJoint)\b")),
     ("reflection", re.compile(
-        r"\b(?:GetMethod|GetField|GetProperty|GetType|Activator|SendMessage|BroadcastMessage)\b|\btypeof\s*\(")),
-    # The forbidden scan reads code with string contents blanked (a log name
+        r"\b(?:GetMethod|GetField|GetProperty|GetType|Activator|SendMessage|BroadcastMessage|Invoke|"
+        r"MethodInfo|FieldInfo|PropertyInfo)\b|\btypeof\s*\(")),
+    # Target-typed construction names no type, so it could build anything the
+    # receiving declaration names. The file needs none.
+    ("a target-typed new", re.compile(r"\bnew\s*\(")),
+    # The forbidden scan reads code with literal contents blanked (a log name
     # such as "Player" is not a type), so an interpolated string - whose holes
     # are code - would be a place to hide one. The file needs none.
-    ("an interpolated string", re.compile(r"\$@?\"|@\$\"")),
+    ("an interpolated string", re.compile(r"\$\s*@?\s*\"|@\s*\$\s*\"")),
 )
-TEAMSTER_FIGURE_STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 
 
-def _teamster_figure_sources(errors: list[str], label: str) -> dict[str, str]:
-    """The Teamster product less obj/bin, keyed relative to the product, plus the
-    shared trees its project file compiles in, keyed `../Shared/<tree>/...`."""
+def _teamster_figure_mask_literals(code: str) -> str:
+    """Blanks string and char literal contents, keeping every offset and line.
+
+    A real scan, not a regex: a char literal `'"'` or a verbatim `@"C:\\"`
+    would otherwise pair quotes wrongly and blank code between two literals,
+    which is how a forbidden call could be hidden from the scan below."""
+    out = list(code)
+    i, n = 0, len(code)
+    while i < n:
+        c = code[i]
+        if c == "'":
+            j = i + 1
+            while j < n and code[j] not in "'\n":
+                j += 2 if code[j] == "\\" else 1
+            for k in range(i + 1, min(j, n)):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j + 1
+        elif c == '"':
+            verbatim = i > 0 and code[i - 1] == "@" or i > 1 and code[i - 2] == "@" and code[i - 1] == "$"
+            j = i + 1
+            while j < n:
+                if verbatim and code[j] == '"' and j + 1 < n and code[j + 1] == '"':
+                    j += 2
+                    continue
+                if not verbatim and code[j] == "\\":
+                    j += 2
+                    continue
+                if code[j] == '"' or (not verbatim and code[j] == "\n"):
+                    break
+                j += 1
+            for k in range(i + 1, min(j, n)):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j + 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+TEAMSTER_SHARED_INCLUDE = re.compile(r"""Include\s*=\s*"\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]""")
+
+
+def _teamster_figure_sources(errors: list[str], label: str) -> tuple[dict[str, str], list[str]]:
+    """The Teamster product less obj/bin, keyed relative to the product, plus
+    every shared tree its project file compiles in - read from the project file,
+    so a tree added there is audited here - keyed `../Shared/<tree>/...`."""
     teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
     sources: dict[str, str] = {}
     for path in sorted(teamster_dir.rglob("*.cs")):
@@ -3613,27 +3674,33 @@ def _teamster_figure_sources(errors: list[str], label: str) -> dict[str, str]:
         if rel.parts[0] in ("obj", "bin"):
             continue
         sources[rel.as_posix()] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+    csproj = teamster_dir / str(PRODUCTS["teamster"]["csproj"])
+    linked = sorted(set(TEAMSTER_SHARED_INCLUDE.findall(csproj.read_text(encoding="utf-8-sig")))) \
+        if csproj.is_file() else []
+    if not linked:
+        fail(f"{label}: no shared source tree could be read from {csproj.relative_to(ROOT).as_posix()}, so "
+             "part of the product may not be audited", errors)
     shared_root = ROOT / "src" / "Shared"
-    for name in TEAMSTER_LINKED_SHARED_DIRS:
-        linked = shared_root / name
-        if not linked.is_dir():
+    for name in linked:
+        tree = shared_root / name
+        if not tree.is_dir():
             fail(f"{label}: the shared tree src/Shared/{name} Teamster compiles in is missing, so part of "
                  "the product is not being audited", errors)
             continue
-        for path in sorted(linked.rglob("*.cs")):
-            rel = path.relative_to(linked)
+        for path in sorted(tree.rglob("*.cs")):
+            rel = path.relative_to(tree)
             if rel.parts[0] in ("obj", "bin"):
                 continue
             sources["../Shared/" + name + "/" + rel.as_posix()] = _strip_cs_comments(
                 path.read_text(encoding="utf-8-sig"))
-    return sources
+    return sources, linked
 
 
 def check_teamster_figure_is_confined(errors: list[str]) -> list[str]:
     """#458: Gunnar's figure goes through Concerned NPC from one pinned file
     that makes no engine write of its own."""
     label = "[teamster] #458 figure audit"
-    sources = _teamster_figure_sources(errors, label)
+    sources, linked = _teamster_figure_sources(errors, label)
 
     def shown(rel: str) -> str:
         return "src/" + rel[3:] if rel.startswith("../") else f"src/ConcernedTeamster/{rel}"
@@ -3660,7 +3727,12 @@ def check_teamster_figure_is_confined(errors: list[str]) -> list[str]:
                 fail(f"{label}: {shown(rel)}:{line_of(code, match.start())} names {match.group(0)}, which only "
                      f"{shown(TEAMSTER_FIGURE_FILE)} may: a second way to build, stand or take down a figure",
                      errors)
-            if rel.startswith(TEAMSTER_COMPANIONS_PREFIX):
+        if rel.startswith(TEAMSTER_COMPANIONS_PREFIX):
+            for match in TEAMSTER_COMPANIONS_NO_BODY.finditer(code):
+                hits += 1
+                fail(f"{label}: {shown(rel)}:{line_of(code, match.start())} names {match.group(0)}. The companion "
+                     "layer is presentation; a body is the worker runtime's to build", errors)
+            if rel != TEAMSTER_FIGURE_FILE:
                 for what, pattern in TEAMSTER_FIGURE_CREATION:
                     for match in pattern.finditer(code):
                         hits += 1
@@ -3682,8 +3754,7 @@ def check_teamster_figure_is_confined(errors: list[str]) -> list[str]:
                 fail(f"{label}: unpinned {what} in {shown(TEAMSTER_FIGURE_FILE)}:"
                      f"{line_of(figure, match.start())}", errors)
 
-    # Same length, so line numbers hold; the quotes stay, so `$"` still shows.
-    figure_code = TEAMSTER_FIGURE_STRING.sub(lambda m: '"' + " " * (len(m.group(0)) - 2) + '"', figure)
+    figure_code = _teamster_figure_mask_literals(figure)
     for what, pattern in TEAMSTER_FIGURE_FILE_FORBIDDEN:
         for match in pattern.finditer(figure_code):
             hits += 1
@@ -3693,11 +3764,13 @@ def check_teamster_figure_is_confined(errors: list[str]) -> list[str]:
 
     return [
         f"{label}: {len(sources)} source(s) - the whole of src/ConcernedTeamster less obj/ and bin/, and the "
-        f"{len(TEAMSTER_LINKED_SHARED_DIRS)} shared tree(s) it compiles in - name the figure library only in "
-        f"{shown(TEAMSTER_FIGURE_FILE)}, whose {pinned} figure call(s) are pinned by spelling and population and "
-        "which makes no engine write, lookup or reflection of its own; nothing names NpcWorkerDresser; the rest "
-        "of Adapters/Companions instantiates, adds, re-parents, activates and poses nothing. A source-text "
-        f"audit with comments stripped: it does not follow indirection or prove control flow ({hits} violations)",
+        f"{len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - name the figure "
+        f"library only in {shown(TEAMSTER_FIGURE_FILE)}, whose {pinned} figure site(s) are pinned by spelling and "
+        "population and which makes no engine write, lookup, reflection or target-typed construction of its own; "
+        "nothing names NpcWorkerDresser; the rest of Adapters/Companions instantiates, creates, finds, adds, "
+        "re-parents, activates and poses nothing and names no body builder. A source-text audit with comments "
+        "stripped: it does not follow a delegate, a method group or a name built from strings to an engine call "
+        f"that spells none of these tokens, and it does not prove control flow ({hits} violations)",
     ]
 
 

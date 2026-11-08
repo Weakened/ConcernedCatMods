@@ -62,6 +62,8 @@ internal sealed class GunnarFigurePresenter
         // A lease the arbiter ended (a world change, a late callback) never
         // carries an old figure into a new claim.
         if (_dresser != null && !_leases.HoldsPresentation) RemoveFigure();
+        // A rig that failed to build in this world holds no lease for nothing.
+        if (_dresser == null && BuildFailed) { Hide(); return; }
         if (!_leases.TakePresentation()) { Hide(); return; }
 
         if (_dresser != null)
@@ -75,7 +77,6 @@ internal sealed class GunnarFigurePresenter
             return;
         }
 
-        if (BuildFailed) return;
         NpcPresentationFigure figure = NpcPresentationBody.TryExtract(
             source, "Player", "CT_GunnarFigure", "CT_GunnarFigure_Source", string.Empty, _log);
         if (!figure.IsBuilt)

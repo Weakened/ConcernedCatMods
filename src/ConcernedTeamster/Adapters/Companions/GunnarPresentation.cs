@@ -44,9 +44,6 @@ internal sealed class GunnarPresentation
     private const float ShowWithinMetres = 48f;
     private const float KeepWithinMetres = 64f;
 
-    /// <summary>How long a hand-over waits for the census to account for the
-    /// body it placed before it believes a "no body" answer.</summary>
-    private const float ArrivalPatienceSeconds = 5f;
 
     // Built once: the pass runs twice a second and the look never changes.
     private static readonly TheConcernedCat.ConcernedNPC.Appearance.NpcLookSpec Look = GunnarLook.Spec();
@@ -68,6 +65,7 @@ internal sealed class GunnarPresentation
     private CompanionAnchor _plannedFor;
     private PlacementResult _placement;
     private string _last = "not asked yet";
+    private int _solidMask;
 
     private GunnarPresentation(GunnarCompanionAdapter companion, Func<WorkerBodyStatus> census,
         Func<bool> liveBody, Func<bool> resting, NpcIdentity identity, Action<string> log)
@@ -143,6 +141,10 @@ internal sealed class GunnarPresentation
         try
         {
             bool granted = _figure.HandOverToWorker(out standing, out refusal);
+            // The spot was probed for a figure, not a character's body: a spot
+            // with no headroom (a beam, a piece built since) is not used, and
+            // the body falls back to the spot in front of the player.
+            if (granted && standing.HasValue && !HasHeadroom(standing.Value)) standing = null;
             if (granted)
             {
                 _arrivalPending = true;
@@ -215,11 +217,7 @@ internal sealed class GunnarPresentation
     {
         if (!_arrivalPending && !_leases.HoldsWorker) return;
         bool? present = GunnarWorkerPresence.From(_census(), _liveBody());
-        bool patient = Time.unscaledTime - _arrivalSince < ArrivalPatienceSeconds;
-        // The guard goes once the census has the body, or once the census has
-        // said "no body" for long enough that it is not a stale answer from
-        // before the body was placed.
-        if (present == true || (present == false && !patient))
+        if (GunnarArrival.MayRelease(present, Time.unscaledTime - _arrivalSince))
         {
             _leases.ReleaseWorker();
             _arrivalPending = false;
@@ -249,7 +247,15 @@ internal sealed class GunnarPresentation
             return;
         }
 
-        int saved = _arrivalPending || _leases.HoldsWorker ? -1 : Count(GunnarWorkerPresence.From(_census(), _liveBody()));
+        int saved = GunnarArrival.SavedWorkers(_arrivalPending || _leases.HoldsWorker,
+            GunnarWorkerPresence.From(_census(), _liveBody()));
+        if (saved != 0)
+        {
+            // Settled before any physics: a body, or not knowing, means no figure.
+            Down(saved > 0 ? "his worker body is in this world" : "his saved bodies are not accounted for yet");
+            return;
+        }
+
         bool resting = _resting();
         bool anchorKnown = _environment.TryAnchor(out CompanionAnchor anchor);
         Player? player = Player.m_localPlayer;
@@ -293,13 +299,18 @@ internal sealed class GunnarPresentation
         _last = _figure.IsShown ? "at home, resting" : "wanted at home, not shown";
     }
 
+    private bool HasHeadroom(Vector3 spot)
+    {
+        if (_solidMask == 0) _solidMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece");
+        return _solidMask != 0 && !Physics.CheckCapsule(spot + Vector3.up * 0.6f, spot + Vector3.up * 1.7f, 0.3f,
+            _solidMask, QueryTriggerInteraction.Ignore);
+    }
+
     private void Down(string why)
     {
         _figure.Hide();
         _last = why;
     }
-
-    private static int Count(bool? present) => present == true ? 1 : present == false ? 0 : -1;
 
     private static Vector3 ToVector(WorldPoint p) => new(p.X, p.Y, p.Z);
 }

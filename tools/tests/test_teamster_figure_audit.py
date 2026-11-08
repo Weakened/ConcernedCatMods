@@ -13,6 +13,9 @@ validator that lacked this rule (origin/main 4457f20's tools/validate_repo.py,
 copied into tools/ so its ROOT is this tree) before being added here: setting
 TEAMSTER_FIGURE_PLANT_VALIDATOR to such a validator's path re-runs that check,
 expecting every plant except the #313 regression pin to get through it.
+The nine plants an independent review constructed against the first version
+of this rule (4674c97) were also each verified to get through that version's
+validator, whose rule they defeated.
 """
 import os
 import shutil
@@ -35,7 +38,7 @@ LABEL = "[teamster] #458 figure audit"
 SCOPE_313 = "[interop] #313 worker-runtime scope audit"
 
 APPLIED = "        _dresser.Apply();\n"
-COUNT = "    private static int Count(bool? present) =>"
+COUNT = "    private bool HasHeadroom(Vector3 spot)"
 DISPOSE = "        _leases.ReleaseWorker();\n    }\n\n    /// <summary>For <c>ct_haul status</c>.</summary>"
 ARRIVED = "        BodiesChanged?.Invoke();\n        return \"Gunnar arrived at \""
 EXTRACTION = ('NpcPresentationBody.TryExtract(\n'
@@ -183,6 +186,67 @@ class TeamsterFigureIsConfined(unittest.TestCase):
     def test_code_hidden_in_an_interpolated_string_is_refused(self):
         self.after(PRESENTER, APPLIED, "        _log($\"{UnityEngine.Object.Instantiate(source!)}\");\n")
         self.assert_refused("an interpolation hole instantiated past the string blanking")
+
+    # --- escapes the first independent review constructed against 4674c97 ----------------------
+
+    def test_a_generic_instantiation_is_refused(self):
+        # Of the game's own player prefab: a live Player, the thing CLAUDE.md forbids.
+        self.after(PRESENTER, APPLIED, "        UnityEngine.Object.Instantiate<GameObject>(source!);\n")
+        self.assert_refused("a type argument carried an instantiation past the pattern")
+
+    def test_a_char_literal_cannot_hide_code_from_the_scan(self):
+        self.after(PRESENTER, APPLIED,
+                   "        const char Q = '\"'; var view = source!.GetComponent<ZNetView>(); _log(\"x\");\n")
+        self.assert_refused("a char literal paired the quotes wrongly and hid a network-view lookup")
+
+    def test_a_verbatim_string_cannot_hide_code_from_the_scan(self):
+        self.after(PRESENTER, APPLIED,
+                   "        string at = @\"C:\\\"; var view = source!.GetComponent<ZNetView>(); _log(\"x\");\n")
+        self.assert_refused("a verbatim string's backslash hid a network-view lookup")
+
+    def test_a_new_object_in_the_figure_file_is_refused(self):
+        self.after(PRESENTER, APPLIED, "        var extra = new GameObject(\"CT_GunnarExtra\");\n")
+        self.assert_refused("the figure file built an object of its own")
+
+    def test_a_target_typed_second_dresser_is_refused(self):
+        self.after(PRESENTER, APPLIED,
+                   "        NpcFigureDresser second = new(figure, look, \"CT_GunnarFigure_Look\", _log);\n")
+        self.assert_refused("a target-typed construction built a second dresser unseen by the count")
+
+    def test_a_primitive_in_the_companion_layer_is_refused(self):
+        self.plant_file(COMPANIONS, ("ZzPrimitive.cs",),
+                        "namespace TheConcernedCat.ConcernedTeamster.Adapters.Companions;\n"
+                        "internal static class ZzPrimitive\n"
+                        "{\n"
+                        "    internal static UnityEngine.GameObject Run() =>\n"
+                        "        UnityEngine.GameObject.CreatePrimitive(UnityEngine.PrimitiveType.Capsule);\n"
+                        "}\n")
+        self.assert_refused("a solid primitive was built beside the figure")
+
+    def test_finding_and_moving_the_figure_from_the_runtime_is_refused(self):
+        self.swap_in(RUNTIME, DISPOSE,
+                     "        _leases.ReleaseWorker();\n        GameObject.Find(\"CT_GunnarFigure\").transform"
+                     ".SetPositionAndRotation(Vector3.zero, Quaternion.identity);\n    }\n\n"
+                     "    /// <summary>For <c>ct_haul status</c>.</summary>")
+        self.assert_refused("the runtime found the figure by name and moved it")
+
+    def test_a_body_builder_in_the_companion_layer_is_refused(self):
+        self.plant_file(COMPANIONS, ("ZzBodies.cs",),
+                        "namespace TheConcernedCat.ConcernedTeamster.Adapters.Companions;\n"
+                        "internal static class ZzBodies\n"
+                        "{\n"
+                        "    internal const string Name = nameof(TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies);\n"
+                        "}\n")
+        self.assert_refused("the companion layer reached for the library's body builders")
+
+    def test_the_shared_companions_tree_is_in_scope(self):
+        self.plant_file(os.path.join(ROOT, "src", "Shared", "Companions"), ("ZzFigureName.cs",),
+                        "namespace TheConcernedCat.Companions;\n"
+                        "internal static class ZzFigureName\n"
+                        "{\n"
+                        "    internal const string Name = \"NpcFigureDresser\";\n"
+                        "}\n")
+        self.assert_refused("the shared tree the project file compiles in but the audit skipped")
 
     # --- the rest of the companion layer builds nothing ----------------------------------------
 

@@ -33,3 +33,19 @@ internal static class GunnarBodyPlan
             ? GunnarBodyKind.Presentation : GunnarBodyKind.None;
     }
 }
+
+/// <summary>The hand-over's arrival guard, decided game-free (#458). Between
+/// the hand-over and the census counting the body it placed, his saved bodies
+/// are unknown - never zero - and the guard goes only once the census has the
+/// body, or has said "no body" for longer than a stale answer could last.
+/// Unknown holds it.</summary>
+internal static class GunnarArrival
+{
+    public const float PatienceSeconds = 5f;
+
+    public static int SavedWorkers(bool handingOver, bool? present) =>
+        handingOver ? -1 : present == true ? 1 : present == false ? 0 : -1;
+
+    public static bool MayRelease(bool? present, float heldSeconds) =>
+        present == true || (present == false && heldSeconds >= PatienceSeconds);
+}

@@ -38,6 +38,23 @@ public sealed class GunnarHandOverOrderTests
     }
 
     [Fact]
+    public void AFailedRigHoldsNoLease()
+    {
+        string body = Method(Presenter, "public void Show(");
+        AssertBefore(body, "if (_dresser == null && BuildFailed) { Hide(); return; }", "_leases.TakePresentation()");
+    }
+
+    [Fact]
+    public void TheRuntimeUsesTheGameFreeArrivalDecisions()
+    {
+        Assert.Contains("GunnarArrival.MayRelease(present, Time.unscaledTime - _arrivalSince)", Method(Runtime, "private void SettleArrival("));
+        string pass = Method(Runtime, "private void Pass(");
+        Assert.Contains("GunnarArrival.SavedWorkers(_arrivalPending || _leases.HoldsWorker,", pass);
+        AssertBefore(pass, "if (saved != 0)", "_environment.TryAnchor(");
+        Assert.Contains("if (granted && standing.HasValue && !HasHeadroom(standing.Value)) standing = null;", Method(Runtime, "public bool TakeWorkerBody("));
+    }
+
+    [Fact]
     public void EveryReleaseTakesTheFigureDownFirst()
     {
         Assert.Contains("public void Hide() => _leases.ReleasePresentation(RemoveFigure);", Presenter);
