@@ -907,10 +907,11 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
     def test_an_overload_may_not_return_the_other_partys_inventory(self):
         # Found by the review of #381's chest take: the measurement reads through
         # the same helpers, so a swapped overload reverses the move and records
-        # it as a clean deposit.
+        # it as a clean deposit. The pinned expression is kept inside the
+        # replacement on purpose: a substring pin let `_g ?? (pinned)` through.
         self.swap_in_deposit(
             "return container == null ? null : container.GetInventory();",
-            "return _held == null ? null : _held.GetInventory();")
+            "return _g ?? (container == null ? null : container.GetInventory());")
         self.assert_refused("an overload returned the other party's inventory", marker="#381",
                             contains="container overload returns")
 

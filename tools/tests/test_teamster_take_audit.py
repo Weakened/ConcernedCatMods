@@ -200,6 +200,19 @@ class ChestTakeIsNarrow(unittest.TestCase):
                      "return _held == null ? null : _held.GetInventory();")
         self.assert_audit_refused("an overload returned the other party's inventory")
 
+    def test_an_overload_may_not_answer_from_a_field_cache(self):
+        # The fourth review: the overload body was pinned as a substring, so
+        # `_g ?? (pinned)` kept the pin while answering from a field the entry
+        # point set to the other party.
+        self.swap_in(PORT, "return container == null ? null : container.GetInventory();",
+                     "return _g ?? (container == null ? null : container.GetInventory());")
+        self.assert_audit_refused("an overload answered from a field cache")
+
+    def test_the_port_may_not_hold_an_inventory_in_a_field(self):
+        self.swap_in(PORT, "    private readonly List<ItemDrop.ItemData> _matching",
+                     "    private Inventory? _held;\n\n    private readonly List<ItemDrop.ItemData> _matching")
+        self.assert_audit_refused("the port held an inventory in a field")
+
     def test_a_parameter_the_roles_come_from_may_not_be_reassigned(self):
         self.swap_in(PORT, "        int remaining = units;\n",
                      "        source = null;\n        int remaining = units;\n")

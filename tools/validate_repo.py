@@ -1753,12 +1753,25 @@ def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: t
     for spelling, why in (
             ("private static Inventory? InventoryOf(Container? container)", "the container overload is declared once"),
             ("private static Inventory? InventoryOf(Humanoid? worker)", "the worker overload is declared once"),
-            ("container == null ? null : container.GetInventory()", "the container overload returns the container's "
-                                                                    "own inventory"),
-            ("worker == null || worker.IsDead() ? null : worker.GetInventory()", "the worker overload returns the "
-                                                                                "living worker's own inventory")):
+            # The WHOLE try block, not a substring of it: `_cache ?? (pinned)`
+            # contains the pinned expression and returns something else.
+            ("try { return container == null ? null : container.GetInventory(); }",
+             "the container overload returns the container's own inventory and nothing else"),
+            ("try { return worker == null || worker.IsDead() ? null : worker.GetInventory(); }",
+             "the worker overload returns the living worker's own inventory and nothing else")):
         if len(_teamster_take_exact(spelling).findall(blank)) != 1:
             found.append(f"`{spelling}` is not in the port exactly once - {why}")
+    # No state an overload could answer from instead: the port's only field is
+    # the list it reuses for matching stacks, and nothing at class level holds an
+    # inventory, a character or a container.
+    fields = re.findall(r"^    (?! )(?:(?:private|internal|public|protected|static|readonly|volatile)[ \t]+)*"
+                        r"(?!return\b|break\b|continue\b|throw\b)"
+                        r"([\w<>.?,\[\]][\w<>.?,\[\] \t]*?)[ \t]+([A-Za-z_]\w*)[ \t]*(?:=[^>=]|;)", blank, re.M)
+    others = sorted(name for _type, name in fields if name != "_matching")
+    if others or len(fields) != 1:
+        found.append(f"the port's fields are {sorted(name for _t, name in fields)}; exactly one is authorized, "
+                     "`_matching` - a field is state an InventoryOf overload or a derivation could answer from "
+                     "instead of its own argument")
     getters = len(re.findall(r"\.\s*GetInventory" + SPACE + r"\(", blank))
     if getters != 2:
         found.append(f"the port reads an inventory with GetInventory {getters} time(s); exactly two are authorized, "
