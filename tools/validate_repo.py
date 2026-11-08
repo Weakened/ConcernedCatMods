@@ -8136,6 +8136,27 @@ NPC_BODY_GATE_ENDS_ON_THE_LEASE = re.compile(
     r"if\s*\(\s*!\s*lease\s*\.\s*IsActive\s*\)\s*\{\s*return\s+NpcBuildPermission\s*\.\s*Refused\s*\([^;{}]*\)\s*;\s*\}\s*"
     r"return\s+NpcBuildPermission\s*\.\s*Granted\s*\(\s*\)\s*;\s*\}\s*\}\s*$")
 NPC_BODY_GRANT = re.compile(r"\bNpcBuildPermission\s*\.\s*Granted\s*\(")
+# #372 re-review: a network view put on a new object is a saved object the
+# scene keeps and rebuilds - a body made without the gate, which spells none of
+# the three words above. Consumers add components only in the generic form with
+# a concrete type today, so every way to make that type a network view is
+# refused: naming it, the Type-taking overload (whose argument can be any
+# `typeof` or Type variable), a generic helper passing its own type parameter
+# (`AddComponent<T>`, by the `T`/`TName` convention), an alias that renames the
+# type, and a subclass of it. A text audit's limit, stated: a type parameter
+# named against that convention, or reflection, is not seen.
+NPC_BODY_NETWORK_VIEW_ADDED = (
+    ("adds a network view to an object",
+     re.compile(r"\bAddComponent\s*<\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*>")),
+    ("adds a component by Type, which can be a network view",
+     re.compile(r"\bAddComponent\s*\(")),
+    ("adds a component of a generic type parameter, which can be a network view",
+     re.compile(r"\bAddComponent\s*<\s*T(?:[A-Z]\w*)?\s*>")),
+    ("renames the network view type",
+     re.compile(r"\busing\s+\w+\s*=\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*;")),
+    ("derives from the network view type",
+     re.compile(r"\bclass\s+\w+[^{;]*:[^{;]*\bZNetView\b")),
+)
 
 
 def _npc_body_consumer_sources(errors: list[str]) -> tuple[dict[tuple[str, str], str], list[str]]:
@@ -8210,6 +8231,11 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
                  "or creates a saved object itself. A product that consumes Concerned NPC creates a body only through "
                  "NpcWorkerPrefabFactory, which requires a BodyLease and re-checks it immediately before the "
                  "build; an engine instantiation here never asks the arbiter at all", errors)
+        for what, pattern in NPC_BODY_NETWORK_VIEW_ADDED:
+            for match in pattern.finditer(code):
+                fail(f"{NPC_BODY_LABEL}: [{product}] {rel}:{code.count(chr(10), 0, match.start()) + 1} {what}. "
+                     "A network view makes a saved object the scene rebuilds, so it is a body created without "
+                     "NpcWorkerPrefabFactory's lease check", errors)
     for key in NPC_BODY_PENDING_INSTANTIATIONS:
         if key not in sources:
             fail(f"{NPC_BODY_LABEL}: pinned pending site [{key[0]}] {key[1]} is missing; remove the pin with the "
@@ -8254,7 +8280,8 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
     return [
         f"{NPC_BODY_LABEL}: {len(sources)} source file(s) across {len(consumers)} consumer(s) "
         f"({', '.join(consumers)}) and the shared trees they compile in - no engine instantiation outside "
-        f"{pending} stated pending site(s); {calls} call(s) into the gated build at their pinned sites; the "
+        f"{pending} stated pending site(s), and no network view added, renamed or derived; "
+        f"{calls} call(s) into the gated build at their pinned sites; the "
         "factory's one instantiation follows the gate's refusal and the gate asks the lease last. A text audit: "
         f"it does not follow reflection or delegates, or prove control flow ({hits} violations)",
     ]

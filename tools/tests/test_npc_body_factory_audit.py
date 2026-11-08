@@ -10,9 +10,11 @@ repository validator, and restores the exact original bytes.
 Every plant was verified to PASS the validator with this rule's one call removed
 from main() - the copy without the rule - before being added, so each is an
 escape this rule is the one to catch rather than one another audit already
-refuses. That is why no plant here is in Foreman: #400 already refuses an
-unpinned instantiation anywhere in Foreman and every shared tree it compiles in,
-which covers every shared tree Steward and Teamster compile in too. Setting
+refuses. That is why no instantiation plant here is in Foreman: #400 already
+refuses an unpinned instantiation anywhere in Foreman and every shared tree it
+compiles in, which covers every shared tree Steward and Teamster compile in too.
+#400 does not refuse a network view put on a new object, so that plant is in
+Foreman as well as Steward. Setting
 NPC_BODY_PLANT_VALIDATOR to another validator's path re-runs that check,
 expecting every plant to get through it.
 """
@@ -32,6 +34,8 @@ STEWARD = os.path.join(ROOT, "src", "ConcernedSteward")
 STEWARD_PREFAB = os.path.join(STEWARD, "Runtime", "StewardWorkerPrefab.cs")
 STEWARD_RUNTIME = os.path.join(STEWARD, "Runtime", "StewardRuntime.cs")
 TEAMSTER_PREFAB = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "Workers", "TeamsterWorkerPrefab.cs")
+FOREMAN_SETTLEMENT = os.path.join(ROOT, "src", "ConcernedForeman", "Runtime", "Settlement", "SettlementRuntime.cs")
+FOREMAN_MARKER = "        WorkerBodyHandOver? handOver = TakeWorkerBody;\n"
 FACTORY = os.path.join(ROOT, "src", "ConcernedNPC", "Body", "NpcWorkerPrefabFactory.cs")
 GATE = os.path.join(ROOT, "src", "ConcernedNPC", "Body", "NpcBodyBuildGate.cs")
 
@@ -165,6 +169,48 @@ class BodiesComeOnlyFromTheGatedBuild(unittest.TestCase):
         self.swap_in(STEWARD_PREFAB, STEWARD_SPAWN,
                      "        GameObject? instance = null;\n        failure = \"not built\";\n")
         self.assert_refused("the Steward no longer spawns through the gated build")
+
+    # ---- a saved object made from a new GameObject (#372 re-review) ----------
+
+    def test_a_network_view_added_to_a_new_object_is_refused(self):
+        # A network view makes a saved object the scene keeps and rebuilds: a
+        # body created without the gate, spelling no Instantiate at all.
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        new GameObject(\"CS_Steward\").AddComponent<ZNetView>();\n")
+        self.assert_refused("a network view was put on a new object in the Steward")
+
+    def test_a_qualified_network_view_added_in_foreman_is_refused(self):
+        self.swap_in(FOREMAN_SETTLEMENT, FOREMAN_MARKER,
+                     "        new GameObject(\"Thorstein\").AddComponent<global::ZNetView>();\n" + FOREMAN_MARKER)
+        self.assert_refused("a network view was put on a new object in Foreman")
+
+    def test_the_type_taking_overload_is_refused(self):
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        new GameObject(\"CS_Steward\").AddComponent(typeof(ZNetView));\n")
+        self.assert_refused("a network view was added through the Type-taking overload")
+
+    def test_an_alias_of_the_network_view_is_refused(self):
+        self.plant_file(
+            os.path.join(STEWARD, "Runtime", "PlantedSavedObject.cs"),
+            "using UnityEngine;\nusing View = ZNetView;\n\nnamespace Planted;\n\ninternal static class Planted\n{\n"
+            "    internal static void Make() => new GameObject(\"CS_Steward\").AddComponent<View>();\n}\n")
+        self.assert_refused("a renamed network view was added to a new object")
+
+    def test_a_generic_helper_that_adds_its_type_parameter_is_refused(self):
+        self.plant_file(
+            os.path.join(STEWARD, "Runtime", "PlantedSavedObject.cs"),
+            "using UnityEngine;\n\nnamespace Planted;\n\ninternal static class Planted\n{\n"
+            "    private static T Add<T>(GameObject g) where T : Component => g.AddComponent<T>();\n\n"
+            "    internal static void Make() => Add<ZNetView>(new GameObject(\"CS_Steward\"));\n}\n")
+        self.assert_refused("a generic helper added a network view")
+
+    def test_a_subclass_of_the_network_view_is_refused(self):
+        self.plant_file(
+            os.path.join(STEWARD, "Runtime", "PlantedSavedObject.cs"),
+            "using UnityEngine;\n\nnamespace Planted;\n\ninternal sealed class SavedView : ZNetView\n{\n}\n\n"
+            "internal static class Planted\n{\n"
+            "    internal static void Make() => new GameObject(\"CS_Steward\").AddComponent<SavedView>();\n}\n")
+        self.assert_refused("a network view subclass was added to a new object")
 
     # ---- a factory that ignores a disposed lease -----------------------------
 
