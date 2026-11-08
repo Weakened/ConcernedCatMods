@@ -2738,10 +2738,11 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"), 1),
     )),
+    # #372: Thorstein's body is instantiated by Concerned NPC's gated build,
+    # which requires his worker lease and re-checks it last. No instantiation
+    # is pinned here any more, so every one in Foreman is unpinned.
     ("UnityEngine.Object.Instantiate", re.compile(
-        r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
-        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
-    )),
+        r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), ()),
     ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
@@ -2922,7 +2923,7 @@ def _npc_exact(pattern: str) -> re.Pattern:
 NPC_ENGINE_WRITES = (
     ("Instantiate", re.compile(r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
         ("Body/NpcPresentationBody.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
-        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*!\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+        ("Body/NpcWorkerPrefabFactory.cs", _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*prefab\s*!\s*,\s*position\s*,\s*rotation\s*\)"), 1),
         (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
         (NPC_KEEPSAKE_PARTS_FILE, _npc_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*prefab\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
     )),
@@ -7188,6 +7189,187 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
             "comments and their scrubber's spelling"]
 
 
+# #372 (CNPC-001): a product that consumes Concerned NPC creates a worker body
+# only through the library's gated build, and that build asks whether the lease
+# is still held immediately before it creates anything.
+#
+# Two halves, because the owner's acceptance criterion has two (issue #372,
+# re-review of CNPC-000): the factory takes a BodyLease and re-checks IsActive
+# immediately before building, and instantiation is confined to that factory.
+#
+# - Consumers. Every product whose project file references the library is read
+#   whole - every folder less obj/ and bin/, and every shared tree its project
+#   file compiles in (#401's lesson: a folder is not a boundary). `Instantiate`
+#   as a word, so a method group or a generic spelling is caught as well as a
+#   call, may appear nowhere in them except one stated, pinned pending site.
+#   Each adopted product's call into the gated build is pinned by path and
+#   population, so a product that stops calling it - a helper with no
+#   production caller - fails too.
+# - The library. The factory has exactly one instantiation, and the statement
+#   before it is the gate's refusal; the gate's last refusal is the lease check
+#   and nothing follows it but the grant.
+#
+# A source-text audit with a text audit's limits, stated rather than left to be
+# found: comments and string literals are blanked first; a creation reached
+# through reflection, `Activator`, or a delegate built from a string spells no
+# `Instantiate` and is invisible to it; and the adjacency pins prove the order
+# the statements are written in, not that control flow cannot route around
+# them - that is BodyInstantiationAuditTests', RoleBodySpawnTests' and a
+# reviewer's job.
+NPC_BODY_LABEL = "[interop] #372 body factory audit"
+NPC_BODY_INSTANTIATION = re.compile(r"\bInstantiate\b")
+NPC_BODY_ROLE_SPAWN = re.compile(r"\bNpcWorkerPrefabFactory\s*\.\s*TrySpawnRoleBody\s*\(")
+# (product key, path relative to the product): calls into the gated build.
+NPC_BODY_ROLE_SPAWN_SITES = {
+    ("foreman", "Runtime/Settlement/ForemanWorkerPrefab.cs"): 1,
+    ("steward", "Runtime/StewardWorkerPrefab.cs"): 1,
+}
+# Not adopted yet, stated rather than hidden. Gunnar's prefab is in the folder
+# Lane J's open #512/#513 change, so its move onto the gated build is #372's
+# named follow-up. Pinned by exact spelling and population so it cannot grow, and
+# keyed by product AND path so no other file inherits it by name.
+NPC_BODY_PENDING_INSTANTIATIONS = {
+    ("teamster", "Adapters/Workers/TeamsterWorkerPrefab.cs"): (
+        re.compile(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*Prefab\s*,\s*position\s*,\s*rotation\s*\)"),
+        1),
+}
+NPC_BODY_FACTORY_FILE = ("Body", "NpcWorkerPrefabFactory.cs")
+NPC_BODY_GATE_FILE = ("Body", "NpcBodyBuildGate.cs")
+NPC_BODY_GATED_BUILD = re.compile(
+    r"NpcBuildPermission\s+permission\s*=\s*NpcBodyBuildGate\s*\.\s*May\s*\([^;{}]*\)\s*;\s*"
+    r"if\s*\(\s*!\s*permission\s*\.\s*IsGranted\s*\)\s*\{\s*failure\s*=\s*permission\s*\.\s*Refusal\s*;\s*"
+    r"return\s+null\s*;\s*\}\s*"
+    r"GameObject\s+instance\s*=\s*UnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*prefab\s*!\s*,\s*position\s*,"
+    r"\s*rotation\s*\)\s*;")
+NPC_BODY_GATE_CALL = re.compile(r"\bNpcBodyBuildGate\s*\.\s*May\s*\(")
+NPC_BODY_GATE_ENDS_ON_THE_LEASE = re.compile(
+    r"if\s*\(\s*!\s*lease\s*\.\s*IsActive\s*\)\s*\{\s*return\s+NpcBuildPermission\s*\.\s*Refused\s*\([^;{}]*\)\s*;\s*\}\s*"
+    r"return\s+NpcBuildPermission\s*\.\s*Granted\s*\(\s*\)\s*;\s*\}\s*\}\s*$")
+NPC_BODY_GRANT = re.compile(r"\bNpcBuildPermission\s*\.\s*Granted\s*\(")
+
+
+def _npc_body_consumer_sources(errors: list[str]) -> tuple[dict[tuple[str, str], str], list[str]]:
+    """Every consumer's sources, keyed (product, product-relative path); a
+    shared file is keyed (product, '../Shared/<tree>/...'), which no product
+    path can spell. A scope this cannot establish is a failure, not a smaller
+    green."""
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        fail(f"{NPC_BODY_LABEL}: the Concerned NPC library is not declared, so its consumers cannot be found", errors)
+        return {}, []
+    lib_name = str(library["package_name"])
+    sources: dict[tuple[str, str], str] = {}
+    consumers: list[str] = []
+    for product_key, product_spec in PRODUCTS.items():
+        project_dir: Path = product_spec["project_dir"]  # type: ignore[assignment]
+        csproj = project_dir / str(product_spec["csproj"])
+        if not csproj.is_file():
+            continue
+        text = csproj.read_text(encoding="utf-8-sig")
+        if lib_name not in text:
+            continue
+        consumers.append(product_key)
+        roots: list[tuple[Path, str]] = [(project_dir, "")]
+        for raw in re.findall(r'Include="(\.\.[\\/]Shared[\\/][^"]*)"', text):
+            match = re.match(r'\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]', raw)
+            if match is None:
+                fail(f"{NPC_BODY_LABEL}: [{product_key}] compiles in a shared include this audit cannot "
+                     f"follow: {raw}", errors)
+                continue
+            shared = ROOT / "src" / "Shared" / match.group(1)
+            prefix = f"../Shared/{match.group(1)}/"
+            if all(existing != prefix for _, existing in roots):
+                if not shared.is_dir():
+                    fail(f"{NPC_BODY_LABEL}: [{product_key}] compiles in "
+                         f"{shared.relative_to(ROOT).as_posix()}, which is missing", errors)
+                    continue
+                roots.append((shared, prefix))
+        for root, prefix in roots:
+            for path in sorted(root.rglob("*.cs")):
+                relative = path.relative_to(root)
+                if any(part in ("obj", "bin") for part in relative.parts):
+                    continue
+                sources[(product_key, prefix + relative.as_posix())] = _cs_code_without_strings(path)
+    if not consumers:
+        fail(f"{NPC_BODY_LABEL}: no product consumes {lib_name}; the audit refuses rather than passing over "
+             "nothing", errors)
+    return sources, consumers
+
+
+def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> list[str]:
+    """#372: no consumer instantiates a body; the library's one build asks the lease last."""
+    before = len(errors)
+    sources, consumers = _npc_body_consumer_sources(errors)
+
+    pending = 0
+    for (product, rel), code in sources.items():
+        allowed: list[tuple[int, int]] = []
+        exact = NPC_BODY_PENDING_INSTANTIATIONS.get((product, rel))
+        if exact is not None:
+            pattern, expected = exact
+            found = list(pattern.finditer(code))
+            if len(found) != expected:
+                fail(f"{NPC_BODY_LABEL}: [{product}] {rel} has {len(found)} exact pending instantiation(s); the "
+                     f"pinned population is {expected}", errors)
+            pending += len(found)
+            allowed = [(match.start(), match.end()) for match in found]
+        for match in NPC_BODY_INSTANTIATION.finditer(code):
+            if any(start <= match.start() < end for start, end in allowed):
+                continue
+            fail(f"{NPC_BODY_LABEL}: [{product}] {rel}:{code.count(chr(10), 0, match.start()) + 1} instantiates "
+                 "something itself. A product that consumes Concerned NPC creates a body only through "
+                 "NpcWorkerPrefabFactory, which requires a BodyLease and re-checks it immediately before the "
+                 "build; an engine instantiation here never asks the arbiter at all", errors)
+    for key in NPC_BODY_PENDING_INSTANTIATIONS:
+        if key not in sources:
+            fail(f"{NPC_BODY_LABEL}: pinned pending site [{key[0]}] {key[1]} is missing; remove the pin with the "
+                 "change that adopted it rather than leaving an allowance that covers nothing", errors)
+
+    calls = 0
+    for (product, rel), code in sources.items():
+        found = len(NPC_BODY_ROLE_SPAWN.findall(code))
+        expected = NPC_BODY_ROLE_SPAWN_SITES.get((product, rel), 0)
+        calls += found
+        if found != expected:
+            fail(f"{NPC_BODY_LABEL}: [{product}] {rel} calls the gated build {found} time(s); the pinned "
+                 f"population is {expected}. Each adopted product spawns its body there and only there", errors)
+    for key in NPC_BODY_ROLE_SPAWN_SITES:
+        if key not in sources:
+            fail(f"{NPC_BODY_LABEL}: pinned spawn site [{key[0]}] {key[1]} is missing", errors)
+
+    library_dir = ROOT / "src" / "ConcernedNPC"
+    factory = library_dir.joinpath(*NPC_BODY_FACTORY_FILE)
+    gate = library_dir.joinpath(*NPC_BODY_GATE_FILE)
+    if not factory.is_file() or not gate.is_file():
+        fail(f"{NPC_BODY_LABEL}: the factory or its gate is missing from src/ConcernedNPC/Body", errors)
+    else:
+        factory_code = _cs_code_without_strings(factory)
+        builds = len(NPC_BODY_INSTANTIATION.findall(factory_code))
+        gated = len(NPC_BODY_GATED_BUILD.findall(factory_code))
+        asks = len(NPC_BODY_GATE_CALL.findall(factory_code))
+        if builds != 1 or gated != 1 or asks != 1:
+            fail(f"{NPC_BODY_LABEL}: NpcWorkerPrefabFactory.cs has {builds} instantiation(s), {asks} gate call(s) "
+                 f"and {gated} gated build(s); exactly one of each is allowed, the instantiation written "
+                 "immediately after the gate's refusal, so nothing can stand between the lease check and the "
+                 "body", errors)
+        gate_code = _cs_code_without_strings(gate)
+        grants = len(NPC_BODY_GRANT.findall(gate_code))
+        if grants != 1 or NPC_BODY_GATE_ENDS_ON_THE_LEASE.search(gate_code) is None:
+            fail(f"{NPC_BODY_LABEL}: NpcBodyBuildGate.cs no longer ends on `if (!lease.IsActive)` refusing, "
+                 f"followed by its one grant ({grants} grant(s) found). The lease is the one fact that can change "
+                 "between the claim and the build, so it is asked last; a factory that does not ask it builds "
+                 "under a lease that has gone", errors)
+
+    hits = len(errors) - before
+    return [
+        f"{NPC_BODY_LABEL}: {len(sources)} source file(s) across {len(consumers)} consumer(s) "
+        f"({', '.join(consumers)}) and the shared trees they compile in - no engine instantiation outside "
+        f"{pending} stated pending site(s); {calls} call(s) into the gated build at their pinned sites; the "
+        "factory's one instantiation follows the gate's refusal and the gate asks the lease last. A text audit: "
+        f"it does not follow reflection or delegates, or prove control flow ({hits} violations)",
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -7236,6 +7418,7 @@ def main() -> int:
     report.extend(check_every_product_pair_is_audited(errors))
     report.extend(check_library_consumers(errors))
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
+    report.extend(check_npc_consumer_bodies_come_from_the_gated_build(errors))
     report.extend(check_the_npc_library_writes_no_file(errors))
     report.extend(check_container_permissions_stay_reachable(errors))
     report.extend(check_container_permit_stays_unforgeable(errors))

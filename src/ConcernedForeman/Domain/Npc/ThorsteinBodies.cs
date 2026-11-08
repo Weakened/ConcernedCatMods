@@ -62,6 +62,13 @@ internal sealed class ThorsteinBodies
     /// <summary>The worker lease is held.</summary>
     internal bool HoldsWorker => _worker != null && _worker.IsActive;
 
+    /// <summary>The worker lease itself, while it is held, for the one call
+    /// that needs to show it: creating his body (#372). Null otherwise. The
+    /// library re-asks whether it is still held immediately before the body
+    /// is created, so handing it over grants nothing a release cannot take
+    /// back.</summary>
+    internal BodyLease? WorkerLease => HoldsWorker ? _worker : null;
+
     /// <summary>What is held now. Never both: see the class remarks.</summary>
     internal ThorsteinBodyKind Held =>
         HoldsWorker ? ThorsteinBodyKind.Worker

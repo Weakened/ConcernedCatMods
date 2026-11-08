@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Journal;
@@ -402,34 +403,33 @@ internal sealed class SettlementRuntime
         // figure, the figure goes and its lease is given up BEFORE the worker
         // body exists, and the body appears where he stood. Concerned NPC
         // refusing the worker lease refuses the spawn.
+        //
+        // #372: the hand-over also hands back the lease the body is created
+        // under, and Concerned NPC builds it - re-asking that the lease is still
+        // held immediately before, counting his saved bodies itself, and
+        // stamping his identity in the same call. No hand-over means no lease,
+        // and no lease means no body.
         WorkerBodyHandOver? handOver = TakeWorkerBody;
-        if (handOver != null)
+        if (handOver == null)
         {
-            if (!handOver(out Vector3? standing, out string refusal))
-            {
-                return "Refused: Concerned NPC would not give Thorstein a worker body (" + refusal + ").";
-            }
-
-            if (standing.HasValue)
-            {
-                position = standing.Value;
-            }
+            return "Refused: nothing can give Thorstein a worker lease, so no body is created.";
         }
 
-        ForemanWorkerAI? worker = ForemanWorkerPrefab.Spawn(position, Quaternion.identity);
+        if (!handOver(out Vector3? standing, out BodyLease? lease, out string refusal))
+        {
+            return "Refused: Concerned NPC would not give Thorstein a worker body (" + refusal + ").";
+        }
+
+        if (standing.HasValue)
+        {
+            position = standing.Value;
+        }
+
+        ForemanWorkerAI? worker = ForemanWorkerPrefab.Spawn(lease, position, Quaternion.identity, key, out string failure);
         if (worker == null)
         {
             ReleaseWorkerBody?.Invoke();
-            return "Refused: that ground is not loaded.";
-        }
-
-        if (!WorkerBody.TryStamp(worker.gameObject, key))
-        {
-            // An identity-less body is never adopted later; say so rather than
-            // leave one standing unexplained.
-            _log("A spawned worker body could not be given its identity; it will not be used.");
-            ReleaseWorkerBody?.Invoke();
-            return "Refused: the new body could not be given its identity, so it will not be used.";
+            return "Refused: " + (failure.Length == 0 ? "the body could not be created" : failure) + ".";
         }
 
         Bind(worker);
@@ -673,4 +673,4 @@ internal sealed class SettlementRuntime
 /// figure is taken down and its lease given up before the worker lease is
 /// asked for. <paramref name="standing"/> is where the figure stood, if there
 /// was one.</summary>
-internal delegate bool WorkerBodyHandOver(out Vector3? standing, out string refusal);
+internal delegate bool WorkerBodyHandOver(out Vector3? standing, out BodyLease? lease, out string refusal);

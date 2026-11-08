@@ -222,6 +222,43 @@ public sealed class ThorsteinBodyTests
     }
 
     [Fact]
+    public void TheWorkerLeaseIsHandedOutOnlyWhileItIsHeld()
+    {
+        // #372: the spawn shows this lease to Concerned NPC's build. A lease
+        // that has been given up is never handed out as if it were still good.
+        ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
+        var bodies = new ThorsteinBodies(registry, adoption.Identity);
+        Assert.Null(bodies.WorkerLease);
+
+        Assert.True(bodies.TryTakeWorker(out string refusal), refusal);
+        Assert.NotNull(bodies.WorkerLease);
+        Assert.True(bodies.WorkerLease!.IsActive);
+        Assert.Equal(NpcBodyKind.Worker, bodies.WorkerLease.Kind);
+
+        bodies.ReleaseWorker();
+        Assert.Null(bodies.WorkerLease);
+    }
+
+    [Fact]
+    public void WhileAJobHoldsHimNoWorkerLeaseIsHandedOut()
+    {
+        // #372: the spawn is refused in this state rather than building a body
+        // with no lease. Releasing a body held in a job's name releases that
+        // job's mode too, which is why the hand-over does not borrow the job's
+        // name for the build.
+        ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
+        var bodies = new ThorsteinBodies(registry, adoption.Identity);
+        Assert.Equal(
+            SharedWorkers.ActorModeOutcome.Entered,
+            adoption.Modes.Enter(SharedWorkers.ActorMode.Working, "collect-1"));
+
+        Assert.False(bodies.TryTakeWorker(out string refusal));
+        Assert.Contains("RefusedHolderConflict", refusal, StringComparison.Ordinal);
+        Assert.Null(bodies.WorkerLease);
+        Assert.Equal("collect-1", adoption.Modes.JobId);
+    }
+
+    [Fact]
     public void AWorldUnloadDropsBothAndTheNextWorldStartsClean()
     {
         ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);

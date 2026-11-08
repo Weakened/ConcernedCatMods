@@ -1,7 +1,10 @@
 using System;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedNPC.Bodies;
+using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedSteward.Domain;
+using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using UnityEngine;
 using TheConcernedCat.Diagnostics;
 
@@ -199,24 +202,26 @@ internal static class StewardWorkerPrefab
         return true;
     }
 
-    /// <summary>Spawns the Steward. The caller establishes authority and stamps
-    /// his identity; this refuses anyway when the ground is not loaded, because
-    /// a body spawned into unloaded ground is a body nobody owns.</summary>
-    internal static StewardWorkerAI? Spawn(Vector3 position, Quaternion rotation)
+    /// <summary>Spawns the Steward through Concerned NPC's gated build (#372),
+    /// and is the only way this product creates a body.
+    ///
+    /// The prefab is still built here, from the same base creature, with the
+    /// same components and under the same name, and registered at the same
+    /// moment; saved bodies load exactly as before. What moved is the
+    /// instantiation: the library requires <paramref name="lease"/>, re-asks
+    /// whether it is still held immediately before the body is created, counts
+    /// her saved bodies itself, refuses unloaded ground, and stamps
+    /// <paramref name="key"/> onto the new object in the same call - destroying
+    /// it again if that write fails, rather than leaving an identity-less body
+    /// the census would report forever. <c>tools/validate_repo.py</c> refuses the
+    /// engine's own instantiation anywhere in this product.</summary>
+    internal static StewardWorkerAI? Spawn(
+        BodyLease? lease, Vector3 position, Quaternion rotation, string key, out string failure)
     {
-        if (_prefab == null)
-        {
-            return null;
-        }
-
-        ZoneSystem zones = ZoneSystem.instance;
-        if (zones == null || !zones.IsZoneLoaded(position))
-        {
-            return null;
-        }
-
-        GameObject instance = UnityEngine.Object.Instantiate(_prefab, position, rotation);
-        return instance.GetComponent<StewardWorkerAI>();
+        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(
+            lease, StewardNpcRole.Contract, _prefab, position, rotation,
+            body => StewardBody.TryStamp(body, key), out failure);
+        return instance == null ? null : instance.GetComponent<StewardWorkerAI>();
     }
 
     /// <summary>The prefab stays registered across worlds; only the reference

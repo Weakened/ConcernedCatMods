@@ -79,6 +79,11 @@ the mod and says why.
 
 ### Notes
 
+- **Her body is created through Concerned NPC's gated build (#372).** `cs_steward recruit` takes her worker lease
+  before her body exists, and Concerned NPC asks again that it is still held immediately before it creates her,
+  counts her saved bodies itself and stamps her identity in the same call; a body whose identity could not be
+  written is destroyed again rather than left standing. Prefab, keys and registration are unchanged. Not observed
+  in game (OWNER GO-AROUND PENDING).
 - **Off by default.** `[Steward] StewardRuntimeEnabled` and, inside it,
   `[Steward] TendFiresEnabled`. With both off the mod changes nothing.
 - **Single player only for now:** host, not a dedicated server, nobody else

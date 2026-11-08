@@ -50,7 +50,8 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// it has to be callable from a product - a library whose own adoption
 /// instructions name an internal type is a library nobody can adopt. What a
 /// role needs is <see cref="TryFor"/>, <see cref="Install"/>,
-/// <see cref="TrySpawn"/>, and the two facts a console command reports
+/// <see cref="TrySpawn"/>, <see cref="TrySpawnRoleBody"/> for a role whose
+/// prefab predates this factory (#372), and the two facts a console command reports
 /// (<see cref="IsReady"/>, <see cref="LastFailure"/>). Three members are
 /// deliberately <i>not</i> part of that:
 ///
@@ -318,8 +319,9 @@ public sealed class NpcWorkerPrefabFactory
         return true;
     }
 
-    /// <summary>Creates one body, and is the only path in this library that
-    /// does.
+    /// <summary>Creates one body from this factory's own prefab. With
+    /// <see cref="TrySpawnRoleBody"/> it is one of the two doors to the one
+    /// build in this library that creates a saved body.
     ///
     /// <b>The lease is a parameter because permission has to be shown, not
     /// claimed.</b> The arbiter hands one out on a grant and only on a grant,
@@ -343,28 +345,186 @@ public sealed class NpcWorkerPrefabFactory
         Quaternion rotation,
         out string failure)
     {
+        NpcBodySetup setup = _setup;
+        GameObject? instance = BuildGated(
+            lease, _contract, tally, _prefab, IsReady, LastFailure, position, rotation,
+            built => built.GetComponent<NpcBodyMind>() != null && NpcBody.TryStamp(built, setup, lease!.Identity),
+            out failure);
+        if (instance == null)
+        {
+            return null;
+        }
+
+        NpcBodyMind mind = instance.GetComponent<NpcBodyMind>();
+        mind.RememberIdentity(lease!.Identity);
+        return mind;
+    }
+
+    /// <summary>Creates one body from a prefab the ROLE built and registered,
+    /// through the same gate as <see cref="TrySpawn"/>, and is the only other
+    /// path in this library that creates a saved body (#372).
+    ///
+    /// <b>Why this exists beside <see cref="TrySpawn"/>.</b> Three shipped roles
+    /// built their worker prefabs before this factory existed, each with its own
+    /// mind and its own body component, and moving a role's mind is a separate
+    /// change with its own behaviour to prove. What can move without changing
+    /// any of that is the one line that mattered to the never-coexist rule: a
+    /// role calling the engine's own instantiation on a prefab it held, and never
+    /// asking anybody. With this, a role hands its prefab in rather than
+    /// instantiating it, so the lease is required and re-checked last exactly as
+    /// it is for this factory's own bodies, and <c>tools/validate_repo.py</c>
+    /// refuses the engine's instantiation anywhere in a product that consumes
+    /// this library.
+    ///
+    /// <b>The prefab goes in; nothing comes out but the new body.</b> This is
+    /// the opposite direction to the <c>Prefab</c> member this type refuses to
+    /// expose, and it keeps that refusal's reason: no caller is handed something
+    /// it could instantiate itself.
+    ///
+    /// <b>The census is this library's, taken here.</b> The tally is not a
+    /// parameter, because a role that counted its own bodies would be the one
+    /// party able to say "none" for itself. A finished walk of every saved object
+    /// of the contract's prefab, keyed by the contract's own key field, is taken
+    /// immediately before the gate. A loaded body is a saved object too, so that
+    /// walk counts it.
+    ///
+    /// <b>The prefab must be the one the network scene knows by the contract's
+    /// name.</b> A body built from a prefab the scene cannot name is destroyed by
+    /// the next load with everything it holds, so a prefab that is missing,
+    /// misnamed or unregistered is a refusal rather than a body.
+    ///
+    /// <b>Stamped in the same call.</b> <paramref name="stamp"/> is the role's own
+    /// identity write, run on the new object before anything else can read it.
+    /// When it fails or throws, the body is destroyed again rather than left
+    /// standing as a stranger the census would then count forever. It holds
+    /// nothing: it was created a moment earlier by this same call.</summary>
+    /// <param name="lease">The permission the arbiter granted. Null is a
+    /// refusal.</param>
+    /// <param name="contract">The role's body contract.</param>
+    /// <param name="rolePrefab">The prefab the role built and registered under
+    /// <see cref="NpcBodyContract.PrefabName"/>.</param>
+    /// <param name="position">Where the body stands.</param>
+    /// <param name="rotation">Which way it faces.</param>
+    /// <param name="stamp">The role's identity write. True when the new body
+    /// carries its identity.</param>
+    /// <param name="failure">Why nothing was built. Empty on success.</param>
+    public static GameObject? TrySpawnRoleBody(
+        BodyLease? lease,
+        NpcBodyContract contract,
+        GameObject? rolePrefab,
+        Vector3 position,
+        Quaternion rotation,
+        Func<GameObject, bool> stamp,
+        out string failure)
+    {
+        string? prefabFailure = DescribeUnregistered(contract, rolePrefab);
+        NpcBodyTally tally = lease == null
+            ? NpcBodyTally.NotYetRun(default)
+            : CountSavedBodies(contract, lease.Identity);
+        return BuildGated(
+            lease, contract, tally, rolePrefab, prefabFailure == null, prefabFailure, position, rotation,
+            stamp, out failure);
+    }
+
+    /// <summary>The one instantiation of a saved body in this library, and the
+    /// gate immediately in front of it. Nothing may be added between the two:
+    /// the lease is the last thing the gate asks, and it has to be the freshest
+    /// thing known when the body is created. <c>tools/validate_repo.py</c> pins
+    /// that adjacency.</summary>
+    private static GameObject? BuildGated(
+        BodyLease? lease,
+        NpcBodyContract contract,
+        NpcBodyTally tally,
+        GameObject? prefab,
+        bool prefabReady,
+        string? prefabFailure,
+        Vector3 position,
+        Quaternion rotation,
+        Func<GameObject, bool>? stamp,
+        out string failure)
+    {
+        bool ready = prefabReady && prefab != null && stamp != null;
+        bool groundLoaded = IsGroundLoaded(position);
         NpcBuildPermission permission = NpcBodyBuildGate.May(
-            lease, _contract, tally, IsReady, LastFailure, IsGroundLoaded(position));
+            lease, contract, tally, ready, prefabFailure, groundLoaded);
         if (!permission.IsGranted)
         {
             failure = permission.Refusal;
             return null;
         }
 
-        GameObject instance = UnityEngine.Object.Instantiate(_prefab!, position, rotation);
+        GameObject instance = UnityEngine.Object.Instantiate(prefab!, position, rotation);
         ZNetView view = instance.GetComponent<ZNetView>();
-        NpcBodyMind mind = instance.GetComponent<NpcBodyMind>();
-        if (view == null || !view.IsValid() || !view.IsOwner() || mind == null
-            || !NpcBody.TryStamp(instance, _setup, lease!.Identity))
+        bool stamped = false;
+        string why = "the new body did not come up as a valid, owned network object";
+        if (view != null && view.IsValid() && view.IsOwner())
         {
-            failure = "the new body did not come up as a valid, owned network object";
+            try
+            {
+                stamped = stamp!(instance);
+            }
+            catch (Exception exception)
+            {
+                why = "giving the new body its identity threw " + SafeFailure.Brief(exception);
+            }
+        }
+
+        if (!stamped)
+        {
+            failure = why;
             Discard(instance, view);
             return null;
         }
 
-        mind.RememberIdentity(lease.Identity);
         failure = string.Empty;
-        return mind;
+        return instance;
+    }
+
+    /// <summary>Why <paramref name="rolePrefab"/> cannot be built from, or null
+    /// when it is the prefab the network scene knows by the contract's name.
+    /// </summary>
+    private static string? DescribeUnregistered(NpcBodyContract contract, GameObject? rolePrefab)
+    {
+        if (rolePrefab == null)
+        {
+            return "the role supplied no prefab";
+        }
+
+        if (!string.Equals(rolePrefab.name, contract.PrefabName, StringComparison.Ordinal))
+        {
+            return "the prefab is named '" + rolePrefab.name + "' and the contract names '" + contract.PrefabName + "'";
+        }
+
+        ZNetScene scene = ZNetScene.instance;
+        if (scene == null)
+        {
+            return "there is no network scene, so no world is up to build a body in";
+        }
+
+        GameObject? registered = scene.GetPrefab(contract.PrefabName);
+        if (registered == null || !ReferenceEquals(registered, rolePrefab))
+        {
+            return "the network scene does not know this prefab by '" + contract.PrefabName
+                + "', so a body built from it would be destroyed by the next load";
+        }
+
+        return null;
+    }
+
+    /// <summary>A finished count of this identity's saved bodies, or a tally
+    /// that says the count is not finished - which the gate refuses.</summary>
+    private static NpcBodyTally CountSavedBodies(NpcBodyContract contract, NpcIdentity identity)
+    {
+        // What a body keeps changes what a census can read back, never what it
+        // counts, and counting is all that is asked here.
+        if (!NpcWorldBodies.TryFor(contract, NpcBodyKeeps.IdentityOnly, out NpcWorldBodies? census, out _)
+            || census == null
+            || !census.RunToCompletion())
+        {
+            return NpcBodyTally.NotYetRun(identity);
+        }
+
+        return census.TallyFor(identity, loadedBodies: 0, loadedIsFaulted: false);
     }
 
     private static void Discard(GameObject instance, ZNetView? view)
