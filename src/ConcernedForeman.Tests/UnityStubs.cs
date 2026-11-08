@@ -111,6 +111,7 @@ namespace UnityEngine
 
     public class Transform : Object
     {
+        public Vector3 up = new Vector3(0f, 1f, 0f);
         public Vector3 position;
 
         /// <summary>#380: a build order takes the facing the player is standing
