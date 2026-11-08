@@ -577,8 +577,9 @@ merges. It grants no world authority: it says how the owner's 2026-09-16 door-pe
 presentation figure that is **set down** at a spot and never walks.
 
 - The figure never opens, closes or uses a door, and is never set down in or right beside a doorway.
-- It is never set down on the far side of a doorway from home. A spot is refused when the straight line from home to
-  it passes through a doorway (the shared `DoorPortal.IsCrossedBy`).
+- It is never set down on the far side of a doorway or a wall from home. A spot is refused when anything solid
+  stands between it and home at chest height (a wall, a shut door; a ray cast that cannot be completed counts as
+  solid), or when the straight line from home to it passes through a doorway (the shared `DoorPortal.IsCrossedBy`).
 - Concerned Foreman (and, when built, Concerned Teamster) keeps no list of doors opened to companions, so every
   door counts as one the figure may not use. This is the rule's own default (`OnlyAllowedDoors` with nothing
   allowed). If the doors near home cannot be read, the figure is seated nowhere new.

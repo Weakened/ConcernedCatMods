@@ -687,14 +687,14 @@ internal sealed class ThorsteinPresentation
         IReadOnlyList<DoorPortal> doors = _campSight.Doors;
         var anchor = new CompanionAnchor(onBed ? AnchorKind.ClaimedBed : AnchorKind.DefaultSpawn, homePoint);
         ThorsteinRestChoice best = ThorsteinRestPlan.Choose(_restPlanner.Plan(
-            anchor, _restProbe, accept: sample => Admits(homePoint, sample.Position, camp, doors)));
+            anchor, _restProbe, accept: sample => Admits(home, sample.Position, camp, doors)));
 
         bool usable = false;
         int value = 0;
         if (_rest.IsSitting)
         {
             PlacementProbeSample here = _restProbe.Recheck(_rest.Spot);
-            usable = here.IsUsable && Admits(homePoint, _rest.Spot, camp, doors);
+            usable = here.IsUsable && Admits(home, _rest.Spot, camp, doors);
             value = _restPlanner.ValueOf(here);
         }
 
@@ -759,11 +759,17 @@ internal sealed class ThorsteinPresentation
     private static bool HomeIsBed() =>
         RespawnAnchorSource.TryGetLatest(out RespawnAnchor anchor, out _) && anchor.Kind == RespawnAnchorKind.ClaimedBed;
 
-    /// <summary>The door rule and camp (<see cref="ThorsteinRestBounds"/>) for
-    /// one spot that already passed every ground rule.</summary>
-    private static bool Admits(WorldPoint home, WorldPoint spot, NpcCampView camp, IReadOnlyList<DoorPortal> doors) =>
+    /// <summary>The door rule, the wall check and camp
+    /// (<see cref="ThorsteinRestBounds"/>) for one spot that already passed
+    /// every ground rule.</summary>
+    private bool Admits(Vector3 home, WorldPoint spot, NpcCampView camp, IReadOnlyList<DoorPortal> doors) =>
         ThorsteinRestBounds.Admits(
-            home, spot, camp.IsEstablished, camp.Contains(new NpcPoint(spot.X, spot.Y, spot.Z)), doors);
+            new WorldPoint(home.x, home.y, home.z),
+            spot,
+            camp.IsEstablished,
+            camp.Contains(new NpcPoint(spot.X, spot.Y, spot.Z)),
+            _restProbe.IsWallBetween(home, new Vector3(spot.X, spot.Y, spot.Z)),
+            doors);
 
     private void TakeDown()
     {

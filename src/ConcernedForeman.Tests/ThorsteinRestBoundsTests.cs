@@ -48,7 +48,8 @@ public sealed class ThorsteinRestBoundsTests
     public void A_wall_beside_the_doorway_is_not_the_doorway()
     {
         // Crossing the door's plane 4 m to one side of its 1 m half-width is
-        // going round, not through. Walls are the probe's to refuse.
+        // not through the doorway. A wall there is refused separately, by the
+        // probe's line check (wallBetween).
         var doors = new List<DoorPortal> { Door() };
         Assert.False(ThorsteinRestBounds.AcrossADoor(new WorldPoint(0f, 0f, 4f), new WorldPoint(5f, 0f, 4f), doors));
     }
@@ -65,11 +66,24 @@ public sealed class ThorsteinRestBoundsTests
         var none = new List<DoorPortal>();
         var spot = new WorldPoint(2f, 0f, 0f);
 
-        Assert.True(ThorsteinRestBounds.Admits(Home, spot, campEstablished: false, insideCamp: false, none));
-        Assert.True(ThorsteinRestBounds.Admits(Home, spot, campEstablished: true, insideCamp: true, none));
-        Assert.False(ThorsteinRestBounds.Admits(Home, spot, campEstablished: true, insideCamp: false, none));
+        Assert.True(ThorsteinRestBounds.Admits(Home, spot, false, false, wallBetween: false, none));
+        Assert.True(ThorsteinRestBounds.Admits(Home, spot, true, true, wallBetween: false, none));
+        Assert.False(ThorsteinRestBounds.Admits(Home, spot, true, false, wallBetween: false, none));
         Assert.False(ThorsteinRestBounds.Admits(
-            Home, new WorldPoint(5f, 0f, 0f), campEstablished: true, insideCamp: true, new List<DoorPortal> { Door() }));
+            Home, new WorldPoint(5f, 0f, 0f), true, true, wallBetween: false, new List<DoorPortal> { Door() }));
+    }
+
+    [Fact]
+    public void A_spot_behind_a_wall_from_home_is_never_his_even_with_no_door_in_line()
+    {
+        // The far side of a closed hut: the line from home meets a wall, not
+        // the doorway, so only the wall check can refuse it.
+        var spot = new WorldPoint(0f, 0f, 5f);
+        var doors = new List<DoorPortal> { Door() };
+
+        Assert.False(ThorsteinRestBounds.AcrossADoor(Home, spot, doors));
+        Assert.False(ThorsteinRestBounds.Admits(Home, spot, false, false, wallBetween: true, doors));
+        Assert.True(ThorsteinRestBounds.Admits(Home, spot, false, false, wallBetween: false, doors));
     }
 
     [Fact]
@@ -87,7 +101,7 @@ public sealed class ThorsteinRestBoundsTests
         PlacementResult result = planner.Plan(
             new CompanionAnchor(AnchorKind.ClaimedBed, Home),
             new WarmBeyondTheDoor(),
-            accept: sample => ThorsteinRestBounds.Admits(Home, sample.Position, false, false, doors));
+            accept: sample => ThorsteinRestBounds.Admits(Home, sample.Position, false, false, false, doors));
 
         Assert.True(result.Found);
         Assert.False(ThorsteinRestBounds.AcrossADoor(Home, result.Position, doors));

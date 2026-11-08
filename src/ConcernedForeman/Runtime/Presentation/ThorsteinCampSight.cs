@@ -131,6 +131,7 @@ internal sealed class ThorsteinCampSight
     internal void Forget()
     {
         _camp.BeginWorld(NpcWorldEpoch.Unknown);
+        _faultSaid = false;
         _noted.Clear();
         _seen.Clear();
         _doors.Clear();

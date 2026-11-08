@@ -164,8 +164,8 @@ drawn where it was put, are Hulgi's. Since the #295 lift the dresser that applie
 them is Concerned NPC's `Body/Dressing/NpcFigureDresser`, shared with Sunniva and
 Gunnar; Foreman keeps only his look (`ThorsteinLookPlan.Spec`) and his settings.
 
-**What this is not yet.** There is no idle routine, no sitting, no dialogue, no
-quest and no hand-over UI. He stands at home facing you. His worker body is still
+**What this is not yet** (as first written; the quest is S1-S2, talk S3, the
+hand-over panel S4 and sitting at home S5, below). He stands at home facing you. His worker body is still
 the `Dverger` clone, which cannot wear Mullet or Mustache, so while he works he
 looks like a dwarf. Because his issued tools live in that body, a Thorstein who has
 been given a worker body stays a worker body until it is despawned. **Nothing here
@@ -300,9 +300,10 @@ respawn point:
   - It waits rather than guesses while any of that ground is still loading.
 - **The probe** is Foreman's own `ThorsteinRestProbe`, which reads physics and effect
   areas and changes nothing.
-- **Doors.** He never opens, closes or uses a door, and is never set down on the far side
-  of a doorway from home: a spot whose straight line from home passes through a doorway
-  is refused (`ThorsteinRestBounds`). Foreman keeps no list of doors players have opened
+- **Doors and walls.** He never opens, closes or uses a door, and is never set down on the
+  far side of a doorway or a wall from home (`ThorsteinRestBounds`). A spot is refused
+  when anything solid stands between it and home at chest height (a wall, a shut door),
+  or when the straight line from home passes through a doorway, open or shut. Foreman keeps no list of doors players have opened
   to companions, so every door counts as one he may not use. **Lead default pending owner
   confirmation** (2026-11-08): a bed inside a house whose door is shut still counts as
   home, so he may rest in that room. He is set down there, not walked in through the door.
@@ -337,8 +338,14 @@ Not in this slice:
    whether the 2.1 hover offset now feels too high for a seated figure.
 6. Judge the pop: when he moves to a better spot he appears there at once.
 7. Build a small hut with a door 3-4 m from the bed and a campfire inside it, door shut.
-   Wait up to 30 s. He does not sit by that fire: it is through a door. `cf_worker
+   Wait up to 30 s. He does not sit by that fire: it is behind the hut's walls and door. `cf_worker
    status` counts the doorway.
+8. Sleep in a bed inside a closed house (door shut). He rests in that room, never outside
+   its walls (lead default pending owner confirmation, DECISIONS.md). Say whether he should
+   stay outside instead, as Hulgi does.
+9. Judge the seated pose itself: the figure's animator gets only `emote_sit`, not the
+   `onGround` bool Foreman's resident pose also sets. If he floats, kneels or plays a fall
+   pose instead of sitting, say so.
 
 ### His look while working, slice S6 (owner decision 2026-10-29, DECISIONS.md D18)
 

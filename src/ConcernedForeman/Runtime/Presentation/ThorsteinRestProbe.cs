@@ -54,6 +54,10 @@ internal sealed class ThorsteinRestProbe : IPlacementProbe
 
     private const float LocationProbeRadius = 3f;
 
+    /// <summary>Above a table, a chest or a fire, below a wall's top: the
+    /// height the wall check looks along.</summary>
+    private const float SightHeight = 1.4f;
+
     private readonly Action<string> _log;
     private readonly float _warmthRadius;
     private readonly RaycastHit[] _hits = new RaycastHit[32];
@@ -312,6 +316,56 @@ internal sealed class ThorsteinRestProbe : IPlacementProbe
         }
 
         return false;
+    }
+
+    /// <summary>Whether something solid stands between home and a spot, at
+    /// chest height: a wall, a shut door, a closed gate. Answers true when the
+    /// question cannot be asked, so a spot it cannot clear is never his. The
+    /// home bed itself, characters and loose items do not count. Read-only:
+    /// one bounded ray cast into a preallocated buffer.</summary>
+    internal bool IsWallBetween(Vector3 home, Vector3 spot)
+    {
+        try
+        {
+            if (_bodyMask == -1)
+            {
+                _bodyMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece");
+            }
+
+            Vector3 from = home + (Vector3.up * SightHeight);
+            Vector3 to = spot + (Vector3.up * SightHeight);
+            Vector3 along = to - from;
+            float distance = along.magnitude;
+            if (distance < 0.01f)
+            {
+                return false;
+            }
+
+            int count = Physics.RaycastNonAlloc(
+                from, along / distance, _hits, distance, _bodyMask, QueryTriggerInteraction.Ignore);
+            if (count >= _hits.Length)
+            {
+                // A full buffer may have dropped the wall that matters.
+                return true;
+            }
+
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _hits[index].collider;
+                if (hit == null || hit.attachedRigidbody != null || hit.GetComponentInParent<Bed>() != null)
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
     }
 
     private static bool IsWithin(Collider hit, Vector3 point, float radius)

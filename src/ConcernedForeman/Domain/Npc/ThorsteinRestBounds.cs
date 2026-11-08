@@ -12,7 +12,10 @@ namespace TheConcernedCat.ConcernedForeman.Domain.Npc;
 /// somewhere a companion may <i>be</i> only if he could get there through doors
 /// he may use. Thorstein's figure never walks and never touches a door: he is
 /// set down at a spot. So the rule here is that he is never set down on the
-/// far side of a doorway from home. Concerned Foreman keeps no list of doors
+/// far side of a doorway, or of a wall, from home: a spot is his only when
+/// nothing solid stands between it and home (the probe's line check, which a
+/// shut door also blocks) and the straight line from home does not pass
+/// through a doorway (open or shut). Concerned Foreman keeps no list of doors
 /// players have opened to companions, so every door counts as one he may not
 /// use: the default policy with nothing allowed. The only crossing that could
 /// ever pass is an open door a player allowed, and Foreman never says
@@ -46,8 +49,16 @@ internal static class ThorsteinRestBounds
     }
 
     /// <summary>Whether a spot that passed every ground rule may be his:
-    /// inside camp when there is one, and not across a door from home.</summary>
+    /// inside camp when there is one, nothing solid between it and home
+    /// (<paramref name="wallBetween"/>, which the caller measures and which is
+    /// true when it could not be measured), and not across a door from home.
+    /// </summary>
     internal static bool Admits(
-        WorldPoint home, WorldPoint spot, bool campEstablished, bool insideCamp, IReadOnlyList<DoorPortal> doors) =>
-        (!campEstablished || insideCamp) && !AcrossADoor(home, spot, doors);
+        WorldPoint home,
+        WorldPoint spot,
+        bool campEstablished,
+        bool insideCamp,
+        bool wallBetween,
+        IReadOnlyList<DoorPortal> doors) =>
+        (!campEstablished || insideCamp) && !wallBetween && !AcrossADoor(home, spot, doors);
 }
