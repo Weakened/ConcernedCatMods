@@ -625,9 +625,12 @@ before this change, are refused. `scripts/audit-teamster-hauling-api.ps1` pins t
 exactly once, in the port's type, and no animator bool, float, int or speed write anywhere.
 
 **Proved to change nothing.** `CartUpkeepIdleTests` (the decision) and `CartUpkeepDriverTests` (the decision driven
-end to end beside a real haul executor holding a real lease for an in-game hour: the cart, the lease, the phase, the
-identity hold, the executor's revision and a carried-material ledger are exactly as they were, and the only port calls
-are his own body's walk, turn and stop).
+end to end beside a real haul executor holding a real lease for an in-game hour: the lease, the phase, the identity
+hold and the executor's revision are exactly as they were, and the only port calls are his own body's walk, turn and
+stop). The load-bearing part is that journal and the structural assertions - the routine has no way to hand a cart
+back - because the fake cart cannot move; a physical shove is the one effect a test here cannot see, so he walks to
+where a puller stands at the handle (`ApproachPoint`), never at the cart's centre, and row 50 checks the cart's
+position in game.
 
 **Not established.** Whether the body Gunnar is cloned from (`Dverger` by default) has the hammer's trigger in its
 animator could not be read without running the game. If it does not, the port refuses on every swing and logs why

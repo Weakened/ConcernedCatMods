@@ -4051,6 +4051,54 @@ TEAMSTER_IDLE_HAMMER_ANIMATOR_WRITES = re.compile(
     r"CrossFadeInFixedTime|SetLayerWeight|Rebind|speed\s*=(?!=))")
 
 
+# Outside the port, nothing in Teamster or the shared trees it compiles in may
+# reach an animator at all. `.SetTrigger(` is refused by the #313 token pin, but
+# `m_zanim.SetBool(...)` or `m_animator.Play(...)` spells no SetTrigger, and the
+# IL audit that would see them (scripts/audit-teamster-hauling-api.ps1) needs the
+# game assemblies and cannot run in CI (review of D21). So the identifiers are
+# refused instead, string literals blanked (the capability probe names them as
+# data), with one pinned exception: the prefab factory's check that a clone
+# carries the component BaseAI.Awake requires.
+TEAMSTER_ANIMATOR_REACH = re.compile(
+    r"\b(?:m_zanim|m_animator|ZSyncAnimation|Animator|AnimatorControllerParameterType|GetAnimator)\b")
+TEAMSTER_ANIMATOR_REACH_SITES = {
+    "Adapters/Workers/TeamsterWorkerPrefab.cs":
+        (re.compile(r"\bclone\s*\.\s*GetComponent\s*<\s*ZSyncAnimation\s*>\s*\(\s*\)\s*==\s*null"), 1),
+}
+
+
+def _teamster_animator_reach(errors: list[str], label: str, port_rel: str) -> int:
+    """How many animator reaches outside the port were refused."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    hits = 0
+    roots = [(teamster_dir, teamster_dir)] + [
+        (ROOT / "src" / "Shared" / name, ROOT / "src" / "Shared" / name) for name in TEAMSTER_LINKED_SHARED_DIRS]
+    for root, base in roots:
+        for path in sorted(root.rglob("*.cs")):
+            rel = path.relative_to(base).as_posix()
+            if rel.split("/")[0] in ("obj", "bin") or (base == teamster_dir and rel == port_rel):
+                continue
+            code = CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"',
+                                 _strip_cs_comments(path.read_text(encoding="utf-8-sig")))
+            allowed = []
+            site = TEAMSTER_ANIMATOR_REACH_SITES.get(rel) if base == teamster_dir else None
+            if site is not None:
+                pinned = list(site[0].finditer(code))
+                if len(pinned) != site[1]:
+                    hits += 1
+                    fail(f"{label}: {path.relative_to(ROOT).as_posix()} has {len(pinned)} pinned animator "
+                         f"reach(es); {site[1]} expected", errors)
+                allowed = [(m.start(), m.end()) for m in pinned]
+            for match in TEAMSTER_ANIMATOR_REACH.finditer(code):
+                if any(start <= match.start() < end for start, end in allowed):
+                    continue
+                hits += 1
+                fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{code.count(chr(10), 0, match.start()) + 1} "
+                     f"reaches an animator ('{match.group(0)}') outside {port_rel} - D21 authorizes one trigger, "
+                     "in that file, and no other animator state anywhere", errors)
+    return hits
+
+
 def check_teamster_idle_hammer_port(errors: list[str]) -> list[str]:
     """Fails when the D21 trigger could play anything but the vanilla Hammer's own
     swing on Gunnar's own body, or when the port writes other animator state."""
@@ -4090,11 +4138,15 @@ def check_teamster_idle_hammer_port(errors: list[str]) -> list[str]:
         fail(f"{label}: {port_rel}:{code.count(chr(10), 0, match.start()) + 1} writes other animator state "
              f"('{match.group(0).strip()}') - D21 authorizes one trigger and nothing else", errors)
 
+    hits += _teamster_animator_reach(errors, label, port_rel)
+
     return [
         f"{label}: the one pinned SetTrigger in {port_rel} plays the vanilla Hammer item's own "
         "m_shared.m_attack.m_attackAnimation, read from the item database with no literal of the product's "
         "own, on the ZSyncAnimation of the TeamsterWorkerAI it is handed, after asking that animator whether "
-        "it has the trigger; it writes no other animator state. A source-text audit "
+        "it has the trigger; it writes no other animator state; and nothing else in Teamster or the shared trees "
+        "it compiles in names an animator (m_zanim, m_animator, ZSyncAnimation, Animator), the prefab factory's "
+        "one component check aside. A source-text audit "
         f"({hits} violations)",
     ]
 

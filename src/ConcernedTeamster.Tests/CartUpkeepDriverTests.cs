@@ -107,7 +107,15 @@ public sealed class CartUpkeepDriverTests
         int face = seen.IndexOf(CartUpkeepAction.FaceCart);
         int swing = seen.IndexOf(CartUpkeepAction.PlayHammerOnce);
         Assert.True(walk >= 0 && face > walk && swing > face, string.Join(", ", seen));
-        Assert.True(rig.Body.Facts.Position.HorizontalDistanceTo(rig.Seam.Observation.CartPosition) <= 2.5f);
+        Assert.True(rig.Body.Facts.Position.HorizontalDistanceTo(rig.Seam.Observation.ApproachPoint) <= 2.5f);
+
+        // He walks to where a puller stands at the handle, never at the cart's
+        // centre: walking into an unbraked cart would shove it, which is a
+        // world effect the idle routine has no licence for (review of D21).
+        string centre = "WalkTo " + rig.Seam.Observation.CartPosition;
+        string handle = "WalkTo " + rig.Seam.Observation.ApproachPoint;
+        Assert.DoesNotContain(centre, rig.Journal);
+        Assert.Contains(handle, rig.Journal);
     }
 
     [Fact]

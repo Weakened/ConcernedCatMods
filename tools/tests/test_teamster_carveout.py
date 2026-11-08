@@ -1541,6 +1541,19 @@ class IdleHammerIsCosmetic(CarveOutFixture):
 
     # -- where the trigger may be spelled --
 
+    def test_another_animator_write_is_not_allowed_outside_the_port(self):
+        # Review of D21: `.SetTrigger(` was refused everywhere but the port, and
+        # any other animator write spelled no SetTrigger - only the IL audit,
+        # which cannot run in CI, would have seen it.
+        self.plant_file(os.path.join(WORKERS, "ZzWorkerBool.cs"),
+                        "        ((Character)who).m_zanim.SetBool(\"crouching\", true);")
+        self.assert_refused("an animator write outside the port passed", contains="reaches an animator ('m_zanim')")
+
+    def test_an_animator_is_not_reachable_from_domain_either(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainAnimator.cs"),
+                        "        ((UnityEngine.Animator)who).Play(\"swing_hammer\");")
+        self.assert_refused("an animator in Domain/ passed", contains="reaches an animator ('Animator')")
+
     def test_a_trigger_is_not_allowed_in_another_worker_file(self):
         self.plant_file(os.path.join(WORKERS, "ZzWorkerSwing.cs"),
                         "        ((dynamic)who).SetTrigger(\"swing_hammer\");")

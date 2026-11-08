@@ -40,7 +40,8 @@ internal readonly struct CartUpkeepFacts
         bool bodyWorking,
         CartCondition cart,
         WorkPoint worker,
-        WorkPoint cartPosition)
+        WorkPoint cartPosition,
+        WorkPoint standAt)
     {
         SwitchedOn = switchedOn;
         AuthorityGranted = authorityGranted;
@@ -50,6 +51,7 @@ internal readonly struct CartUpkeepFacts
         Cart = cart;
         Worker = worker;
         CartPosition = cartPosition;
+        StandAt = standAt;
     }
 
     /// <summary>Teamster, hauling and the idle hammer setting are all on, and
@@ -77,6 +79,13 @@ internal readonly struct CartUpkeepFacts
     public WorkPoint Worker { get; }
 
     public WorkPoint CartPosition { get; }
+
+    /// <summary>Where he stands to swing: the point a puller's pivot rests at
+    /// the handle, outside the cart's body. Walking at the cart's centre would
+    /// have him bump an unbraked cart and shove it - a world effect the idle
+    /// routine is not allowed - so he walks to this and only faces the centre.
+    /// </summary>
+    public WorkPoint StandAt { get; }
 
     /// <summary>Copies what the executor's getters answer, and nothing else.
     ///
@@ -124,7 +133,8 @@ internal readonly struct CartUpkeepFacts
             bodyWorking: body.Present && !body.Dead && !body.Faulted,
             condition,
             body.Position,
-            cart.CartPosition);
+            cart.CartPosition,
+            cart.ApproachPoint);
     }
 }
 
@@ -179,8 +189,8 @@ internal sealed class CartUpkeepDriver
     /// <summary>One worker tick.</summary>
     public CartUpkeepAction Step(CartUpkeepFacts facts, double nowSeconds)
     {
-        bool positions = facts.Worker.IsFinite && facts.CartPosition.IsFinite;
-        double distance = positions ? facts.Worker.HorizontalDistanceTo(facts.CartPosition) : double.NaN;
+        bool positions = facts.Worker.IsFinite && facts.CartPosition.IsFinite && facts.StandAt.IsFinite;
+        double distance = positions ? facts.Worker.HorizontalDistanceTo(facts.StandAt) : double.NaN;
 
         // Every gate folds into "idle": a switch off, authority refused, a body
         // that is not working, a position nobody could read, or a cart further
@@ -216,13 +226,13 @@ internal sealed class CartUpkeepDriver
         switch (action)
         {
             case CartUpkeepAction.WalkToCart:
-                _motor.WalkTo(facts.CartPosition, ArrivalRadiusMetres);
+                _motor.WalkTo(facts.StandAt, ArrivalRadiusMetres);
                 return action;
 
             case CartUpkeepAction.FaceCart:
                 // The last steps: still walking in, turned square to the cart
                 // rather than to the path's last corner.
-                _motor.WalkTo(facts.CartPosition, ArrivalRadiusMetres);
+                _motor.WalkTo(facts.StandAt, ArrivalRadiusMetres);
                 _motor.Face(towardX, towardZ);
                 return action;
 

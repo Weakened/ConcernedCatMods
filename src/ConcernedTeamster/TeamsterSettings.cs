@@ -144,9 +144,8 @@ internal sealed class TeamsterSettings
     /// idle beside the cart assigned to him, he now and then walks over, faces it
     /// and plays the vanilla hammer swing. Cosmetic only. Effective only while
     /// <see cref="GunnarHaulingEnabled"/> is on - which is off by default - so
-    /// this default enrols nobody: it decides what an already opted-in Gunnar
-    /// does between jobs. On by default for that reason; the owner asked for the
-    /// behaviour and called it scenery.</summary>
+    /// it is read only by an already opted-in Gunnar. <b>Off</b> by default all
+    /// the same, like each of the owner's 2026-10-31 grants.</summary>
     public ConfigEntry<bool> GunnarIdleHammerEnabled { get; }
 
     /// <summary>#374: while looking at a container, press this to change what

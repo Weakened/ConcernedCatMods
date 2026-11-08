@@ -1340,7 +1340,9 @@ build, profile and scenario recorded.
     `Gunnar's idle hammer swing is not played: his body's animator has no '…' trigger…`. Copy that line verbatim:
     it decides whether the default `Dverger` body can play the hammer at all.
 50. **Nothing changes.** Before and after five minutes of idling, compare the cart's health (hover), its contents,
-    and `ct_haul status` (lease, phase, revision). All identical; the swings line counts up.
+    its position (`pos` while standing at it, or a screenshot against a landmark) and `ct_haul status` (lease, phase,
+    revision). All identical - he stands at the handle, and never bumps or shoves an unbraked cart; the swings line
+    counts up.
 51. **A job takes him.** Mid-walk or mid-swing, `ct_haul go <x> <z>`: he goes to the handle and hauls; no swing
     happens during the haul, and none the moment it ends.
 52. **A hitched cart is left alone.** Hitch the cart yourself while he is idle: he stops walking to it and never
