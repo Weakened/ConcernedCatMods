@@ -8,6 +8,7 @@ using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
+using TheConcernedCat.Workers.Felling;
 
 namespace Shared.Settlement.Tests;
 
@@ -462,8 +463,10 @@ internal sealed class FakeMotion : ICollectionMotion
 /// <summary>A world of sources behind the pickup port. Enforces the port's own
 /// preconditions the way the adapter does: the reservation must be held and the
 /// worker must be within reach.</summary>
-internal sealed class FakePickup : ISourcePickupPort
+internal sealed class FakePickup : ISourcePickupPort, ISourceFellingPort
 {
+    private readonly Dictionary<SourceKey, (int HitsLeft, int Wood)> _trees = new Dictionary<SourceKey, (int, int)>();
+
     private readonly Dictionary<SourceKey, (CollectedResource Resource, int Yield, bool Consumable)> _sources =
         new Dictionary<SourceKey, (CollectedResource, int, bool)>();
     private readonly Dictionary<string, (CollectionOrderDefinition Order, CollectedResource Resource)> _drops =
@@ -496,6 +499,80 @@ internal sealed class FakePickup : ISourcePickupPort
     public Action<SourceKey>? OnPicked { get; set; }
 
     public void Add(SourceKey key, CollectedResource resource, int yield = 1) => _sources[key] = (resource, yield, true);
+
+    /// <summary>D19 (#282): a small tree that falls on its
+    /// <paramref name="hits"/>th hit and drops <paramref name="wood"/> Wood (and
+    /// other things the order never takes).</summary>
+    public void AddTree(SourceKey key, int hits, int wood) => _trees[key] = (hits, wood);
+
+    public bool TreeStands(SourceKey key) => _trees.ContainsKey(key);
+
+    public Queue<FellStrikeOutcome> ForcedStrikes { get; } = new Queue<FellStrikeOutcome>();
+
+    /// <summary>A player within 15 m of the tree, as the adapter would measure.
+    /// </summary>
+    public Func<SourceKey, bool> PlayerNear { get; set; } = _ => false;
+
+    /// <summary>Every strike the loop asked for: the tree, the time order and
+    /// the take limit it was given.</summary>
+    public List<(SourceKey Tree, int TakeLimit)> Strikes { get; } = new List<(SourceKey, int)>();
+
+    public List<SourceKey> Felled { get; } = new List<SourceKey>();
+
+    /// <summary>Wood a fell dropped that was beyond the order's limit and left
+    /// on the ground.</summary>
+    public int WoodLeftOnGround { get; private set; }
+
+    public Action<SourceKey>? OnFelled { get; set; }
+
+    public FellStrikeResult TryStrike(SourceKey source, OrderId order, int takeLimit)
+    {
+        Assert.True(_book.IsHeldBy(source, order), "struck without holding the reservation");
+        Assert.True(_motion.Position.HorizontalDistanceTo(source.Position) <= 2f, "struck out of reach");
+        Assert.True(takeLimit >= 1, "struck with nothing the order may take");
+        Strikes.Add((source, takeLimit));
+
+        if (ForcedStrikes.Count > 0)
+        {
+            FellStrikeOutcome forced = ForcedStrikes.Dequeue();
+            return forced == FellStrikeOutcome.Felled
+                ? new FellStrikeResult(forced, new PickupResult(PickupOutcome.Picked, Array.Empty<SpawnedDrop>(), "forced"), "forced")
+                : new FellStrikeResult(forced, null, "forced " + forced);
+        }
+
+        if (PlayerNear(source))
+        {
+            return new FellStrikeResult(FellStrikeOutcome.Waiting, null, "someone is within 15 m of that tree");
+        }
+
+        if (!_trees.TryGetValue(source, out var tree))
+        {
+            return new FellStrikeResult(FellStrikeOutcome.Refused, null, "gone");
+        }
+
+        if (tree.HitsLeft > 1)
+        {
+            _trees[source] = (tree.HitsLeft - 1, tree.Wood);
+            return new FellStrikeResult(FellStrikeOutcome.Struck, null, "it still stands");
+        }
+
+        _trees.Remove(source);
+        Felled.Add(source);
+        OnFelled?.Invoke(source);
+        var drops = new List<SpawnedDrop>();
+        ResourceProgress progress = _custody.Bucket(Order!, CollectedResource.Wood);
+        int taken = Math.Min(tree.Wood, takeLimit);
+        WoodLeftOnGround += tree.Wood - taken;
+        for (int unit = 0; unit < taken; unit++)
+        {
+            string id = "drop-" + (++_nextDrop);
+            drops.Add(new SpawnedDrop(id, MaterialItem.Of(CollectedResource.Wood), 1));
+            _drops[id] = (Order!, CollectedResource.Wood);
+            progress.OnGround++;
+        }
+
+        return new FellStrikeResult(FellStrikeOutcome.Felled, new PickupResult(PickupOutcome.Picked, drops, "felled"), "felled");
+    }
 
     public void Remove(SourceKey key) => _sources.Remove(key);
 
@@ -714,9 +791,16 @@ internal sealed class CollectionRig
     /// arbiter-backed hold Concerned Foreman now uses — most importantly one that
     /// refuses with <c>Unspecified</c>, which is what the library answers for an
     /// identity it does not track and which must not read as permission.</param>
+    /// <param name="withFelling">D19 (#282): the loop is given the fake's felling
+    /// seam, as Foreman gives it the pickup port.</param>
+    /// <param name="scopeSource">Where the order's work area comes from. The
+    /// default camp circle, as every existing test has always had it, never
+    /// authorises felling.</param>
     public CollectionRig(
-        CollectionParameters? parameters = null, bool withHauler = false, IActorModeHold? modes = null)
+        CollectionParameters? parameters = null, bool withHauler = false, IActorModeHold? modes = null,
+        bool withFelling = false, WorkScopeSource scopeSource = WorkScopeSource.DefaultCampCircle)
     {
+        ScopeSource = scopeSource;
         Parameters = parameters ?? CollectionParameters.Default;
         Modes = new ActorModeOwner(WorkerKey.Thorstein);
         Hold = modes ?? Modes;
@@ -752,10 +836,13 @@ internal sealed class CollectionRig
                     picked.OwnedHere, picked.InInterior, picked.Location, picked.Ward, picked.EstimatedYield);
             }
         };
+        Pickup.OnFelled = key => Probe.Candidates.RemoveAll(candidate => candidate.Key.Equals(key));
         Loop = new SoloCollectionLoop(
             Parameters, WorkerKey.Thorstein, new WorkerId("thorstein"), Hold, Book, Motion, Custody, Pickup, Probe,
-            World, Cooperation, new CollectionRequestIds(Epoch));
+            World, Cooperation, new CollectionRequestIds(Epoch), log: null, felling: withFelling ? Pickup : null);
     }
+
+    public WorkScopeSource ScopeSource { get; }
 
     public CollectionParameters Parameters { get; }
 
@@ -791,7 +878,7 @@ internal sealed class CollectionRig
     public float Now { get; private set; }
 
     public WorkScope Scope() =>
-        new WorkScope(WorkScopeSource.DefaultCampCircle, Anchor, 30f, "your bed", ScopeRevision.ForAnchor("bed", Anchor), Epoch);
+        new WorkScope(ScopeSource, Anchor, 30f, "your bed", ScopeRevision.ForAnchor("bed", Anchor), Epoch);
 
     public CollectionOrderDefinition Order(
         int stone, int wood, bool hold = false, ParticipationMode mode = ParticipationMode.Solo, string id = "collect-1")
@@ -853,6 +940,33 @@ internal sealed class CollectionRig
 
         return key;
     }
+
+    /// <summary>D19 (#282): places one of the four small trees in the world and in
+    /// the probe, eligible, with no building within 15 m.</summary>
+    public SourceKey AddTree(
+        float x, float z, string prefab = "Beech_small1", int hits = 2, int wood = 3,
+        float builtPieceMetres = float.PositiveInfinity, AreaAccess ward = AreaAccess.Granted)
+    {
+        var key = new SourceKey(prefab, "00000000cafe0000:" + (++_nextSource).ToString("x8"), Epoch, new SitePoint(x, 30f, z));
+        Probe.Candidates.Add(new SurveyCandidate(
+            key, TreeFacts(prefab), ownedHere: true, inInterior: false, LocationStanding.Outside, ward, builtPieceMetres,
+            SmallTreeSources.MaxWood(prefab)));
+        Pickup.AddTree(key, hits, wood);
+        return key;
+    }
+
+    public static SmallTreeFacts TreeFacts(
+        string prefab, bool plant = false, bool pickable = false, int destructibles = 1, float health = 20f) =>
+        new SmallTreeFacts(
+            hasValidNetworkObject: true,
+            networkPrefabName: prefab,
+            destructibleCount: destructibles,
+            hasPlant: plant,
+            hasPiece: false,
+            hasWearNTear: false,
+            hasPickable: pickable,
+            minToolTier: 0,
+            health: health);
 
     public void Tick(int count = 1)
     {

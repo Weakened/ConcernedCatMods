@@ -50,7 +50,10 @@ internal sealed class CollectionParameters
         float transferFirstRetrySeconds = 2f,
         float transferMaxRetrySeconds = 20f,
         float readinessRecheckSeconds = 60f,
-        float absentWorkerGraceSeconds = 3f)
+        float absentWorkerGraceSeconds = 3f,
+        float fellSwingSeconds = 1.5f,
+        int fellMaxStrikes = 8,
+        float fellPlayerWaitSeconds = 30f)
     {
         if (!(workerCarryWeight >= MinWorkerCarryWeight) || workerCarryWeight > MaxWorkerCarryWeight)
         {
@@ -85,6 +88,11 @@ internal sealed class CollectionParameters
             throw new ArgumentOutOfRangeException(nameof(routeDetourFactor), "Cost weights must be non-negative, detour at least 1.");
         }
 
+        if (!(fellSwingSeconds > 0f) || fellMaxStrikes < 1 || !(fellPlayerWaitSeconds > 0f))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fellSwingSeconds), "Felling cadence, ceiling and wait must be positive.");
+        }
+
         WorkerCarryWeight = workerCarryWeight;
         PickupReachMetres = pickupReachMetres;
         SourceArrivalToleranceMetres = sourceArrivalToleranceMetres;
@@ -110,6 +118,9 @@ internal sealed class CollectionParameters
         TransferMaxRetrySeconds = transferMaxRetrySeconds;
         ReadinessRecheckSeconds = readinessRecheckSeconds;
         AbsentWorkerGraceSeconds = absentWorkerGraceSeconds;
+        FellSwingSeconds = fellSwingSeconds;
+        FellMaxStrikes = fellMaxStrikes;
+        FellPlayerWaitSeconds = fellPlayerWaitSeconds;
     }
 
     public static CollectionParameters Default { get; } = new CollectionParameters();
@@ -213,4 +224,18 @@ internal sealed class CollectionParameters
     /// <summary>When the worker's own tick has not run for this long, his body
     /// is not being simulated here and the order pauses.</summary>
     public float AbsentWorkerGraceSeconds { get; }
+
+    /// <summary>D19 in an order: at most one felling hit this often, so a small
+    /// tree takes its hits one swing at a time rather than all in one tick.
+    /// </summary>
+    public float FellSwingSeconds { get; }
+
+    /// <summary>D19 in an order: hits on one tree before the order gives up on
+    /// it (a beech is 20 hp and a fir 40 hp, so an axe that has not felled
+    /// one in this many hits is not felling it).</summary>
+    public int FellMaxStrikes { get; }
+
+    /// <summary>D19 in an order: how long he waits at a tree for a player to
+    /// step more than 15 m away before he leaves it for this survey.</summary>
+    public float FellPlayerWaitSeconds { get; }
 }

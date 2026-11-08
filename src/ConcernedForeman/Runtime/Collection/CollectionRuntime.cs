@@ -940,17 +940,22 @@ internal sealed class CollectionRuntime
             return "Not felled: no work area (" + failure + ").";
         }
 
+        return FellingPort(world.Parameters).TryFellNearest(scope!, scope!.Source != WorkScopeSource.DefaultCampCircle).Message;
+    }
+
+    private WorldFellingPort? _felling;
+
+    /// <summary>The one felling port (D19) of this runtime, shared by
+    /// <c>cf_collect fell</c> and by collection orders (#282 leaf 2), so the
+    /// single pinned hit is reached the same way from both.</summary>
+    private WorldFellingPort FellingPort(CollectionParameters parameters) =>
         _felling ??= new WorldFellingPort(
             () => _settings.ThorsteinFellsSmallTrees.Value,
             () => WorkAuthorityPolicy.Evaluate(CollectionWorldFacts.ReadAuthorityFacts(_settlement.SettlementRuntimeEnabled.Value)),
             () => _body,
             _site,
-            world.Parameters.PickupReachMetres,
+            parameters.PickupReachMetres,
             _log);
-        return _felling.TryFellNearest(scope!, scope!.Source != WorkScopeSource.DefaultCampCircle).Message;
-    }
-
-    private WorldFellingPort? _felling;
 
     /// <summary>For the status line and <c>area list</c>.</summary>
     internal string DescribeAreaChoice()
@@ -1025,6 +1030,7 @@ internal sealed class CollectionRuntime
             }
 
             SoloCollectionLoop? loop = null;
+            WorldFellingPort felling = runtime.FellingPort(Parameters);
             Pickup = new WorldSourcePickupPort(
                 Parameters,
                 runtime._custody,
@@ -1036,7 +1042,8 @@ internal sealed class CollectionRuntime
                 RequestIds,
                 Facts.EvaluateAuthority,
                 Facts.UnitWeight,
-                runtime._log);
+                runtime._log,
+                felling);
 
             loop = new SoloCollectionLoop(
                 Parameters,
@@ -1047,11 +1054,12 @@ internal sealed class CollectionRuntime
                 new CollectionMotionBridge(runtime.Motion),
                 new CustodyBridge(runtime._custody, WorkerKey.Thorstein),
                 Pickup,
-                new WorldSourceSurvey(Directory, runtime._site),
+                new WorldSourceSurvey(Directory, runtime._site, felling),
                 Facts,
                 runtime._cooperation != null ? new CooperationBridge(runtime._cooperation) : null,
                 RequestIds,
-                runtime._log);
+                runtime._log,
+                Pickup);
             Loop = loop;
         }
 

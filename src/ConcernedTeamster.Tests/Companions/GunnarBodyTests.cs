@@ -170,6 +170,38 @@ public sealed class GunnarBodyTests
     }
 
     [Fact]
+    public void ASecondHandOverBeforeTheBodyIsCountedIsRefused()
+    {
+        // Two spawns in one frame would otherwise both pass a stale census.
+        var (_, leases, _) = Setup();
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
+        Assert.False(leases.TryTakeWorker(() => { }, out string refusal));
+        Assert.Contains("not been counted", refusal);
+        leases.ReleaseWorker();
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
+    }
+
+    // --- the arrival guard's two decisions ------------------------------------------------------
+
+    [Theory]
+    [InlineData(true, true, -1)] [InlineData(true, false, -1)] [InlineData(true, null, -1)]
+    [InlineData(false, true, 1)] [InlineData(false, false, 0)] [InlineData(false, null, -1)]
+    public void WhileHandingOverHisBodiesAreUnknownNeverZero(bool handingOver, bool? present, int expected)
+    { Assert.Equal(expected, GunnarArrival.SavedWorkers(handingOver, present)); }
+
+    [Fact]
+    public void TheGuardGoesOnlyOnceTheCensusHasTheBodyOrHasLongSaidNone()
+    {
+        Assert.True(GunnarArrival.MayRelease(true, 0f));
+        // A "no body" that may predate the spawn is not believed at once...
+        Assert.False(GunnarArrival.MayRelease(false, 0f));
+        Assert.False(GunnarArrival.MayRelease(false, GunnarArrival.PatienceSeconds - 0.01f));
+        Assert.True(GunnarArrival.MayRelease(false, GunnarArrival.PatienceSeconds));
+        // ...and not knowing never releases it, however long it lasts.
+        Assert.False(GunnarArrival.MayRelease(null, 1e6f));
+    }
+
+    [Fact]
     public void AJobAlreadyHoldingHimIsNotARefusal()
     {
         var (registry, leases, id) = Setup();

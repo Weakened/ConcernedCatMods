@@ -111,6 +111,11 @@ internal readonly struct SelectionResult
 /// him. No path query is spent here; walking finds out the truth, and a source
 /// he could not reach is excluded by the caller.
 ///
+/// <b>Cheapest labour first</b> (#282): a source of a lower
+/// <see cref="LabourTier"/> always wins over a higher one, so a small tree is
+/// felled only when no loose stone or branch the order can use is left. Within
+/// a tier, cost decides.
+///
 /// <b>Deterministic.</b> Ties break by the order's resource order, then by the
 /// source's session id and prefab name, ordinally. The same inputs choose the
 /// same source.
@@ -150,6 +155,7 @@ internal static class CollectionTargetSelector
         SourceObservation? best = null;
         float bestScore = float.PositiveInfinity;
         int bestResourceOrder = int.MaxValue;
+        LabourTier bestTier = LabourTier.Unspecified;
         bool carryBlocked = false;
         bool returnBlocked = false;
         bool overcollection = false;
@@ -181,7 +187,7 @@ internal static class CollectionTargetSelector
                 continue;
             }
 
-            int yield = Math.Max(1, source.EstimatedYield);
+            int yield = SmallTreeSources.PlannedYield(source, need.Remaining);
             if (yield > need.Remaining)
             {
                 overcollection = true;
@@ -201,11 +207,14 @@ internal static class CollectionTargetSelector
             }
 
             float score = Score(parameters, worker, source.Key.Position, returnPoint);
-            if (IsBetter(score, resourceOrder, source, bestScore, bestResourceOrder, best))
+            LabourTier tier = SmallTreeSources.TierOf(source.Kind);
+            if (best == null || tier < bestTier ||
+                (tier == bestTier && IsBetter(score, resourceOrder, source, bestScore, bestResourceOrder, best)))
             {
                 best = source;
                 bestScore = score;
                 bestResourceOrder = resourceOrder;
+                bestTier = tier;
             }
         }
 

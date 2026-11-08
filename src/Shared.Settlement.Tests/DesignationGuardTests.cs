@@ -393,6 +393,7 @@ public sealed class DesignationGuardTests : IDisposable
             // C2: a rebind is keyed by its order, like the order's acceptance.
             [JournalEntryKind.CollectionRebound] = false,
             [JournalEntryKind.BuildOrderRecorded] = false,
+            [JournalEntryKind.ResidentRecorded] = false,
         };
 
         // Collected, not asserted one at a time. Assert.True stops at the

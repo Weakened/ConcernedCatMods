@@ -105,8 +105,11 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// <summary>Where Gunnar's one body stands, from this runtime's census
     /// (#379). The collection tour's plan is revalidated only once this says
     /// Bound, NotFound or Duplicated - Searching would be deciding before the
-    /// census has finished, which is the race a second Gunnar comes from.</summary>
-    internal WorkerBodyStatus BodyStatus => _bodyStatus;
+    /// census has finished, which is the race a second Gunnar comes from.
+    /// Unspecified once the runtime has faulted (#458): a census nobody
+    /// advances any more is not an answer, so the figure and the buckle show
+    /// nothing and a tour waits.</summary>
+    internal WorkerBodyStatus BodyStatus => _faulted ? WorkerBodyStatus.Unspecified : _bodyStatus;
 
     internal GunnarHaulService Service { get; private set; } = null!;
 
