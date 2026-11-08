@@ -4,6 +4,8 @@ using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui.Hauling;
 namespace TheConcernedCat.ConcernedTeamster.Tests.Companions;
+// #459: pins catalog English the override tests change, so it shares their collection.
+[Collection("TeamsterStrings shared statics")]
 public sealed class GunnarTalkTests
 {
     [Fact] public void AuthoredCatalogHasAtLeast24UniqueLocalizableLines()
@@ -20,7 +22,7 @@ public sealed class GunnarTalkTests
         var talk=new GunnarTalk(); var recent=new Queue<string>(); var seen=new HashSet<string>();
         for (int i=0;i<GunnarTalk.Catalog.Count*3;i++)
         {
-            string line=talk.Interact(QuestState.Recruited,HaulPhase.Ready,HaulAttentionReason.Unspecified)!;
+            string line=talk.Reply(QuestState.Recruited,HaulPhase.Ready,HaulAttentionReason.Unspecified)!;
             Assert.DoesNotContain(line,recent); seen.Add(line); recent.Enqueue(line);
             if (recent.Count>8) recent.Dequeue();
         }
@@ -33,7 +35,7 @@ public sealed class GunnarTalkTests
             if (reason==HaulAttentionReason.Unspecified) { Assert.Null(GunnarTalk.AttentionKey(reason)); continue; }
             string key=GunnarTalk.AttentionKey(reason)!;
             Assert.Equal(HaulPanelKeys.ForReason(reason),key); Assert.True(TeamsterStrings.HasKey(key));
-            Assert.Contains(TeamsterStrings.Get(key),new GunnarTalk().Interact(
+            Assert.Contains(TeamsterStrings.Get(key),new GunnarTalk().Reply(
                 QuestState.Recruited,HaulPhase.NeedsAttention,reason));
         }
         Assert.Null(GunnarTalk.AttentionKey((HaulAttentionReason)999));
@@ -41,13 +43,13 @@ public sealed class GunnarTalkTests
     [Fact] public void IntroductionAndToolsOnlyDoNotPretendHeWasRecruited()
     {
         var talk=new GunnarTalk();
-        Assert.Equal("Bring Gunnar a usable cart",talk.Interact(QuestState.IntroPending,HaulPhase.Ready,default));
-        Assert.Null(talk.Interact(QuestState.Skipped,HaulPhase.Ready,default));
-        Assert.Null(talk.Interact(QuestState.Unstarted,HaulPhase.Ready,default));
+        Assert.Equal("Bring Gunnar a usable cart",talk.Reply(QuestState.IntroPending,HaulPhase.Ready,default));
+        Assert.Null(talk.Reply(QuestState.Skipped,HaulPhase.Ready,default));
+        Assert.Null(talk.Reply(QuestState.Unstarted,HaulPhase.Ready,default));
     }
     [Fact] public void TranslatedLineIsUsedAndNoMissingOptionalCompanionOrProgressionHintLeaks()
     {
-        Assert.Equal("translated",new GunnarTalk().Interact(QuestState.Recruited,HaulPhase.Ready,default,_=>"translated"));
+        Assert.Equal("translated",new GunnarTalk().Reply(QuestState.Recruited,HaulPhase.Ready,default,_=>"translated"));
         foreach (string line in GunnarDialogueStrings.English.Values)
         {
             Assert.DoesNotContain("Hulgi",line); Assert.DoesNotContain("Thorstein",line);

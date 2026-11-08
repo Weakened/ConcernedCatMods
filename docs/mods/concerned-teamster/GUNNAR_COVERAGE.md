@@ -1,77 +1,76 @@
-# Gunnar #297 / #462 requirement coverage and handoff
+# Gunnar: the #297 coverage matrix (#462)
 
-Status: SOURCE HANDOFF; NOT CLOSABLE. No integrated candidate/package/game run
-has been produced here. All in-game rows are OWNER GO-AROUND PENDING. Domain
-coverage does not prove native call sites, appearance, real-cart assignment or
-laden hauling. The owner is bulk-testing a separate Hulgi ZIP; it is unchanged.
+Status: **automated rows code-complete; every in-game row is OWNER GO-AROUND
+PENDING.** #297 ("A Fair Load") is **not** closable from this document: it may
+be reported closable only with observed evidence on an identified candidate,
+row by row below. No package was built and nothing was published.
 
-## Current source stack
+## Where each part lives
 
-One dedicated worktree/branch per leaf, stacked for explicit dependencies:
-
-| Issue | Branch | Scope and exact outstanding integration |
+| Issue | Part | Document |
 |---|---|---|
-| #456 | feat/ct-456-gunnar-record | Scoped durable record; adapter/config now installed at the four pinned Plugin lifecycle sites. Native owner checks remain. |
-| #457 | feat/ct-457-gunnar-keepsake | Shared keepsake now has native plugin wiring, verified-anchor/ground queries, canonical other-memento snapshot and existing-census reads. Actual mesh/physics/game evidence remains. |
-| #458 | feat/ct-458-gunnar-presentation | Body decisions, role wrapper, real-library leases, dresser/metadata adapters; existing role registration, same-position worker handover, Teamster figure audit/plants, native presets and visual evidence remain. |
-| #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
-| #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel remain; owner confirmed hauling opt-in + host authority on 2026-11-01. |
-| #461 | feat/ct-461-gunnar-camp | Cached no-allocation targets/range retention/seats; public Camp facade (`NpcCamp`) and the figure's ground-sitting pose are in Concerned NPC 0.5.0 (library PR); Teamster lifecycle wiring remains. |
-| #462 | feat/ct-462-gunnar-coverage | Cross-feature tests and this matrix; native campaign/evidence remains. |
+| #456 | Scoped companion record, `Companions/Gunnar` opt-out, display name | `GUNNAR_COMPANION.md` |
+| #457 | The worn harness buckle (shared keepsake) | `GUNNAR_KEEPSAKE.md` |
+| #458 | His presentation figure at home and the hand-over to his worker body | `GUNNAR_PRESENTATION.md` |
+| #459 | Catalogued lines and talking to his figure | `GUNNAR_DIALOGUE.md` |
+| #460 | Recruitment against an explicitly chosen real cart | `GUNNAR_RECRUITMENT.md` |
+| #461 | Camp idle and poses: the public `NpcCamp` facade and the figure's ground-sitting pose are in Concerned NPC (PR #515); Teamster lifecycle wiring remains | `GUNNAR_CAMP.md` |
+| #313/#314/#317, #381 | The haul, collection tour, deposit and death drop (not redone here) | `GUNNAR_HAULING.md`, `GUNNAR_COLLECTION.md` |
 
-Do not cherry-pick each full branch as an independent base: later branches include
-earlier commits. Take the ordered unique commit stack, or the cumulative source
-patch in artifacts/gunnar-handoff. No branch has been merged or published.
+## The #297 matrix
 
-## Requirement-to-production-policy coverage
+"Automated" names the tests that fail when the protected property is removed.
+The xUnit tests and `tools/validate_repo.py` run in `scripts/verify.ps1` (the
+gate); the `tools/tests` plant suites (the figure audit's plants) run in CI,
+one job per class (`repo-checks.yml`), and were run locally before each push.
+"Owner" is the in-game row and its state.
 
-| Row | Requirement | Meaningful automated coverage | Native evidence |
+| Row | Requirement | Automated | Owner |
 |---|---|---|---|
-| G01 | Fresh intro | GunnarIntroductionFlowTests scenario 0; record/pickup/reopen/visitor/objective/confirm | Pending |
-| G02 | Legacy 1.0.x keeps tools before meeting | GunnarCompanionRecordTests legacy fixture and every existing feature gate; flow scenario 1 preserves original bytes | Pending actual upgrade |
-| G03 | Advanced/existing cart counts | IntroductionFlowTests scenario 2; no automatic hire and exact explicit confirmation | Pending real existing cart |
-| G04 | Early no-cart visitor/objective | BodyTests IntroPending; TalkTests objective; no work lease created by story flow | Pending |
-| G05 | Wrong, in-use, unauthorized or already leased cart | RecruitmentTests every check, post-prompt recheck and changed exact identity | Pending |
-| G06 | Two assignments | RecruitmentTests second Prepare is Busy and cannot replace first named prompt | Pending actual UI |
-| G07 | Stale identity/relog | RecruitmentTests epoch/character checks; no persisted cart key; Record/Session scope tests | Pending |
-| G08 | Cart destroyed/unloaded never relocks hire | IntroductionFlowTests real CartLeaseBook invalidation/reload; RecruitmentTests permanent hire | Pending real work pause |
-| G09 | Bed moved during haul | CampTests worker priority/no probe on worker state; no worker/cart operation in routine | Pending actual cart/cargo position |
-| G10 | Player takeover; detach/cancel | Existing HaulingExecutionLifecycle/Teardown/Authority/Hold/Custody tests | Pending native worker |
-| G11 | Missing optional mods | Talk has no product reference/unsupported knowledge hints; existing hauling interop tests | Pending missing-mod startup |
-| G12 | Full destination; conservation | Existing DepositOrderGateTests, GunnarCargoLedgerTests, GunnarTourPlanKillTests; no transfer added here | Pending laden native delivery |
-| G13 | Once-only pickup, write refusal | KeepsakeTests real sidecar/reopen/retry; RecordTests detached failed save and no in-memory hire | Pending native callback/removal |
-| G14 | No memento collision | Shared planner separation plus actual native-reader source tests for compass/shared footprints and own-spot exclusion; full buffers defer | Pending actual cross-product positions |
-| G15 | Appearance | BodyTests labels/palette/overrides; LookSource reads installed metadata only when invoked | Pending IDs and front/side/daylight |
-| G16 | One body; ordered handover | BodyTests real ConcernedNPC arbiter, removal failure, release-before-claim | Pending ct_haul/#317 wiring |
-| G17 | Safe camp/idle/range retention | CampTests real internal Camp via TEST-ONLY projection, seat targets and exact isolated hot-path allocation/probe budget | Pending approved public API and actual poses |
-| G18 | World/character/logout cleanup | Record/Session tests, body lease invalidation, recruitment token invalidation | Pending integrated lifecycle |
+| G01 | Fresh introduction: buckle, examine, story, objective | `GunnarIntroductionFlowTests` scenario 0; `GunnarKeepsakeTests` | OWNER GO-AROUND PENDING (E1) |
+| G02 | Legacy 1.0.x save keeps every tool before meeting him | `GunnarNeverMetUpgradeTests` (a never-met character gets no figure, no hire and writes nothing; no Teamster file outside a Companions folder names any companion type, bar two pinned ports); `GunnarCompanionRecordTests.ExistingFeatureGatesHaveNoCompanionDependency` (every gate, and Plugin.cs's hooks one by one); flow scenario 1 keeps a synthetic legacy file byte for byte | OWNER GO-AROUND PENDING (E1) |
+| G03 | Advanced introduction: an existing cart counts, only when chosen | `GunnarCompanionRecordTests.AlreadyOwningACartIsNotAnAcceptedAssignment`; `GunnarRecruitmentCartPortTests.AnExistingParkedAssignmentOfThisSameCartCanCount`; `GunnarRecruitmentTests` explicit confirmation | OWNER GO-AROUND PENDING (E3) |
+| G04 | Early no-cart state: visitor at home, "Bring Gunnar a usable cart" | `GunnarIntroductionFlowTests` (no work lease is created by the story: the lease book's revision stays 0 and no lease is active); `GunnarBodyTests.VisitorAndRecruitedCanPresentAtRest`; `GunnarTalkTests.IntroductionAndToolsOnlyDoNotPretendHeWasRecruited` | OWNER GO-AROUND PENDING (E1, E2) |
+| G05 | Existing cart accepted | `GunnarRecruitmentTests`; `GunnarRecruitmentCartPortTests` | OWNER GO-AROUND PENDING (E3) |
+| G06 | Wrong, in-use or unauthorized cart refused | `GunnarRecruitmentTests` (every `GunnarCartCheck`, post-prompt recheck, changed identity) | OWNER GO-AROUND PENDING (E3) |
+| G07 | Simultaneous assignment | `GunnarRecruitmentTests` second prepare is busy; `HaulingExecutionAssignmentTests` | OWNER GO-AROUND PENDING (E3) |
+| G08 | Stale identity after relog | `GunnarRecruitmentTests` epoch/character; `GunnarCompanionRecordTests` scope; `GunnarBodyTests.WorldUnloadInvalidatesBothLeasesAndForgetDropsThem` | OWNER GO-AROUND PENDING (E3) |
+| G09 | Cart destroyed or unloaded | `GunnarIntroductionFlowTests` lease invalidation; `HaulingExecutionLeaseTests`, `HaulingExecutionSignalTests` | OWNER GO-AROUND PENDING (E4) |
+| G10 | Bed moved during a haul | `GunnarBodyTests.SavedWorkerAnywhereOutranksFigure` (no figure while a body exists, wherever home is); `GunnarCampTests.ChangedBedRepositionsOnlyThePresentationAndWorkerSuppressesIt` | OWNER GO-AROUND PENDING (E4) |
+| G11 | Player takeover | `HaulingExecutionSignalTests`, `HaulingExecutionTeardownTests` (`PlayerTookOver`) | OWNER GO-AROUND PENDING (E4) |
+| G12 | Detach / cancel | `HaulingExecutionLifecycleTests`, `HaulingExecutionTeardownTests`, `CollectionLifecycleTests` | OWNER GO-AROUND PENDING (E4) |
+| G13 | Missing optional mods | `GunnarTalkTests` (no Hulgi/Thorstein/progression hint); `HaulingInteropProviderTests`; `CartographerGateTests` | OWNER GO-AROUND PENDING (E5) |
+| G14 | Full destination | `DepositOrderGateTests` (a full or unavailable chest leaves the remainder in him) | OWNER GO-AROUND PENDING (E4) |
+| G15 | Conserved contents | `GunnarCargoLedgerTests`; `GunnarTourPlanKillTests`; `WorkerRetirementTests`; `WorkerDeathDropTests`; `PickAccountingTests` | OWNER GO-AROUND PENDING (E4) |
+| G16 | One body at a time; ordered hand-over | `GunnarBodyTests` (real arbiter, arrival guard, removal failure, second hand-over); `GunnarHandOverOrderTests`; validator `[teamster] #458 figure audit` + `tools/tests/test_teamster_figure_audit.py` | OWNER GO-AROUND PENDING (E2) |
+| G17 | Appearance | `GunnarLookTests` (label, token and id read from the installed game, renumbering, language, fallback, palette, clothes, overrides) | OWNER GO-AROUND PENDING (E2) |
+| G18 | Dialogue is talk-only and catalogued | `GunnarTalkTests`; `GunnarDialogueCatalogTests`; `HardcodedStringAuditTests` | OWNER GO-AROUND PENDING (E1) |
+| G19 | Camp idle and range retention (#461) | `GunnarCampTests` (the domain routine, on main); the public camp facade and the sitting pose are PR #515's and pending until it merges | OWNER GO-AROUND PENDING once #515 is in |
+| G20 | World/character/logout cleanup | `GunnarCompanionRecordTests` scope; `GunnarBodyTests` world unload; `GunnarHandOverOrderTests.AWorldUnloadTakesTheFigureDownBeforeTheSharedRuntimeEndsTheWorld` | OWNER GO-AROUND PENDING (E1) |
+| G21 | The buckle is picked up once; a refused write never strands the story | `GunnarKeepsakeTests` (real sidecar, reopen, retry, second-write failure) | OWNER GO-AROUND PENDING (E1) |
+| G22 | No memento collision with another product's keepsake | `GunnarKeepsakeTests`, `GunnarNativeEnvironmentTests` (other keepsakes reserved, own spot excluded, full buffers defer); `GunnarBodyTests.HeKeepsClearOfAnotherProductsKeepsake` | OWNER GO-AROUND PENDING (E1) |
 
-## Controlled integration and capture sequence (lead/owner only)
+## Owner evidence rows
 
-1. Reconcile the new-file source stack with current main. Keep Claude's worker,
-   settings, localization, validator and release edits; no competing integration.
-2. Wire the contracts described in each GUNNAR_*.md. Apply the owner-approved
-   hauling opt-in + host authority rule for recruitment. Resolve the Camp release decision. Add Teamster confinement/plant tests before any native pose
-   writes. Read actual installed preset IDs and record what was resolved.
-3. Run scripts/build.ps1 and scripts/verify.ps1 under the shared build mutex;
-   record repaired source SHA, library/product versions and gate logs.
-4. Build the actual integrated test ZIP only in the lead's controlled pipeline;
-   record ZIP/DLL hashes, installed agreement and startup identity. No package
-   operation is part of #462 or performed by this branch.
-5. Capture separate progression/intro, appearance, explicit cart assignment and
-   laden-haul segments. Include G01-G18, exact candidate identity and truthful
-   pending/failure rows. Do not reuse Hulgi or historical worker footage as proof.
-6. #297 can be reported closable only after observed evidence and all requested
-   mechanics/integration rows pass. Source-only or identity-only results cannot
-   close it. Nothing here authorizes publication, merging or game operation.
+Separate captures, on one identified candidate (source SHA, ZIP and DLL hashes
+recorded by the lead), in a disposable world and a dedicated profile. None is
+satisfied by unit tests, by Hulgi's or Thorstein's footage, or by a historical
+worker capture.
 
-## Work left outside this stack
+| Row | What to capture | State |
+|---|---|---|
+| E1 Progression / introduction | Never-met 1.0.x save: every utility works (G02). New character: buckle, examine, inscription and introduction, the objective, talking to the visitor (G01, G04, G18, G21, G22); relog and world change leave nothing behind (G20) | OWNER GO-AROUND PENDING |
+| E2 Appearance and one body | Gunnar at home front, side and neutral daylight against the reference; the resolved ids in `ct_haul status`; `ct_haul spawn` places him where he stood and never beside a figure; `ct_haul retire` brings him home (G16, G17) | OWNER GO-AROUND PENDING |
+| E3 Cart assignment | An existing cart chosen and confirmed; wrong, in-use and unauthorized carts refused; a second assignment busy; a relog invalidates a pending prompt (G03, G05-G08) | OWNER GO-AROUND PENDING |
+| E4 The laden haul | A loaded haul to a destination; the bed moved mid-haul; the player taking the cart; detach and cancel; a destroyed or unloaded cart; a full destination; contents counted before and after (G09-G12, G14, G15) | OWNER GO-AROUND PENDING |
+| E5 Missing optional mods | Teamster alone, without Cartographer or Foreman: start-up clean, no Hulgi/Thorstein lines (G13) | OWNER GO-AROUND PENDING |
 
-#334 requires an owner grant for worker ladder movement (still absent). #356
-requires the owner to decide resident identity/presentation versus worker. #372
-and #376 require cross-product lifecycle/custody adoption in active runtime files.
-#381 and #382 remain with Claude's worker lanes. #494/#497/#498 change validator
-files Claude owns in #495/#489. #288/#470 are game/evidence work reserved to the
-lead/owner. #485-#487 are explicitly queued after current issues, not authorized
-to jump ahead. The remaining #297 rows above need lead-owned integration and
-actual game evidence; none is declared done simply because its unit tests pass.
+## Out of scope (per #297)
+
+#280's construction clearance, fleets, base-wide chest collection, cross-world
+routing and any new carve-out.
+
+## Closure
+
+#297 is reported closable only when E1-E5 are observed and every row above is
+green on the same candidate. Until then it stays open.

@@ -14,7 +14,11 @@ namespace TheConcernedCat.ConcernedTeamster;
 // than referenced, because the repository's library audit reads this file
 // as text; NpcLibraryAdoptionTests pins the literal against the library's
 // own constant so the two cannot drift.
-[BepInDependency("com.theconcernedcat.valheim.concernednpc")]
+// The minimum version is 0.5.0 because Gunnar's role contract
+// (NpcBodyContract.ForWorkerWithPresentation, #458) first exists there; an
+// older library would fail this plugin's start with a missing method instead
+// of a clear dependency error at load.
+[BepInDependency("com.theconcernedcat.valheim.concernednpc", "0.5.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedteamster";
@@ -33,6 +37,7 @@ public sealed class Plugin : BaseUnityPlugin
     private Adapters.Companions.GunnarCompanionAdapter? _gunnarCompanion;
     private Adapters.Companions.GunnarKeepsakeRuntime? _gunnarKeepsake;
     private Adapters.Companions.GunnarRecruitmentRuntime? _gunnarRecruitment;
+    private Adapters.Companions.GunnarPresentation? _gunnarFigure;
 
     private static readonly IReadOnlyDictionary<string, object> NoCapabilities =
         new Dictionary<string, object>();
@@ -92,6 +97,24 @@ public sealed class Plugin : BaseUnityPlugin
         // Workers/GunnarHaulingEnabled is on and a cart is explicitly assigned.
         _hauling = Adapters.Workers.GunnarHaulingRuntime.Install(gameObject, settings, Logger);
         _gunnarRecruitment = Adapters.Companions.GunnarRecruitmentRuntime.Install(_gunnarCompanion, () => _hauling?.Service, Logger);
+
+        // #458: Gunnar at home - his presentation figure while he rests, handed
+        // over to his worker body by ct_haul spawn. It reads the hauling
+        // runtime's census and adds no scan of its own.
+        _gunnarFigure = Adapters.Companions.GunnarPresentation.Install(_gunnarCompanion,
+            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,
+            () => _hauling?.BoundBody != null,
+            () => _hauling?.CollectionIdentity?.MayRetireBody ?? false,
+            () => _hauling?.Service,
+            Logger);
+        if (_hauling != null && _gunnarFigure != null)
+        {
+            _hauling.TakeWorkerBody = _gunnarFigure.TakeWorkerBody;
+            _hauling.ReleaseWorkerBody = _gunnarFigure.ReleaseWorkerBody;
+            _hauling.BodiesChanged = _gunnarFigure.NoteBodiesChanged;
+            _hauling.BeforeWorldEnds = _gunnarFigure.OnWorldUnloading;
+            _hauling.PresentationStatus = _gunnarFigure.Describe;
+        }
 
         // #381: Gunnar's opt-in collection runtime — the call site of the owner's
         // pickup carve-out. Always installed for the same reason the hauling
@@ -158,6 +181,17 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        // #458: the figure comes down before the runtime whose census it reads.
+        _gunnarFigure?.Dispose();
+        if (_hauling != null)
+        {
+            _hauling.TakeWorkerBody = null;
+            _hauling.ReleaseWorkerBody = null;
+            _hauling.BodiesChanged = null;
+            _hauling.BeforeWorldEnds = null;
+            _hauling.PresentationStatus = null;
+        }
+
         _gunnarRecruitment?.Forget();
         _gunnarKeepsake?.Forget();
         _gunnarCompanion?.Forget();
@@ -186,6 +220,7 @@ public sealed class Plugin : BaseUnityPlugin
         _gunnarCompanion?.Tick();
         _gunnarKeepsake?.Tick();
         _gunnarRecruitment?.Tick();
+        _gunnarFigure?.Tick(UnityEngine.Time.deltaTime);
         bool worldIsUp = Adapters.Workers.GunnarHaulingRuntime.WorldIsUp;
         if (_haulWorldWasUp && !worldIsUp)
         {
