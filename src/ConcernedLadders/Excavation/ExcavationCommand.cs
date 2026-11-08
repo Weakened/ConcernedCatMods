@@ -31,12 +31,19 @@ internal sealed class ExcavationCommand : ConsoleCommand
     {
         try
         {
-            Console.instance?.Print(Answer(args ?? new string[0]));
+            Print(Answer(args ?? new string[0]));
         }
         catch (Exception exception)
         {
-            Console.instance?.Print("Excavation could not answer that: " + SafeFailure.Brief(exception));
+            Print("Excavation could not answer that: " + SafeFailure.Brief(exception));
         }
+    }
+
+    /// <summary>Unity's own null test, which a destroyed console passes as non-null under ?. .</summary>
+    internal static void Print(string text)
+    {
+        Console console = Console.instance;
+        if (console != null) console.Print(text);
     }
 
     private string Answer(string[] args)

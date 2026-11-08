@@ -63,6 +63,7 @@ public sealed class ExcavationSourceAuditTests
     [InlineData(@"\bDestroyImmediate\s*\(")]
     [InlineData(@"\.Damage\s*\(")]
     [InlineData(@"\bm_levelDelta\s*\[")]
+    [InlineData(@"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)")]
     public void TheAdapterNeverChangesTheWorldAnyOtherWay(string pattern)
     {
         foreach ((string path, string text) in Sources("Excavation"))
@@ -85,6 +86,42 @@ public sealed class ExcavationSourceAuditTests
         Assert.Matches(@"Object\.Destroy\s*\(\s*_container\s*\)", Sources("Excavation").Single(s => s.Path == hits[0].Path).Text);
     }
 
+    private static string SourceText(string relative) => Sources().Single(s => s.Path == relative).Text;
+
+    /// <summary>The adapter properties a game-free test cannot see, pinned in the text that sets them. Removing or
+    /// flipping any of them fails here.</summary>
+    [Theory]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_raise\s*=\s*true\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_square\s*=\s*true\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_raiseDelta\s*=\s*-geometry\.Depth\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_level\s*=\s*false\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_smooth\s*=\s*false\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_paintCleared\s*=\s*false\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"op\.m_spawnOnPlaced\s*=\s*null\s*;")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"CheckAccess\s*\([^;]*AccessCheckRadius\s*,\s*flash\s*:\s*true\s*,\s*wardCheck\s*:\s*true\s*\)")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"IsInside\s*\(\s*centre\s*,\s*radius\s*,\s*buildCheck\s*:\s*true\s*\)")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"float\s+radius\s*=\s*plan\.Geometry\.AccessCheckRadius\s*;")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"GetComponentInParent<Vagon>\(\)\s*!=\s*null\s*\|\|\s*hit\.GetComponentInParent<Ship>\(\)\s*!=\s*null")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"if\s*\(\s*!vehicle\s*&&\s*hit\.GetComponentInParent<WearNTear>\(\)\s*!=\s*null\s*\)")]
+    [InlineData("Excavation/ExcavationTerrainReader.cs", @"if\s*\(\s*!ExcavationTerrainRules\.LatticeSupported\s*\(\s*tile\.m_width\s*,\s*tile\.m_scale\s*,\s*origin\.x\s*,\s*origin\.z\s*\)\s*\)\s*return\s+ExcavationReadFault\.UnsupportedLattice\s*;")]
+    [InlineData("Excavation/ExcavationTerrainReader.cs", @"if\s*\(\s*tile\.m_doLateUpdate\s*!=\s*0\s*\)\s*return\s+ExcavationReadFault\.Rebuilding\s*;")]
+    [InlineData("Excavation/ExcavationTerrainReader.cs", @"WriteTo\s*\(\s*samples\s*,\s*dx\s*,\s*dz\s*,\s*ExcavationTerrainRules\.ExpectedCopies\s*\(")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"if\s*\(\s*op\s*==\s*null\s*\|\|\s*!_inFlight\.TryStart\s*\(\s*plan\s*,\s*Time\.time\s*\)\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"ExcavationPlanner\.Check\s*\(\s*plan\s*,\s*after\s*\)")]
+    public void TheAdapterPropertiesAreWhereTheyMustBe(string relative, string pattern)
+    {
+        Assert.Equal(1, Count(SourceText(relative), pattern));
+    }
+
+    [Fact]
+    public void TheTerrainToolCallComesAfterTheSlotIsTaken()
+    {
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        int slot = runtime.IndexOf("_inFlight.TryStart(plan, Time.time)", StringComparison.Ordinal);
+        int spawn = Regex.Match(runtime, @"\bSpawnOnHitTerrain\s*\(").Index;
+        Assert.True(slot > 0 && spawn > slot, "The single SpawnOnHitTerrain call must follow the in-flight slot.");
+    }
+
     [Fact]
     public void TheAuditSeesWhatItLooksFor()
     {
@@ -92,5 +129,7 @@ public sealed class ExcavationSourceAuditTests
         string planted = StripComments("x.SpawnOnHitTerrain(a); // SpawnOnHitTerrain( in a comment\n view.InvokeRPC(\"x\");");
         Assert.Equal(1, Count(planted, @"\bSpawnOnHitTerrain\s*\("));
         Assert.Equal(1, Count(planted, @"\bInvokeRPC\s*\("));
+        Assert.Equal(1, Count("levels[index] = 0f;", @"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)"));
+        Assert.Equal(0, Count("float level = levels[index];", @"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)"));
     }
 }

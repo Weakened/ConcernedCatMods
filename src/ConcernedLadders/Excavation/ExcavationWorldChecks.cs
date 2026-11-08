@@ -11,10 +11,12 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 ///
 /// Read from the decompiled installed game:
 /// <list type="bullet">
-/// <item><b>Wards.</b> <c>PrivateArea.CheckAccess(point, radius)</c> is the check the pickaxe's path makes, but on the
-/// op radius, a circle that misses a square op's floor corners (EXCAVATION.md claim 10). Here it is asked at
-/// <see cref="ExcavationGeometry.AccessCheckRadius"/>, the distance to the farthest border corner, so every changed
-/// cell is covered.</item>
+/// <item><b>Wards.</b> The pickaxe's path asks <c>PrivateArea.CheckAccess(point, opRadius)</c>, a circle that misses a
+/// square op's floor corners (EXCAVATION.md claim 10), and in its default mode passes when ANY overlapping ward grants
+/// access - so merely widening that radius would also pull in more wards that grant. Here it is asked at
+/// <see cref="ExcavationGeometry.AccessCheckRadius"/> (the farthest border corner) with <c>wardCheck: true</c>, which
+/// refuses when any overlapping ward does not grant access. Whatever the pickaxe's check refuses, this refuses
+/// too.</item>
 /// <item><b>No-build locations.</b> The game's public test, <c>Location.IsInsideNoBuildLocation(point)</c>, takes a
 /// point only. Each no-build location is instead asked <c>IsInside(centre, AccessCheckRadius, buildCheck: true)</c>,
 /// which covers the whole square. The location list is private, so it is found once by reflection; when it cannot be
@@ -52,9 +54,10 @@ internal sealed class ExcavationWorldChecks
 
     internal string? Missing { get; }
 
-    /// <summary>The ward check at the geometry's wider radius. Flashes the refusing ward, as the pickaxe does.</summary>
+    /// <summary>The ward check at the geometry's wider radius, refusing if any overlapping ward lacks access. Flashes
+    /// the refusing ward, as the pickaxe does.</summary>
     internal static bool WardAllows(in ExcavationPlan plan) =>
-        PrivateArea.CheckAccess(Centre(plan, plan.Datum), plan.Geometry.AccessCheckRadius, flash: true, wardCheck: false);
+        PrivateArea.CheckAccess(Centre(plan, plan.Datum), plan.Geometry.AccessCheckRadius, flash: true, wardCheck: true);
 
     /// <summary>True when any no-build location reaches into the square. Fails closed: an unreadable list is a hit.</summary>
     internal bool InNoBuildArea(in ExcavationPlan plan)
@@ -99,9 +102,13 @@ internal sealed class ExcavationWorldChecks
             Collider hit = _hits[i];
             _hits[i] = null!;
             if (hit == null) continue;
-            // A structural building piece (it has WearNTear, so the game's own support and collapse govern it). A planted
-            // crop or sapling is a Piece without WearNTear and would float, so it refuses like a rock.
-            if (hit.GetComponentInParent<WearNTear>() != null) { pieces++; continue; }
+            // A structural building piece (it has WearNTear, so the game's own support and collapse govern it). Carts and
+            // ships carry WearNTear too but are vehicles, and anything on a moving rigidbody could be left hanging; they
+            // refuse first. A planted crop or sapling is a Piece without WearNTear and would float, so it refuses too.
+            Rigidbody body = hit.attachedRigidbody;
+            bool vehicle = hit.GetComponentInParent<Vagon>() != null || hit.GetComponentInParent<Ship>() != null ||
+                           (body != null && !body.isKinematic);
+            if (!vehicle && hit.GetComponentInParent<WearNTear>() != null) { pieces++; continue; }
             obstructions++;
             if (firstObstruction == null)
             {

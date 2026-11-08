@@ -96,7 +96,7 @@ public sealed class Plugin : BaseUnityPlugin
             _excavation.Install();
             if (enabled.Value)
             {
-                _excavation.Report = text => global::Console.instance?.Print(text);
+                _excavation.Report = ExcavationCommand.Print;
                 CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(_excavation));
             }
         }

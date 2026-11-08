@@ -194,16 +194,17 @@ read from the decompiled installed game (1.0.21) and Jötunn 2.30.2. **None of i
   prefab-name hash (claim 7). A peer that had not registered them would drop a dig on a tile it owns.
   Registering is inert: nothing instantiates these prefabs except the opt-in commit gate.
 - At build time the log states whether `Attack.SpawnOnHitTerrain`'s own `GetComponentInChildren<TerrainOp>()`
-  sees the op on a prefab whose parent is inactive. If it does not, vanilla's own ward and no-build re-check is
-  skipped; the commit gate's own checks (6.3) are a superset of it, so nothing is lost. Which one happens is
-  **NOT RUN**.
+  sees the op on a prefab whose parent is inactive (Unity's default skips inactive objects, so it most likely does
+  not). If it does not, vanilla's own ward and no-build re-check is skipped. The commit gate's own checks (6.3)
+  refuse everything that re-check refuses, so nothing is lost. Which one happens is **NOT RUN**.
 
 ### 6.2 The terrain read (`ExcavationTerrainReader`, read-only)
 
 - Only full-detail heightmaps (`Heightmap.GetAllHeightmaps()`, which distant-LOD heightmaps leave), active
   and enabled.
-- **Live lattice check (claim 1):** each tile under the square must have `m_scale` = 1 (±0.0001), an even
-  `m_width`, and an origin on whole metres; otherwise the plan refuses `UnsupportedLattice`.
+- **Live lattice check (claim 1):** each tile under the square must have `m_scale` = 1 (±0.0001), `m_width` = 64
+  (the 64 m zone the planner counts tiles in), and an origin on whole metres; otherwise the plan refuses
+  `UnsupportedLattice`.
 - **Stale heights (claim 9):** a tile with `m_doLateUpdate` set (a rebuild queued by `Poke`) refuses
   `Rebuilding`.
 - **Limit base (claim 6):** `ExcavationTerrainRules.LimitBase` = height − level delta − smooth delta, read from
@@ -218,9 +219,12 @@ read from the decompiled installed game (1.0.21) and Jötunn 2.30.2. **None of i
   edit: `m_playerModifiction`, `Heightmap.TerrainVSModifier`) refuses `LegacyTerrainModifier`, because its `B` is
   a snapshot this adapter cannot read. A compiler that exists but is not initialised, or whose arrays are the
   wrong size, refuses `CompilerUnreadable`.
-- **Shared edges (claim 8):** a vertex on a tile edge is read from every tile that holds it. The copies must
-  agree within 2 cm or the vertex is NaN (refused). The strictest copy's limit base is used, because each tile
-  is lowered on its own.
+- **Shared edges (claim 8):** a vertex on a tile edge is read from every tile that holds it, and all of them must
+  be loaded: an edge vertex needs 2 copies and a corner vertex 4, or it counts as unloaded, because a missing tile
+  would keep its edge and leave a seam. The copies must agree within 2 cm. Before a dig, copies that disagree
+  refuse `TilesDisagree`. During the read-back after a dig, the same disagreement means one tile has rebuilt and its
+  neighbour not yet, so it waits (until the timeout) instead of ending the dig as unreadable. The strictest copy's
+  limit base is used, because each tile is lowered on its own.
 - `TerrainComp`'s deltas and initialised flag are private in the shipped game, and a publicized reference would
   compile a direct read that the game then refuses (observed for a protected method in 0.2.2). So they are read
   by reflection, found once at start-up. A missing member makes the feature unavailable.
@@ -231,17 +235,22 @@ In this order, and each refusal changes and charges nothing: the switch; the sta
 live registry; the game's `TerrainOp.m_forceDisableTerrainOps`; **one in flight** (`Busy`); a fresh terrain read;
 the planner (`Refused`, `NothingToDig`). Only a Ready plan that lowers something then gets the world checks:
 
-- **Ward** at `AccessCheckRadius` (`PrivateArea.CheckAccess`, flashing the ward as the pickaxe does), which
-  covers every border corner (claim 10).
+- **Ward** at `AccessCheckRadius`, which covers every border corner (claim 10), and in the strict mode
+  (`wardCheck: true`): it refuses if **any** overlapping ward does not grant access, and flashes it as the pickaxe
+  does. The pickaxe's own call uses the default mode, which passes when any overlapping ward grants access, so
+  widening the radius in that mode would also have pulled in more wards that grant (independent review). The strict
+  mode refuses everything the pickaxe's check refuses, at either radius.
 - **No-build locations:** each `Location` with `m_noBuild` is asked `IsInside(centre, AccessCheckRadius,
   buildCheck: true)`, because the game's own public test takes a point only. The location list is private, so
   it is found by reflection; if it is missing, the feature is unavailable.
 - **Objects (claim 11):** one `Physics.OverlapBoxNonAlloc` over the border square (inset 5 cm), from 10 cm below
   the floor to 30 cm above the highest sampled ground, on the placement layers plus `item`, ignoring triggers
-  and terrain. Any collider that does not belong to a `WearNTear` (a rock, tree, ore, bush, planted crop,
-  dropped item, cart or ship) refuses `Obstructed`, naming the first one. Structural building pieces do not
-  refuse: digging under or beside your own floor is the core use. The result counts their colliders on the
-  changed ground, and their support and collapse stay the game's. A full buffer refuses `ScanOverflow`.
+  and terrain. A cart (`Vagon`), a ship (`Ship`) or anything on a moving rigidbody refuses `Obstructed` first:
+  carts and ships carry `WearNTear` too. Then any collider that does not belong to a `WearNTear` (a rock, tree, ore,
+  bush, planted crop or dropped item) refuses, naming the first one. Structural building pieces do not refuse:
+  digging under or beside your own floor is the core use. Their colliders on the changed ground are counted and
+  shown by the read-only `plan` before any dig, and their support and collapse stay the game's (so a
+  ground-supported piece can lose support and break). A full buffer refuses `ScanOverflow`.
 
 Then, after the in-flight slot is taken, exactly one `Attack.SpawnOnHitTerrain(point, op, null, 0, null, null)`
 at (centre, datum). A plain null back means the game's own check declined before instantiating anything: the
@@ -259,7 +268,8 @@ through a delegate is invisible to it.
 
 Registered only when `[Excavation] Enabled = true` (default **false**; restart after changing).
 `cl_excavate plan small|large` reads and describes the plan at the terrain the camera looks at, within 10 m of the
-player, and changes nothing. `cl_excavate dig small|large` runs the full gate. `cl_excavate status` shows the
+player, including what would refuse it and how many building-piece colliders stand on ground that would change. It
+changes nothing and flashes no ward. `cl_excavate dig small|large` runs the full gate. `cl_excavate status` shows the
 switch, the probe, the registration and any unconfirmed dig. The harness exists so the owner can measure the hole
 before the shovel exists; the shovel's deliberate action replaces it as the way a player digs. It is registered
 through Jötunn, because Jötunn 2.30.2 reflects for the 13-parameter `Terminal.ConsoleCommand` constructor that
@@ -271,7 +281,8 @@ including digging under a floor and from a ladder, belongs to the preview slice.
 - A console harness behind the off-by-default switch is the slice's only trigger, so the adapter can be reached
   and measured before the shovel exists. Nothing is charged, because there is no item yet.
 - The terrain ops register on every peer regardless of the switch (6.1).
-- Non-structural objects in the square refuse; structural pieces are allowed and counted (6.3).
+- Non-structural objects, carts and ships in the square refuse; structural pieces are allowed, counted and shown
+  before the dig (6.3). The owner should confirm that pieces losing support to a dig is acceptable.
 - One dig in flight per client. A Pending result times out after 10 s and is reported, never retried.
 - No paint (claim 13), so the dug floor keeps whatever ground texture it had.
 
@@ -287,6 +298,9 @@ including digging under a floor and from a ladder, belongs to the preview slice.
   from outside also refuses. That is the fail-closed side.
 - One in flight is per client. Two clients committing on one tile in the same frame could still double count
   (claim 9).
+- Until the item slice bumps the version, a peer running the published 1.0.0 passes the version handshake but has
+  not registered the ops. A dig on a tile it owns is dropped there (with an error in its log), and the digging
+  client reports `TimedOut`, which says so.
 
 ## 7. Next slices (each a PR of its own)
 

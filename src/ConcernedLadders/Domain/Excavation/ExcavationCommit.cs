@@ -139,13 +139,13 @@ internal sealed class ExcavationInFlight
     }
 
     /// <summary>Feeds one read-back. Complete, Overshot and Unreadable end the flight at once; Pending waits until the
-    /// timeout. A terrain read that found a rebuild in progress counts as Pending (the result is on its way); any
-    /// other read fault is Unreadable.</summary>
+    /// timeout. A terrain read that found a rebuild in progress, or tiles that disagree at a shared edge (one has
+    /// rebuilt, the other not yet), counts as Pending: the result is on its way. Any other read fault is Unreadable.</summary>
     internal ExcavationOutcome Observe(ExcavationReadFault fault, ExcavationProgress progress, float now)
     {
         if (!IsActive) throw new InvalidOperationException("No operation in flight.");
         ExcavationOutcome outcome;
-        if (fault == ExcavationReadFault.Rebuilding) outcome = ExcavationOutcome.Waiting;
+        if (fault == ExcavationReadFault.Rebuilding || fault == ExcavationReadFault.TilesDisagree) outcome = ExcavationOutcome.Waiting;
         else if (fault != ExcavationReadFault.None) outcome = ExcavationOutcome.Unreadable;
         else
         {

@@ -56,6 +56,7 @@ internal static class ExcavationReport
             case ExcavationReadFault.Rebuilding: return "The terrain here is still updating from another edit. Try again in a moment.";
             case ExcavationReadFault.LegacyTerrainModifier: return "An old-style terrain edit touches this area; its dig limit cannot be measured. Pick another spot.";
             case ExcavationReadFault.CompilerUnreadable: return "This area's terrain edits could not be read. Nothing is changed.";
+            case ExcavationReadFault.TilesDisagree: return "Two terrain tiles disagree at their shared edge here (one is still updating). Try again in a moment.";
             default: return "The terrain could not be read.";
         }
     }
@@ -91,10 +92,22 @@ internal static class ExcavationReport
             case ExcavationOutcome.Complete: return head + ": done. Floor level at " + F1(plan.Bottom) + " m.";
             case ExcavationOutcome.Overshot: return head + ": the floor went lower than planned (another edit landed at the same time). Reported only; nothing is repaired or retried.";
             case ExcavationOutcome.Unreadable: return head + ": the result could not be read. Nothing is retried; plan again to see the terrain as it is.";
-            case ExcavationOutcome.TimedOut: return head + ": the floor did not arrive within " + F0(ExcavationInFlight.TimeoutSeconds) + " s. Nothing is retried; plan again to see the terrain as it is.";
+            case ExcavationOutcome.TimedOut: return head + ": the floor did not arrive within " + F0(ExcavationInFlight.TimeoutSeconds) + " s (the player who owns this terrain may not have this build of the mod; see their log). Nothing is retried; plan again to see the terrain as it is.";
             case ExcavationOutcome.Abandoned: return head + ": the world closed before the result could be read.";
             default: return head + ": waiting for the result.";
         }
+    }
+
+    /// <summary>The object-scan line the read-only plan adds: what would refuse, and how many building-piece colliders
+    /// stand on ground that would change (their support and collapse are the game's own).</summary>
+    internal static string Ground(int obstructions, string? first, int pieces, bool overflow)
+    {
+        if (overflow) return "Too many objects overlap this square to check them all.";
+        string text = obstructions > 0
+            ? "In the way: " + obstructions.ToString(CultureInfo.InvariantCulture) + " object collider(s)" + (string.IsNullOrEmpty(first) ? "" : " (first: " + first + ")") + "; a dig would refuse."
+            : "Nothing in the way.";
+        if (pieces > 0) text += " " + pieces.ToString(CultureInfo.InvariantCulture) + " building-piece collider(s) stand on ground that would change; the game's own support rules decide whether they hold.";
+        return text;
     }
 
     private static string F0(float value) => value.ToString("0", CultureInfo.InvariantCulture);

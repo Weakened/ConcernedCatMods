@@ -48,6 +48,7 @@ public sealed class ExcavationCommitTests
     [InlineData((int)ExcavationReadFault.Rebuilding)]
     [InlineData((int)ExcavationReadFault.LegacyTerrainModifier)]
     [InlineData((int)ExcavationReadFault.CompilerUnreadable)]
+    [InlineData((int)ExcavationReadFault.TilesDisagree)]
     public void EveryReadFaultRefusesEvenWithAReadyPlan(int faultValue)
     {
         Assert.Equal(ExcavationCommitRefusal.TerrainUnreadable, Before(fault: (ExcavationReadFault)faultValue));
@@ -117,6 +118,8 @@ public sealed class ExcavationCommitTests
         Assert.Equal(ExcavationProgress.Pending, ExcavationPlanner.Check(plan, world.Sample(ExcavationMode.Small, 0, 0)));
         Assert.Equal(ExcavationOutcome.Waiting, slot.Observe(ExcavationReadFault.None, ExcavationProgress.Pending, 10.5f));
         Assert.Equal(ExcavationOutcome.Waiting, slot.Observe(ExcavationReadFault.Rebuilding, ExcavationProgress.Unreadable, 11f));
+        // One tile under the hole rebuilt, its neighbour not yet: the shared edge disagrees, and that is still arriving.
+        Assert.Equal(ExcavationOutcome.Waiting, slot.Observe(ExcavationReadFault.TilesDisagree, ExcavationProgress.Unreadable, 11.2f));
         Assert.True(slot.IsActive);
 
         world.Rebuild();

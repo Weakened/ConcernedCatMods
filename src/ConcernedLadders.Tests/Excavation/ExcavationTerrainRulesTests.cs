@@ -14,6 +14,8 @@ public sealed class ExcavationTerrainRulesTests
     [InlineData(64, 2f, 0f, 0f, false)]
     [InlineData(64, 0.5f, 0f, 0f, false)]
     [InlineData(63, 1f, 0f, 0f, false)]
+    [InlineData(32, 1f, 0f, 0f, false)]
+    [InlineData(128, 1f, 0f, 0f, false)]
     [InlineData(0, 1f, 0f, 0f, false)]
     [InlineData(-64, 1f, 0f, 0f, false)]
     [InlineData(64, 1f, 0.5f, 0f, false)]
@@ -143,6 +145,47 @@ public sealed class ExcavationTerrainRulesTests
             }
         }
         return samples;
+    }
+
+    [Theory]
+    [InlineData(0, 0, 1)]
+    [InlineData(31, -31, 1)]
+    [InlineData(32, 0, 2)]
+    [InlineData(-32, 5, 2)]
+    [InlineData(7, 96, 2)]
+    [InlineData(32, 32, 4)]
+    [InlineData(-96, 160, 4)]
+    [InlineData(64, 64, 1)]
+    public void TileEdgeVerticesBelongToTwoTilesAndCornersToFour(int x, int z, int copies)
+    {
+        Assert.Equal(copies, ExcavationTerrainRules.ExpectedCopies(x, z));
+    }
+
+    [Fact]
+    public void AnEdgeVertexMissingOneOfItsTilesIsUnloadedNotASeam()
+    {
+        var samples = new ExcavationSamples(ExcavationMode.Small);
+        var vertex = new ExcavationVertexRead();
+        vertex.Add(48f, 50f);
+        vertex.WriteTo(samples, 1, 0, expectedCopies: 2);
+        Assert.False(samples.IsLoaded(1, 0));
+        vertex.Add(48f, 50f);
+        vertex.WriteTo(samples, 1, 0, expectedCopies: 2);
+        Assert.True(samples.IsLoaded(1, 0));
+    }
+
+    [Fact]
+    public void DifferingHeightsAreToldApartFromUnreadableOnes()
+    {
+        var differ = new ExcavationVertexRead();
+        differ.Add(48f, 50f);
+        differ.Add(46f, 50f);
+        Assert.True(differ.HeightsDiffer);
+        var unreadable = new ExcavationVertexRead();
+        unreadable.Add(48f, 50f);
+        unreadable.Add(48f, float.NaN);
+        Assert.False(unreadable.HeightsDiffer);
+        Assert.True(float.IsNaN(unreadable.Height));
     }
 
     [Fact]

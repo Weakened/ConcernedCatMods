@@ -102,11 +102,12 @@ internal sealed class ExcavationTerrainOps : IDisposable
         _large = Make(container.transform, LargePrefabName, ExcavationGeometry.For(ExcavationMode.Large));
         _container = container;
         // Attack.SpawnOnHitTerrain finds the op with GetComponentInChildren, which in Unity skips objects that are not
-        // active in the hierarchy. If it misses, the game's own ward and no-build re-check is skipped; the commit gate's
-        // own checks are a superset of it (wider radius), so nothing is lost, but the log says which happens.
+        // active in the hierarchy. If it misses, the game's own ward and no-build re-check is skipped. The commit gate's
+        // own checks refuse everything that re-check refuses (the ward at the wider radius in its strict mode, every
+        // no-build location at the wider radius), so nothing is lost; the log says which happens.
         bool vanillaSees = _small.gameObject.GetComponentInChildren<TerrainOp>() != null;
         _log("Excavation terrain operations built; the game's own terrain-tool re-check " +
-             (vanillaSees ? "applies" : "is skipped (the mod's wider ward and no-build checks still run)") + ".");
+             (vanillaSees ? "applies" : "is skipped (the mod's stricter ward and no-build checks still run)") + ".");
     }
 
     private static TerrainOp Make(Transform parent, string name, ExcavationGeometry geometry)

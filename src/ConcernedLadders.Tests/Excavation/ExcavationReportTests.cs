@@ -52,6 +52,18 @@ public sealed class ExcavationReportTests
     }
 
     [Fact]
+    public void ThePlanSaysWhatIsInTheWayAndWhatStandsOnChangedGround()
+    {
+        string clear = ExcavationReport.Ground(0, null, 0, false);
+        string blocked = ExcavationReport.Ground(2, "Beech1", 3, false);
+        Assert.Contains("Nothing in the way", clear);
+        Assert.Contains("Beech1", blocked);
+        Assert.Contains("would refuse", blocked);
+        Assert.Contains("3 building-piece", blocked);
+        Assert.Contains("Too many", ExcavationReport.Ground(0, null, 0, true));
+    }
+
+    [Fact]
     public void AnObstructionIsNamed()
     {
         string text = ExcavationReport.Commit(ExcavationCommitRefusal.Obstructed, ExcavationReadFault.None, default, "rock4_coast");

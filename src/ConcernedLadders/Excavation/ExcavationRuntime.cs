@@ -68,7 +68,8 @@ internal sealed class ExcavationRuntime : IDisposable
         return state;
     }
 
-    /// <summary>Read-only: plans at the aimed point and describes it. Never commits, flashes a ward or scans objects.</summary>
+    /// <summary>Read-only: plans at the aimed point and describes it, with the object scan for a Ready plan (what would
+    /// refuse, and how many building pieces stand on ground that would change). Never commits or flashes a ward.</summary>
     internal string PlanAtAim(ExcavationMode mode)
     {
         if (!Enabled) return ExcavationReport.Commit(ExcavationCommitRefusal.Disabled, ExcavationReadFault.None, default, null);
@@ -78,7 +79,13 @@ internal sealed class ExcavationRuntime : IDisposable
         ExcavationReadFault fault = _reader.Read(samples, centreX, centreZ);
         if (fault != ExcavationReadFault.None) return ExcavationReport.ReadFault(fault);
         ExcavationPlan plan = ExcavationPlanner.Plan(samples, centreX, centreZ, WaterLevel());
-        return ExcavationReport.Plan(plan);
+        string text = ExcavationReport.Plan(plan);
+        if (plan.Status == ExcavationStatus.Ready)
+        {
+            int obstructions = _world.Obstructions(plan, HighestGround(samples), out int pieces, out bool overflow, out string? first);
+            text += " " + ExcavationReport.Ground(obstructions, first, pieces, overflow);
+        }
+        return text;
     }
 
     /// <summary>The commit gate. Returns what happened; the result of a submitted dig arrives later through
@@ -163,6 +170,7 @@ internal sealed class ExcavationRuntime : IDisposable
                 return;
             }
             ExcavationSamples after = Check(plan.Mode);
+            // TilesDisagree here means one tile under the hole has rebuilt and its neighbour not yet: Observe waits.
             ExcavationReadFault fault = _reader.Read(after, plan.CentreX, plan.CentreZ);
             ExcavationProgress progress = fault == ExcavationReadFault.None ? ExcavationPlanner.Check(plan, after) : ExcavationProgress.Unreadable;
             ExcavationOutcome outcome = _inFlight.Observe(fault, progress, now);

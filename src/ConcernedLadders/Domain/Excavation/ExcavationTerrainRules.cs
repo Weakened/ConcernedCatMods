@@ -24,6 +24,11 @@ internal enum ExcavationReadFault
     /// <summary>A terrain compiler under the square exists but its deltas could not be read (not initialised, or
     /// arrays of the wrong size). Its dig limit is unknown.</summary>
     CompilerUnreadable = 4,
+
+    /// <summary>A vertex on a tile edge reads differently in the two tiles that hold it. Before a dig the plan refuses;
+    /// while a dig is arriving it means one tile has rebuilt and the other not yet, so the read-back keeps waiting
+    /// (until the timeout) instead of ending the dig as unreadable.</summary>
+    TilesDisagree = 5,
 }
 
 /// <summary>Game-free rules the terrain adapter applies to what it reads (#487 slice 2). Kept here so each one is
@@ -43,12 +48,16 @@ internal static class ExcavationTerrainRules
     /// <summary>Margin inside <see cref="EngineClamp"/> past which the final clamp may already have bound.</summary>
     internal const float FinalClampMargin = 0.01f;
 
+    /// <summary>Vertices across one terrain tile: the 64 m zones (ZoneSystem.GetZone) the planner counts tiles in.</summary>
+    internal const int TileWidth = 64;
+
     /// <summary>True when a live heightmap puts one vertex on every whole world metre, the lattice the planner
-    /// draws on: spacing <see cref="ExcavationGeometry.VertexSpacing"/>, an even vertex count across (so the
-    /// centre vertex sits on the origin), and an origin on whole metres. Anything else refuses (claim 1).</summary>
+    /// draws on: spacing <see cref="ExcavationGeometry.VertexSpacing"/>, <see cref="TileWidth"/> cells across (the
+    /// 64 m zone the planner's tile count assumes, which also puts the centre vertex on the origin), and an origin
+    /// on whole metres. Anything else refuses (claim 1).</summary>
     internal static bool LatticeSupported(int width, float scale, float originX, float originZ)
     {
-        if (width <= 0 || width % 2 != 0) return false;
+        if (width != TileWidth) return false;
         if (!LadderRules.Finite(scale) || Math.Abs(scale - ExcavationGeometry.VertexSpacing) > LatticeTolerance) return false;
         return WholeMetre(originX) && WholeMetre(originZ);
     }
@@ -74,6 +83,13 @@ internal static class ExcavationTerrainRules
         return height - compiled;
     }
 
+    /// <summary>How many 64 m tiles hold the lattice vertex at world (x, z): 1 inside a tile, 2 on a tile edge, 4 on a
+    /// corner (tile edges sit at odd multiples of 32, ZoneSystem.GetZone). A vertex read from fewer loaded tiles than
+    /// this would leave the missing tile unchanged and a seam in the hole, so it counts as unloaded.</summary>
+    internal static int ExpectedCopies(int x, int z) => (OnTileEdge(x) ? 2 : 1) * (OnTileEdge(z) ? 2 : 1);
+
+    private static bool OnTileEdge(int value) => ((value + TileWidth / 2) % TileWidth + TileWidth) % TileWidth == 0;
+
     private static bool WholeMetre(float value) =>
         LadderRules.Finite(value) && Math.Abs(value - Math.Round(value)) <= OriginTolerance;
 }
@@ -87,8 +103,12 @@ internal struct ExcavationVertexRead
     private float _height;
     private float _limitBase;
     private bool _disagree;
+    private bool _heightsDiffer;
 
     internal int Copies => _copies;
+
+    /// <summary>Two finite copies hold different heights (a tile rebuilt and its neighbour not yet).</summary>
+    internal bool HeightsDiffer => _heightsDiffer;
 
     /// <summary>The agreed height, or NaN when copies disagree or any copy is not finite.</summary>
     internal float Height => _copies == 0 || _disagree ? float.NaN : _height;
@@ -109,18 +129,19 @@ internal struct ExcavationVertexRead
         }
         else
         {
-            if (Math.Abs(height - _height) > ExcavationPlanner.LevelTolerance) _disagree = true;
+            if (Math.Abs(height - _height) > ExcavationPlanner.LevelTolerance) { _disagree = true; _heightsDiffer = true; }
             if (limitBase > _limitBase) _limitBase = limitBase;
         }
         _copies++;
     }
 
-    /// <summary>Writes this vertex into the planner's grid: unloaded when no tile held it, otherwise its agreed values
-    /// (NaN, which the planner refuses, when the copies disagree).</summary>
-    internal void WriteTo(ExcavationSamples samples, int dx, int dz)
+    /// <summary>Writes this vertex into the planner's grid: unloaded when fewer tiles held it than
+    /// <paramref name="expectedCopies"/>, otherwise its agreed values (NaN, which the planner refuses, when the copies
+    /// disagree).</summary>
+    internal void WriteTo(ExcavationSamples samples, int dx, int dz, int expectedCopies = 1)
     {
         if (samples == null) throw new ArgumentNullException(nameof(samples));
-        if (_copies == 0) { samples.SetUnloaded(dx, dz); return; }
+        if (_copies == 0 || _copies < expectedCopies) { samples.SetUnloaded(dx, dz); return; }
         samples.Set(dx, dz, Height, LimitBase);
     }
 }

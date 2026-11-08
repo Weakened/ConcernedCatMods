@@ -19,7 +19,8 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// (claim 9).</item>
 /// <item>The dig-limit base comes from the tile's TerrainComp level and smooth deltas
 /// (<see cref="ExcavationTerrainRules.LimitBase"/>); a tile with a legacy player TerrainModifier refuses (claim 6).</item>
-/// <item>A vertex on a tile edge is read from every tile that holds it and must agree (claim 8).</item>
+/// <item>A vertex on a tile edge is read from every tile that holds it; every one of those tiles must be loaded, and
+/// the copies must agree (claim 8).</item>
 /// </list>
 /// TerrainComp's deltas and its initialised flag are private in the shipped game. A publicized build reference would
 /// compile a direct read and the game would then throw (observed for a protected method in 0.2.2), so they are read
@@ -85,6 +86,7 @@ internal sealed class ExcavationTerrainReader
             _smooths.Add(smooths);
         }
 
+        bool differ = false;
         for (int dz = -reach; dz <= reach; dz++)
         {
             for (int dx = -reach; dx <= reach; dx++)
@@ -98,10 +100,11 @@ internal sealed class ExcavationTerrainReader
                     ReadVertex(tile, _levels[t], _smooths[t], point, out float height, out float limitBase);
                     vertex.Add(height, limitBase);
                 }
-                vertex.WriteTo(samples, dx, dz);
+                if (vertex.HeightsDiffer) differ = true;
+                vertex.WriteTo(samples, dx, dz, ExcavationTerrainRules.ExpectedCopies(centreX + dx, centreZ + dz));
             }
         }
-        return ExcavationReadFault.None;
+        return differ ? ExcavationReadFault.TilesDisagree : ExcavationReadFault.None;
     }
 
     private static ExcavationReadFault CheckTile(Heightmap tile)
