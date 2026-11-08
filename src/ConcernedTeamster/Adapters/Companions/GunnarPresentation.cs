@@ -57,6 +57,7 @@ internal sealed class GunnarPresentation
     private readonly Func<GunnarHaulService?> _service;
     private GunnarTalk _talk = new();
     private GunnarCompanionRecord? _talkScope;
+    private readonly Action _onTalk;
     private readonly Action<string> _log;
     private readonly GunnarBodyLeases _leases;
     private readonly GunnarFigurePresenter _figure;
@@ -77,6 +78,7 @@ internal sealed class GunnarPresentation
         Action<string> log)
     {
         _service = service;
+        _onTalk = Talk;
         _companion = companion;
         _census = census;
         _liveBody = liveBody;
@@ -319,7 +321,7 @@ internal sealed class GunnarPresentation
         look.y = 0f;
         Quaternion facing = look.sqrMagnitude > 0.01f ? Quaternion.LookRotation(look.normalized, Vector3.up) : Quaternion.identity;
         _figure.Show(Game.instance != null ? Game.instance.m_playerPrefab : null, spot, facing,
-            Look, DisplayName(), TeamsterStrings.Get("gunnar.talk.verb"), Talk);
+            Look, DisplayName(), TeamsterStrings.Get("gunnar.talk.verb"), _onTalk);
         _last = _figure.IsShown ? "at home, resting" : "wanted at home, not shown";
     }
 
@@ -335,7 +337,7 @@ internal sealed class GunnarPresentation
         {
             GunnarCompanionRecord? record = _companion.Current();
             if (record == null) return;
-            if (!ReferenceEquals(record, _talkScope)) { _talkScope = record; _talk = new GunnarTalk(); }
+            if (!ReferenceEquals(record, _talkScope)) { _talkScope = record; _talk = new GunnarTalk(GunnarTalk.StartFor(record.Scope.World.Value, record.Scope.Character.Value)); }
             HaulSnapshot? snapshot = _service()?.Snapshot;
             string? line = _talk.Reply(record.State,
                 snapshot?.Phase ?? HaulPhase.Unassigned,

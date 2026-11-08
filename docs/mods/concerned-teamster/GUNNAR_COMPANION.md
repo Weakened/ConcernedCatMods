@@ -80,7 +80,8 @@ In the lead-owned Plugin.cs:
 4. #457's memento and #458's local figure must obey ShouldPresentMemento(enabled)
    and ShouldPresentFigure(enabled). Turning this opt-out off hides both; it
    never retires a worker body, clears a ledger, disables a tool or changes hire.
-5. #459 supplies the localized display-name lookup. #460 alone supplies accepted
+5. His name is `Companions/GunnarDisplayName`, the player's own setting (#459
+   keeps it out of the catalog so a translator file never overrides it). #460 alone supplies accepted
    real-cart assignment to TryRecruitAfterAcceptedCartAssignment; a rejected cart,
    tools-only, prior config or a missing sidecar must never pass true.
 6. Surface the record's Notice on the intro UI/log when present, including save

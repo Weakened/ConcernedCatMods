@@ -478,6 +478,8 @@ public static class TeamsterStrings
         ["gunnar.stop"] = "Choose where to stop before the hill chooses for you.",
         ["gunnar.pace"] = "A steady pull brings more home than a hurried promise.",
         ["gunnar.check"] = "Count what you brought. Then count what arrived.",
+        ["gunnar.longway"] = "I will take the long way if it brings the whole load home.",
+        ["gunnar.brave"] = "A cart does not care how brave you are. Clear the path.",
         ["gunnar.room"] = "Room for another bundle is not the same as an easy pull.",
         ["gunnar.fair"] = "A fair load. A clear road. Everyone home. I meant every word.",
         ["gunnar.fire"] = "A fire is a fine place to put down a worry.",
