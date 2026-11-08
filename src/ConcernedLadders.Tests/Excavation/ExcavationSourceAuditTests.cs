@@ -122,6 +122,121 @@ public sealed class ExcavationSourceAuditTests
         Assert.True(slot > 0 && spawn > slot, "The single SpawnOnHitTerrain call must follow the in-flight slot.");
     }
 
+    // ---- #487 slice 3: the Iron Shovel ----
+
+    private static List<(string Path, int N)> Hits(string pattern) =>
+        Sources().Select(s => (s.Path, N: Count(s.Text, pattern))).Where(h => h.N > 0).ToList();
+
+    private static bool ExcavationCode(string path) =>
+        path.StartsWith("Excavation/", StringComparison.Ordinal) || path.StartsWith("Domain/Excavation/", StringComparison.Ordinal) ||
+        path.StartsWith("Items/", StringComparison.Ordinal);
+
+    /// <summary>The cost is taken in one place: one durability write in the whole product and one UseStamina in the
+    /// excavation code (the ladder's own climbing charge is the other product use), both in the runtime's Charge, and
+    /// Charge is called once, after the spawn and after its refusal branch has returned.</summary>
+    [Fact]
+    public void TheChargeIsTakenOnceAfterTheSpawnAndNowhereElse()
+    {
+        foreach (string pattern in new[] { @"\bUseStamina\s*\(", @"\.m_durability\s*(=[^=]|\+=|-=|\+\+|--)", @"\bCharge\s*\(\s*player\b" })
+        {
+            var hits = Hits(pattern).Where(h => pattern != @"\bUseStamina\s*\(" || ExcavationCode(h.Path)).ToList();
+            Assert.True(hits.Count == 1 && hits[0].Path == "Excavation/ExcavationRuntime.cs" && hits[0].N == 1,
+                pattern + " must appear exactly once, in Excavation/ExcavationRuntime.cs: " + string.Join(", ", hits));
+        }
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        int spawn = Regex.Match(runtime, @"\bSpawnOnHitTerrain\s*\(").Index;
+        int refused = runtime.IndexOf("ExcavationCommitRefusal.SpawnRefused", spawn, StringComparison.Ordinal);
+        int charge = Regex.Match(runtime, @"\bCharge\s*\(\s*player\b").Index;
+        int stamina = Regex.Match(runtime, @"\bUseStamina\s*\(").Index;
+        int durability = Regex.Match(runtime, @"\.m_durability\s*=[^=]").Index;
+        int chargeBody = Regex.Match(runtime, @"private\s+void\s+Charge\s*\(").Index;
+        Assert.True(spawn > 0 && refused > spawn && charge > refused, "Charge must follow the spawn and its refusal branch.");
+        Assert.True(chargeBody > 0 && stamina > chargeBody && durability > chargeBody, "The stamina and durability writes belong to Charge.");
+    }
+
+    /// <summary>The shovel's press is the only caller of the commit gate; the console cannot dig.</summary>
+    [Fact]
+    public void OnlyTheShovelPressReachesTheCommitGate()
+    {
+        var calls = Hits(@"\.DigWithShovel\s*\(");
+        Assert.Single(calls);
+        Assert.Equal("Excavation/ExcavationShovelInput.cs", calls[0].Path);
+        Assert.Equal(1, calls[0].N);
+        string command = SourceText("Excavation/ExcavationCommand.cs");
+        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bDigAtAim\b|\bCommit\s*\(", command);
+        Assert.Equal(1, Count(command, @"_runtime\.PlanAtAim\s*\("));
+    }
+
+    /// <summary>Whether the shovel and the player can pay is asked before any world check, so a refused payment never
+    /// flashes a ward; and the input prefix only observes (a void prefix never skips the game's own input).</summary>
+    [Theory]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"refusal\s*=\s*IronShovel\.CanPay\s*\(\s*Equipped\s*\(\s*player\s*,\s*shovel\s*\)\s*,\s*Ready\s*\(\s*player\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"ReferenceEquals\s*\(\s*player\.GetCurrentWeapon\s*\(\s*\)\s*,\s*shovel\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"player\.HaveStamina\s*\(\s*IronShovel\.StaminaNeeded\s*\(\s*mode\s*,\s*Game\.m_staminaRate\s*\)\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"IronShovel\.DurabilityCost\s*\(\s*mode\s*,\s*Game\.m_durabilityRate\s*\)")]
+    [InlineData("Excavation/ExcavationShovelInput.cs", @"private\s+static\s+void\s+BeforeAttackInput\s*\(\s*Player\s+__instance\s*\)")]
+    [InlineData("Excavation/ExcavationShovelInput.cs", @"IronShovel\.ModeFor\s*\(\s*attack\s*\(\s*__instance\s*\)\s*,\s*secondary\s*\(\s*__instance\s*\)")]
+    [InlineData("Excavation/ExcavationShovelInput.cs", @"ReferenceEquals\s*\(\s*__instance\s*,\s*Player\.m_localPlayer\s*\)")]
+    [InlineData("Items/IronShovelItem.cs", @"shared\.m_attack\.m_attackAnimation\s*=\s*""""\s*;")]
+    [InlineData("Items/IronShovelItem.cs", @"shared\.m_secondaryAttack\.m_attackAnimation\s*=\s*""""\s*;")]
+    [InlineData("Items/IronShovelItem.cs", @"shared\.m_spawnOnHitTerrain\s*=\s*null\s*;")]
+    [InlineData("Items/IronShovelItem.cs", @"shared\.m_maxQuality\s*=\s*1\s*;")]
+    [InlineData("Items/IronShovelItem.cs", @"shared\.m_damages\s*=\s*default\s*\(\s*HitData\.DamageTypes\s*\)\s*;")]
+    [InlineData("Items/IronShovelItem.cs", @"if\s*\(\s*item\.HavePrimaryAttack\s*\(\s*\)\s*\|\|\s*item\.HaveSecondaryAttack\s*\(\s*\)\s*\)\s*throw")]
+    [InlineData("Items/IronShovelItem.cs", @"new\s+RequirementConfig\s*\(\s*IronShovel\.IronItem\s*,")]
+    [InlineData("Items/IronShovelItem.cs", @"new\s+CustomItem\s*\(\s*IronShovel\.PrefabName\s*,\s*IronShovel\.DonorPrefab\s*,\s*config\s*\)")]
+    public void TheShovelPropertiesAreWhereTheyMustBe(string relative, string pattern)
+    {
+        Assert.Equal(1, Count(SourceText(relative), pattern));
+    }
+
+    [Fact]
+    public void TheCostIsAskedBeforeTheWorldChecks()
+    {
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        int planner = Regex.Match(runtime, @"ExcavationGate\.BeforeWorldChecks\s*\(").Index;
+        int pay = Regex.Match(runtime, @"IronShovel\.CanPay\s*\(").Index;
+        int ward = Regex.Match(runtime, @"ExcavationWorldChecks\.WardAllows\s*\(").Index;
+        Assert.True(planner > 0 && pay > planner && ward > pay, "CanPay must sit between the planner gate and the ward check.");
+    }
+
+    /// <summary>With the switch off nothing is added: the shovel, its input and the console diagnostic are constructed only
+    /// inside the switch's branch of the plugin, and nowhere else.</summary>
+    [Fact]
+    public void TheShovelExistsOnlyBehindTheSwitch()
+    {
+        foreach (string pattern in new[] { @"new\s+IronShovelItem\s*\(", @"new\s+ExcavationShovelInput\s*\(", @"new\s+ExcavationCommand\s*\(" })
+        {
+            var hits = Hits(pattern);
+            Assert.True(hits.Count == 1 && hits[0].Path == "Plugin.cs" && hits[0].N == 1, pattern + ": " + string.Join(", ", hits));
+        }
+        string plugin = SourceText("Plugin.cs");
+        Match branch = Regex.Match(plugin, @"if\s*\(\s*enabled\.Value\s*\)\s*\{(?<body>[^{}]*)\}");
+        Assert.True(branch.Success, "The switch's branch was not found.");
+        string body = branch.Groups["body"].Value;
+        Assert.Matches(@"new\s+IronShovelItem\s*\(", body);
+        Assert.Matches(@"new\s+ExcavationShovelInput\s*\(", body);
+        Assert.Matches(@"new\s+ExcavationCommand\s*\(", body);
+        Assert.Matches(@"Config\.Bind\s*\(\s*""Excavation""\s*,\s*""Enabled""\s*,\s*false\s*,", plugin);
+    }
+
+    /// <summary>The item folder clones and configures an item; it never changes terrain or the player.</summary>
+    [Theory]
+    [InlineData(@"\bSpawnOnHitTerrain\s*\(")]
+    [InlineData(@"\bUseStamina\s*\(")]
+    [InlineData(@"\bInvokeRPC\s*\(")]
+    [InlineData(@"\bInstantiate\s*\(")]
+    [InlineData(@"\bGetZDO\s*\(")]
+    [InlineData(@"\.Damage\s*\(")]
+    [InlineData(@"\bDestroy(Immediate)?\s*\(")]
+    public void TheItemRegistrationChangesNothingElse(string pattern)
+    {
+        foreach ((string path, string text) in Sources("Items"))
+        {
+            Assert.True(Count(text, pattern) == 0, path + " uses " + pattern + ".");
+        }
+    }
+
     [Fact]
     public void TheAuditSeesWhatItLooksFor()
     {
@@ -131,5 +246,12 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(planted, @"\bInvokeRPC\s*\("));
         Assert.Equal(1, Count("levels[index] = 0f;", @"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)"));
         Assert.Equal(0, Count("float level = levels[index];", @"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)"));
+        // Slice 3: a second durability write in any spelling is seen, a comparison is not.
+        const string durability = @"\.m_durability\s*(=[^=]|\+=|-=|\+\+|--)";
+        Assert.Equal(1, Count("item.m_durability -= 4f;", durability));
+        Assert.Equal(1, Count("item.m_durability = 0f;", durability));
+        Assert.Equal(1, Count("item.m_durability--;", durability));
+        Assert.Equal(0, Count("if (item.m_durability == 0f) return;", durability));
+        Assert.Equal(0, Count("float max = item.m_shared.m_maxDurability;", durability));
     }
 }

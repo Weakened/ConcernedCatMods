@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using Jotunn.Managers;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Excavation;
+using TheConcernedCat.ConcernedLadders.Items;
 using TheConcernedCat.ConcernedLadders.Pieces;
 using TheConcernedCat.ConcernedLadders.Runtime;
 using TheConcernedCat.ConcernedLadders.Runtime.Animation;
@@ -32,6 +33,8 @@ public sealed class Plugin : BaseUnityPlugin
     private OriginalClimbPresenter? _presenter;
     private LadderSnapAlignment? _snap;
     private ExcavationRuntime? _excavation;
+    private ExcavationShovelInput? _shovelInput;
+    private IronShovelItem? _shovel;
 
     private void Awake()
     {
@@ -81,36 +84,58 @@ public sealed class Plugin : BaseUnityPlugin
         _excavation?.Update();
     }
 
-    /// <summary>Iron Shovel excavation (#487 slice 2). The terrain operations register on every peer, because the tile
-    /// owner applies them; the console harness that commits one exists only when the off-by-default switch is on. A
-    /// fault here never stops the ladders.</summary>
+    /// <summary>Iron Shovel excavation (#487 slices 2 and 3). The terrain operations register on every peer, because the
+    /// tile owner applies them. The Iron Shovel item, its attack input and the read-only console diagnostic exist only
+    /// when the off-by-default switch is on; with it off nothing is added. A fault here never stops the ladders.</summary>
     private void InstallExcavation()
     {
         ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", false,
-            "Experimental, off by default (#487): adds the cl_excavate console command, which plans and digs one measured " +
-            "2x2x2 m or 4x4x4 m basement hole through the game's own terrain operation. No shovel item yet. Not yet " +
-            "observed in game. Every player needs the same version of this mod. Restart after changing.");
+            "Experimental, off by default (#487): adds the Iron Shovel (Forge: Iron and Wood), which digs one measured " +
+            "2x2x2 m (attack) or 4x4x4 m (secondary attack) basement hole through the game's own terrain operation, and " +
+            "the read-only cl_excavate console diagnostic. Not yet observed in game. Every player needs the same version " +
+            "and the same setting. Turning it off again removes the item from the game, and the game discards unknown items " +
+            "from inventories and chests when it loads them. Restart after changing.");
         try
         {
             _excavation = new ExcavationRuntime(message => Logger.LogInfo(message), enabled.Value);
             _excavation.Install();
             if (enabled.Value)
             {
-                _excavation.Report = ExcavationCommand.Print;
+                _excavation.Report = Announce;
                 CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(_excavation));
+                _shovelInput = new ExcavationShovelInput(message => Logger.LogInfo(message));
+                if (!_shovelInput.Install(PluginGuid + ".excavation", _excavation)) _shovelInput = null;
+                ExcavationRuntime runtime = _excavation;
+                _shovel = new IronShovelItem(message => Logger.LogInfo(message), swing => runtime.SwingAnimation = swing);
+                _shovel.Install();
             }
         }
         catch (Exception exception)
         {
             Logger.LogInfo("Excavation unavailable (" + SafeFailure.Brief(exception) + "); ladders are unaffected.");
+            try { _shovelInput?.Dispose(); } catch { /* Cleanup only. */ }
+            try { _shovel?.Dispose(); } catch { /* Cleanup only. */ }
             try { _excavation?.Dispose(); } catch { /* Cleanup only. */ }
+            _shovelInput = null;
+            _shovel = null;
             _excavation = null;
         }
     }
 
+    /// <summary>A dig's later result goes to the console and to the HUD, where the shovel's player sees it.</summary>
+    private static void Announce(string text)
+    {
+        ExcavationCommand.Print(text);
+        ExcavationShovelInput.Show(text);
+    }
+
     private void OnDestroy()
     {
+        try { _shovelInput?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        try { _shovel?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _excavation?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        _shovelInput = null;
+        _shovel = null;
         _excavation = null;
         try { _runtime?.Dispose(); _presenter?.Dispose(); }
         catch (Exception exception)
