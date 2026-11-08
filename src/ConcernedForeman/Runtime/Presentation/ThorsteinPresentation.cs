@@ -59,6 +59,7 @@ internal sealed class ThorsteinPresentation
     private readonly SettlementRuntime _settlement;
     private readonly Action<string> _log;
     private readonly ThorsteinBodies _bodies;
+    private readonly ResidentPresentation _resident;
 
     private GameObject? _figure;
     private NpcFigureDresser? _dresser;
@@ -96,6 +97,7 @@ internal sealed class ThorsteinPresentation
         _settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _bodies = new ThorsteinBodies(npc.Registry, npc.Identity);
+        _resident = new ResidentPresentation(() => settlementSettings.SettlementRuntimeEnabled.Value && settings.ResidentsEnabled.Value, npc.Registry, settlement, log);
     }
 
     /// <summary>One pass every half second while a world is up. A pass that
@@ -103,6 +105,7 @@ internal sealed class ThorsteinPresentation
     /// event (spawn, despawn, death, world load) or every 30 seconds.</summary>
     internal void Tick(float deltaTime)
     {
+        _resident.Tick(deltaTime);
         if (_faulted)
         {
             return;
@@ -205,6 +208,7 @@ internal sealed class ThorsteinPresentation
     /// figure is down before its lease ends.</summary>
     internal void OnWorldUnloaded()
     {
+        _resident.Forget();
         TakeDown();
         RemoveKeepsake();
         _keepsakeFailedThisWorld = false;
@@ -264,6 +268,7 @@ internal sealed class ThorsteinPresentation
     /// <summary>Plugin teardown.</summary>
     internal void Dispose()
     {
+        _resident.Dispose();
         RemoveKeepsake();
         ForgetWorkerLook();
         TakeDown();
