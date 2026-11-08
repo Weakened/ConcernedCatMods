@@ -5,6 +5,7 @@ using Jotunn.Configs;
 using Jotunn.Entities;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
+using TheConcernedCat.ConcernedLadders.Runtime;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Ladders;
 using UnityEngine;
@@ -16,7 +17,8 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// <c>Door</c> and <c>Animator</c> so state, replication, persistence, wards, damage, repair and refunds stay native.
 /// Every donor child but the animated leaf is removed, the leaf keeps only its transform, and the frame and lid are
 /// built from <see cref="TrapdoorBlueprint"/>. Only inactive CLONES are edited; no native prefab is changed.
-/// Installed only when <see cref="TrapdoorSettings"/> is on (off by default). The lid does not move yet (slice 3).</summary>
+/// Installed only when <see cref="TrapdoorSettings"/> is on (off by default). Each clone carries a
+/// <see cref="TrapdoorLid"/> (slice 3) that turns the lid from the native door state.</summary>
 internal sealed class TrapdoorPieceRegistration : IDisposable
 {
     private readonly Action<string> _log;
@@ -44,6 +46,9 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
         if (_attempted) return;
         _attempted = true;
         Dispose();
+        TrapdoorLid.Log = _log;
+        if (!TrapdoorLid.ResolveLayers())
+            _log("Concerned Ladders trapdoors: a collision layer the lid checks is missing, so every lid stays shut.");
         foreach (DoorFamily family in DoorFamilies.All) { Add(family); }
         _log("Concerned Ladders trapdoors: " + _registered.Count + " of " + DoorFamilies.All.Count + " registered" +
              (_refused.Count == 0 ? "." : "; refused " + string.Join(", ", _refused) + "."));
@@ -138,6 +143,8 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
             var strapMaterial = new Material(lid) { name = lid.name + "_tcc_hinge" };
             if (strapMaterial.HasProperty("_Color")) strapMaterial.color *= new Color(0.35f, 0.35f, 0.35f, 1f);
             foreach (TrapdoorPart strap in TrapdoorBlueprint.HingeStraps) Visual(hinge.transform, strap, strapMaterial, layer);
+            // The lid runtime (slice 3): reads the native door state, never writes it. The swing time is the donor's.
+            prefab.AddComponent<TrapdoorLid>().SwingSeconds = family.SwingSeconds;
 
             foreach (ClimbPoint corner in HatchGeometry.CornerSnaps) Snap(prefab.transform, HatchGeometry.CornerSnapToken, Vector(corner), layer);
             Verify(prefab, wear);
@@ -286,6 +293,13 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
         Transform? leaf = prefab.transform.Find(TrapdoorBlueprint.LeafChild);
         if (leaf == null || leaf.childCount != 0 || leaf.GetComponents<Component>().Length != 1)
             throw new InvalidOperationException("The animated leaf is not a bare transform.");
+
+        TrapdoorLid[] lids = prefab.GetComponentsInChildren<TrapdoorLid>(true);
+        Transform? hinge = prefab.transform.Find(TrapdoorBlueprint.Hinge);
+        Transform? lidCollider = hinge != null ? hinge.Find(TrapdoorBlueprint.LidCollider.Name) : null;
+        if (lids.Length != 1 || lids[0].gameObject != prefab || lidCollider == null || lidCollider.GetComponent<BoxCollider>() == null ||
+            !(lids[0].SwingSeconds >= HatchMotion.MinimumSwingSeconds && lids[0].SwingSeconds <= HatchMotion.MaximumSwingSeconds))
+            throw new InvalidOperationException("The lid runtime, its hinge or its collider is missing or misconfigured.");
     }
 
     /// <summary>True for a box this adapter built: a frame collider directly under the root, or a part under one of

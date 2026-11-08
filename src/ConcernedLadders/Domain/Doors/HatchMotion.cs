@@ -24,6 +24,17 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 ///
 /// <para>Progress is the runtime's own float, and the runtime must keep its last finite value and never pass NaN. An
 /// infinity reads as its end of the swing; NaN reads as the closed pose without any occupancy check.</para></summary>
+/// <summary>The runtime's one occupancy question (CL-004 #485, slice 3): would the lid's pose at this hinge angle overlap
+/// a character, a dynamic body or another building piece? The lid runtime answers it with one bounded,
+/// non-allocating physics overlap of the lid's own box at that angle; tests answer it with a script. Generic callers
+/// (<see cref="HatchMotion.Step{TProbe}"/>) take it as a constrained type parameter, so a class probe is never boxed
+/// and nothing is allocated per frame.</summary>
+internal interface IHatchOccupancy
+{
+    /// <summary>True when the lid's box at <paramref name="angleDegrees"/> would overlap anything it must not move into.</summary>
+    bool Occupied(float angleDegrees);
+}
+
 internal static class HatchMotion
 {
     /// <summary>Shortest and longest swing the policy accepts; a donor outside this range is a census error.</summary>
@@ -93,6 +104,44 @@ internal static class HatchMotion
     {
         float current = Clamp01(progress);
         return proposedPoseOccupied ? current : Clamp01(proposed);
+    }
+
+    /// <summary>One frame of the lid (slice 3): propose this frame's move, split it into <see cref="SubSteps"/> checked
+    /// poses, ask <paramref name="probe"/> about each in order, and stop at the first occupied one, returning the last
+    /// clear progress. So the returned progress is either the starting progress (nothing moved) or a pose the probe
+    /// reported clear; the lid is never put at a pose that was not checked. No move asks nothing. Allocation-free.</summary>
+    internal static float Step<TProbe>(float progress, bool open, float seconds, float swingSeconds, TProbe probe)
+        where TProbe : IHatchOccupancy
+    {
+        float current = Clamp01(progress);
+        float proposed = Proposed(current, open, seconds, swingSeconds);
+        int count = SubSteps(current, proposed);
+        float reached = current;
+        for (int step = 1; step <= count; ++step)
+        {
+            float next = SubStep(current, proposed, step, count);
+            bool occupied = probe.Occupied(Angle(next));
+            reached = Advance(reached, next, occupied);
+            if (occupied) { break; }
+        }
+
+        return reached;
+    }
+
+    /// <summary>Where a lid starts the first time its runtime reads the native state: when a piece is placed, loaded
+    /// with its zone, or seen by a late joiner. The stored state's end of the swing, which is what every other client
+    /// already shows, if that pose is clear. If it is not (someone stands where a loaded-closed lid would lie), the
+    /// other end, if that is clear: the checked motion of <see cref="Step{TProbe}"/> then carries the lid to the stored
+    /// state once the way is clear, so it is never put into whoever is there. Only when both ends are occupied, which
+    /// needs something both in the opening and where the upright lid stands, does it take the stored end anyway: the
+    /// lid has to be somewhere, and that is the pose the network agrees on. Asks at most twice.</summary>
+    internal static float Settle<TProbe>(bool open, TProbe probe)
+        where TProbe : IHatchOccupancy
+    {
+        float stored = open ? 1f : 0f;
+        if (!probe.Occupied(Angle(stored))) { return stored; }
+        float other = 1f - stored;
+        return probe.Occupied(Angle(other)) ? stored : other;
     }
 
     /// <summary>True while the lid has somewhere to go.</summary>
