@@ -64,6 +64,7 @@ internal static class NaturalSourceAllowlist
             case NaturalSourceKind.LooseStone:
                 return CollectedResource.Stone;
             case NaturalSourceKind.Branch:
+            case NaturalSourceKind.SmallTree:
                 return CollectedResource.Wood;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), "Not a natural source kind.");

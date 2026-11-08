@@ -4,6 +4,7 @@ using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Worker;
+using TheConcernedCat.Workers.Felling;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
@@ -31,17 +32,24 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
 
     private readonly SourceDirectory _directory;
     private readonly IDesignationSite _site;
+    private readonly WorldFellingPort? _felling;
     private readonly List<ZNetView> _entries = new List<ZNetView>();
     private readonly Dictionary<(long X, long Z), AreaAccess> _wardByCell = new Dictionary<(long, long), AreaAccess>();
+    private readonly Dictionary<(long X, long Z), float> _piecesByCell = new Dictionary<(long, long), float>();
 
     private WorkScope? _scope;
     private int _cursor;
     private int _sceneCountAtBegin;
 
-    public WorldSourceSurvey(SourceDirectory directory, IDesignationSite site)
+    /// <param name="felling">D19 (#282): when given, and its switch is on, and
+    /// the scope is an explicit work area (never the default camp circle), the
+    /// four small trees are surveyed too. Null surveys stones and branches only.
+    /// </param>
+    public WorldSourceSurvey(SourceDirectory directory, IDesignationSite site, WorldFellingPort? felling = null)
     {
         _directory = directory ?? throw new ArgumentNullException(nameof(directory));
         _site = site ?? throw new ArgumentNullException(nameof(site));
+        _felling = felling;
     }
 
     public bool IsLoaded(SitePoint point)
@@ -56,6 +64,7 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
         _cursor = 0;
         _entries.Clear();
         _wardByCell.Clear();
+        _piecesByCell.Clear();
         _directory.Reset(scope.WorldLoadEpoch);
 
         ZNetScene scene = ZNetScene.instance;
@@ -78,6 +87,7 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
         int examined = 0;
         int found = 0;
         float reach = scope.RadiusMetres + 1f;
+        bool trees = _felling != null && _felling.Enabled && scope.Source != WorkScopeSource.DefaultCampCircle;
         while (_cursor < _entries.Count && examined < maxEntries && found < maxCandidates)
         {
             ZNetView view = _entries[_cursor++];
@@ -89,7 +99,9 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
                 continue;
             }
 
-            if (!NaturalSourceClassifier.IsAllowlistedHash(view.GetZDO().GetPrefab()))
+            int hash = view.GetZDO().GetPrefab();
+            bool tree = trees && WorldFellingPort.IsSmallTreeHash(hash);
+            if (!tree && !NaturalSourceClassifier.IsAllowlistedHash(hash))
             {
                 continue;
             }
@@ -105,6 +117,30 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
             // a source outside the drawn boundary is not in the area.
             if (scope.OutsideBoundary(point))
             {
+                continue;
+            }
+
+            if (tree)
+            {
+                SmallTreeFacts treeFacts = WorldFellingPort.ReadFacts(view, out _, out SmallTreeKind? kind);
+                if (kind == null)
+                {
+                    continue;
+                }
+
+                var treeKey = new SourceKey(
+                    kind.Prefab, NaturalSourceClassifier.FormatId(view.GetZDO().m_uid), scope.WorldLoadEpoch, point);
+                into.Add(new SurveyCandidate(
+                    treeKey,
+                    treeFacts,
+                    ownedHere: view.IsOwner(),
+                    inInterior: Character.InInterior(position),
+                    location: WorldLocationSense.At(position),
+                    ward: WardAt(position),
+                    builtPieceClearanceMetres: BuiltPieceClearance(position),
+                    estimatedYield: SmallTreeSources.MaxWood(kind)));
+                _directory.Remember(treeKey, view);
+                found++;
                 continue;
             }
 
@@ -134,6 +170,31 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
         ZNetScene current = ZNetScene.instance;
         bool sceneMoved = current == null || current.m_instances.Count != _sceneCountAtBegin;
         return new DiscoveryStep(examined, _cursor >= _entries.Count, sceneMoved);
+    }
+
+    /// <summary>The flat distance to the nearest player-built piece, asked once
+    /// per 8 m cell where no piece is near. A tree is at most half a cell's
+    /// diagonal from its cell's middle, so a middle whose nearest piece is that
+    /// much further than the clearance proves the clearance for every tree in
+    /// the cell, and the lower bound is what is reported. Anywhere nearer, the
+    /// tree itself is measured. The strike measures again before every hit.
+    /// </summary>
+    private float BuiltPieceClearance(Vector3 position)
+    {
+        const float halfDiagonal = WardCellSize * 0.7072f;
+        long cellX = (long)Math.Floor(position.x / WardCellSize);
+        long cellZ = (long)Math.Floor(position.z / WardCellSize);
+        (long X, long Z) cell = (cellX, cellZ);
+        if (!_piecesByCell.TryGetValue(cell, out float fromMiddle))
+        {
+            var middle = new Vector3((cellX + 0.5f) * WardCellSize, position.y, (cellZ + 0.5f) * WardCellSize);
+            fromMiddle = _felling!.NearestPieceMetres(middle);
+            _piecesByCell[cell] = fromMiddle;
+        }
+
+        return fromMiddle - halfDiagonal >= TheConcernedCat.Workers.Felling.SmallTreeFelling.ClearanceMetres
+            ? fromMiddle - halfDiagonal
+            : _felling!.NearestPieceMetres(position);
     }
 
     private AreaAccess WardAt(Vector3 position)

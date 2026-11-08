@@ -42,8 +42,8 @@ implementation, validator, shared-library or package metadata is modified.
 
 The inscription is exactly: A fair load. A clear road. Everyone home. - G.
 The real use callback shows it with the introduction/objective through MessageHud.
-Authored lines use the existing Teamster catalog when present and the source
-fallback rows otherwise. #459's catalog merge remains separate active-file work.
+Authored lines are rows of Teamster's one catalog (#459), so a translator file
+overrides them and English is the fallback.
 No cart assignment, worker start, recruitment grant or tutorial cargo is added.
 
 ## Verification and limits

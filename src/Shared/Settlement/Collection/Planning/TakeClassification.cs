@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Settlement.Collection;
 
 namespace TheConcernedCat.Settlement.Collection.Planning;
 
@@ -37,6 +38,20 @@ internal readonly struct TakeObservation
     public bool DropGone { get; }
 
     public int Delta => CountAfter - CountBefore;
+}
+
+/// <summary>Where a traced drop is held in the settlement record between its
+/// pick and its take (#282 review). <see cref="MaterialCustodyLedger.FinishPickup"/>
+/// books every drop of a <see cref="PickupOutcome.Picked"/> result at
+/// <see cref="CustodyPlace.SourceGround"/> under <b>the drop's own id</b>, in
+/// the source's world load, so the take that moves it to the worker has to name
+/// exactly that location. Naming the source instead (its prefab and id) finds
+/// nothing there, and every take is refused. One function, so the booking and
+/// the take cannot drift apart again.</summary>
+internal static class PickupTakes
+{
+    public static CustodyLocation GroundOf(SpawnedDrop drop, SourceKey source) =>
+        new CustodyLocation(CustodyPlace.SourceGround, drop.SessionId, source.WorldLoadEpoch);
 }
 
 /// <summary>The rule that turns one take's observation into a transfer outcome

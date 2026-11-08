@@ -3535,6 +3535,265 @@ def check_figure_dressing_has_one_home(errors: list[str]) -> list[str]:
     ]
 
 
+# #458: Gunnar's presentation figure, Teamster's half of the #295 audit.
+#
+# The figure's engine writes live in Concerned NPC (the "NPC figure-parts audit"
+# above pins every one of them), so what Teamster must not do is reach round
+# that library. Three rules, over the whole of src/ConcernedTeamster less obj/
+# and bin/ AND the shared trees its project file compiles in (the scope #401
+# taught this file to use), keyed by path relative to the product so a file of
+# the same name in another folder inherits nothing:
+#
+# 1. ONE FILE NAMES THE FIGURE LIBRARY. NpcPresentationBody, NpcPresentationFigure,
+#    NpcFigureDresser (and the library's internal NpcFigureParts and NpcFigureTalk,
+#    which the compiler already refuses across assemblies) may be named only in
+#    Adapters/Companions/GunnarFigurePresenter.cs. A name anywhere else - a call,
+#    a method group, a field - is a second figure path and fails.
+#    NpcWorkerDresser is refused everywhere for now: D18 lets Gunnar's worker
+#    body wear his own hair behind a Teamster setting of its own, and that is
+#    not built. The leaf that builds it adds the setting, one pinned call and
+#    its plants (DECISIONS.md, the #458 note under D18).
+# 2. IN THAT FILE, EVERY FIGURE CALL IS PINNED by exact spelling and population:
+#    one extraction, one dresser, two stands, one dressing, one talk point, one
+#    take-down. A different receiver or a second call is a different program.
+# 3. THAT FILE WRITES NOTHING TO THE ENGINE ITSELF: no instantiation,
+#    destruction, re-parenting, activation, component lookup or addition, network
+#    view or object, collider, rigidbody, AI or character type, transform or pose
+#    write, no reaching for the figure's root object, and no reflection. The
+#    rest of Adapters/Companions is held to the creation half of the same list
+#    (no instantiation, component addition, re-parenting, activation or pose
+#    write), so the figure cannot grow a collider or an AI from a neighbour.
+#    Component surgery in Adapters/Workers stays the #313 audit's to refuse.
+#
+# Limits, stated: a source-text audit with comments stripped. It does not
+# follow a delegate or a method group to an engine call that spells none of
+# these tokens, and it does not prove control flow.
+TEAMSTER_FIGURE_FILE = "Adapters/Companions/GunnarFigurePresenter.cs"
+TEAMSTER_COMPANIONS_PREFIX = "Adapters/Companions/"
+TEAMSTER_FIGURE_LIBRARY_NAME = re.compile(
+    r"\b(?:NpcPresentationBody|NpcPresentationFigure|NpcFigureDresser|NpcFigureParts|NpcFigureTalk)\b")
+TEAMSTER_FIGURE_NEVER = re.compile(r"\bNpcWorkerDresser\b")
+# The library's public body builders. The companion layer is presentation, so
+# a networked or saved body built from it would be the worker runtime's job
+# done in the wrong folder.
+TEAMSTER_COMPANIONS_NO_BODY = re.compile(r"\b(?:NpcWorkerPrefabFactory|NpcWorkerPrefabOptions|NpcWorldBodies|NpcBody)\b")
+# what, broad spelling, exact spelling, population
+TEAMSTER_FIGURE_CALLS = (
+    ("the extraction", re.compile(r"\bTryExtract\b"),
+     re.compile(r"\bNpcPresentationBody\s*\.\s*TryExtract\s*\(\s*source\s*,\s*\"Player\"\s*,"
+                r"\s*\"CT_GunnarFigure\"\s*,\s*\"CT_GunnarFigure_Source\"\s*,\s*string\s*\.\s*Empty\s*,"
+                r"\s*_log\s*\)"), 1),
+    # Counted by the type's name rather than by `new NpcFigureDresser(`, so a
+    # target-typed `NpcFigureDresser second = new(...)` is a second site too:
+    # the field's declaration and the one construction are the whole population.
+    ("the dresser", re.compile(r"\bNpcFigureDresser\b"),
+     re.compile(r"\bprivate\s+NpcFigureDresser\s*\?\s*_dresser\s*;|"
+                r"\bnew\s+NpcFigureDresser\s*\(\s*figure\s*,\s*look\s*,\s*\"CT_GunnarFigure_Look\"\s*,\s*_log\s*\)"), 2),
+    ("standing it", re.compile(r"\.\s*StandAt\b"),
+     re.compile(r"\b_dresser\s*\.\s*StandAt\s*\(\s*spot\s*,\s*facing\s*\)"), 2),
+    ("dressing it", re.compile(r"\.\s*Apply\b"),
+     re.compile(r"\b_dresser\s*\.\s*Apply\s*\(\s*\)"), 1),
+    ("its talk point", re.compile(r"\.\s*EnableTalk\b"),
+     re.compile(r"\b_dresser\s*\.\s*EnableTalk\s*\(\s*displayName\s*,\s*verb\s*,\s*talk\s*,\s*_log\s*\)"), 1),
+    ("taking it down", re.compile(r"\.\s*TakeDown\b"),
+     re.compile(r"\b_dresser\s*\?\s*\.\s*TakeDown\s*\(\s*\)"), 1),
+)
+TEAMSTER_FIGURE_CREATION = (
+    # `\b`, not a call: a method group `Func<Object, Object> make = Object.Instantiate`
+    # spells the token without a parenthesis.
+    ("an instantiation", re.compile(r"\bInstantiate\b")),
+    ("a new object", re.compile(r"\bCreatePrimitive\b|\bnew\s+(?:global\s*::\s*)?(?:UnityEngine\s*\.\s*)?GameObject\s*\(|"
+                                r"\bGameObject\s+\w+\s*=\s*new\s*\(|\busing\s+\w+\s*=\s*[\w.:\s]*\bGameObject\s*;")),
+    ("a physics type", re.compile(r"\btypeof\s*\(\s*[\w.:\s]*(?:Collider|Rigidbody\w*|CharacterController)\s*\)")),
+    ("an object lookup", re.compile(r"\bGameObject\s*\.\s*Find\w*\b|\bFind\w*ObjectsOfType\b|\bFindObjectOfType\b|"
+                                    r"\bFindFirstObjectByType\b|\bFindAnyObjectByType\b|\bFindObjectsByType\b")),
+    ("a component addition", re.compile(r"\bAddComponent\b")),
+    ("a re-parent", re.compile(r"\bSetParent\b|\.\s*parent\s*=(?!=)")),
+    ("an activation", re.compile(r"\bSetActive\b|\.\s*enabled\s*=(?!=)")),
+    ("a persistent object", re.compile(r"\bDontDestroyOnLoad\b")),
+    ("a pose or layer write", re.compile(
+        r"\.\s*(?:position|rotation|localPosition|localRotation|localScale|eulerAngles|localEulerAngles|layer)"
+        r"\s*[-+*/]?=(?!=)|\b(?:SetPositionAndRotation|SetLocalPositionAndRotation|Translate|Rotate|RotateAround|"
+        r"LookAt)\b")),
+)
+TEAMSTER_FIGURE_FILE_FORBIDDEN = TEAMSTER_FIGURE_CREATION + (
+    ("a destruction", re.compile(r"\bDestroy\w*\b")),
+    ("a component lookup", re.compile(r"\bGetComponent\w*\b")),
+    ("a network view or object", re.compile(r"\b(?:ZNetView|ZNetScene|ZDO\w*|ZRoutedRpc)\b")),
+    ("a physics component", re.compile(r"\b(?:\w*Collider|Rigidbody\w*|CharacterController)\b")),
+    ("an AI or character type", re.compile(r"\b(?:BaseAI|MonsterAI|AnimalAI|Humanoid|Character|Player)\b")),
+    ("a transform", re.compile(r"\.\s*transform\b|\bTransform\b")),
+    ("the figure's own object", re.compile(r"\.\s*(?:Root|gameObject|Animator|BodyModel|HelmetJoint|RightHandJoint)\b")),
+    ("reflection", re.compile(
+        r"\b(?:GetMethod|GetField|GetProperty|GetType|Activator|SendMessage|BroadcastMessage|Invoke|"
+        r"MethodInfo|FieldInfo|PropertyInfo)\b|\btypeof\s*\(")),
+    # Target-typed construction names no type, so it could build anything the
+    # receiving declaration names. The file needs none.
+    ("a target-typed new", re.compile(r"\bnew\s*\(")),
+    # The forbidden scan reads code with literal contents blanked (a log name
+    # such as "Player" is not a type), so an interpolated string - whose holes
+    # are code - would be a place to hide one. The file needs none.
+    ("an interpolated string", re.compile(r"\$\s*@?\s*\"|@\s*\$\s*\"")),
+    # The masker knows C# 10's literals; a raw string (C# 11) would pair its
+    # quotes wrongly. The file needs none, whatever the language version.
+    ("a raw string", re.compile(r'"""')),
+)
+
+
+def _teamster_figure_mask_literals(code: str) -> str:
+    """Blanks string and char literal contents, keeping every offset and line.
+
+    A real scan, not a regex: a char literal `'"'` or a verbatim `@"C:\\"`
+    would otherwise pair quotes wrongly and blank code between two literals,
+    which is how a forbidden call could be hidden from the scan below."""
+    out = list(code)
+    i, n = 0, len(code)
+    while i < n:
+        c = code[i]
+        if c == "'":
+            j = i + 1
+            while j < n and code[j] not in "'\n":
+                j += 2 if code[j] == "\\" else 1
+            for k in range(i + 1, min(j, n)):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j + 1
+        elif c == '"':
+            verbatim = i > 0 and code[i - 1] == "@" or i > 1 and code[i - 2] == "@" and code[i - 1] == "$"
+            j = i + 1
+            while j < n:
+                if verbatim and code[j] == '"' and j + 1 < n and code[j + 1] == '"':
+                    j += 2
+                    continue
+                if not verbatim and code[j] == "\\":
+                    j += 2
+                    continue
+                if code[j] == '"' or (not verbatim and code[j] == "\n"):
+                    break
+                j += 1
+            for k in range(i + 1, min(j, n)):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j + 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+TEAMSTER_SHARED_INCLUDE = re.compile(r"""Include\s*=\s*"\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]""")
+
+
+def _teamster_figure_sources(errors: list[str], label: str) -> tuple[dict[str, str], list[str]]:
+    """The Teamster product less obj/bin, keyed relative to the product, plus
+    every shared tree its project file compiles in - read from the project file,
+    so a tree added there is audited here - keyed `../Shared/<tree>/...`."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    sources: dict[str, str] = {}
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        rel = path.relative_to(teamster_dir)
+        if rel.parts[0] in ("obj", "bin"):
+            continue
+        sources[rel.as_posix()] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+    csproj = teamster_dir / str(PRODUCTS["teamster"]["csproj"])
+    linked = sorted(set(TEAMSTER_SHARED_INCLUDE.findall(csproj.read_text(encoding="utf-8-sig")))) \
+        if csproj.is_file() else []
+    if not linked:
+        fail(f"{label}: no shared source tree could be read from {csproj.relative_to(ROOT).as_posix()}, so "
+             "part of the product may not be audited", errors)
+    shared_root = ROOT / "src" / "Shared"
+    for name in linked:
+        tree = shared_root / name
+        if not tree.is_dir():
+            fail(f"{label}: the shared tree src/Shared/{name} Teamster compiles in is missing, so part of "
+                 "the product is not being audited", errors)
+            continue
+        for path in sorted(tree.rglob("*.cs")):
+            rel = path.relative_to(tree)
+            if rel.parts[0] in ("obj", "bin"):
+                continue
+            sources["../Shared/" + name + "/" + rel.as_posix()] = _strip_cs_comments(
+                path.read_text(encoding="utf-8-sig"))
+    return sources, linked
+
+
+def check_teamster_figure_is_confined(errors: list[str]) -> list[str]:
+    """#458: Gunnar's figure goes through Concerned NPC from one pinned file
+    that makes no engine write of its own."""
+    label = "[teamster] #458 figure audit"
+    sources, linked = _teamster_figure_sources(errors, label)
+
+    def shown(rel: str) -> str:
+        return "src/" + rel[3:] if rel.startswith("../") else f"src/ConcernedTeamster/{rel}"
+
+    def line_of(code: str, at: int) -> int:
+        return code.count("\n", 0, at) + 1
+
+    hits = 0
+    figure = sources.get(TEAMSTER_FIGURE_FILE)
+    if figure is None:
+        fail(f"{label}: {shown(TEAMSTER_FIGURE_FILE)} is missing - point the audit at the figure's new "
+             "home rather than leaving it green", errors)
+        return []
+
+    for rel, code in sources.items():
+        for match in TEAMSTER_FIGURE_NEVER.finditer(code):
+            hits += 1
+            fail(f"{label}: {shown(rel)}:{line_of(code, match.start())} names NpcWorkerDresser. D18 lets "
+                 "Gunnar's worker body wear his hair behind a Teamster setting of its own, which is not built: "
+                 "add the setting, a pinned call and its plants together", errors)
+        if rel != TEAMSTER_FIGURE_FILE:
+            for match in TEAMSTER_FIGURE_LIBRARY_NAME.finditer(code):
+                hits += 1
+                fail(f"{label}: {shown(rel)}:{line_of(code, match.start())} names {match.group(0)}, which only "
+                     f"{shown(TEAMSTER_FIGURE_FILE)} may: a second way to build, stand or take down a figure",
+                     errors)
+        if rel.startswith(TEAMSTER_COMPANIONS_PREFIX):
+            for match in TEAMSTER_COMPANIONS_NO_BODY.finditer(code):
+                hits += 1
+                fail(f"{label}: {shown(rel)}:{line_of(code, match.start())} names {match.group(0)}. The companion "
+                     "layer is presentation; a body is the worker runtime's to build", errors)
+            if rel != TEAMSTER_FIGURE_FILE:
+                for what, pattern in TEAMSTER_FIGURE_CREATION:
+                    for match in pattern.finditer(code):
+                        hits += 1
+                        fail(f"{label}: {what} in {shown(rel)}:{line_of(code, match.start())}. The companion "
+                             "layer builds nothing of its own; the figure is Concerned NPC's to build", errors)
+
+    pinned = 0
+    for what, broad, exact, expected in TEAMSTER_FIGURE_CALLS:
+        spans = [(m.start(), m.end()) for m in exact.finditer(figure)]
+        if len(spans) != expected:
+            hits += 1
+            fail(f"{label}: {shown(TEAMSTER_FIGURE_FILE)} has {len(spans)} exact site(s) for {what}; the pinned "
+                 f"population is {expected}", errors)
+        else:
+            pinned += expected
+        for match in broad.finditer(figure):
+            if not any(start <= match.start() < end for start, end in spans):
+                hits += 1
+                fail(f"{label}: unpinned {what} in {shown(TEAMSTER_FIGURE_FILE)}:"
+                     f"{line_of(figure, match.start())}", errors)
+
+    figure_code = _teamster_figure_mask_literals(figure)
+    for what, pattern in TEAMSTER_FIGURE_FILE_FORBIDDEN:
+        for match in pattern.finditer(figure_code):
+            hits += 1
+            fail(f"{label}: {what} ({match.group(0).strip()!r}) in {shown(TEAMSTER_FIGURE_FILE)}:"
+                 f"{line_of(figure, match.start())}. The figure file writes nothing to the engine itself; "
+                 "every write is Concerned NPC's and pinned there", errors)
+
+    return [
+        f"{label}: {len(sources)} source(s) - the whole of src/ConcernedTeamster less obj/ and bin/, and the "
+        f"{len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - name the figure "
+        f"library only in {shown(TEAMSTER_FIGURE_FILE)}, whose {pinned} figure site(s) are pinned by spelling and "
+        "population and which makes no engine write, lookup, reflection or target-typed construction of its own; "
+        "nothing names NpcWorkerDresser; the rest of Adapters/Companions instantiates, creates, finds, adds, "
+        "re-parents, activates and poses nothing and names no body builder. A source-text audit with comments "
+        "stripped: it does not follow a delegate, a method group or a name built from strings to an engine call "
+        f"that spells none of these tokens, and it does not prove control flow ({hits} violations)",
+    ]
+
+
 def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
     """Pins Foreman's direct engine mutations and refuses every unlisted one."""
     foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
@@ -3712,6 +3971,68 @@ def check_foreman_felling_scope(errors: list[str]) -> list[str]:
         "`.Damage(`, the pinned hit in Runtime/Collection/WorldFellingPort.cs; TreeBase, TreeLog, DestroyNow, "
         "ApplyDamage and RPC_Damage are refused everywhere in that scope. A text audit with comments stripped: "
         f"a call through a delegate spells none of these ({hits} violations)",
+    ]
+
+
+# #282 leaf 2: felling inside a collection order. The one pinned
+# `tree.Damage(hit)` above now sits inside `WorldFellingPort.StrikeOnce`, which
+# `cf_collect fell` and an order's strike both reach. So the D19 audit's single
+# `.Damage(` no longer says who can land a hit: the verb does. It is pinned to
+# its declaration and exactly two callers, each spelled verbatim - the command's
+# own call in the felling port, and the order's call in the pickup port, which is
+# where every D19 gate is re-asked, the strike is journaled first, and only the
+# Wood his own hit dropped is traced for the one pinned `Humanoid.Pickup`. A
+# third caller anywhere in the D19 scope (a construction job, a panel, a shared
+# helper), a second call in the pickup port, or the call moved to another
+# receiver fails here. A text audit with comments stripped: a call through a
+# delegate or a method group spells no `StrikeOnce(` and is invisible to it.
+FOREMAN_FELLING_PICKUP_PORT = "src/ConcernedForeman/Runtime/Collection/WorldSourcePickupPort.cs"
+FOREMAN_FELLING_STRIKE = re.compile(r"\bStrikeOnce\s*\(")
+FOREMAN_FELLING_STRIKE_SITES = (
+    (FOREMAN_FELLING_PORT,
+     re.compile(r"\binternal\s+FellOutcome\s+StrikeOnce\s*\("), 1, "the declaration"),
+    (FOREMAN_FELLING_PORT,
+     re.compile(r"\bFellOutcome\s+outcome\s*=\s*StrikeOnce\s*\(\s*tree\s*,\s*view\s*,\s*kind\s*,\s*axe\s*!\s*,"
+                r"\s*humanoid\s*,\s*workerAt\s*,\s*_spawned\s*,"), 1, "cf_collect fell"),
+    (FOREMAN_FELLING_PICKUP_PORT,
+     re.compile(r"\bFellOutcome\s+outcome\s*=\s*_felling\s*\.\s*StrikeOnce\s*\(\s*tree\s*,\s*view\s*,\s*kind\s*,"
+                r"\s*axe\s*!\s*,\s*humanoid\s*,\s*workerAt\s*,\s*_spawned\s*,"), 1, "an order's strike"),
+)
+
+
+def check_foreman_felling_strike_callers(errors: list[str]) -> list[str]:
+    """#282 leaf 2: the one hit is reached from exactly the command and an order's strike."""
+    before = len(errors)
+    sources, _ = _foreman_felling_sources(errors)
+    hits = len(errors) - before
+    for rel, code in sources.items():
+        allowed: list[tuple[int, int]] = []
+        for path, pattern, count, label in FOREMAN_FELLING_STRIKE_SITES:
+            if rel != path:
+                continue
+            spans = [(m.start(), m.end()) for m in pattern.finditer(code)]
+            if len(spans) != count:
+                hits += 1
+                fail(
+                    f"[foreman] #282 felling strike audit: {rel} has {len(spans)} pinned site(s) for {label}; "
+                    f"the population is exactly {count}", errors)
+            allowed.extend(spans)
+        for match in FOREMAN_FELLING_STRIKE.finditer(code):
+            if any(start <= match.start() < end for start, end in allowed):
+                continue
+            hits += 1
+            fail(
+                f"[foreman] #282 felling strike audit: an unpinned `StrikeOnce(` in "
+                f"{rel}:{code.count(chr(10), 0, match.start()) + 1} - the hit is reached only from cf_collect fell "
+                "and an order's strike in the pickup port", errors)
+    if FOREMAN_FELLING_PICKUP_PORT not in sources:
+        hits += 1
+        fail(f"[foreman] #282 felling strike audit: {FOREMAN_FELLING_PICKUP_PORT} is missing", errors)
+    return [
+        f"[foreman] #282 felling strike audit: {len(sources)} source(s), the D19 scope - WorldFellingPort.StrikeOnce, "
+        "which holds the one pinned hit, is declared once and called from exactly cf_collect fell and an order's "
+        f"strike in Runtime/Collection/WorldSourcePickupPort.cs; a call through a delegate is invisible to it "
+        f"({hits} violations)",
     ]
 
 
@@ -6929,8 +7250,10 @@ def main() -> int:
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_foreman_felling_scope(errors))
+    report.extend(check_foreman_felling_strike_callers(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
+    report.extend(check_teamster_figure_is_confined(errors))
     report.extend(check_npc_keepsake_confined(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))

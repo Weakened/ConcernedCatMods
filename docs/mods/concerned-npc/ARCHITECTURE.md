@@ -289,8 +289,8 @@ the phase and the note and nothing else about the work.
 The package exists, builds and ships nothing yet, but it is **no longer consumed by nobody**: two of five products
 take it today - `ConcernedSteward` and `ConcernedTeamster` both carry the `ProjectReference` and the matching
 `BepInDependency`, so a missing library is a load-time dependency error rather than a null reference at the first
-call. `ConcernedForeman` has not adopted it yet, and that adoption is the seam the arbiter-mediates-mode work exists
-to cross.
+call. `ConcernedForeman` also takes it: Thorstein's actor mode goes through the arbiter, and since #379 his
+collection and construction loops are witnessed by two `NpcPlanRun` plans (`INTERRUPTION.md` §11).
 
 One role has been moved onto it in part. The Steward's maintenance-round model can drive `NpcJobDriver`, but that
 batch driver remains a tested model rather than the shipped executor. The shipped runtime still drives the older,
