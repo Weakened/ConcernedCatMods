@@ -48,7 +48,7 @@ internal sealed class GunnarTalk
     public static string? AttentionKey(HaulAttentionReason reason) =>
         reason != HaulAttentionReason.Unspecified && Enum.IsDefined(typeof(HaulAttentionReason),reason)
         ? HaulPanelKeys.ForReason(reason) : null;
-    public string? Interact(QuestState stage, HaulPhase phase, HaulAttentionReason reason,
+    public string? Reply(QuestState stage, HaulPhase phase, HaulAttentionReason reason,
         Func<string,string>? translate = null)
     {
         if (stage == QuestState.IntroPending)

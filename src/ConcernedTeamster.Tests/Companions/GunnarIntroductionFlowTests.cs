@@ -24,13 +24,13 @@ public sealed class GunnarIntroductionFlowTests : IDisposable
         Assert.Equal(GunnarBodyKind.Presentation,GunnarBodyPlan.Decide(new GunnarBodyFacts(
             true,true,true,true,record.State,0,true,true,true)));
         var talk=new GunnarTalk();
-        Assert.Equal("Bring Gunnar a usable cart",talk.Interact(record.State,HaulPhase.Unassigned,default));
+        Assert.Equal("Bring Gunnar a usable cart",talk.Reply(record.State,HaulPhase.Unassigned,default));
         var flow=new GunnarRecruitment();
         Assert.Equal(GunnarRecruitmentResult.PendingConfirmation,flow.Prepare(record,epoch,cart,true,out var prompt));
         Assert.False(record.IsRecruited);
         Assert.Equal(GunnarRecruitmentResult.Recruited,flow.Confirm(record,epoch,prompt!.Token,cart,true));
         var reopened=GunnarCompanionRecord.Open(_root,11,22); Assert.True(reopened.IsRecruited);
-        Assert.False(reopened.ShouldPresentMemento(true)); Assert.NotNull(talk.Interact(reopened.State,HaulPhase.Ready,default));
+        Assert.False(reopened.ShouldPresentMemento(true)); Assert.NotNull(talk.Reply(reopened.State,HaulPhase.Ready,default));
         Assert.Equal(0,book.Revision); Assert.False(book.TryGetActiveForWorker(WorkerKey.Gunnar,out _));
         if(scenario==1) Assert.Equal("legacy utility data must survive byte-for-byte",File.ReadAllText(old));
     }

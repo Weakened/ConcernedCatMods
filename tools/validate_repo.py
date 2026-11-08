@@ -3571,7 +3571,7 @@ TEAMSTER_FIGURE_CALLS = (
     ("dressing it", re.compile(r"\.\s*Apply\s*\("),
      re.compile(r"\b_dresser\s*\.\s*Apply\s*\(\s*\)"), 1),
     ("its talk point", re.compile(r"\.\s*EnableTalk\s*\("),
-     re.compile(r"\b_dresser\s*\.\s*EnableTalk\s*\(\s*displayName\s*,\s*\"Talk\"\s*,\s*talk\s*,\s*_log\s*\)"), 1),
+     re.compile(r"\b_dresser\s*\.\s*EnableTalk\s*\(\s*displayName\s*,\s*verb\s*,\s*talk\s*,\s*_log\s*\)"), 1),
     ("taking it down", re.compile(r"\.\s*TakeDown\s*\("),
      re.compile(r"\b_dresser\s*\?\s*\.\s*TakeDown\s*\(\s*\)"), 1),
 )

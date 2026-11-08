@@ -5,7 +5,9 @@ using TheConcernedCat.Companions.Placement;
 using TheConcernedCat.Companions.Quest;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Domain.Companions;
+using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Workers;
 using UnityEngine;
@@ -55,6 +57,9 @@ internal sealed class GunnarPresentation
     private readonly Func<WorkerBodyStatus> _census;
     private readonly Func<bool> _liveBody;
     private readonly Func<bool> _resting;
+    private readonly Func<GunnarHaulService?> _service;
+    private GunnarTalk _talk = new();
+    private GunnarCompanionRecord? _talkScope;
     private readonly Action<string> _log;
     private readonly GunnarBodyLeases _leases;
     private readonly GunnarFigurePresenter _figure;
@@ -70,8 +75,10 @@ internal sealed class GunnarPresentation
     private string _last = "not asked yet";
 
     private GunnarPresentation(GunnarCompanionAdapter companion, Func<WorkerBodyStatus> census,
-        Func<bool> liveBody, Func<bool> resting, NpcIdentity identity, Action<string> log)
+        Func<bool> liveBody, Func<bool> resting, Func<GunnarHaulService?> service, NpcIdentity identity,
+        Action<string> log)
     {
+        _service = service;
         _companion = companion;
         _census = census;
         _liveBody = liveBody;
@@ -84,7 +91,7 @@ internal sealed class GunnarPresentation
     /// <summary>Null, with one warning, when the companion layer is missing or
     /// his identity cannot be named; every Teamster tool keeps working.</summary>
     public static GunnarPresentation? Install(GunnarCompanionAdapter? companion, Func<WorkerBodyStatus> census,
-        Func<bool> liveBody, Func<bool> resting, ManualLogSource log)
+        Func<bool> liveBody, Func<bool> resting, Func<GunnarHaulService?> service, ManualLogSource log)
     {
         if (companion == null) return null;
         try
@@ -95,7 +102,7 @@ internal sealed class GunnarPresentation
                 return null;
             }
 
-            return new GunnarPresentation(companion, census, liveBody, resting, identity, text => log.LogInfo(text));
+            return new GunnarPresentation(companion, census, liveBody, resting, service, identity, text => log.LogInfo(text));
         }
         catch (Exception exception)
         {
@@ -181,6 +188,7 @@ internal sealed class GunnarPresentation
         _leases.Forget();
         _environment.Forget();
         _figure.ResetForWorld();
+        _talkScope = null;
         _arrivalPending = false;
         _planned = false;
         _faulted = false;
@@ -289,9 +297,44 @@ internal sealed class GunnarPresentation
         look.y = 0f;
         Quaternion facing = look.sqrMagnitude > 0.01f ? Quaternion.LookRotation(look.normalized, Vector3.up) : Quaternion.identity;
         _figure.Show(Game.instance != null ? Game.instance.m_playerPrefab : null, spot, facing,
-            Look, _companion.DisplayName.Value, talk: null);
+            Look, DisplayName(), TeamsterStrings.Get("gunnar.talk.verb"), Talk);
         _last = _figure.IsShown ? "at home, resting" : "wanted at home, not shown";
     }
+
+    /// <summary>#459: a press of the use key on his figure, and the only way he
+    /// speaks: there is no timer and no ambient line. What he says follows this
+    /// character's story and, once recruited, the live haul: an attention line
+    /// uses the same catalog row as the haul panel's reason. A fresh rotation
+    /// per character and world, so a line from one save never suppresses one
+    /// in another.</summary>
+    private void Talk()
+    {
+        try
+        {
+            GunnarCompanionRecord? record = _companion.Current();
+            if (record == null) return;
+            if (!ReferenceEquals(record, _talkScope)) { _talkScope = record; _talk = new GunnarTalk(); }
+            HaulSnapshot? snapshot = _service()?.Snapshot;
+            string? line = _talk.Reply(record.State,
+                snapshot?.Phase ?? HaulPhase.Unassigned,
+                snapshot?.Attention ?? HaulAttentionReason.Unspecified,
+                key => TeamsterStrings.Get(key));
+            if (string.IsNullOrEmpty(line)) return;
+            string said = TeamsterStrings.Format("gunnar.says", DisplayName(), line!);
+            _log(said);
+            MessageHud hud = MessageHud.instance;
+            if (hud != null) hud.ShowMessage(MessageHud.MessageType.TopLeft, said);
+        }
+        catch (Exception exception)
+        {
+            // A message screen that changed shape loses the line, never the figure.
+            _log("Gunnar's line could not be shown on this build: " + SafeFailure.Brief(exception));
+        }
+    }
+
+    private string DisplayName() =>
+        GunnarCompanionRecord.ResolveDisplayName(_companion.DisplayName.Value,
+            key => TeamsterStrings.HasKey(key) ? TeamsterStrings.Get(key) : null);
 
     private void Down(string why)
     {

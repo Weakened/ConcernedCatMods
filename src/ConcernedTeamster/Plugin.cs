@@ -105,6 +105,7 @@ public sealed class Plugin : BaseUnityPlugin
             () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,
             () => _hauling?.BoundBody != null,
             () => _hauling?.CollectionIdentity?.MayRetireBody ?? false,
+            () => _hauling?.Service,
             Logger);
         if (_hauling != null && _gunnarFigure != null)
         {

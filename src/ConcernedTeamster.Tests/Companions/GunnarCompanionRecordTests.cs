@@ -266,6 +266,7 @@ public sealed class GunnarCompanionRecordTests : IDisposable
                     "            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,\n"+
                     "            () => _hauling?.BoundBody != null,\n"+
                     "            () => _hauling?.CollectionIdentity?.MayRetireBody ?? false,\n"+
+                    "            () => _hauling?.Service,\n"+
                     "            Logger);",
                     "if (_hauling != null && _gunnarFigure != null)\n        {\n"+
                     "            _hauling.TakeWorkerBody = _gunnarFigure.TakeWorkerBody;\n"+
