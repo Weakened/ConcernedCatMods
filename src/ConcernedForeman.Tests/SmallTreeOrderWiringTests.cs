@@ -113,6 +113,12 @@ public sealed class SmallTreeOrderWiringTests
         }
 
         Assert.Single(Regex.Matches(pickup, @"\.\s*Pickup\s*\("));
+
+        // #282 review: the take names where the pick booked the drop, the drop's
+        // own id, never the source's.
+        string take = Between(pickup, "public int TryTakeDrop(", "public void ReleaseUntakenDrops(");
+        Assert.Contains("PickupTakes.GroundOf(drop, traced.Source),", take);
+        Assert.DoesNotContain("traced.Source.ToString()", take);
     }
 
     [Fact]
@@ -123,7 +129,9 @@ public sealed class SmallTreeOrderWiringTests
             "bool trees = _felling != null && _felling.Enabled && scope.Source != WorkScopeSource.DefaultCampCircle;",
             survey);
         Assert.Contains("bool tree = trees && WorldFellingPort.IsSmallTreeHash(hash);", survey);
-        Assert.Contains("builtPieceClearanceMetres: _felling!.NearestPieceMetres(position)", survey);
+        Assert.Contains("builtPieceClearanceMetres: BuiltPieceClearance(position)", survey);
+        Assert.Contains("fromMiddle = _felling!.NearestPieceMetres(middle);", survey);
+        Assert.Contains(": _felling!.NearestPieceMetres(position);", survey);
     }
 
     [Fact]

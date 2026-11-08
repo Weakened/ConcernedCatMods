@@ -21,6 +21,9 @@ moved: 0.1.0 has never shipped, so these are still its notes.
 - **He takes only the Wood that tree dropped, and never more than the order still needs.**
   Resin, fir cones and any extra Wood stay on the ground for you.
 - **A cleared area says so:** the order pauses as exhausted.
+- **Fixed, found in review:** what a pick or a fell dropped could never be taken into his
+  inventory. The take named the stone, branch or tree rather than the drop, so the settlement
+  record refused every take and the order stopped. Stones and branches were affected too.
 - Not yet observed in game.
 
 ### Added — small-tree felling (#282, owner decision 2026-10-31, D19)

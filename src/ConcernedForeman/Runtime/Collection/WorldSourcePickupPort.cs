@@ -527,7 +527,7 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort, ISourceFellingP
         var intent = new TransferIntent(
             _requestIds.Next(traced.Order, "take"),
             traced.Order,
-            new CustodyLocation(CustodyPlace.SourceGround, traced.Source.ToString(), traced.Source.WorldLoadEpoch),
+            PickupTakes.GroundOf(drop, traced.Source),
             new CustodyLocation(CustodyPlace.Worker, WorkerKey.Thorstein.Value, Guid.Empty),
             traced.Item,
             drop.Count,
