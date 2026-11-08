@@ -3,6 +3,8 @@ using TheConcernedCat.ConcernedTeamster.Domain.Companions;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.Workers;
 namespace TheConcernedCat.ConcernedTeamster.Tests.Companions;
+// #459: pins catalog English the override tests change, so it shares their collection.
+[Collection("TeamsterStrings shared statics")]
 public sealed class GunnarIntroductionFlowTests : IDisposable
 {
     private readonly string _root=Path.Combine(Path.GetTempPath(),"ct-462-"+Guid.NewGuid().ToString("N"));

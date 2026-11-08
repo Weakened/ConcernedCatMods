@@ -29,6 +29,8 @@ internal sealed class GunnarTalk
         new("gunnar.pace", DialogueCategory.Travel),
         new("gunnar.check", DialogueCategory.Travel),
         new("gunnar.room", DialogueCategory.Travel),
+        new("gunnar.longway", DialogueCategory.Travel),
+        new("gunnar.brave", DialogueCategory.Travel),
         new("gunnar.fair", DialogueCategory.CatAndHome),
         new("gunnar.fire", DialogueCategory.CatAndHome),
         new("gunnar.rest", DialogueCategory.CatAndHome),
@@ -45,6 +47,14 @@ internal sealed class GunnarTalk
     });
     private readonly DialogueRotation _rotation;
     public GunnarTalk(int startOffset = 0) { _rotation=new DialogueRotation(Catalog,startOffset:startOffset); }
+    /// <summary>A stable start in the rotation for one character in one world,
+    /// so two characters do not hear the same order and one character hears the
+    /// same order every session.</summary>
+    public static int StartFor(long world, long character)
+    {
+        ulong mixed = unchecked((ulong)world * 0x9E3779B97F4A7C15UL ^ (ulong)character);
+        return (int)(mixed % (ulong)Catalog.Count);
+    }
     public static string? AttentionKey(HaulAttentionReason reason) =>
         reason != HaulAttentionReason.Unspecified && Enum.IsDefined(typeof(HaulAttentionReason),reason)
         ? HaulPanelKeys.ForReason(reason) : null;

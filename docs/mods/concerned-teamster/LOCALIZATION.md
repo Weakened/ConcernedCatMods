@@ -100,7 +100,9 @@ Deliberately **not** translatable, by design:
 - Keys are grouped by surface (`status.*`, `manifest.*`, `warn.*`, `diag.*`,
   `coop.*`, `recovery.*`, `load.*`, `trips.*`, `compare.*`, `bottleneck.*`,
   `profile.*`, `report.*`, `routes.*`, `nav.*`, `unit.*`, `verdict.*`,
-  `ui.*`). The template always lists every current key.
+  `ui.*`, `haul.*`, `containers.*`, and Gunnar's `gunnar.*` lines and
+  `gunnar.recruit.*` panel). Keep `{0}`/`{1}` in `gunnar.says` and
+  `gunnar.attention`: a row that drops one is refused. The template always lists every current key.
 - The trip-selection markers must stay consistent as a set if you change
   them: `trips.markerA`/`trips.markerB` (row markers), `trips.selectA`/
   `trips.selectB` (row buttons), and the bracketed letters mentioned in

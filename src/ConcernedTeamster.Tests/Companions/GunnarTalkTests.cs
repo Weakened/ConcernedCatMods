@@ -4,6 +4,8 @@ using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui.Hauling;
 namespace TheConcernedCat.ConcernedTeamster.Tests.Companions;
+// #459: pins catalog English the override tests change, so it shares their collection.
+[Collection("TeamsterStrings shared statics")]
 public sealed class GunnarTalkTests
 {
     [Fact] public void AuthoredCatalogHasAtLeast24UniqueLocalizableLines()
