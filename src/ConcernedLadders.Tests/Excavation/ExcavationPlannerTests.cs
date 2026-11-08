@@ -326,6 +326,44 @@ public sealed class ExcavationPlannerTests
     }
 
     [Fact]
+    public void ARefusedPlanNeverChecksComplete()
+    {
+        VanillaTerrainModel world = Flat();
+        world.MarkUnloaded(2, 2);
+        ExcavationPlan refused = Plan(world, ExcavationMode.Small, 0, 0);
+        Assert.True(float.IsNaN(refused.Bottom));
+        Assert.Equal(ExcavationProgress.Unreadable, ExcavationPlanner.Check(refused, Flat().Sample(ExcavationMode.Small, 0, 0)));
+
+        VanillaTerrainModel deeper = Flat();
+        deeper.Edit(0, 0, -3f);
+        ExcavationPlan refusedWithDatum = Plan(deeper, ExcavationMode.Small, 0, 0);
+        Assert.Equal(ExcavationStatus.Refused, refusedWithDatum.Status);
+        Assert.Equal(ExcavationProgress.Unreadable, ExcavationPlanner.Check(refusedWithDatum, deeper.Sample(ExcavationMode.Small, 0, 0)));
+    }
+
+    [Fact]
+    public void AFloorWithinToleranceIsNothingToDigButStillDigLimitChecked()
+    {
+        VanillaTerrainModel world = Flat();
+        for (int z = -1; z <= 1; z++) for (int x = -1; x <= 1; x++) world.Edit(x, z, -1.99f); // 1 cm above the floor
+        ExcavationPlan idle = Plan(world, ExcavationMode.Small, 0, 0);
+        Assert.Equal(ExcavationStatus.NothingToDig, idle.Status);
+        Assert.Equal(0, idle.LoweredVertices);
+
+        // The same 1 cm band, but with the floor past the dig limit: the engine would still touch those vertices.
+        var samples = new ExcavationSamples(ExcavationMode.Small);
+        for (int dz = -2; dz <= 2; dz++)
+        for (int dx = -2; dx <= 2; dx++)
+        {
+            bool floor = Math.Abs(dx) <= 1 && Math.Abs(dz) <= 1;
+            samples.Set(dx, dz, floor ? 48.01f : 50f, 60f);
+        }
+        ExcavationPlan limited = ExcavationPlanner.Plan(samples, 0, 0, null);
+        Assert.Equal(ExcavationRefusal.DigLimit, limited.Refusal);
+        Assert.Equal(9, limited.RefusalVertices);
+    }
+
+    [Fact]
     public void ARefusedOrIdlePlanPlansNoChange()
     {
         VanillaTerrainModel world = Flat();

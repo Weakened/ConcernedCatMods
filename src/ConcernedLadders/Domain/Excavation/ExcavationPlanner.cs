@@ -225,6 +225,9 @@ internal static class ExcavationPlanner
     {
         if (after == null) throw new ArgumentNullException(nameof(after));
         if (after.Geometry.Mode != plan.Mode) throw new ArgumentException("Samples for another mode.", nameof(after));
+        // A refused plan has no floor (a refusal before the datum leaves it NaN, and every comparison with NaN is
+        // false), so there is nothing to compare against: the outcome is unknown, never Complete.
+        if (plan.Status == ExcavationStatus.Refused || !LadderRules.Finite(plan.Bottom)) return ExcavationProgress.Unreadable;
         int half = plan.Geometry.HalfExtent;
         bool pending = false;
         bool overshot = false;

@@ -28,9 +28,10 @@ internal sealed class ExcavationSamples
     internal void Clear() => Array.Clear(_loaded, 0, _loaded.Length);
 
     /// <summary>Records one vertex. <paramref name="height"/> is the current world height of the surface
-    /// (and collider) there. <paramref name="limitBase"/> is the height the engine measures its dig limit
-    /// from: the surface before any player terrain operation, i.e. current height minus the terrain
-    /// compiler's accumulated level and smooth deltas.</summary>
+    /// (and collider) there. <paramref name="limitBase"/> is the base the engine's 8 m dig limit binds on:
+    /// the higher of (current height minus the terrain compiler's level delta), which the level-delta clamp
+    /// measures from, and the heightmap's base before player TerrainModifiers, which the final clamp
+    /// measures from (EXCAVATION.md section 3, claim 6).</summary>
     internal void Set(int dx, int dz, float height, float limitBase)
     {
         int index = Index(dx, dz);

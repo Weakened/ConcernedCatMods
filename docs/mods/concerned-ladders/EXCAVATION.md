@@ -1,7 +1,7 @@
 # Concerned Ladders: Iron Shovel excavation (#487, CL-006): geometry contract and terrain feasibility
 
 **Status: design record plus a game-free planner. No shovel, preview or terrain operation exists in the
-product yet.** Everything below about the engine was **read from the installed game's code**. None of it
+product yet.** The planner compiles into the shipped Ladders DLL but nothing calls it. Everything below about the engine was **read from the installed game's code**. None of it
 was **observed in the running game**. Runtime measurement is **NOT RUN**. Every in-game row is **OWNER
 GO-AROUND PENDING**.
 
@@ -75,12 +75,20 @@ Facts that decide the shape:
    centre vertex at the datum, with radius = half extent and delta = −depth. It brings every floor
    vertex down to one absolute floor height. `LevelTerrain` is not used, because it would also raise
    deeper ground.
-6. **The dig limit is 8 m.** `TerrainComp` clamps a vertex's accumulated level delta to ±8. `Heightmap`
-   clamps the result to base ±8. In both, the base is the ground before player terrain ops. A plan that
-   needs more refuses instead of letting the engine clamp it to a partial floor
-   (`ThePlanRefusesWhereTheEngineWouldClampAndTheClampIsReal`). The adapter must read the base as the
-   current height minus the compiler's level and smooth deltas. It must not use the generated height,
-   because older `TerrainModifier` edits and locations shift it.
+6. **The dig limit is 8 m, measured from two different bases.** There are two clamps.
+   - `RaiseTerrain` clamps the vertex's accumulated level delta to ±8. A lowering to `target` therefore
+     stops at (current height − level delta) − 8: the height before the compiler's level delta, which
+     includes its smooth delta and any `TerrainModifier`.
+   - `ApplyToHeightmap` clamps the result to `baseHeights` ± 8. `Heightmap.ApplyModifiers` copies
+     `baseHeights` lazily, just before the first *player* `TerrainModifier` runs (or after all modifiers
+     when there is none), so that base excludes legacy player modifiers.
+
+   The floor is reachable only when it is no lower than the **higher** of those two bases minus 8. The
+   planner takes one limit base per vertex and the adapter must pass that maximum. A plan that needs more
+   refuses instead of letting the engine clamp it to a partial floor
+   (`ThePlanRefusesWhereTheEngineWouldClampAndTheClampIsReal`). The test model has one base, which
+   covers the clamp arithmetic but not how the adapter derives the two bases. That derivation is
+   checked in the adapter slice.
 7. **Settings travel as a prefab-name hash.** `TerrainOp.Settings.Serialize` writes only the hash, and
    the owner looks it up with `ObjectDB.TryGetTerrainOp`. Every peer therefore needs the same registered
    op prefab. Each mode is one prefab with fixed radius and delta. Only the position varies. Jötunn 2.30.2
@@ -141,7 +149,7 @@ Two further behaviours:
 - **A plan inside a larger pit** takes the pit floor as its datum. That makes it a visible, deliberate
   new depth, not an accidental deepening.
 
-Tests: `src/ConcernedLadders.Tests/Excavation/` (40). They measure the surface by the engine's own
+Tests: `src/ConcernedLadders.Tests/Excavation/` (42). They measure the surface by the engine's own
 triangulation, using `VanillaTerrainModel`, a test-only transcription of the source-read path. Planted
 mutations were checked against them: a minimum-height datum, a removed dig-limit refusal, a removed
 deeper-floor refusal, and a dropped shared tile edge each fail them.
@@ -156,8 +164,11 @@ deeper-floor refusal, and a dropped shared tile edge each fail them.
 ## 6. Next slices (each a PR of its own)
 
 1. **Op prefabs and adapter.** Register the two `TerrainOp` prefabs, cloned from the pickaxe's own
-   `m_spawnOnHitTerrain` with `m_raise`/`m_square` set and no spawn-on-placed item. Add the sampling
-   adapter (live spacing check, limit base from the compiler deltas, loaded full-detail tiles only). Add
+   `m_spawnOnHitTerrain` with `m_raise`/`m_square` set and no spawn-on-placed item. `m_level` and
+   `m_smooth` must be off, because a smooth pass would break the flat floor. `m_paintCleared` must be off
+   or its radius kept inside the border; it defaults to on with a 2 m radius, and it widens
+   `GetRadius()`. Add the sampling adapter (live spacing check, limit base as the maximum of claim 6's two
+   bases, loaded full-detail tiles only). Add
    the commit gate: ward check at `AccessCheckRadius`, no-build check, object refusal, then exactly one
    `Attack.SpawnOnHitTerrain` and one op in flight, then `Check`. Behind an off-by-default switch until
    it has been observed.

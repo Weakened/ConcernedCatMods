@@ -11,7 +11,11 @@ namespace TheConcernedCat.ConcernedLadders.Tests.Excavation;
 /// op's vertex; skip when delta &lt; 0 and the target is above the vertex; add target - height to the level
 /// delta; clamp the level delta to +-8), Heightmap.WorldToVertex rounding, TerrainComp.ApplyToHeightmap's
 /// final clamp to base +-8, and the triangulation of Heightmap.RebuildCollisionMesh (each cell split on its
-/// (x+1, z) - (x, z+1) diagonal; the collider mesh is built from the same vertices).</summary>
+/// (x+1, z) - (x, z+1) diagonal; the collider mesh is built from the same vertices).
+///
+/// Left out, and harmless for these tests (level-only edits, one base, heightmaps at y = 0): the smooth delta,
+/// TerrainModifier and the second base the final clamp uses (EXCAVATION.md claim 6), each tile keeping its own
+/// copy of the deltas, and the heightmap transform's y offset.</summary>
 internal sealed class VanillaTerrainModel
 {
     private readonly Func<int, int, float> _base;
