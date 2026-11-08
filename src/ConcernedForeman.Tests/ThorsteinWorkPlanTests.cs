@@ -103,8 +103,8 @@ public sealed class ThorsteinWorkPlanTests
 
     private static INpcPlanCodec Codec() => new ThorsteinPlanCodec(ForemanNpcRole.Id, ThorsteinWorkPlan.CollectJobId);
 
-    private static NpcPlanEvidence Evidence(NpcWorldEpoch world, bool mayWork = true, int bodies = 1) =>
-        new NpcPlanEvidence(world, bodies, false, true, false, mayWork, true, true, false, 0f);
+    private static NpcPlanEvidence Evidence(NpcWorldEpoch world, bool mayWork = true, int bodies = 1, bool areaReadable = true) =>
+        new NpcPlanEvidence(world, bodies, false, areaReadable, false, mayWork, true, true, false, 0f);
 
     /// <summary>The executor: start, pick every stone (announce, act,
     /// conclude), deposit what the plan says he carries, end. Stops at the
@@ -345,11 +345,48 @@ public sealed class ThorsteinWorkPlanTests
         world.Carried++;
         Assert.True(plan.Conclude(true, world.Measure(), "picked", out said), said);
 
-        // Authority lost across the reload: the shared policy answers refund,
-        // which would quietly drop the stone he carries.
+        // The work area could not be read across the reload: the shared policy
+        // answers refund, which would quietly drop the stone he carries.
         ThorsteinWorkPlan reloaded = Opened(folder.Path_);
-        Assert.False(reloaded.Start(Evidence(NpcWorldEpoch.Mint(), mayWork: false), "harvest", "chest", world.Measure(), out _));
+        Assert.False(reloaded.Start(Evidence(NpcWorldEpoch.Mint(), areaReadable: false), "harvest", "chest", world.Measure(), out _));
         Assert.Equal(ThorsteinPlanStanding.NeedsAttention, reloaded.Standing);
+    }
+
+    [Fact]
+    public void APassingConditionAfterAReloadWaitsAndWritesNothing()
+    {
+        using var folder = new Folder();
+        var world = new World();
+        ThorsteinWorkPlan plan = Opened(folder.Path_);
+        Assert.True(plan.Start(Evidence(NpcWorldEpoch.Mint()), "harvest", "chest", world.Measure(), out string said), said);
+        Assert.True(plan.Intend("pick", out said), said);
+        world.Remaining--;
+        world.Carried++;
+        Assert.True(plan.Conclude(true, world.Measure(), "picked", out said), said);
+        string before = File.ReadAllText(folder.Path_);
+
+        // #379 review: a peer connected, or his body not loaded yet, is not a
+        // reason to refund or stop a plan he carries material for.
+        ThorsteinWorkPlan reloaded = Opened(folder.Path_);
+        NpcWorldEpoch next = NpcWorldEpoch.Mint();
+        Assert.False(reloaded.Start(Evidence(next, mayWork: false), "harvest", "chest", world.Measure(), out _));
+        Assert.Equal(ThorsteinPlanStanding.Recovered, reloaded.Standing);
+        Assert.False(reloaded.Start(Evidence(next, bodies: 0), "harvest", "chest", world.Measure(), out _));
+        Assert.Equal(ThorsteinPlanStanding.Recovered, reloaded.Standing);
+        Assert.Equal(before, File.ReadAllText(folder.Path_));
+
+        Assert.True(reloaded.Start(Evidence(next), "harvest", "chest", world.Measure(), out said), said);
+        Assert.Equal(1, reloaded.State!.CarriedUnits);
+    }
+
+    [Fact]
+    public void AResolutionAgainstAnUnknownLoadIsRefused()
+    {
+        using var folder = new Folder();
+        File.WriteAllText(folder.Path_, "not a plan" + Environment.NewLine);
+        ThorsteinWorkPlan plan = Opened(folder.Path_);
+        Assert.False(plan.Resolve(NpcWorldEpoch.Mint(), null, out _));
+        Assert.Equal(ThorsteinPlanStanding.NeedsAttention, plan.Standing);
     }
 
     [Fact]

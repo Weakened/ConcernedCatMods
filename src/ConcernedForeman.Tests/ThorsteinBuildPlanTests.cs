@@ -113,13 +113,18 @@ public sealed class ThorsteinBuildPlanTests : IDisposable
     private static NpcPlanEvidence Evidence(NpcWorldEpoch world) =>
         new NpcPlanEvidence(world, 1, false, true, false, true, true, true, false, 0f);
 
+    private string? _latch;
+    private bool _measurable = true;
+    private bool _mayPutBack = true;
+
     private (ShelterBuildLoop Loop, ThorsteinWorkPlan Plan, Counting Counted, WitnessedBuildMaterials Witness) Session(
         BuildWorld world, NpcWorldEpoch epoch, INpcPlanCodec? codec = null)
     {
         var plan = new ThorsteinWorkPlan(ForemanNpcRole.Id, ThorsteinWorkPlan.BuildJobId, codec);
         plan.Open(_path, null);
         var counted = new Counting(world.Materials, () => plan);
-        var witness = new WitnessedBuildMaterials(counted, plan, () => Evidence(epoch));
+        var witness = new WitnessedBuildMaterials(
+            counted, plan, () => Evidence(epoch), () => _latch, () => _measurable, () => _mayPutBack);
         var loop = new ShelterBuildLoop(
             () => ShelterPlan.For(world.Authorised ? world.Marker : world.Marker.Withdraw(), world.Recipes),
             () => world.Authorised,
@@ -213,5 +218,90 @@ public sealed class ThorsteinBuildPlanTests : IDisposable
         Assert.Equal(world.Plan.Pieces.Count, world.Placer.Placed.Count);
         Assert.Equal(wood, world.Total("Wood"));
         Assert.Equal(0, lastCount.UnannouncedMoves);
+    }
+
+    [Fact]
+    public void AMovementTheMaterialsCannotVouchForStopsTheBuildPlanForAPerson()
+    {
+        var world = new BuildWorld();
+        (ShelterBuildLoop loop, ThorsteinWorkPlan plan, Counting counted, _) = Session(world, NpcWorldEpoch.Mint());
+        bool latched = false;
+        counted.DieInsideCommit = () =>
+        {
+            if (!latched && world.Placer.Placed.Count == 2)
+            {
+                latched = true;
+                _latch = "moving 2 Wood between his pack and the chest could not be measured";
+            }
+        };
+
+        for (int tick = 0; tick < 80 && plan.Standing != ThorsteinPlanStanding.NeedsAttention; tick++)
+        {
+            loop.Tick(100f + (tick * Step));
+        }
+
+        Assert.Equal(ThorsteinPlanStanding.NeedsAttention, plan.Standing);
+
+        // Stopped on the very commit the materials could not vouch for, not on
+        // some later movement that happened to read the same latch.
+        Assert.Equal(2, world.Placer.Placed.Count);
+        int moves = counted.Moves;
+        for (int tick = 0; tick < 40; tick++)
+        {
+            loop.Tick(400f + (tick * Step));
+        }
+
+        Assert.Equal(moves, counted.Moves);
+    }
+
+    [Fact]
+    public void AnUnreadableLoadIsUnknownNeverNothing()
+    {
+        var world = new BuildWorld();
+        (_, ThorsteinWorkPlan plan, _, WitnessedBuildMaterials witness) = Session(world, NpcWorldEpoch.Mint());
+        _measurable = false;
+        Assert.Null(witness.Measure());
+        Assert.False(plan.Start(Evidence(NpcWorldEpoch.Mint()), "build:x", "chest", witness.Measure(), out _));
+    }
+
+    [Fact]
+    public void APutBackThatCannotMoveAnythingNeverRewritesThePlan()
+    {
+        var world = new BuildWorld();
+        var counting = new CountingCodec();
+        (ShelterBuildLoop loop, ThorsteinWorkPlan plan, _, WitnessedBuildMaterials witness) =
+            Session(world, NpcWorldEpoch.Mint(), counting);
+        for (int tick = 0; tick < 6; tick++)
+        {
+            loop.Tick(100f + (tick * Step));
+        }
+
+        // A withdrawn order whose chest cannot take the load back: the runtime
+        // asks for a put-back every round.
+        _mayPutBack = false;
+        int writes = counting.Writes;
+        for (int round = 0; round < 50; round++)
+        {
+            witness.PutBack(out _);
+            witness.Ended(false, "the build order was withdrawn");
+        }
+
+        Assert.True(counting.Writes - writes <= 1, "the plan was rewritten " + (counting.Writes - writes) + " times");
+    }
+
+    private sealed class CountingCodec : INpcPlanCodec
+    {
+        private readonly INpcPlanCodec _inner = new ThorsteinPlanCodec(ForemanNpcRole.Id, ThorsteinWorkPlan.BuildJobId);
+
+        public int Writes { get; private set; }
+
+        public IReadOnlyList<string>? Encode(NpcPlanState state)
+        {
+            Writes++;
+            return _inner.Encode(state);
+        }
+
+        public bool TryDecode(IReadOnlyList<string> lines, out NpcPlanState? state, out string reason) =>
+            _inner.TryDecode(lines, out state, out reason);
     }
 }

@@ -65,6 +65,12 @@ internal sealed class ThorsteinPlans
     /// <c>build</c>.</summary>
     internal string Resolve(string? job)
     {
+        if (!string.IsNullOrEmpty(job) && !string.Equals(job, "build", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(job, "collect", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Usage: cf_collect resolve [collect | build]. Nothing was resolved.";
+        }
+
         bool build = string.Equals(job, "build", StringComparison.OrdinalIgnoreCase);
         ThorsteinWorkPlan plan = build ? Build : Collect;
         Func<IReadOnlyList<KeyValuePair<string, int>>?>? measure = build ? MeasureBuild : MeasureCollect;

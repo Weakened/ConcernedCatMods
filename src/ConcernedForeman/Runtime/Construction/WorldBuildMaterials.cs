@@ -341,6 +341,34 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         return true;
     }
 
+    /// <summary>#379: whether what he carries for this order can be read now:
+    /// his inventory opens, and an order the record holds is bound to this
+    /// world load. False means unknown, never nothing.</summary>
+    internal bool CanMeasure(BuildOrderJournal? journal)
+    {
+        World();
+        return TryWorker(out _, out _) && (journal?.Current == null || IsBoundTo(journal));
+    }
+
+    /// <summary>#379: whether a put-back could move anything now, by the same
+    /// checks <see cref="PutBack"/> makes before it moves: no latch, his
+    /// inventory, and the first unsettled holding's chest with room.</summary>
+    internal bool CouldPutBackAny()
+    {
+        World();
+        if (Uncertain != null || !TryWorker(out IInventoryPort? worker, out _)) return false;
+        foreach (Holding holding in _holdings)
+        {
+            if (!holding.Drawn || holding.Settled) continue;
+            if (!TryChest(holding.Source, out IInventoryPort? chest, out _)) return false;
+            var cost = new MaterialTally();
+            foreach (MaterialStack stack in holding.Reservation.Stacks) cost.Add(stack.Item, stack.Count);
+            return Fits(worker!, chest!, cost);
+        }
+
+        return false;
+    }
+
     public MaterialTally PutBack(out string failure)
     {
         World();

@@ -413,6 +413,13 @@ decides whether a difference is a loss, and a second, disagreeing verdict here w
   (or `cf_collect resolve build`) records what he holds from a measurement. A refund of material he still carries is
   refused the same way. A reload between movements is a re-plan: the next start re-attaches the same plan to the new
   world load and continues it, with the same job id and the measured load. A pause continues in the session.
+- **A passing condition waits.** A recovered plan is revalidated only when work is allowed and exactly one body
+  answers; before that it stays recovered and nothing is written, so a peer who is connected or a body not yet
+  loaded pauses the order rather than refunding or stopping the plan.
+- **Not witnessed, and said so:** the cooperative hand-off to Gunnar's cart and `cf_settle release`. The settlement
+  record alone governs them, as before; the next start re-measures what he carries either way.
+- **Two exits, on purpose.** A movement nobody can vouch for is two records' question: `cf_settle resolve` answers the
+  settlement record's, and `cf_collect resolve [build]` the plan's. Neither answers for the other.
 - **No priority ladder**, as for Gunnar: one job holds Thorstein at a time through the arbiter, nothing preempts
   another, and "resumes rather than restarts" is the plan kept open across whatever held him.
 

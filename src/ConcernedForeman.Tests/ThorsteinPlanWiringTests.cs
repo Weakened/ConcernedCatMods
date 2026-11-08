@@ -58,7 +58,10 @@ public sealed class ThorsteinPlanWiringTests
     public void TheConstructionLoopMovesMaterialOnlyThroughTheWitness()
     {
         string runtime = Source("src", "ConcernedForeman", "Runtime", "Construction", "ShelterConstructionRuntime.cs");
-        Assert.Contains("_witness = new WitnessedBuildMaterials(_materials, plans.Build, PlanEvidence);", runtime);
+        Assert.Matches(new Regex(@"_witness = new WitnessedBuildMaterials\(\s*_materials, plans\.Build, PlanEvidence,"), runtime);
+        Assert.Contains("uncertain: () => _materials.Uncertain,", runtime);
+        Assert.Contains("measurable: () => _materials.CanMeasure(_orders.Journal),", runtime);
+        Assert.Contains("mayPutBack: _materials.CouldPutBackAny);", runtime);
         Assert.Contains("loopMaterials = _witness;", runtime);
         Assert.Matches(new Regex(@"new WorkerBuildWalk\(motion, \(\) => _job\),\s*loopMaterials,"), runtime);
         Assert.Contains("_witness?.Ended(true, \"the shelter is finished\");", runtime);

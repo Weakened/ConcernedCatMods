@@ -242,6 +242,17 @@ internal sealed class ThorsteinWorkPlan
             return false;
         }
 
+        if (_standing == ThorsteinPlanStanding.Recovered && (!evidence.MayWork || evidence.BodiesAnswering != 1))
+        {
+            // #379 review: a peer connected or his body not yet here is a
+            // condition that passes. Revalidating against it would refund (or,
+            // with a load, stop for a person) a plan nothing is wrong with. It
+            // waits, Recovered, and writes nothing.
+            sentence = "Thorstein's " + Job + " plan waits to be taken up again until " +
+                (!evidence.MayWork ? "work is allowed here" : "his body is here") + "; nothing moves.";
+            return false;
+        }
+
         if (_standing == ThorsteinPlanStanding.Recovered && !Revalidate(evidence))
         {
             sentence = _sentence;
@@ -258,7 +269,8 @@ internal sealed class ThorsteinWorkPlan
         _standing = ThorsteinPlanStanding.Running;
         if ((!run.State.World.Matches(evidence.World) &&
                 !Write(run.Reattach(evidence.World, "taken up again in this world load"), "re-attach the plan to this world load")) ||
-            !Write(run.Record(run.State.WithRoute(sourceKey, destinationKey, string.Empty)), "name this stretch of work") ||
+            (!SameRoute(run.State, sourceKey, destinationKey) &&
+                !Write(run.Record(run.State.WithRoute(sourceKey, destinationKey, string.Empty)), "name this stretch of work")) ||
             !WalkToExecuting(load, "what he carries was measured again when the work resumed, not fetched") ||
             !Restate(load, "what he carries was measured again when the work resumed, not fetched"))
         {
@@ -729,6 +741,11 @@ internal sealed class ThorsteinWorkPlan
         stacks.Sort((left, right) => string.CompareOrdinal(left.Material.ItemName, right.Material.ItemName));
         return stacks.Count == 0 ? Nothing : stacks;
     }
+
+    private static bool SameRoute(NpcPlanState state, string sourceKey, string destinationKey) =>
+        string.Equals(state.SourceKey, sourceKey ?? string.Empty, StringComparison.Ordinal) &&
+        string.Equals(state.DestinationKey, destinationKey ?? string.Empty, StringComparison.Ordinal) &&
+        state.VehicleKey.Length == 0;
 
     private static bool SameLoad(IReadOnlyList<NpcMaterialStack> left, IReadOnlyList<NpcMaterialStack> right)
     {

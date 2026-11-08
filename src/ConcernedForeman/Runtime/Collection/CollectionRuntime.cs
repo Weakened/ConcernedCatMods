@@ -465,7 +465,8 @@ internal sealed class CollectionRuntime
                         : _plans.Resolve(args.Length > 1 ? args[1] : null);
                 default:
                     return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold] [gunnar], " +
-                        "rebind (look at the chest), pause, resume, cancel, area [list | next | default | <name>], fell.";
+                        "rebind (look at the chest), pause, resume, cancel, area [list | next | default | <name>], fell, " +
+                        "resolve [collect | build].";
             }
         }
         catch (Exception exception)

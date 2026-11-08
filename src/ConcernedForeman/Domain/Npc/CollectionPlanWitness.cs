@@ -44,9 +44,16 @@ internal sealed class CollectionPlanWitness : ICollectionWorkWitness
             return true;
         }
 
-        reason = ReasonOf(_plan);
+        reason = _plan.Standing == ThorsteinPlanStanding.Recovered
+            ? WaitingReason(_evidence())
+            : ReasonOf(_plan);
         return false;
     }
+
+    /// <summary>A recovered plan that waits for a passing condition pauses the
+    /// order with that condition, never "needs attention".</summary>
+    private static CollectionAttentionReason WaitingReason(in NpcPlanEvidence evidence) =>
+        !evidence.MayWork ? CollectionAttentionReason.NoAuthority : CollectionAttentionReason.WorkerBodyLost;
 
     public bool Intend(string note, out CollectionAttentionReason reason, out string why)
     {

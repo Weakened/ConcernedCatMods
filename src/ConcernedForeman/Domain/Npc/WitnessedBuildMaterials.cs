@@ -23,10 +23,27 @@ internal sealed class WitnessedBuildMaterials : IBuildMaterials
     private readonly IBuildMaterials _inner;
     private readonly ThorsteinWorkPlan _plan;
     private readonly Func<NpcPlanEvidence> _evidence;
+    private readonly Func<string?> _uncertain;
+    private readonly Func<bool> _measurable;
+    private readonly Func<bool> _mayPutBack;
     private string _tag = string.Empty;
 
-    internal WitnessedBuildMaterials(IBuildMaterials inner, ThorsteinWorkPlan plan, Func<NpcPlanEvidence> evidence)
+    /// <param name="uncertain">The inner materials' own latch for a movement
+    /// nobody can vouch for; null when there is none.</param>
+    /// <param name="measurable">Whether what he carries for the order can be
+    /// read now: his inventory opens and the order's holdings are bound to
+    /// this world load. False is "unknown", never "nothing".</param>
+    /// <param name="mayPutBack">Whether a put-back could move anything now. A
+    /// put-back that cannot is asked of the inner materials without a plan
+    /// write, so a withdrawn order whose chest is out of reach does not rewrite
+    /// the plan every round.</param>
+    internal WitnessedBuildMaterials(
+        IBuildMaterials inner, ThorsteinWorkPlan plan, Func<NpcPlanEvidence> evidence,
+        Func<string?>? uncertain = null, Func<bool>? measurable = null, Func<bool>? mayPutBack = null)
     {
+        _uncertain = uncertain ?? (() => null);
+        _measurable = measurable ?? (() => true);
+        _mayPutBack = mayPutBack ?? (() => true);
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         if (!string.Equals(plan.JobId, ThorsteinWorkPlan.BuildJobId, StringComparison.Ordinal))
@@ -41,8 +58,13 @@ internal sealed class WitnessedBuildMaterials : IBuildMaterials
 
     /// <summary>What he carries for the order, by item name, as the plan
     /// records it.</summary>
-    internal IReadOnlyList<KeyValuePair<string, int>> Measure()
+    internal IReadOnlyList<KeyValuePair<string, int>>? Measure()
     {
+        if (!_measurable())
+        {
+            return null;
+        }
+
         MaterialTally carried = _inner.Carried;
         var counts = new List<KeyValuePair<string, int>>(carried.Kinds);
         foreach (string item in carried.Items)
@@ -84,7 +106,7 @@ internal sealed class WitnessedBuildMaterials : IBuildMaterials
             throw;
         }
 
-        _plan.Conclude(true, Measure(), "drew: " + draw, out _);
+        _plan.Conclude(_uncertain() == null, Measure(), "drew: " + draw, out _);
         return draw;
     }
 
@@ -110,8 +132,9 @@ internal sealed class WitnessedBuildMaterials : IBuildMaterials
 
         // The settlement record's CommitStarted/CommitFinished is the custody
         // answer. A commit it could not finish is held there as a named repair,
-        // and the plan says nobody can vouch for it either.
-        bool established = committed || failure.Length != 0;
+        // and the inner latch says so: then the plan says nobody can vouch for
+        // it either, and stops for a person.
+        bool established = _uncertain() == null && (committed || failure.Length != 0);
         if (!_plan.Conclude(established, Measure(), committed ? "placed and paid" : "not placed: " + failure, out string stopped) &&
             committed)
         {
@@ -123,6 +146,19 @@ internal sealed class WitnessedBuildMaterials : IBuildMaterials
 
     public MaterialTally PutBack(out string failure)
     {
+        if (!_mayPutBack())
+        {
+            // Nothing can move: the inner refusal is asked for its sentence,
+            // and the plan is not touched.
+            MaterialTally none = _inner.PutBack(out failure);
+            if (!none.IsEmpty)
+            {
+                _plan.Stop("material was put back without its announcement (" + none.Describe() + "); resolve it.");
+            }
+
+            return none;
+        }
+
         if (!Announce("about to put back what he carries", out string why))
         {
             failure = why;
@@ -140,7 +176,7 @@ internal sealed class WitnessedBuildMaterials : IBuildMaterials
             throw;
         }
 
-        _plan.Conclude(true, Measure(), "put back " + back.Describe(), out _);
+        _plan.Conclude(_uncertain() == null, Measure(), "put back " + back.Describe(), out _);
         return back;
     }
 

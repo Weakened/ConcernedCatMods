@@ -164,7 +164,11 @@ internal sealed class ShelterConstructionRuntime
         IBuildMaterials loopMaterials = _materials;
         if (plans != null)
         {
-            _witness = new WitnessedBuildMaterials(_materials, plans.Build, PlanEvidence);
+            _witness = new WitnessedBuildMaterials(
+                _materials, plans.Build, PlanEvidence,
+                uncertain: () => _materials.Uncertain,
+                measurable: () => _materials.CanMeasure(_orders.Journal),
+                mayPutBack: _materials.CouldPutBackAny);
             plans.MeasureBuild = _witness.Measure;
             loopMaterials = _witness;
         }
@@ -304,6 +308,7 @@ internal sealed class ShelterConstructionRuntime
                         try
                         {
                             _loop.RetryFinishedReturn();
+                            _witness?.Ended(true, "the shelter is finished and what he held went back");
                             if (!_materials.HasUnspent) _cleanupJob = null;
                         }
                         finally

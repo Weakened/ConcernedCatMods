@@ -1844,13 +1844,14 @@ internal sealed class SoloCollectionLoop
             bool depositKnown = receipt.Outcome == TransferOutcome.Completed || receipt.Outcome == TransferOutcome.AlreadySatisfied ||
                 receipt.Outcome == TransferOutcome.Partial || receipt.Outcome == TransferOutcome.Refused ||
                 receipt.Outcome == TransferOutcome.Stale;
-            if (!Witnessed(depositKnown, "the deposit: " + receipt.Outcome + ", " + receipt.Accepted + " of " + count, now))
-            {
-                return;
-            }
-
             LastEvidence = "Deposit " + intent.Request + ": " + receipt.Outcome + ", " + receipt.Accepted + " of " + count +
                 " " + item + (receipt.Evidence.Length > 0 ? " (" + receipt.Evidence + ")" : string.Empty);
+            string depositEvidence = LastEvidence;
+            if (!Witnessed(depositKnown, "the deposit: " + receipt.Outcome + ", " + receipt.Accepted + " of " + count, now))
+            {
+                LastEvidence = depositEvidence + " " + LastEvidence;
+                return;
+            }
 
             switch (receipt.Outcome)
             {
