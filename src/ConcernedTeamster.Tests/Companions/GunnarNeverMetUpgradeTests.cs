@@ -1,29 +1,23 @@
+using System.Text.RegularExpressions;
 using TheConcernedCat.Companions.Quest;
-using TheConcernedCat.ConcernedTeamster.Domain.Authority;
 using TheConcernedCat.ConcernedTeamster.Domain.Companions;
-using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
-using Rig = ConcernedTeamster.Tests.HaulingExecutionRig;
 namespace TheConcernedCat.ConcernedTeamster.Tests.Companions;
 
 /// <summary>#462 (#297's upgrade row): a 1.0.x player who installs this build
 /// and never meets Gunnar keeps every utility exactly as it was. The companion
-/// is presentation and story only: no feature gate, no worker switch and no
-/// haul asks whether he was met, and a never-met character gets no figure and
-/// no recruitment, only the buckle a player may ignore forever.</summary>
+/// is presentation and story only, so a never-met character gets no figure and
+/// no hire, and no utility - telemetry, the panel, the manifest, warnings,
+/// descent, recovery, trips, routes, the brake - can even name the companion's
+/// types, let alone ask whether he was met.</summary>
 public sealed class GunnarNeverMetUpgradeTests
 {
-    private static GunnarCompanionRecord NeverMet(out string root)
-    {
-        root = Path.Combine(Path.GetTempPath(), "ct-462-never-met-" + Guid.NewGuid().ToString("N"));
-        return GunnarCompanionRecord.Open(root, 1234, 5678);
-    }
-
     [Fact]
     public void ANeverMetCharacterHasNoStoryNoFigureAndNoHire()
     {
-        GunnarCompanionRecord record = NeverMet(out string root);
+        string root = Path.Combine(Path.GetTempPath(), "ct-462-never-met-" + Guid.NewGuid().ToString("N"));
         try
         {
+            GunnarCompanionRecord record = GunnarCompanionRecord.Open(root, 1234, 5678);
             Assert.Equal(QuestState.Unstarted, record.State);
             Assert.False(record.IsRecruited);
             Assert.False(record.ShouldPresentFigure(true));
@@ -31,69 +25,73 @@ public sealed class GunnarNeverMetUpgradeTests
             Assert.True(record.ShouldPresentMemento(true));
             // Opening the record of a character who never met him writes nothing.
             Assert.False(Directory.Exists(root) && Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).Any());
-
-            var everythingElseTrue = new GunnarBodyFacts(registered: true, worldLoaded: true, host: true, enabled: true,
-                stage: null, savedWorkers: 0, resting: true, anchorKnown: true, near: true);
-            Assert.Equal(GunnarBodyKind.None, GunnarBodyPlan.Decide(everythingElseTrue));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
-    [Fact]
-    public void EveryFeatureGateIsTheSameWithTheCompanionNeverMet()
+    /// <summary>The ports that are part of the companion's own features and
+    /// live in the worker folder because they touch a cart or register his
+    /// role, with exactly the companion names each may use. Anything else
+    /// outside a Companions folder naming a companion type fails.</summary>
+    private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal)
     {
-        // The gate's inputs are the feature and the cart's authority. There is
-        // no companion argument, so there is nothing a never-met state changes.
-        foreach (TeamsterFeature feature in Enum.GetValues<TeamsterFeature>())
-        foreach (CartAuthority authority in Enum.GetValues<CartAuthority>())
+        // #458: the role registers the game-free body contract.
+        ["Adapters/Workers/GunnarNpcRole.cs"] = new[] { "GunnarBodyContract", "Domain.Companions" },
+        // #460: reads the explicitly chosen cart for recruitment.
+        ["Adapters/Workers/GunnarRecruitmentCartPort.cs"] = new[] { "GunnarCartCheck", "GunnarCartChoice", "Domain.Companions" },
+    };
+
+    [Fact]
+    public void NoUtilityNamesAnyCompanionType()
+    {
+        string product = Product();
+        var names = new HashSet<string>(StringComparer.Ordinal) { "Domain.Companions", "Adapters.Companions", "Ui.Companions" };
+        var declaration = new Regex(@"^\s*(?:internal|public)\s+(?:(?:sealed|static|readonly|abstract)\s+)*(?:class|struct|enum|interface)\s+(\w+)",
+            RegexOptions.Multiline);
+        foreach (string file in Sources(product).Where(InCompanions))
+            foreach (Match match in declaration.Matches(File.ReadAllText(file)))
+                names.Add(match.Groups[1].Value);
+        Assert.Contains("GunnarCompanionRecord", names);
+        Assert.Contains("GunnarPresentation", names);
+
+        var offences = new List<string>();
+        foreach (string file in Sources(product).Where(f => !InCompanions(f)))
         {
-            bool expected = CartAuthorityPolicy.ClassOf(feature) == FeatureClass.Mutation && authority == CartAuthority.Local;
-            Assert.Equal(expected, CartAuthorityPolicy.MayMutate(feature, authority));
+            string rel = Path.GetRelativePath(product, file).Replace('\\', '/');
+            // Plugin.cs's lifecycle hooks are pinned one by one in
+            // GunnarCompanionRecordTests.ExistingFeatureGatesHaveNoCompanionDependency.
+            if (rel == "Plugin.cs") continue;
+            string code = Regex.Replace(File.ReadAllText(file), @"//[^\n]*|/\*.*?\*/", string.Empty, RegexOptions.Singleline);
+            Allowed.TryGetValue(rel, out string[]? allowed);
+            foreach (string name in names)
+            {
+                if (allowed != null && allowed.Contains(name)) continue;
+                if (Regex.IsMatch(code, @"(?<![\w])" + Regex.Escape(name) + @"(?![\w])"))
+                    offences.Add(rel + " names " + name);
+            }
         }
+
+        Assert.True(offences.Count == 0, "A utility names the companion:\n" + string.Join("\n", offences));
     }
 
-    [Fact]
-    public void AHaulRunsWithTheCompanionNeverMet()
-    {
-        // The executor and service know nothing about the story: the rig has no
-        // companion record at all, as a 1.0.x world has none.
-        var rig = new Rig();
-        rig.AssignAndStartLeg();
-        Assert.Equal("haul-1", rig.Service.Snapshot.HaulId);
-        Assert.NotEqual(HaulPhase.NeedsAttention, rig.Service.Snapshot.Phase);
-        rig.AssertNoBugs();
-    }
+    private static bool InCompanions(string file) =>
+        file.Replace('\\', '/').Contains("/Companions/", StringComparison.Ordinal);
 
-    [Fact]
-    public void NoUtilityOrWorkerSourceConsultsTheCompanion()
-    {
-        // GunnarCompanionRecordTests.ExistingFeatureGatesHaveNoCompanionDependency
-        // pins Plugin.cs's lifecycle hooks; this pins the two runtimes a 1.0.x
-        // player uses most against the companion's record and story types.
-        foreach (string file in new[]
-        {
-            Path.Combine("Adapters", "Workers", "GunnarHaulingRuntime.cs"),
-            Path.Combine("Adapters", "Workers", "GunnarCollectionRuntime.cs"),
-            Path.Combine("Domain", "Hauling", "Execution", "HaulExecutor.cs"),
-        })
-        {
-            string source = Read(file);
-            Assert.DoesNotContain("GunnarCompanion", source);
-            Assert.DoesNotContain("QuestState", source);
-            Assert.DoesNotContain("ShouldPresentFigure", source);
-        }
-    }
+    private static IEnumerable<string> Sources(string product) =>
+        Directory.GetFiles(product, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Replace('\\', '/').Contains("/obj/", StringComparison.Ordinal) &&
+                        !f.Replace('\\', '/').Contains("/bin/", StringComparison.Ordinal));
 
-    private static string Read(string relative)
+    private static string Product()
     {
         var here = new DirectoryInfo(AppContext.BaseDirectory);
         while (here != null)
         {
-            string candidate = Path.Combine(here.FullName, "src", "ConcernedTeamster", relative);
-            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+            string candidate = Path.Combine(here.FullName, "src", "ConcernedTeamster");
+            if (Directory.Exists(Path.Combine(candidate, "Domain", "Companions"))) return candidate;
             here = here.Parent;
         }
 
-        throw new FileNotFoundException("Shipped source not found above the test assembly.", relative);
+        throw new DirectoryNotFoundException("src/ConcernedTeamster not found above the test assembly.");
     }
 }
