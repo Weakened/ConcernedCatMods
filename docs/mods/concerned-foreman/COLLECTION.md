@@ -347,6 +347,11 @@ and the commit.
 | F4 what is never felled | In the area: a full-size beech, birch or fir; a berry bush; a sapling you planted; a bush | `cf_collect fell` never strikes them. If one of them is the only candidate, it says no small tree may be felled. **OWNER GO-AROUND PENDING** |
 | F5 his axe | Note the axe's durability, then fell two trees | Durability is unchanged: vanilla wears a weapon only for a player attacker. **OWNER GO-AROUND PENDING** |
 | F6 vanilla drops only | Pick up the drops and count them against the drop table | Exactly what the game dropped; nothing extra, nothing in Thorstein. **OWNER GO-AROUND PENDING** |
+| F7 felling in an order (#282 leaf 2) | Setting on. In a map area (or harvest area) with two or three branches and two small trees, all 15 m from anything built, look at a chest and `cf_collect start 0 8`; stand more than 15 m from the trees | He picks every branch first, then walks to a tree and strikes it about once every 1.5 s until it falls. He picks up only the Wood that tree dropped; resin and fir cones stay on the ground. `cf_collect status` counts exactly the Wood that reached him and then the chest. **OWNER GO-AROUND PENDING** |
+| F8 never more than needed | `cf_collect start 0 2` with only a small fir in the area | He fells it and takes two Wood; the rest of what it dropped lies on the ground as ordinary items. The order completes at 2 delivered. **OWNER GO-AROUND PENDING** |
+| F9 standing close | During F7, stand within 15 m of the tree he is at | He stops striking and the status says someone is within 15 m; step back and he resumes. If you stay about 30 s he leaves that tree for the next survey. **OWNER GO-AROUND PENDING** |
+| F10 a cleared area | Give an order for more Wood than the area's branches and small trees hold | When nothing is left he pauses with "exhausted", not "no eligible sources". **OWNER GO-AROUND PENDING** |
+| F11 where he never fells in an order | Repeat F7 (a) with the setting off, (b) in the default camp circle, (c) with a tree within 15 m of a built piece | (a) and (b): branches only, and no tree is struck. (c) That tree is never walked to. **OWNER GO-AROUND PENDING** |
 
 ### 7.4 Runtime unknowns to settle while doing the above
 

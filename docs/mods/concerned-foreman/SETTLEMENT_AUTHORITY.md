@@ -314,7 +314,8 @@ Thorstein may fell exactly four small trees: `Beech_small1`, `Beech_small2`, `Fi
 - **Clearances.** Never within 15 m of a player or a player-built piece, and never through a ward.
 - **Default.** Off (`Collection/ThorsteinFellsSmallTrees`).
 - **Durability.** The axe follows vanilla's rule, which wears no durability for a non-player attacker.
-- **Drops.** Vanilla's own. In this leaf they stay on the ground. Taking them is granted only as same-call custody of the drops his own hit produced, and is the next leaf's work.
+- **Drops.** Vanilla's own. For `cf_collect fell` they stay on the ground. Inside a collection order (#282 leaf 2) only the Wood drops his own hit produced are taken, by instance id in the same call, never more than the order still needs or he and the chest can hold; everything else stays on the ground.
+- **In an order.** Small trees are the last labour tier, after loose stones and branches: one hit per swing, every gate re-asked before each hit, each hit journaled as a pickup. A cleared area pauses `SourcesExhausted`. The hit's verb is pinned to the command and the order's strike (the #282 felling strike audit).
 - **Decided but unused.** `TreeBase` and `TreeLog` damage were decided, but the small trees are not `TreeBase`, so neither has a call site. The D19 felling audit refuses both names, and any other `.Damage(`, across all of Foreman and the shared trees it compiles in.
 - **The full record** is `docs/settlement/cart-and-collection/DECISIONS.md` D19.
 

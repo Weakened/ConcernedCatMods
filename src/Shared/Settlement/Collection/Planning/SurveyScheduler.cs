@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Worker;
+using TheConcernedCat.Workers.Felling;
 
 namespace TheConcernedCat.Settlement.Collection.Planning;
 
@@ -26,11 +27,49 @@ internal readonly struct SurveyCandidate
         Location = location;
         Ward = ward;
         EstimatedYield = estimatedYield;
+        TreeFacts = null;
+        BuiltPieceClearanceMetres = float.NaN;
+    }
+
+    /// <summary>A D19 small tree (#282): its facts are the felling facts, not a
+    /// pickable's, and the flat distance to the nearest player-built piece is
+    /// measured at survey time so a tree beside a building is never walked to.
+    /// </summary>
+    public SurveyCandidate(
+        SourceKey key,
+        SmallTreeFacts treeFacts,
+        bool ownedHere,
+        bool inInterior,
+        LocationStanding location,
+        AreaAccess ward,
+        float builtPieceClearanceMetres,
+        int estimatedYield)
+    {
+        Key = key;
+        Facts = null;
+        TreeFacts = treeFacts;
+        OwnedHere = ownedHere;
+        InInterior = inInterior;
+        Location = location;
+        Ward = ward;
+        BuiltPieceClearanceMetres = builtPieceClearanceMetres;
+        EstimatedYield = estimatedYield;
     }
 
     public SourceKey Key { get; }
 
-    public NaturalSourceFacts Facts { get; }
+    /// <summary>A stone's or a branch's facts; null for a small tree.</summary>
+    public NaturalSourceFacts? Facts { get; }
+
+    /// <summary>A small tree's facts; null for a stone or a branch.</summary>
+    public SmallTreeFacts? TreeFacts { get; }
+
+    public bool IsSmallTree => TreeFacts.HasValue;
+
+    /// <summary>Small trees only: the flat distance to the nearest player-built
+    /// piece, infinity when there is none. NaN (never measured) refuses.
+    /// </summary>
+    public float BuiltPieceClearanceMetres { get; }
 
     public bool OwnedHere { get; }
 
@@ -328,8 +367,29 @@ internal sealed class SurveyScheduler
             return true;
         }
 
-        NaturalSourceVerdict verdict = NaturalSourcePredicate.Classify(candidate.Facts);
-        SourceAvailability? availability = NaturalSourcePredicate.SurveyAvailability(verdict, site);
+        NaturalSourceKind kind;
+        SourceAvailability? availability;
+        if (candidate.IsSmallTree)
+        {
+            // D19 (#282): the default camp circle never authorises felling, so
+            // a tree there is not an observation at all, whatever the probe
+            // sent. The adapter does not send one; this is the second lock.
+            if (Scope.Source == WorkScopeSource.DefaultCampCircle)
+            {
+                return true;
+            }
+
+            kind = NaturalSourceKind.SmallTree;
+            availability = SmallTreeSources.SurveyAvailability(
+                candidate.TreeFacts!.Value, site, candidate.BuiltPieceClearanceMetres);
+        }
+        else
+        {
+            NaturalSourceVerdict verdict = NaturalSourcePredicate.Classify(candidate.Facts!);
+            kind = verdict.Kind;
+            availability = NaturalSourcePredicate.SurveyAvailability(verdict, site);
+        }
+
         if (availability == null)
         {
             Accounting.RejectedNotNatural++;
@@ -353,10 +413,11 @@ internal sealed class SurveyScheduler
             recorded = SourceAvailability.Unknown;
         }
 
+        CollectedResource yields = NaturalSourceAllowlist.YieldOf(kind);
         _observations.Add(new SourceObservation(
-            candidate.Key, verdict.Kind, verdict.Yields, candidate.EstimatedYield, recorded,
+            candidate.Key, kind, yields, candidate.EstimatedYield, recorded,
             SourceReachability.NotChecked, Revision, now));
-        Accounting.Count(verdict.Yields, recorded);
+        Accounting.Count(yields, recorded);
         return true;
     }
 
