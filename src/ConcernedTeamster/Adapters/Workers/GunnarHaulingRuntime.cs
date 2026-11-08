@@ -40,6 +40,30 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// </summary>
 internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExecutionLog
 {
+    /// <summary>#458: the hand-over from Gunnar's figure at home to his worker
+    /// body. Figure down, presentation lease released, worker lease claimed;
+    /// <paramref name="standing"/> is where the figure stood. False refuses the
+    /// spawn.</summary>
+    internal delegate bool WorkerBodyHandOver(out Vector3? standing, out string refusal);
+
+    /// <summary>#458: asked by <c>ct_haul spawn</c> before the body is created.
+    /// Null (no figure runtime) hands over from nothing.</summary>
+    internal WorkerBodyHandOver? TakeWorkerBody { get; set; }
+
+    /// <summary>#458: the body was not placed after all; the hand-over's worker
+    /// lease is given back.</summary>
+    internal Action? ReleaseWorkerBody { get; set; }
+
+    /// <summary>#458: a body appeared or left the world through this runtime.</summary>
+    internal Action? BodiesChanged { get; set; }
+
+    /// <summary>#458: told before the shared NPC runtime ends the world, so a
+    /// figure is down before its lease ends.</summary>
+    internal Action? BeforeWorldEnds { get; set; }
+
+    /// <summary>#458: one line about his figure at home, for <c>ct_haul status</c>.</summary>
+    internal Func<string>? PresentationStatus { get; set; }
+
     // Keep the vanilla network-scene probe inside the worker boundary. Outside
     // that boundary ZNetScene is forbidden because it can also remove network
     // objects, including a carrying worker and its inventory.
@@ -81,8 +105,11 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// <summary>Where Gunnar's one body stands, from this runtime's census
     /// (#379). The collection tour's plan is revalidated only once this says
     /// Bound, NotFound or Duplicated - Searching would be deciding before the
-    /// census has finished, which is the race a second Gunnar comes from.</summary>
-    internal WorkerBodyStatus BodyStatus => _bodyStatus;
+    /// census has finished, which is the race a second Gunnar comes from.
+    /// Unspecified once the runtime has faulted (#458): a census nobody
+    /// advances any more is not an answer, so the figure and the buckle show
+    /// nothing and a tour waits.</summary>
+    internal WorkerBodyStatus BodyStatus => _faulted ? WorkerBodyStatus.Unspecified : _bodyStatus;
 
     internal GunnarHaulService Service { get; private set; } = null!;
 
@@ -454,6 +481,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         // already gone is refused, which would leave the identity held by a job
         // whose string nothing still has.
         Shutdown("the world unloaded");
+        BeforeWorldEnds?.Invoke();
         NpcRoleRegistry.Shared.EndWorldLoad();
     }
 
@@ -698,6 +726,12 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         text.Append("Seam: ").Append(_seam.IsAvailable ? "available" : "UNAVAILABLE (" + _seam.UnavailableDetail + ")");
         text.Append(". Prefab: ").Append(TeamsterWorkerPrefab.IsReady ? "registered" : TeamsterWorkerPrefab.LastFailure).AppendLine();
         text.Append("Body: ").Append(_bodyStatus).Append(" - ").Append(WorkerBodyCensus.Describe(_bodyStatus)).AppendLine();
+        Func<string>? presentation = PresentationStatus;
+        if (presentation != null)
+        {
+            text.Append(presentation()).AppendLine();
+        }
+
         HaulExecutor? executor = _executor;
         if (executor == null)
         {
@@ -821,19 +855,39 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return "Refused: no local player to bring Gunnar to.";
         }
 
-        Vector3 position = player.transform.position + (player.transform.forward * 3f);
-        if (ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(position, out float ground))
+        // #458: the hand-over, before the body exists. His figure at home comes
+        // down and gives up its lease, and the worker lease is claimed; only then
+        // may a body be placed, and it is placed where the figure stood.
+        Vector3? standing = null;
+        WorkerBodyHandOver? handOver = TakeWorkerBody;
+        if (handOver != null && !handOver(out standing, out string handOverRefusal))
+        {
+            return "Refused: Gunnar's figure at home could not hand over to his worker body (" + handOverRefusal + ").";
+        }
+
+        // The figure's spot is already a probed floor (it may be a house floor,
+        // above the terrain), so only the fallback in front of the player is
+        // dropped to the ground.
+        Vector3 position = standing ?? player.transform.position + (player.transform.forward * 3f);
+        if (!standing.HasValue && ZoneSystem.instance != null && ZoneSystem.instance.GetGroundHeight(position, out float ground))
         {
             position.y = ground;
         }
 
-        TeamsterWorkerAI? body = TeamsterWorkerPrefab.Spawn(position, Quaternion.LookRotation(-player.transform.forward), out string failure);
+        Vector3 toPlayer = player.transform.position - position;
+        toPlayer.y = 0f;
+        Quaternion facing = standing.HasValue && toPlayer.sqrMagnitude > 0.01f
+            ? Quaternion.LookRotation(toPlayer.normalized)
+            : Quaternion.LookRotation(-player.transform.forward);
+        TeamsterWorkerAI? body = TeamsterWorkerPrefab.Spawn(position, facing, out string failure);
         if (body == null)
         {
+            ReleaseWorkerBody?.Invoke();
             return "Refused: " + failure + ".";
         }
 
         _persistedBodies.Add(body.GetComponent<ZNetView>().GetZDO().m_uid);
+        BodiesChanged?.Invoke();
         return "Gunnar arrived at " + Format(position) + ". He stays in this world until you retire him.";
     }
 
@@ -883,6 +937,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
             _persistedBodies.Remove(view.GetZDO().m_uid);
             view.Destroy();
+            BodiesChanged?.Invoke();
             return "That worker body was retired; Gunnar's own binding is unchanged." +
                 (pointedVerdict == RetireVerdict.ForcedAndLost
                     ? " " + WorkerRetirement.Describe(pointedVerdict, pointedHolds)
@@ -920,6 +975,9 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         switch (_executor.RetireBody())
         {
             case BodyRetirementOutcome.Retired:
+                // #458: the next presentation pass decides whether he is shown
+                // at home again; it waits for the census to say he is gone.
+                BodiesChanged?.Invoke();
                 return "Gunnar was retired; his body left the world." + lost;
             case BodyRetirementOutcome.RefusedStillHitched:
                 return "Refused: a cart still holds Gunnar's joint and would not let go. Take the cart yourself, then retire him.";

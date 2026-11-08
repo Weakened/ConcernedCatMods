@@ -37,4 +37,4 @@ suppression, every actual attention reason and panel key, unknown reason refusal
 objective/tools-only behavior, translation use and withheld knowledge hints.
 OWNER GO-AROUND PENDING: real use-key talk, localizable names/lines after catalog
 merge, reason changing with the running haul, repetition/voice feel and no ambient
-speech across relog. Native figure integration (#458) is still required.
+speech across relog. The figure (#458) exists; binding its talk point is this issue's.

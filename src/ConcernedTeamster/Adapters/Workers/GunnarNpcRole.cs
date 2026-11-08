@@ -24,15 +24,21 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// <see cref="GunnarHaulingDefaults"/>, which is where they already were and
 /// where the shipped body factory still reads them. There is no second spelling
 /// of either, so there is nothing for the two to drift apart about, and nothing
-/// this file does reaches a save.</summary>
+/// this file does reaches a save.
+///
+/// <b>Worker with presentation (#458).</b> Since Concerned NPC 0.5.0 the
+/// contract is <c>ForWorkerWithPresentation</c>: the arbiter may grant his
+/// resting figure at home as well as his saved worker body, never both at once.
+/// The durable facts above are unchanged, so no saved world migrates.</summary>
 internal sealed class GunnarNpcRole : INpcRole
 {
     private GunnarNpcRole(NpcIdentity identity)
     {
         Identity = identity;
-        Body = NpcBodyContract.ForWorker(
-            GunnarHaulingDefaults.WorkerPrefabName,
-            GunnarHaulingDefaults.WorkerKeyPrefix);
+        // #458: the same prefab name and key prefix, now admitting his
+        // presentation figure too (one kind at a time). Built in the game-free
+        // layer so the contract registered here is the one the tests check.
+        Body = Domain.Companions.GunnarBodyContract.Create();
         Paths = new TeamsterDataPaths();
     }
 
