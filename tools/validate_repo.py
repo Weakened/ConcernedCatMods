@@ -2759,6 +2759,9 @@ FOREMAN_AUDITED_CAPABILITIES = (
     )),
     ("BaseAI.MoveTo", re.compile(r"(?<![A-Za-z0-9_])MoveTo\s*\("), (
         ("Runtime/Settlement/ForemanWorkerAI.cs", _foreman_exact(r"(?<![A-Za-z0-9_])MoveTo\s*\(\s*dt\s*,\s*goal\s*,\s*_planner\s*\.\s*Goal\s*\.\s*ArrivalTolerance\s*,\s*run\s*:\s*false\s*\)"), 1),
+        # #497: not BaseAI - the shared climb model's own method of the same
+        # name, which sets a progress number and touches no body or engine.
+        ("../Shared/Ladders/ClimbTrack.cs", _foreman_exact(r"\bpublic\s+void\s+MoveTo\s*\(\s*float\s+progress\s*\)"), 1),
     )),
     ("physics position/velocity write", re.compile(
         r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity)\s*[-+*/&|^]?=(?!=)"), (
@@ -3527,15 +3530,31 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
             "point the audit at the runtime's new home rather than leaving it green", errors)
         return []
 
+    # #497: the scope is the whole product less obj/ and bin/, plus every shared
+    # tree its project file compiles in - the scope the D19 felling audit reads,
+    # taken from the same reader so the two cannot drift. Runtime/ alone left
+    # Ui/, Plugin.cs and Domain/ unread, the folder-as-boundary pattern #401
+    # closed for Teamster. Product files keep their product-relative keys; a
+    # shared file is keyed `../Shared/<tree>/...`, which no product-relative
+    # path can spell, so a shared file never inherits a product file's
+    # allowance by name. A scope the reader could not establish is a failure
+    # here too, not a smaller green.
+    scope_errors: list[str] = []
+    scoped, linked = _foreman_felling_sources(scope_errors)
+    hits = len(scope_errors)
+    for message in scope_errors:
+        fail(message.replace("D19 felling audit", "#400 runtime capability audit"), errors)
+    product_prefix = foreman_dir.relative_to(ROOT).as_posix() + "/"
     sources: dict[str, str] = {}
-    for path in sorted(runtime_dir.rglob("*.cs")):
-        parts = path.relative_to(foreman_dir).parts
-        if any(part in ("obj", "bin") for part in parts):
-            continue
-        sources[path.relative_to(foreman_dir).as_posix()] = _strip_foreman_cs_comments(
-            path.read_text(encoding="utf-8-sig"))
+    for rel, code in scoped.items():
+        if rel.startswith(product_prefix):
+            sources[rel[len(product_prefix):]] = code
+        else:
+            sources["../" + rel[len("src/"):]] = code
 
-    hits = 0
+    def shown(rel: str) -> str:
+        return "src/" + rel[3:] if rel.startswith("../") else f"src/ConcernedForeman/{rel}"
+
     pinned = 0
     for label, broad, allowances in FOREMAN_AUDITED_CAPABILITIES:
         allowed_spans: dict[str, list[tuple[int, int]]] = {}
@@ -3565,7 +3584,7 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
                 hits += 1
                 fail(
                     f"[foreman] #400 runtime capability audit: unpinned {label} in "
-                    f"src/ConcernedForeman/{rel}:{code.count(chr(10), 0, match.start()) + 1}",
+                    f"{shown(rel)}:{code.count(chr(10), 0, match.start()) + 1}",
                     errors)
 
     for label, pattern in FOREMAN_ALWAYS_FORBIDDEN:
@@ -3574,12 +3593,13 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
                 hits += 1
                 fail(
                     f"[foreman] #400 runtime capability audit: forbidden {label} in "
-                    f"src/ConcernedForeman/{rel}:{code.count(chr(10), 0, match.start()) + 1}",
+                    f"{shown(rel)}:{code.count(chr(10), 0, match.start()) + 1}",
                     errors)
 
     return [
-        f"[foreman] #400 runtime capability audit: {len(sources)} source file(s) under "
-        f"src/ConcernedForeman/Runtime, {pinned} direct engine mutation/capability site(s) "
+        f"[foreman] #400 runtime capability audit: {len(sources)} source file(s) - the whole of "
+        "src/ConcernedForeman less obj/ and bin/, and the "
+        f"{len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - {pinned} direct engine mutation/capability site(s) "
         "pinned by full path and exact whitespace-tolerant spelling; SetTrigger, ownership "
         "takeover, unpinned teleport/position/velocity/force writes, item spawning/drop calls, "
         "and arbitrary RPC are refused. This source-text audit strips comments; it does not "
@@ -4186,6 +4206,41 @@ def check_teamster_source_is_plain(errors: list[str]) -> list[str]:
         "\\u/\\U escape, no Unicode format (Cf) character, no U+0085/U+2028/U+2029 and no verbatim identifier "
         "(`x.@Interact(`), so none of those five makes the text a Teamster audit reads differ from the "
         f"text the compiler builds. Still outside every text audit: a call through a delegate ({hits} violations)",
+    ]
+
+
+# #480: the #473 rule above refuses Unicode format (Cf) characters in Teamster's
+# scope only, yet the Steward S1 retire audit and every Foreman audit read names
+# as text the same way, and the compiler drops a Cf character from an identifier,
+# so `Dest<U+00AD>roy(` is Destroy to C# and to no pattern. This refuses one in
+# every product and library source under src/ - every non-test project, and the
+# shared trees, which some product compiles - rather than audit by audit: a rule
+# per audit would leave whatever audit is written next uncovered. Test projects
+# are outside on purpose; a test may need the character as data, and no audit
+# reads a test project as product code. A byte-order mark at the very start of a
+# file is allowed, as in the #473 rule, whose detector this reuses.
+def check_source_has_no_format_characters(errors: list[str]) -> list[str]:
+    """Fails when product or library C# under src/ holds a Cf character (#480)."""
+    label = "[interop] #480 format-character audit"
+    src = ROOT / "src"
+    scanned = 0
+    hits = 0
+    for path in sorted(src.rglob("*.cs")):
+        parts = path.relative_to(src).parts
+        if parts[0].endswith(".Tests") or any(part in ("obj", "bin") for part in parts):
+            continue
+        scanned += 1
+        raw = path.read_text(encoding="utf-8")
+        at = _teamster_lexical_format_character(raw)
+        if at >= 0:
+            hits += 1
+            fail(f"{label}: {path.relative_to(ROOT).as_posix()} holds the format character "
+                 f"U+{ord(raw[at]):04X} at line {raw.count(chr(10), 0, at) + 1} - the compiler drops it "
+                 "from an identifier, so it can split a name such as Destroy where no text audit looks; "
+                 "a string that needs one can build it with (char)0x200B", errors)
+    return [
+        f"{label}: {scanned} product and library source(s) under src/ (test projects, obj/ and bin/ "
+        f"aside) hold no Unicode format (Cf) character but a leading byte-order mark ({hits} violations)",
     ]
 
 
@@ -6869,6 +6924,7 @@ def main() -> int:
     report.extend(check_teamster_ward_queries_are_quiet(errors))
     report.extend(check_teamster_destination_is_pointed_at(errors))
     report.extend(check_teamster_source_is_plain(errors))
+    report.extend(check_source_has_no_format_characters(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
