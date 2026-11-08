@@ -90,10 +90,11 @@ so - as for Teamster's audits in `CLAUDE.md` - the remaining limits are stated r
   run on net10.0 only, so code that branches on the runtime it runs on is a reviewer's job;
 - it does not follow data flow: the values the facts are built from are proved by the port tests, one witness at a time;
 - it cannot see a destruction reached through a delegate, a method group or reflection;
-- it reads names as text, so a Unicode formatting character (category Cf, e.g. a soft hyphen U+00AD or U+200B) written
-  raw inside an identifier - which C# ignores when comparing names - would spell `Destroy` or a second `view` that no
-  pattern here matches (found by the final review of `15eda77`; not refused, recorded here);
 - its scope is `src/ConcernedSteward`; the Concerned NPC library and shared sources it builds on are not scanned.
+
+A Unicode format character (category Cf, e.g. U+00AD or U+200B) written raw inside an identifier, which the final
+review of `15eda77` found and this list used to carry, is no longer a limit: since #480 the repository-wide
+`#480 format-character audit` refuses one in every product and library source under `src/`.
 
 **Still owner go-around pending:** the retire and re-recruit round trip in a running game.
 
