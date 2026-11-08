@@ -27,8 +27,12 @@ public sealed class DoorFamiliesTests
     {
         var donors = DoorFamilies.Census.Select(d => d.Donor).ToList();
         Assert.Equal(donors.Count, donors.Distinct(StringComparer.Ordinal).Count());
-        // 23 prefabs carry a Door component in the 1.0.21 main bundle; three more door-tagged hammer pieces carry none.
-        Assert.Equal(26, donors.Count);
+        // 23 prefabs carry a Door component in the 1.0.21 main bundle; three hammer pieces in the Doors usage tag
+        // carry none (two grausten windows, the crystal wall); three cloth curtains are named like doors and are in
+        // neither (usage.json).
+        Assert.Equal(29, donors.Count);
+        Assert.Equal(6, DoorFamilies.Census.Count(d => d.Kind == DoorDonorClass.NoDoorState));
+        Assert.Equal(11, DoorFamilies.Census.Count(d => d.Kind == DoorDonorClass.NotBuildable));
     }
 
     [Fact]
@@ -50,6 +54,9 @@ public sealed class DoorFamiliesTests
     [InlineData("piece_drawbridge_log", "SpecialSemantics")]
     [InlineData("wood_window", "WindowCovering")]
     [InlineData("piece_cloth_hanging_door", "NoDoorState")]
+    [InlineData("Piece_grausten_window_2x2", "NoDoorState")]
+    [InlineData("Piece_grausten_window_4x2", "NoDoorState")]
+    [InlineData("crystal_wall_1x1", "NoDoorState")]
     [InlineData("piece_dvergr_wood_door", "NotBuildable")]
     [InlineData("dungeon_queen_door", "NotBuildable")]
     public void SpecialPrefabsAreClassifiedExplicitly(string donor, string kind)
@@ -117,6 +124,50 @@ public sealed class DoorFamiliesTests
         Assert.Equal(station, family.Station);
         Assert.Equal(costs, string.Join(",", family.Costs.Select(c => c.Item + ":" + c.Amount)));
         Assert.All(family.Costs, c => Assert.True(c.Amount > 0));
+    }
+
+    [Fact]
+    public void TheSwingConstantsAreTheNativeClipLengths()
+    {
+        // door_animator, darkwood_gate_animator and Flametal_gate_animator opening clips in 1.0.21 (clips.txt).
+        Assert.Equal(0.5f, DoorFamilies.LightSwing);
+        Assert.Equal(1.0f, DoorFamilies.MediumSwing);
+        Assert.Equal(2.0f, DoorFamilies.HeavySwing);
+    }
+
+    /// <summary>The native <c>WearNTear.MaterialType</c> ordinals the adapter will compare against.</summary>
+    [Fact]
+    public void DonorMaterialOrdinalsAreTheGames()
+    {
+        Assert.Equal(new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }, new[]
+        {
+            (int)DonorMaterial.Wood, (int)DonorMaterial.Stone, (int)DonorMaterial.Iron, (int)DonorMaterial.HardWood,
+            (int)DonorMaterial.Marble, (int)DonorMaterial.Ashstone, (int)DonorMaterial.Ancient, (int)DonorMaterial.Ice,
+            (int)DonorMaterial.Timberwood,
+        });
+    }
+
+    /// <summary>Pinned from the installed game (census.json): health, material ordinal, burnable, tokens, names.</summary>
+    [Theory]
+    [InlineData("wood_door", 400f, 0, true, "$piece_wooddoor", "Wood Door", "Wood Trapdoor")]
+    [InlineData("wood_gate", 400f, 0, true, "$piece_woodgate", "Wood Gate", "Wood Gate Trapdoor")]
+    [InlineData("wood_fence_gate", 400f, 0, true, "$piece_woodfencegate", "Roundpole Gate", "Roundpole Trapdoor")]
+    [InlineData("iron_grate", 2000f, 2, false, "$piece_irongate", "Iron Gate", "Iron Gate Trapdoor")]
+    [InlineData("darkwood_gate", 1000f, 3, true, "$piece_darkwoodgate", "Darkwood Gate", "Darkwood Trapdoor")]
+    [InlineData("stave_gate", 1000f, 3, true, "$piece_stavegate", "Timberwood Gate", "Timberwood Trapdoor")]
+    [InlineData("piece_hexagonal_door", 1500f, 3, true, "$piece_hexagonalgate", "Hexagonal Gate", "Hexagonal Trapdoor")]
+    [InlineData("ashwood_door", 1000f, 0, true, "$piece_ashwood_door", "Ashwood Door", "Ashwood Trapdoor")]
+    [InlineData("flametal_gate", 3000f, 2, false, "$piece_flametalgate", "Flametal Gate", "Flametal Trapdoor")]
+    public void EachFamilyKeepsItsDonorsPinnedValues(string donor, float health, int material, bool burnable,
+        string token, string english, string trapdoor)
+    {
+        DoorFamily family = DoorFamilies.ByDonor(donor)!;
+        Assert.Equal(health, family.Health);
+        Assert.Equal(material, (int)family.Material);
+        Assert.Equal(burnable, family.Burnable);
+        Assert.Equal(token, family.DonorToken);
+        Assert.Equal(english, family.DonorEnglish);
+        Assert.Equal(trapdoor, family.EnglishTrapdoor);
     }
 
     [Fact]

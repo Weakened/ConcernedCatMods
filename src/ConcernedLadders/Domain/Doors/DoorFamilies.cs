@@ -22,7 +22,8 @@ internal enum DoorDonorClass
     /// <summary>Buildable and a Door, but a window covering whose material family another donor already carries.</summary>
     WindowCovering,
 
-    /// <summary>In the hammer's door tag, but has no Door component: there is no open/closed state to reuse.</summary>
+    /// <summary>A hammer piece with no Door component (in the hammer's Doors usage tag, or named like a door): there is
+    /// no open/closed state to reuse.</summary>
     NoDoorState,
 }
 
@@ -193,8 +194,9 @@ internal static class DoorFamilies
             "sfx_flametalgate_door_open", "sfx_flametalgate_door_close"),
     };
 
-    /// <summary>Every prefab the census found with a Door component, plus the hammer's door-tagged pieces without one.
-    /// Each appears exactly once.</summary>
+    /// <summary>Every prefab the census found with a Door component (23), every hammer piece in the Doors usage tag
+    /// (<c>Piece.m_usage</c> flag 0x40000) without one (3), and the three hammer cloth curtains named <c>hanging_door</c>,
+    /// which are in neither. Each appears exactly once.</summary>
     internal static readonly IReadOnlyList<DoorDonorDecision> Census = BuildCensus();
 
     /// <summary>The nine candidates the published Jötunn 1.0.12 piece list named; each must be a family.</summary>
@@ -239,7 +241,7 @@ internal static class DoorFamilies
         var census = new List<DoorDonorDecision>();
         foreach (DoorFamily family in All) { census.Add(new DoorDonorDecision(family.Donor, DoorDonorClass.Family, string.Empty)); }
 
-        // Lead defaults pending owner confirmation (2026-11-08): the three buildable non-families below.
+        // Every non-family decision below is a lead default pending owner confirmation (2026-11-08).
         census.Add(new DoorDonorDecision("piece_drawbridge", DoorDonorClass.SpecialSemantics,
             "Timberwood Drawbridge: a 4 m x 8 m hoisted bridge (drawbridge2_animator, 1.5/2.2 s) whose open state enables a crush area (DrawBridgeAOE) and rope/weight presentation; its Frostwood material is carried by the Timberwood family."));
         census.Add(new DoorDonorDecision("piece_drawbridge_log", DoorDonorClass.SpecialSemantics,
@@ -247,10 +249,19 @@ internal static class DoorFamilies
         census.Add(new DoorDonorDecision("wood_window", DoorDonorClass.WindowCovering,
             "Wood Shutter: a 1 m window shutter (window_animator), not a passage; its wood material is carried by the Wood family."));
 
+        foreach (string window in new[] { "Piece_grausten_window_2x2", "Piece_grausten_window_4x2" })
+        {
+            census.Add(new DoorDonorDecision(window, DoorDonorClass.NoDoorState,
+                "A fixed grausten window in the hammer's Doors usage tag with no Door component: it does not open."));
+        }
+
+        census.Add(new DoorDonorDecision("crystal_wall_1x1", DoorDonorClass.NoDoorState,
+            "A fixed crystal wall in the hammer's Doors usage tag with no Door component: it does not open."));
+
         foreach (string cloth in new[] { "piece_cloth_hanging_door", "piece_cloth_hanging_door_blue", "piece_cloth_hanging_door_blue2" })
         {
             census.Add(new DoorDonorDecision(cloth, DoorDonorClass.NoDoorState,
-                "A hanging cloth curtain in the hammer's door tag with no Door component: no open/closed state, and cloth cannot carry a walking player."));
+                "A hanging cloth curtain, named like a door but in neither the Doors usage tag nor carrying a Door component: no open/closed state, and cloth cannot carry a walking player."));
         }
 
         census.Add(new DoorDonorDecision("piece_dvergr_wood_door", DoorDonorClass.NotBuildable,

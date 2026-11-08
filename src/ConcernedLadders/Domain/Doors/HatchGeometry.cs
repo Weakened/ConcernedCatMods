@@ -115,7 +115,7 @@ internal static class HatchGeometry
         new HatchBox(new ClimbPoint(HalfAperture, FrameBottomY, -HalfAperture), new ClimbPoint(HalfModule, TopY, HalfAperture)),
     };
 
-    /// <summary>The lid at a hinge angle, clamped to [0, open]. A non-finite angle is the closed lid.</summary>
+    /// <summary>The lid at a hinge angle, clamped to [0, open]. NaN is the closed lid. Allocation-free.</summary>
     internal static LidPose Lid(float angleDegrees)
     {
         float angle = Clamp(angleDegrees);
@@ -128,54 +128,67 @@ internal static class HatchGeometry
         return new LidPose(angle, new ClimbPoint(0f, HingeY + y, HingeZ + z), new ClimbPoint(LidLength, LidThickness, LidLength));
     }
 
-    /// <summary>The lid's eight corners at a hinge angle. A rectangle's extremes are its corners, so bounds and
-    /// clearance tests over these are exact.</summary>
-    internal static ClimbPoint[] LidCorners(float angleDegrees)
+    /// <summary>One of the lid's eight corners at a hinge angle, without allocating: bit 0 of <paramref name="index"/>
+    /// picks the side (x), bit 1 the bottom face (y), bit 2 the front edge (z). A box's extremes are its corners, so
+    /// bounds and clearance tests over these are exact.</summary>
+    internal static ClimbPoint LidCorner(float angleDegrees, int index)
     {
         float angle = Clamp(angleDegrees);
         double radians = angle * Math.PI / 180.0;
         float cos = (float)Math.Cos(radians), sin = (float)Math.Sin(radians);
-        var corners = new ClimbPoint[8];
-        int index = 0;
-        foreach (float x in new[] { -HalfLid, HalfLid })
-        {
-            foreach (float dy in new[] { 0f, -LidThickness })
-            {
-                foreach (float dz in new[] { 0f, -LidLength })
-                {
-                    corners[index++] = new ClimbPoint(x, HingeY + dy * cos - dz * sin, HingeZ + dy * sin + dz * cos);
-                }
-            }
-        }
+        float x = (index & 1) == 0 ? -HalfLid : HalfLid;
+        float dy = (index & 2) == 0 ? 0f : -LidThickness;
+        float dz = (index & 4) == 0 ? 0f : -LidLength;
+        return new ClimbPoint(x, HingeY + dy * cos - dz * sin, HingeZ + dy * sin + dz * cos);
+    }
 
+    /// <summary>All eight corners. Allocates: for tests and diagnostics only, never per frame.</summary>
+    internal static ClimbPoint[] LidCorners(float angleDegrees)
+    {
+        var corners = new ClimbPoint[8];
+        for (int index = 0; index < 8; ++index) { corners[index] = LidCorner(angleDegrees, index); }
         return corners;
     }
 
     /// <summary>The ladder that serves the hatch: hung inside the opening from its front edge, top level with the
     /// snap plane (as <see cref="LadderEdgeSnap"/> hangs a ladder from a floor), rails' back face
     /// <see cref="LadderEdgeSnap.Gap"/> from the frame's inner face, climbing side facing the hinge (+z).
-    /// Returns the ladder section's origin (its bottom-centre at the rails' back plane offset).</summary>
+    /// Returns the ladder section's origin; its footprint is <see cref="LadderFootprint.Section"/>.</summary>
     internal static ClimbPoint LadderOrigin =>
         new ClimbPoint(0f, SnapPlaneY - LadderEdgeSnap.SectionHeight, -HalfAperture + LadderEdgeSnap.Gap - LadderEdgeSnap.RailBack);
 
-    /// <summary>The ladder rails' front face in hatch z, from the ladder's own collider (front face depth 0.24).</summary>
-    internal const float LadderFrontFaceDepth = 0.24f;
-
-    /// <summary>The smallest margin between a climber's capsule (centred where the ladder runtime holds it: radius +
-    /// front face + 0.06 in front of the ladder) and the clear opening, metres. Negative means the capsule would not
-    /// fit. <paramref name="radius"/> is the player's scaled capsule radius.</summary>
-    internal static float ClimberMargin(float radius)
+    /// <summary>The centre of a climber's capsule in hatch z on a ladder face, from the runtime's own lane rule.</summary>
+    internal static float ClimberCentreZ(LadderFace face, float radius)
     {
-        if (!Finite(radius) || radius < 0.05f || radius > 1f) { return float.NegativeInfinity; }
-        float centreZ = LadderOrigin.Z + LadderRules.BodyOffset(radius, LadderFrontFaceDepth);
-        float front = (centreZ - radius) - ClearFrontZ;
-        float rear = ClearRearZ - (centreZ + radius);
-        float side = HalfAperture - radius;
-        return Math.Min(front, Math.Min(rear, side));
+        LadderFootprint section = LadderFootprint.Section;
+        return LadderOrigin.Z + ClimbPolicy.LaneDepth(face, radius, section.Back, section.Front);
     }
 
+    /// <summary>The margins between a front-lane climber's capsule and the clear opening once the lid is open,
+    /// metres: to the front frame band, to the open lid's face, and to each side band. False (all margins negative
+    /// infinity) for an unusable radius. Only the front lane (facing the hinge) passes through the hatch: the rear
+    /// lane lies under the front frame band and the floor beyond it, so a climber on the back of the ladder meets
+    /// the floor, as on any ladder hung from a floor edge.</summary>
+    internal static bool ClimberMargins(float radius, out float front, out float rear, out float side)
+    {
+        front = rear = side = float.NegativeInfinity;
+        if (!Finite(radius) || radius < 0.05f || radius > 1f) { return false; }
+        float centreZ = ClimberCentreZ(LadderFace.Front, radius);
+        front = (centreZ - radius) - ClearFrontZ;
+        rear = ClearRearZ - (centreZ + radius);
+        side = HalfAperture - radius;
+        return true;
+    }
+
+    /// <summary>The smallest of <see cref="ClimberMargins"/>. Negative means the capsule would not fit.</summary>
+    internal static float ClimberMargin(float radius) =>
+        ClimberMargins(radius, out float front, out float rear, out float side)
+            ? Math.Min(front, Math.Min(rear, side))
+            : float.NegativeInfinity;
+
+    /// <summary>NaN is the closed lid; an infinite angle clamps to its end of the swing.</summary>
     private static float Clamp(float angleDegrees) =>
-        !Finite(angleDegrees) ? 0f : Math.Max(0f, Math.Min(OpenAngleDegrees, angleDegrees));
+        float.IsNaN(angleDegrees) ? 0f : Math.Max(0f, Math.Min(OpenAngleDegrees, angleDegrees));
 
     private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 }

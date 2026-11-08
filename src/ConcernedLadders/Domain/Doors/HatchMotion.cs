@@ -11,20 +11,38 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 /// The hatch reads that integer and nothing else. Native doors open to +1 or -1 depending on which side the user
 /// stands; a hatch has one swing direction, so both signs mean open.</para>
 ///
-/// <para>Obstruction. The lid never moves into a character. Each frame the runtime asks whether the lid's pose at the
-/// proposed progress would overlap a character; if it would, the lid holds where it is and tries again next frame.
-/// So a lid with someone standing on it stays closed until they step off, a lid closing over a head waits, and
-/// nothing is launched, pushed through a wall, or shut in: a held lid moves only toward its target and only into
-/// empty space. The native state (and so the hover text) still says what was asked for, and every client applies
-/// the same rule to the same synchronized character positions.</para></summary>
+/// <para>Obstruction. The lid never moves into anything that is not fixed world or the hatch itself. Each frame the
+/// runtime divides the frame's step into sub-steps of at most <see cref="MaximumAngleStepDegrees"/> and asks, in
+/// order, whether the lid's pose at each would overlap a character, a dynamic body (a dropped item, a cart, a boat)
+/// or another building piece; at the first that would, the lid holds at the last clear sub-step and tries again next
+/// frame. So a lid with someone (or something, or a piece built on it) on it stays closed until it is clear, a lid
+/// closing over a head waits, and a small body cannot sit between two checked poses. Nothing it checks is
+/// launched, pushed through a wall or shut in. The native state (and so the hover text) still says what was asked
+/// for. Each client moves its own copy of the lid against the positions it sees; remote characters are
+/// interpolated, so two clients can briefly disagree about when a held lid resumes, but each player's own client,
+/// which is authoritative for that player's collision, never moves the lid into them.</para>
+///
+/// <para>Progress is the runtime's own float. The runtime keeps its last finite value; NaN reads as closed and an
+/// infinity as its end of the swing, so a corrupt value can never stand for an unchecked pose silently.</para></summary>
 internal static class HatchMotion
 {
     /// <summary>Shortest and longest swing the policy accepts; a donor outside this range is a census error.</summary>
     internal const float MinimumSwingSeconds = 0.1f;
     internal const float MaximumSwingSeconds = 5f;
 
-    /// <summary>Longest frame step applied at once, seconds, so a hitch cannot jump the lid through a body in one step.</summary>
+    /// <summary>Longest frame step applied at once, seconds; a longer hitch is simply slower that frame.</summary>
     internal const float MaximumStepSeconds = 0.05f;
+
+    /// <summary>Largest hinge turn between two poses the runtime checks. At 5 degrees the lid's free edge (1.58 m out)
+    /// moves at most 0.14 m between checks, less than any character capsule's diameter.</summary>
+    internal const float MaximumAngleStepDegrees = 5f;
+
+    /// <summary>The steepest slope of <see cref="Ease"/> (at progress one half): angle per unit progress is at most
+    /// this times the open angle.</summary>
+    internal const float MaximumEaseSlope = 1.5f;
+
+    /// <summary>Hard ceiling on sub-steps in one frame (a 0.1 s swing over a full 0.05 s step needs 14).</summary>
+    internal const int MaximumSubSteps = 32;
 
     /// <summary>The native door state integer means open when it is not zero, whatever its sign.</summary>
     internal static bool IsOpenState(int nativeState) => nativeState != 0;
@@ -48,8 +66,29 @@ internal static class HatchMotion
         return open ? Math.Min(1f, current + step) : Math.Max(0f, current - step);
     }
 
-    /// <summary>The progress after this frame: the proposal, unless the lid's pose there would overlap a character,
-    /// in which case the lid holds at its current progress.</summary>
+    /// <summary>How many equal sub-steps the move from <paramref name="progress"/> to <paramref name="proposed"/> needs so
+    /// no two consecutive checked poses differ by more than <see cref="MaximumAngleStepDegrees"/>. Zero when there is
+    /// no move.</summary>
+    internal static int SubSteps(float progress, float proposed)
+    {
+        float delta = Math.Abs(Clamp01(proposed) - Clamp01(progress));
+        if (delta <= 0f) { return 0; }
+        double worstDegrees = delta * MaximumEaseSlope * HatchGeometry.OpenAngleDegrees;
+        return Math.Max(1, Math.Min(MaximumSubSteps, (int)Math.Ceiling(worstDegrees / MaximumAngleStepDegrees - 1e-6)));
+    }
+
+    /// <summary>The progress of sub-step <paramref name="step"/> (1-based) of <paramref name="count"/> on the way from
+    /// <paramref name="progress"/> to <paramref name="proposed"/>; the last is the proposal itself.</summary>
+    internal static float SubStep(float progress, float proposed, int step, int count)
+    {
+        float from = Clamp01(progress), to = Clamp01(proposed);
+        if (count <= 0 || step >= count) { return to; }
+        if (step <= 0) { return from; }
+        return from + (to - from) * step / count;
+    }
+
+    /// <summary>The progress after one checked sub-step: the proposal, unless the lid's pose there would overlap
+    /// something it must not move into, in which case the lid holds at its current progress.</summary>
     internal static float Advance(float progress, float proposed, bool proposedPoseOccupied)
     {
         float current = Clamp01(progress);
@@ -63,9 +102,10 @@ internal static class HatchMotion
         return open ? p < 1f : p > 0f;
     }
 
-    /// <summary>The opening is a passage only once the lid is fully open: a climber may go up through it, and the
-    /// ladder's top exit may route through it.</summary>
-    internal static bool IsPassage(float progress) => Clamp01(progress) >= 1f;
+    /// <summary>The opening is a passage only while the lid is fully open and staying open: a climber may go up
+    /// through it, and the ladder's top exit may route through it. A lid asked to close is not, even before it moves
+    /// (it would hold against the climber anyway, but a route must not be committed through it).</summary>
+    internal static bool IsPassage(float progress, bool open) => open && Clamp01(progress) >= 1f;
 
     /// <summary>The lid is a floor only while closed and staying closed. A moving, held or open lid is never a
     /// landing the top exit may choose; it must find a real floor instead.</summary>
@@ -80,5 +120,5 @@ internal static class HatchMotion
             : Math.Max(MinimumSwingSeconds, Math.Min(MaximumSwingSeconds, swingSeconds));
 
     private static float Clamp01(float value) =>
-        float.IsNaN(value) || float.IsInfinity(value) ? 0f : Math.Max(0f, Math.Min(1f, value));
+        float.IsNaN(value) ? 0f : Math.Max(0f, Math.Min(1f, value));
 }
