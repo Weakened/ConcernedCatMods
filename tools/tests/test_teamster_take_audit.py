@@ -172,6 +172,37 @@ class ChestTakeIsNarrow(unittest.TestCase):
                      "        Exchange(ref chest, ref gunnar);\n        int remaining = units;\n")
         self.assert_audit_refused("a role was rewritten through a ref argument")
 
+    def test_a_nested_deconstruction_may_not_swap_the_roles(self):
+        # The re-review's third finding: one paren level was all the first
+        # counter looked at.
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        (chest, (gunnar, _)) = (gunnar, (chest, 0));\n        int remaining = units;\n")
+        self.assert_audit_refused("a nested deconstruction swapped the roles")
+
+    def test_the_calls_may_not_move_into_a_helper_whose_parameters_swap_the_roles(self):
+        # The re-review's first finding: parameters are bindings, not writes, so
+        # `Shift(chest, gunnar, ...)` into `Shift(Inventory gunnar, Inventory
+        # chest, ...)` exchanged the roles with every pin still matching.
+        self.swap_in(PORT, "                    gunnar.MoveItemToThis(chest, stack);\n",
+                     "                    Shift(chest, gunnar, stack);\n")
+        self.swap_in(PORT, "    private static Inventory? InventoryOf(Humanoid? worker)",
+                     "    private static void Shift(Inventory gunnar, Inventory chest, ItemDrop.ItemData stack)\n"
+                     "    {\n        gunnar.MoveItemToThis(chest, stack);\n    }\n\n"
+                     "    private static Inventory? InventoryOf(Humanoid? worker)")
+        self.assert_audit_refused("the calls moved into a helper whose parameters swap the roles")
+
+    def test_a_local_function_in_the_mover_may_not_shadow_the_roles(self):
+        # The re-review's second finding: in this language version a local
+        # function may shadow the mover's locals.
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        void Go(Inventory gunnar, Inventory chest) { }\n        int remaining = units;\n")
+        self.assert_audit_refused("a local function in the mover shadowed the roles")
+
+    def test_a_lambda_in_the_mover_may_not_shadow_the_roles(self):
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        Action<Inventory> go = chest => { };\n        int remaining = units;\n")
+        self.assert_audit_refused("a lambda in the mover shadowed a role")
+
     # --- nothing built from a name --------------------------------------------------------------
 
     def test_the_clone_must_come_from_the_chests_own_stack(self):

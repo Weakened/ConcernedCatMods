@@ -895,7 +895,7 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             "        int remaining = units;\n",
             "        (from, to) = (to, from);\n        int remaining = units;\n")
         self.assert_refused("the roles were swapped after the pinned derivations", marker="#381",
-                            contains="writes `from`")
+                            contains="`from` is written")
 
     def test_the_move_may_not_take_two_interchangeable_inventories(self):
         # Going back to `(Inventory from, Inventory to, ...)` restores the

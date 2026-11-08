@@ -1601,13 +1601,13 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
     # them: `(from, to) = (to, from);` below the pinned lines reverses the deposit
     # into a withdrawal with every pinned call byte-identical (review of #381's
     # chest take, which found the same hole there).
-    for role in ("from", "to"):
-        writes = _teamster_role_writes(code, role)
-        if writes != 2:
-            fail(f"{label}: {port.relative_to(ROOT)} writes `{role}` {writes} time(s); exactly two are authorized, "
-                 "the two pinned derivations. Any other write changes which inventory is which after the pin",
-                 errors)
-            return []
+    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS)
+    if findings:
+        for finding in findings:
+            fail(f"{label}: {port.relative_to(ROOT)}: {finding}. Pinning the derivations means nothing if the two "
+                 "roles can be exchanged below them - the deposit becomes a withdrawal with every pinned call "
+                 "byte-identical", errors)
+        return []
 
     return [
         f"{label}: the deposit port clones exactly the stack it removes from, assigns that clone "
@@ -1643,17 +1643,91 @@ def _teamster_take_exact(spelling: str) -> re.Pattern:
     return re.compile("".join(out))
 
 
-def _teamster_role_writes(code: str, name: str) -> int:
-    """How many times `name` is written in comment-stripped C#: a plain or
-    compound assignment (a lambda's `=>` and a comparison are not), a
-    deconstruction that names it, or a `ref`/`out` argument. The two role
-    derivations of a port are two such writes; any other is a way to swap which
-    inventory is which after the pinned derivation, with every call identical."""
-    word = r"\b" + re.escape(name) + r"\b"
-    plain = re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", code)
-    deconstructed = re.findall(r"\([^()]*" + word + r"[^()]*\)" + SPACE + r"=(?![=>])", code)
-    by_reference = re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, code)
-    return len(plain) + len(deconstructed) + len(by_reference)
+TEAMSTER_ROLE_KEYWORDS = frozenset({
+    "return", "in", "is", "as", "out", "ref", "new", "await", "throw", "case", "when", "else", "yield",
+    "not", "and", "or", "typeof", "nameof", "sizeof", "default", "goto", "using", "lock", "params", "this",
+})
+TEAMSTER_ROLE_LOCAL_FUNCTION = re.compile(
+    r"^\s+(?:static\s+)?(?!(?:if|for|foreach|while|switch|catch|using|lock|return|else|new|throw|await|fixed)\b)"
+    r"[A-Za-z_][\w<>?,\[\]. ]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(?:\{.*)?$")
+
+
+def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: tuple) -> list[str]:
+    """Why a port's two ROLES (which inventory is the source, which the
+    destination) could be exchanged below the pinned derivations - empty when
+    they cannot, as far as a text audit can see.
+
+    A pinned derivation fixes a name to a role on one line. It means nothing if
+    the name can be bound again, or the pinned calls can run where the name means
+    something else. Reviews of #381's chest take found each of these escapes, in
+    the take port and mirrored in the deposit port, with every pinned call
+    byte-identical:
+
+    - a reassignment, a swap by deconstruction (nested ones included), or a
+      `ref`/`out` argument after the derivations;
+    - the pinned calls moved into a helper whose parameters bind the two names
+      the other way round, called from the mover with them exchanged;
+    - the same through a local function or a lambda inside the mover, which may
+      shadow its locals in this language version.
+
+    So: every pinned call sits in the pinned mover's own body; the mover holds no
+    lambda, delegate or local function; each role is declared exactly twice (the
+    two derivations) and written exactly twice; and no untyped lambda parameter
+    takes a role's name anywhere in the file. String literals are blanked first,
+    so a sentence that happens to say "to = ..." is not code."""
+    blank = CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"', code)
+    found = []
+
+    movers = [(header, block) for header, _start, block in _teamster_tour_plan_methods(blank)
+              if shape.search(header)]
+    if len(movers) != 1:
+        return [f"the pinned mover was found {len(movers)} time(s), so where its calls run cannot be checked"]
+    body = "\n".join(movers[0][1])
+    for token, pattern, _what in calls:
+        if len(pattern.findall(body)) != 1:
+            found.append(f"the pinned `{token}` call is not inside the pinned mover's own body, exactly once - "
+                         "a call in a helper runs wherever that helper's parameters say the roles are")
+    if re.search(r"=>|\bdelegate\b", body):
+        found.append("the mover holds a lambda or a delegate, whose parameters may shadow the two roles")
+    for line in movers[0][1][1:]:
+        if TEAMSTER_ROLE_LOCAL_FUNCTION.match(line):
+            found.append(f"the mover declares a local function (`{line.strip()}`), whose parameters may shadow the "
+                         "two roles")
+
+    for role in roles:
+        word = r"\b" + re.escape(role) + r"\b"
+        declared = [match for match in re.finditer(
+            r"(?<![\w.])([A-Za-z_][\w.]*(?:<[^<>;]*>)?\??|\])" + SPACES + word + r"(?!" + SPACE + r"\()", blank)
+            if match.group(1) not in TEAMSTER_ROLE_KEYWORDS]
+        plain = re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
+        by_reference = re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank)
+        lambdas = re.findall(word + SPACE + r"=>|\([^()]*" + word + r"[^()]*\)" + SPACE + r"=>", blank)
+        deconstructed = 0
+        for statement in re.split(r"[;{}]", blank):
+            text = statement.strip()
+            if not text.startswith("("):
+                continue
+            depth = 0
+            for index, char in enumerate(text):
+                if char in "([":
+                    depth += 1
+                elif char in ")]":
+                    depth -= 1
+                elif (char == "=" and depth == 0 and text[index + 1:index + 2] not in ("=", ">")
+                      and text[index - 1:index] not in ("=", "!", "<", ">")):
+                    if re.search(word, text[:index]):
+                        deconstructed += 1
+                    break
+        if len(declared) != 2:
+            found.append(f"`{role}` is declared {len(declared)} time(s) (a local or a parameter); exactly two "
+                         "are authorized, the two pinned derivations")
+        if len(plain) != 2 or by_reference or deconstructed:
+            found.append(f"`{role}` is written {len(plain)} time(s) by assignment, {len(by_reference)} through ref "
+                         f"or out and {deconstructed} by deconstruction; exactly two assignments are authorized, "
+                         "the two pinned derivations")
+        if lambdas:
+            found.append(f"a lambda parameter is named `{role}`")
+    return found
 
 
 def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) -> list[str]:
@@ -1739,14 +1813,15 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
                                     "their order if these can move"):
             return []
 
-    for role in ("chest", "gunnar"):
-        writes = _teamster_role_writes(code, role)
-        if writes != 2:
-            fail(f"{label}: src/ConcernedTeamster/{port_rel} writes `{role}` {writes} time(s); exactly two are "
-                 "authorized, the two pinned derivations. Any other write - a reassignment, a swap by "
-                 "deconstruction, a ref or out argument - changes which inventory is which after the pin, and "
-                 "turns the take into a deposit with every pinned call byte-identical", errors)
-            return []
+    take_shape = _teamster_take_exact(
+        "private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)")
+    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS)
+    if findings:
+        for finding in findings:
+            fail(f"{label}: src/ConcernedTeamster/{port_rel}: {finding}. Pinning the derivations means nothing if "
+                 "the two roles can be exchanged below them - the take becomes a deposit out of Gunnar with every "
+                 "pinned call byte-identical", errors)
+        return []
 
     mints = len(re.findall(r"\bNpcContainerPermit" + SPACE + r"\." + SPACE + r"Issue" + SPACE + r"\(", code))
     if mints != 1:
@@ -1854,8 +1929,9 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
         "chest and its destination from Gunnar inside the mover, and mints one permit, for Take; it is built and "
         f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, in the method whose take gate refuses with a return above "
         "it, every gate input pinned (the switches, the world, the work-authority rule, the probe, his body and its "
-        "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); `chest` "
-        "and `gunnar` are written only by their derivations; an open tour plan refuses; and the "
+        "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); the "
+        "three calls sit in the mover's own body, which holds no lambda or local function, and `chest` and `gunnar` "
+        "are declared and written only by their derivations; an open tour plan refuses; and the "
         "source is set from the pointed-at chest and cleared, nowhere else. A text audit; it does not follow "
         "delegates or prove control flow",
     ]
