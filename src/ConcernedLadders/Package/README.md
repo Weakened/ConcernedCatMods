@@ -113,6 +113,7 @@ server must have it at a matching version, and Jötunn checks that when a player
 | Setting | Default | Meaning |
 |---|---|---|
 | `General` / `ClimbingEnabled` | `true` | Turns climbing on or off. Placed ladders and the Climbing skill stay registered either way. |
+| `Trapdoors` / `Enabled` | `false` | Unfinished. Adds nine floor trapdoors to the hammer, but their lids do not open yet. Leave it off. If you turn it on and place trapdoors, turning it off again (or uninstalling) makes the game delete them, with no refund, the next time the world loads. |
 
 ## Known limitations
 

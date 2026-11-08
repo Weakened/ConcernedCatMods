@@ -90,8 +90,13 @@ support from them, as with their donors.
   Darkwood and Timberwood donors' Wall tag are not copied (section 7).
 - **Uninstall**: as with the ladders (STATUS.md, uninstall row), the game deletes a placed piece whose prefab is unknown
   on load (`Destroyed invalid prefab ZDO`). Removing the mod destroys every placed trapdoor permanently, with no refund,
-  and leaves a 2 m x 2 m hole in the floor; reinstalling does not restore them. The README must say so when the pieces
-  ship (slice 2).
+  and leaves a 2 m x 2 m hole in the floor; reinstalling does not restore them. The README says so beside the
+  setting. The same happens to a placed trapdoor when `Trapdoors/Enabled` is turned off again, or when its family is
+  refused at start-up (a changed donor), because the prefab is then not registered in that session.
+- **Off by default (slice 2)**: the pieces are registered only with `Trapdoors/Enabled` on (`TrapdoorSettings`,
+  default false). With it off nothing is cloned, no token is added and the hammer menu is unchanged. Each family is
+  checked and built on its own; a refused family is logged with every difference and never registered, and the other
+  families and the ladders are unaffected. One attempt per session: a refused family is not retried.
 
 ## 4. What the native `Door` gives the clone, and what it does not
 
@@ -131,8 +136,35 @@ reads it). From `census.json`:
 `WearNTear.m_new`, `m_worn` and `m_broken` point at those `New`/`Worn`/`Frame`/`broken`/`door` children, and
 `WearNTear` toggles them by health. The adapter reassigns all three to the hatch's own new/worn presentation roots (or
 the one root, for donors whose three are the same object), so health display keeps working and nothing points at a
-destroyed child. Destruction children are only presentation for the native break effect and are replaced by the
-hatch's own. The `LODGroup` on the root is rebuilt over the hatch renderers.
+destroyed child.
+
+**Corrected in slice 2** (a second read-only probe of the same bundles, `wearextra.py` -> `wearextra.json` beside the
+census scripts, read the `WearNTear` fields `census.py` had not dumped):
+
+- The destruction children are not only presentation: they are `WearNTear.m_fragmentRoots` on three donors
+  (`flametalgateDestruction`, `destruction` on the hexagonal gate, `Ashwood_door_destruction`). The other six have an
+  empty list, which is the native whole-object fragment path. The adapter sets the empty list on all nine, so no
+  fragment root points at a removed child.
+- `m_snow` points at the removed snow child on seven donors (`pole_top_snow`, `beam_2m_snow`, `DvergrDoor_Snow`); the
+  adapter clears it with `m_snowWorn`, `m_snowBroken` and `m_wet` (null on all nine). The hatch has no snow overlay yet
+  (wood_floor's own is `floor_2x2_snow`): an intentional difference until the art pass.
+- `m_comOffset` is (0, 2, 0) on darkwood, timberwood and flametal: the centre of mass of a 4 m leaf. The adapter sets
+  it to zero on all nine, the hatch's own centre. `m_roofCheckOffset` is 0 on all nine and on wood_floor, so it is
+  inherited unchanged.
+- The `LODGroup` is **removed**, not rebuilt, as on the ladders (observed in game for them): the hatch is a few boxes,
+  and a rebuilt single LOD would only add an invented cull height. A real LOD set belongs to the art pass.
+
+**What the adapter builds** (`Domain/Doors/TrapdoorBlueprint.cs`, walked by `Pieces/TrapdoorPieceRegistration.cs`):
+the donor's root components stay; the root gets the four frame bands as box colliders on their own children (never on
+the root: the ghost's blocked-by-player test skips root colliders), one presentation root `new` with the four bands in
+the donor's frame material and, where the donor has a separate worn root, a `worn` root in its worn material
+(`m_worn` = `m_broken` = `worn`; for iron, hexagonal and flametal all three are `new`, as the donors' are one object);
+a `lid_hinge` pivot on the hinge axis carrying a kinematic `Rigidbody`, the lid's box collider, the lid in the donor
+leaf's material and two hinge straps (a darkened copy of that material) that mark the hinge side in the ghost; the
+four corner snap points; `Door.m_name` and `Piece.m_name` = the trapdoor's token. The materials are found by name in
+the donor's own renderers before anything is stripped. The lid's collider sits on a rigidbody, so `WearNTear` leaves it
+out of support bounds and the build ray ignores it: pieces cannot be built onto a lid, as onto a native door leaf.
+Support comes from the frame bands.
 
 ## 5. Floor hatch geometry (`HatchGeometry`)
 
@@ -190,12 +222,15 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
 
 ## 8. Remaining slices (each its own PR)
 
-1. Piece adapter: clone each donor under Jötunn's inactive parent after `OnVanillaPrefabsAvailable`; apply the strip
-   set and `WearNTear` reassignment of section 4; build the frame and lid procedurally from `HatchGeometry` with copied
-   donor materials;
-   explicit requirements checked against the clone; icons; localization; snap points; hinge hardware in the ghost.
+1. Piece adapter: **code-complete in slice 2, behind `Trapdoors/Enabled` (off)**. Clones each donor under Jötunn's
+   inactive parent after `OnVanillaPrefabsAvailable`; checks the donor against this matrix first (`DonorMismatches`);
+   applies the strip set and `WearNTear` reassignment of section 4 with its slice-2 corrections; builds the frame and
+   lid from `TrapdoorBlueprint`; sets the requirements explicitly and reads them back from the clone
+   (`RequirementMismatches`, with Jötunn's `JVLmock_` prefix removed); icons; localization; snap points; hinge straps.
+   With it on, a placed trapdoor's native state, sounds and hover text toggle but **its lid stays shut** until slice 3.
 2. Lid runtime: read the animator `state`, step `HatchMotion` with one bounded non-allocating overlap per checked
-   sub-step (characters, dynamic bodies, pieces) while moving, apply the pose to transform and kinematic collider.
+   sub-step (characters, dynamic bodies, pieces) while moving, turn the one `lid_hinge` transform (which carries the
+   kinematic body, the lid's collider and its visuals) by `Quaternion.Euler(angle, 0, 0)`.
 3. Ladder integration: hatch ladder anchor in `LadderSnapAlignment`; door Use while attached does not dismount; top exit
    refuses a non-landing lid; closed lid blocks ascent.
 4. Asset sources and export notes; CL-005 cellar doors reusing this matrix.
@@ -206,3 +241,11 @@ Placement beside wood and stone floors and ladder endpoints, every family; walk 
 open one and exit; re-enter from above; open/close from above, below and from the ladder; standing-on-lid and
 closing-over-head holds; damage, repair, deconstruction refunds, guard stone; host/client, late join, zone and save
 reload. None has been observed.
+
+Slice 2 adds these, each OWNER GO-AROUND PENDING: with `Trapdoors/Enabled` off, the hammer menu and the startup log
+show no trapdoor; with it on, the log reports `9 of 9 registered`, the nine appear once each in the Building tab under
+their Title Case names with a rendered icon, the cost and station of their donor, and are
+discovered when the donor is; the ghost shows the hinge straps on the rear edge and snaps at the four corners
+beside wood_floor; insufficient resources or invalid placement consume nothing; a placed hatch's frame and closed lid
+can be walked on, Use toggles the hover text and plays the donor's sound while the lid stays shut, and hammer damage,
+repair, worn display and deconstruction refunds behave as the donor's.

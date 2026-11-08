@@ -3,6 +3,7 @@ using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using Jotunn.Utils;
+using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.ConcernedLadders.Pieces;
 using TheConcernedCat.ConcernedLadders.Runtime;
 using TheConcernedCat.ConcernedLadders.Runtime.Animation;
@@ -29,6 +30,8 @@ public sealed class Plugin : BaseUnityPlugin
     private LadderSkill? _skill;
     private OriginalClimbPresenter? _presenter;
     private LadderSnapAlignment? _snap;
+    private ConfigEntry<bool>? _trapdoorsEnabled;
+    private TrapdoorPieceRegistration? _trapdoors;
 
     private void Awake()
     {
@@ -40,6 +43,15 @@ public sealed class Plugin : BaseUnityPlugin
         if (!_snap.Install(PluginGuid + ".snap")) { _snap = null; }
         _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message), sideModes: _snap != null);
         _pieces.Install();
+        // Floor trapdoors (CL-004 #485), unfinished and off by default: with the setting off nothing is cloned or
+        // localized and the hammer menu is unchanged. Their failures never touch the ladders.
+        _trapdoorsEnabled = Config.Bind(TrapdoorSettings.Section, TrapdoorSettings.Key, TrapdoorSettings.EnabledByDefault,
+            TrapdoorSettings.Description);
+        if (_trapdoorsEnabled.Value)
+        {
+            _trapdoors = new TrapdoorPieceRegistration(message => Logger.LogInfo(message));
+            _trapdoors.Install();
+        }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
         _skill = new LadderSkill(message => Logger.LogInfo(message));
         _skill.Register();
@@ -85,6 +97,8 @@ public sealed class Plugin : BaseUnityPlugin
         }
         _snap?.Dispose();
         _pieces?.Dispose();
+        _trapdoors?.Dispose();
+        _trapdoors = null;
         _snap = null;
         _runtime = null;
         _pieces = null;
