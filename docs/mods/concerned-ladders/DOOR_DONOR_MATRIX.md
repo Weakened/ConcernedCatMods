@@ -222,8 +222,8 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   collider's own box at that angle, shrunk by a 1 cm skin on every side (`HatchMotion.QuerySkinMetres`) so that
   touching is not overlapping, into a 32-entry shared buffer, triggers ignored; a full buffer counts as occupied.
   Because of the skin, the lid can close at most 1 cm past a surface it touches before the next checked pose sees it;
-  a body resting on a closed lid is seen by the first 5-degree sub-step everywhere beyond about 0.12 m from the hinge
-  and by the second nearer to it. The guarantee is the check spacing: no two checked poses are more than 5 degrees
+  a body resting on a closed lid is seen by the first 5-degree sub-step everywhere beyond about 0.12 m from the hinge,
+  by the second beyond about 0.06 m, and by a later one nearer still. The guarantee is the check spacing: no two checked poses are more than 5 degrees
   apart, so anything spanning more than that much of the sweep is always seen; something thinner (a small falling
   item) can pass between two checked poses.
   The hatch's own colliders never count. On the `character`, `character_net`, `character_ghost`, `character_noenv`,
@@ -231,7 +231,7 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   only a dynamic (non-kinematic) body does; terrain and `static_solid` are not queried, so an open lid may stand into a
   slope or rock as a native door leaf may. Every name is one the installed game's own `LayerMask.GetMask` calls use; if
   one were missing, every lid stays shut and the start-up log says so. The lid turns by setting the hinge transform,
-  never by velocity or `MoveRotation`, so it imparts no push, and it only ever stops at a pose that was checked clear.
+  never by velocity or `MoveRotation`, so it imparts no push, and it only ever stops at a pose that was checked clear (to within the 1 cm skin).
   A fault stops that lid where it is and logs once.
 - **The first pose** (a piece placed, loaded with its zone, or seen by a late joiner) is the stored state's end of the
   swing when that pose is clear, which is what every other client shows. Contact is not occupancy (the skin above),

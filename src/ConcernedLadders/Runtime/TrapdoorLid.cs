@@ -21,7 +21,7 @@ namespace TheConcernedCat.ConcernedLadders.Runtime;
 /// angle, shrunk by a 1 cm skin so contact is not overlap, into a shared buffer; the lid stops at the last clear pose when anything but fixed world or the hatch
 /// itself is in the way (<see cref="Occupied"/>). It turns by setting the transform, never by velocity or
 /// <c>MoveRotation</c>, so it gives nothing a push; and since it only ever stops at a pose that was clear, it is never
-/// placed into a character, a dynamic body or a piece it checked.</para>
+/// placed into a character, a dynamic body or a piece it checked, beyond the 1 cm skin.</para>
 ///
 /// <para>Ghost and icon: the placement ghost and the icon render are instances with no ZDO, so nothing is read and
 /// the lid stays closed. Idle cost per hatch per frame is one ZDO integer read; nothing allocates per frame.</para></summary>

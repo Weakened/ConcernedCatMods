@@ -61,7 +61,7 @@ internal static class HatchMotion
     /// <c>LadderClearance</c> uses a skin for the same reason). The lid can therefore come at most this close past a
     /// surface it touches before the next checked pose sees it: a body resting on the lid is seen by the first
     /// sub-step anywhere the 5-degree turn lifts the lid by more than this, which is everywhere beyond about 0.12 m
-    /// from the hinge, and by the next sub-step there.</summary>
+    /// from the hinge, by the second beyond about 0.06 m, and by a later one nearer still.</summary>
     internal const float QuerySkinMetres = 0.01f;
 
     /// <summary>Hard ceiling on sub-steps in one frame (a 0.1 s swing over a full 0.05 s step needs 14).</summary>
