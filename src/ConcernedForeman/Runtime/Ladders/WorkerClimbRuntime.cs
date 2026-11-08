@@ -85,11 +85,24 @@ internal sealed class WorkerClimbRuntime
         }
     }
 
-    /// <summary>Once a frame from the plugin.</summary>
-    internal void Update(float now) => _order.Supervise(now);
+    /// <summary>Once a frame from the plugin. Never throws into the plugin's
+    /// own update.</summary>
+    internal void Update(float now)
+    {
+        try
+        {
+            _order.Supervise(now);
+        }
+        catch (Exception exception)
+        {
+            _log("Worker climb supervision failed: " + SafeFailure.Brief(exception));
+        }
+    }
 
-    /// <summary>The world is going away: the order ends and the body is given
-    /// back before the scene drops it.</summary>
+    /// <summary>The world has gone (the plugin notices once the scene is
+    /// already null): the order ends, the identity is released and nothing of
+    /// that world is kept. A body the scene already destroyed counts as given
+    /// back.</summary>
     internal void OnWorldUnloaded()
     {
         _order.Cancel("the world is unloading");

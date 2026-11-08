@@ -320,7 +320,7 @@ Thorstein may fell exactly four small trees: `Beech_small1`, `Beech_small2`, `Fi
 
 ## 5c. Addendum: ladder traversal (owner decision 2026-11-01, #334, D14.6)
 
-The one exception to section 4's "moved only through the vanilla motor".
+The one exception to a worker body being moved only through the vanilla motor (CLAUDE.md, "Workers").
 - **Who.** Thorstein's own worker body, on an explicit `cf_worker climb` order, with `Ladders/NpcClimbing` on (off by default) and this record's authority granted (opted in, host, not dedicated, no other peers). His actor mode is held for the whole order.
 - **Where.** Only along a Concerned Ladders link measured against the real colliders and his real capsule, re-surveyed at admission and immediately before every entry. Vanilla ladders are not admitted.
 - **How.** `Runtime/Ladders/WorkerClimbMotor.cs` alone: his AI reports sleeping, so vanilla's walking motor is skipped and `MoveTo` is not called; his own rigidbody is kinematic for the lease and restored after; each step is one position write after a fresh capsule sweep. Walking legs stay on the vanilla motor.

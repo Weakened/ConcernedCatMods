@@ -255,6 +255,30 @@ class WorkerClimbMotorIsConfined(_Plants):
                        "    internal static void Hook(dynamic ai) { ai.RouteTick = null; }\n}\n")
         self.assert_refused("a second place drove the body's route tick")
 
+    # --- review m1: spellings the first version of the audit could not see ----------------------
+
+    def test_an_added_route_tick_is_refused(self):
+        self.append_to(BUILD_POSE, "\ninternal static class Zz334TickAdd\n{\n"
+                       "    internal static void Hook(dynamic ai) { ai.RouteTick += null; }\n}\n")
+        self.assert_refused("a compound assignment slipped another route tick onto the body")
+
+    def test_a_lease_field_written_inside_the_ai_is_refused(self):
+        self.swap_in(AI, "    internal bool IsClimbing => _climbLease != null;\n",
+                     "    internal bool IsClimbing => _climbLease != null;\n"
+                     "    internal void Zz334Sleep() { _climbLease = new object(); }\n")
+        self.assert_refused("the AI switched its own ground motor off with no lease")
+
+    def test_an_unqualified_lease_start_inside_the_ai_is_refused(self):
+        self.swap_in(AI, "    internal bool IsClimbing => _climbLease != null;\n",
+                     "    internal bool IsClimbing => _climbLease != null;\n"
+                     "    internal bool Zz334Grab() => TryBeginClimb(new object());\n")
+        self.assert_refused("the AI started a lease on itself with no motor")
+
+    def test_a_write_without_the_suspension_guard_is_refused(self):
+        self.swap_in(MOTOR, "        if (!GroundMotorSuspended || !position.IsFinite)\n",
+                     "        if (!position.IsFinite)\n")
+        self.assert_refused("the motor wrote a position after its lease had been given back")
+
     def test_the_success_sentence_states_the_text_audits_limits(self):
         code, out = run(VALIDATOR)
         self.assertEqual(0, code)

@@ -24,6 +24,8 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   body. Anything new in the way stops him. Stopped part-way, he lets go where he
   is; he is never put at the top or bottom by magic. The game's own ladders are
   not used.
+- **Stand a few metres clear** of the ladder while he uses it: anybody at its
+  foot, in its lane or on the landing counts as in the way, and he stops.
 - Not yet observed in game.
 
 ### Added — small-tree felling (#282, owner decision 2026-10-31, D19)

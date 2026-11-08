@@ -111,6 +111,7 @@ public sealed class WorkerClimbOrderTests
         public bool Landing = true, Wedged;
         public int Placements, Restores, Walks, Stops, Suspensions;
         public Motor? Lease;
+        public bool RefuseRestore;
         public Action<float>? Ticking;
         public bool WalkToward(WorkPoint target, float tolerance)
         {
@@ -120,7 +121,7 @@ public sealed class WorkerClimbOrderTests
         }
         public void StopWalking() => Stops++;
         public IWorkerLadderMotor? TrySuspendGroundMotor(WorkerKey worker, Guid epoch)
-        { Suspensions++; Lease = new Motor(this, epoch); return Lease; }
+        { Suspensions++; Lease = new Motor(this, epoch) { RestoreAllowed = !RefuseRestore }; return Lease; }
         public bool IsSupportedLanding(WorkPoint target) => Landing;
         public void Attach(Action<float> tick) => Ticking = tick;
         public void Detach() => Ticking = null;
@@ -375,6 +376,33 @@ public sealed class WorkerClimbOrderTests
         Assert.Equal(WorkerClimbState.Finished, rig.Order.State);
         Assert.Null(rig.Modes.JobId);
         Assert.Contains("cancelled", rig.Order.LastOutcome);
+    }
+
+    [Fact]
+    public void AStopWhileTheArrivalRestoreIsRetriedNeverWalksOn()
+    {
+        var rig = new Rig();
+        rig.Body.RefuseRestore = true;
+        rig.Begin();
+        rig.RunUntil(() => rig.Order.Runner?.Phase == WorkerRoutePhase.Restoring);
+        Assert.Equal(WorkerRoutePhase.Restoring, rig.Order.Runner!.Phase);
+        Assert.Equal(Top, rig.Body.Position);
+        int walks = rig.Body.Walks, placed = rig.Body.Placements;
+
+        rig.Order.Cancel("cancelled by the player");
+        Assert.Equal(WorkerClimbState.Releasing, rig.Order.State);
+        Assert.NotNull(rig.Modes.JobId);
+        for (int i = 0; i < 5; i++) rig.Step();
+        Assert.Equal(WorkerClimbState.Releasing, rig.Order.State);
+
+        rig.Body.Lease!.RestoreAllowed = true;
+        for (int i = 0; i < 5 && rig.Order.State != WorkerClimbState.Finished; i++) rig.Step();
+        Assert.Equal(WorkerClimbState.Finished, rig.Order.State);
+        Assert.Contains("cancelled", rig.Order.LastOutcome);
+        Assert.Equal(walks, rig.Body.Walks);
+        Assert.Equal(placed, rig.Body.Placements);
+        Assert.Equal(Top, rig.Body.Position);
+        Assert.Null(rig.Modes.JobId);
     }
 
     [Fact]

@@ -432,8 +432,8 @@ public sealed class Plugin : BaseUnityPlugin
         bool worldIsUp = ZNetScene.instance != null;
         if (_worldWasUp && !worldIsUp)
         {
-            // #334 first: a body on a ladder is given back to its own motor
-            // before anything else lets go of the world it is standing in.
+            // #334 first: a climb order on the world that just went ends and
+            // releases Thorstein before the other runtimes forget that world.
             _workerClimb?.OnWorldUnloaded();
             _settlement?.OnWorldUnloaded();
             _collection?.OnWorldUnloaded();

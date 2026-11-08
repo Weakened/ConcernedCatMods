@@ -17,6 +17,13 @@ internal sealed class WorkerLadderReceiver : IWorkerClimbLinks
     private readonly TraversalCapabilities _capabilities;
     private readonly Action<string> _log;
     private WorkerLadderSurveyResult? _last;
+    // #334 review M1: the capsule is measured ONCE, at the first successful
+    // read, and that exact value is what every later survey lays lanes and
+    // fingerprints with. Re-measuring world-space bounds as the body moves can
+    // differ in the last bits, which would republish an unchanged ladder under
+    // a new generation and end every route. The live shape must still agree
+    // within a millimetre, or the survey refuses.
+    private WorkerLadderCapsule? _shape;
     internal WorkerLadderReceiver(ForemanWorkerAI worker,TraversalCapabilities capabilities,
         Func<WorkPoint,bool> siteAllowed,Action<string> log,TraversalLimits? limits=null)
     {
@@ -38,7 +45,7 @@ internal sealed class WorkerLadderReceiver : IWorkerClimbLinks
         bool allowed=npcClimbing&&explicitOrder&&authority==WorkAuthorityVerdict.Granted&&_capabilities.NpcClimbingEnabled;
         WorkerLadderSurveyResult result;
         if(!allowed) result=_feed.Tick(dt,false,settlement,radius,default);
-        else if(!_probe.TryBodyShape(out var body)) { _feed.Forget(); result=WorkerLadderSurveyResult.Unavailable; }
+        else if(!TryShape(out var body)) { _feed.Forget(); result=WorkerLadderSurveyResult.Unavailable; }
         else result=_feed.Tick(dt,true,settlement,radius,body);
         if(result!=_last)
         {
@@ -50,11 +57,20 @@ internal sealed class WorkerLadderReceiver : IWorkerClimbLinks
     }
     public bool RevalidateForAdmission(bool npcClimbing,bool explicitOrder,WorkAuthorityVerdict authority,WorkPoint settlement,float radius)
     {
-        if(!npcClimbing||!explicitOrder||authority!=WorkAuthorityVerdict.Granted||!_capabilities.NpcClimbingEnabled||!_probe.TryBodyShape(out var body))
+        if(!npcClimbing||!explicitOrder||authority!=WorkAuthorityVerdict.Granted||!_capabilities.NpcClimbingEnabled||!TryShape(out var body))
         { _feed.Forget(); return false; }
         return _feed.RefreshNow(true,settlement,radius,body)==WorkerLadderSurveyResult.Ready;
     }
     public void Forget()=>_feed.Forget();
+    private bool TryShape(out WorkerLadderCapsule body)
+    {
+        body=default;
+        if(!_probe.TryBodyShape(out var live)) return false;
+        if(_shape==null) _shape=live;
+        var kept=_shape.Value;
+        if(Math.Abs(live.Radius-kept.Radius)>.001f||Math.Abs(live.Height-kept.Height)>.001f) return false;
+        body=kept; return true;
+    }
     /// <summary>#334: a fresh capsule sweep for one motor step, against the
     /// real collider world and the current site policy.</summary>
     internal bool IsMoveClear(WorkPoint from,WorkPoint to)=>_probe.IsMoveClear(from,to);

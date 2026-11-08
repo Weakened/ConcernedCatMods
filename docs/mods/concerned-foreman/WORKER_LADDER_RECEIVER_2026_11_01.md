@@ -103,7 +103,11 @@ kinematic and restored, and every position write follows a fresh
 supervises death, unload, a lost or unsimulated body, the switch and authority
 every frame. Pins: the #400 capability audit and the #334 worker climb audit
 (`tools/tests/test_foreman_worker_climb_audit.py`); every exit:
-`WorkerClimbOrderTests`. The rows below are still NOT RUN.
+`WorkerClimbOrderTests`. The receiver measures the body's capsule once and keeps
+it (a live shape more than 1 mm off refuses), so an unchanged ladder keeps its
+generation. Any other character at the foot, in the lane or on the landing
+during a survey refuses the entry or ends the climb - fail closed, by design.
+The rows below are still NOT RUN.
 Vanilla teleport ladders are NOT admitted by this CL-only receiver. No vanilla
 interaction, player admission, animation, snap, input or movement is changed.
 

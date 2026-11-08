@@ -3754,13 +3754,22 @@ FOREMAN_CLIMB_CONFINED = (
             r"\bWorkerClimbMotor\s*\.\s*TrySuspend\s*\(\s*_ai\s*,\s*worker\s*,\s*bodyEpoch\s*,\s*"
             r"_receiver\s*\.\s*IsMoveClear\s*\)"), 1),
     )),
-    ("ladder-lease start", re.compile(r"\.\s*TryBeginClimb\s*\("), (
+    # Unqualified spellings count too (review m1): a call inside ForemanWorkerAI
+    # itself needs no receiver, so each name is matched without one and the
+    # declaration is pinned beside the one call.
+    ("ladder-lease start", re.compile(r"(?<![A-Za-z0-9_])TryBeginClimb\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(r"\binternal\s+bool\s+TryBeginClimb\s*\(\s*object\s+lease\s*\)"), 1),
         (FOREMAN_CLIMB_MOTOR, re.compile(r"\bai\s*\.\s*TryBeginClimb\s*\(\s*lease\s*\)"), 1),
     )),
-    ("ladder-lease end", re.compile(r"\.\s*EndClimb\s*\("), (
+    ("ladder-lease end", re.compile(r"(?<![A-Za-z0-9_])EndClimb\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(r"\binternal\s+bool\s+EndClimb\s*\(\s*object\s+lease\s*\)"), 1),
         (FOREMAN_CLIMB_MOTOR, re.compile(r"\b_ai\s*\.\s*EndClimb\s*\(\s*this\s*\)"), 1),
     )),
-    ("route-tick installation", re.compile(r"\.\s*RouteTick\s*=(?!=)"), (
+    ("ladder-lease field write", re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*(?:\?\?)?=(?!=)"), (
+        (FOREMAN_CLIMB_AI, re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*=\s*lease\s*;"), 1),
+        (FOREMAN_CLIMB_AI, re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*=\s*null\s*;"), 1),
+    )),
+    ("route-tick installation", re.compile(r"(?<![A-Za-z0-9_])RouteTick\s*[-+]?=(?!=)"), (
         (FOREMAN_CLIMB_RUNTIME, re.compile(r"\b_ai\s*\.\s*RouteTick\s*=\s*_installed\s*;"), 1),
         (FOREMAN_CLIMB_RUNTIME, re.compile(r"\b_ai\s*\.\s*RouteTick\s*=\s*null\s*;"), 1),
     )),
@@ -3768,6 +3777,10 @@ FOREMAN_CLIMB_CONFINED = (
 
 # path, exact program shape, what it proves - each must appear exactly once.
 FOREMAN_CLIMB_SHAPES = (
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bpublic\s+bool\s+TryPlaceOwnBody\s*\(\s*WorkPoint\s+position\s*\)\s*\{\s*"
+        r"if\s*\(\s*!\s*GroundMotorSuspended\s*\|\|\s*!\s*position\s*\.\s*IsFinite\s*\)\s*\{\s*return\s+false\s*;\s*\}"),
+     "the refusal to write unless this lease still suspends the ground motor"),
     (FOREMAN_CLIMB_MOTOR, re.compile(
         r"\bRigidbody\s+body\s*=\s*ai\s*\.\s*GetComponent\s*<\s*Rigidbody\s*>\s*\(\s*\)\s*;"),
      "the ordered worker's own rigidbody, taken from the AI the lease was given"),

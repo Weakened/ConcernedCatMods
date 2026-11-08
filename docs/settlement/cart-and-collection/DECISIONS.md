@@ -282,6 +282,10 @@ suspended, and #282's broader harvesting stays open as deferred scope.
    - **Not granted.** No teleport, entry snap, velocity, force or rotation write, ownership takeover, RPC, cart or
      cargo movement, generic worker positioning, other body, player motor, or world-save write. Concerned Ladders
      never drives a worker.
+   - **Known limit, by design.** Every survey - at admission, before each entry, and every two seconds on the way -
+     counts any other character as a blocker. Somebody standing at the ladder's foot, in its lane or on the landing
+     when one runs refuses the entry or ends the climb. That is the fail-closed direction; the player watches from a
+     few metres away. The body's capsule is measured once per order so an unchanged ladder keeps its generation.
    - **Proof.** The #400 capability audit pins the motor's two kinematic writes and one position write; the #334
      worker climb audit pins the sweep directly in front of that write, the worker's own rigidbody, who may create,
      request, start and end a lease, and the ground-motor suspension. Planted escapes:

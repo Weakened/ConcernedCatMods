@@ -514,6 +514,9 @@ internal sealed class WorkerClimbOrder
             _links = null;
             _walk = null;
             _search = null;
+            _runner = null;
+            _plan = null;
+            _capabilities = null;
         }
     }
 
