@@ -28,6 +28,7 @@
          the ownership read, both budgets, the loaded-ground check and the bed key
          were all eyeballed. -->
     <Compile Include="..\ConcernedForeman\Runtime\Presentation\ResidentPose.cs" Link="Product/ResidentPose.cs" />
+    <Compile Include="..\ConcernedForeman\Runtime\Ladders\WorkerLadderLandingProbe.cs" Link="Product/WorkerLadderLandingProbe.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\Settlement\WorldHousing.cs" Link="Product/WorldHousing.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\SitePoints.cs" Link="Product/SitePoints.cs" />
 
