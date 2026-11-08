@@ -46,9 +46,9 @@ one job per class (`repo-checks.yml`), and were run locally before each push.
 | G17 | Appearance | `GunnarLookTests` (label, token and id read from the installed game, renumbering, language, fallback, palette, clothes, overrides) | OWNER GO-AROUND PENDING (E2) |
 | G18 | Dialogue is talk-only and catalogued | `GunnarTalkTests`; `GunnarDialogueCatalogTests`; `HardcodedStringAuditTests` | OWNER GO-AROUND PENDING (E1) |
 | G19 | Camp idle and range retention (#461) | `GunnarCampTests` (the domain routine, on main); the public camp facade and the sitting pose are PR #515's and pending until it merges | OWNER GO-AROUND PENDING once #515 is in |
+| G20 | World/character/logout cleanup | `GunnarCompanionRecordTests` scope; `GunnarBodyTests` world unload; `GunnarHandOverOrderTests.AWorldUnloadTakesTheFigureDownBeforeTheSharedRuntimeEndsTheWorld` | OWNER GO-AROUND PENDING (E1) |
 | G21 | The buckle is picked up once; a refused write never strands the story | `GunnarKeepsakeTests` (real sidecar, reopen, retry, second-write failure) | OWNER GO-AROUND PENDING (E1) |
 | G22 | No memento collision with another product's keepsake | `GunnarKeepsakeTests`, `GunnarNativeEnvironmentTests` (other keepsakes reserved, own spot excluded, full buffers defer); `GunnarBodyTests.HeKeepsClearOfAnotherProductsKeepsake` | OWNER GO-AROUND PENDING (E1) |
-| G20 | World/character/logout cleanup | `GunnarCompanionRecordTests` scope; `GunnarBodyTests` world unload; `GunnarHandOverOrderTests.AWorldUnloadTakesTheFigureDownBeforeTheSharedRuntimeEndsTheWorld` | OWNER GO-AROUND PENDING (E1) |
 
 ## Owner evidence rows
 

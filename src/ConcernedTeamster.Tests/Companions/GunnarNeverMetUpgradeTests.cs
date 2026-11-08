@@ -39,6 +39,11 @@ public sealed class GunnarNeverMetUpgradeTests
         ["Adapters/Workers/GunnarNpcRole.cs"] = new[] { "GunnarBodyContract", "Domain.Companions" },
         // #460: reads the explicitly chosen cart for recruitment.
         ["Adapters/Workers/GunnarRecruitmentCartPort.cs"] = new[] { "GunnarCartCheck", "GunnarCartChoice", "Domain.Companions" },
+        // The plugin installs the four companion runtimes (each hook pinned in
+        // GunnarCompanionRecordTests.ExistingFeatureGatesHaveNoCompanionDependency)
+        // and names nothing else of the companion's.
+        ["Plugin.cs"] = new[] { "Adapters.Companions", "GunnarCompanionAdapter", "GunnarKeepsakeRuntime",
+            "GunnarRecruitmentRuntime", "GunnarPresentation" },
     };
 
     [Fact]
@@ -58,9 +63,6 @@ public sealed class GunnarNeverMetUpgradeTests
         foreach (string file in Sources(product).Where(f => !InCompanions(f)))
         {
             string rel = Path.GetRelativePath(product, file).Replace('\\', '/');
-            // Plugin.cs's lifecycle hooks are pinned one by one in
-            // GunnarCompanionRecordTests.ExistingFeatureGatesHaveNoCompanionDependency.
-            if (rel == "Plugin.cs") continue;
             string code = Regex.Replace(File.ReadAllText(file), @"//[^\n]*|/\*.*?\*/", string.Empty, RegexOptions.Singleline);
             Allowed.TryGetValue(rel, out string[]? allowed);
             foreach (string name in names)
@@ -71,6 +73,10 @@ public sealed class GunnarNeverMetUpgradeTests
             }
         }
 
+        // The shared story library's own types (QuestState and the rest) are the
+        // existing test's: it refuses `TheConcernedCat.Companions` outside these
+        // folders. A text check: a `//` inside a string literal hides the rest of
+        // its line from this one.
         Assert.True(offences.Count == 0, "A utility names the companion:\n" + string.Join("\n", offences));
     }
 
