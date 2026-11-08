@@ -913,7 +913,7 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             "return container == null ? null : container.GetInventory();",
             "return _g ?? (container == null ? null : container.GetInventory());")
         self.assert_refused("an overload returned the other party's inventory", marker="#381",
-                            contains="container overload returns")
+                            contains="each InventoryOf overload returns its own party")
 
     def test_the_move_may_not_take_two_interchangeable_inventories(self):
         # Going back to `(Inventory from, Inventory to, ...)` restores the
