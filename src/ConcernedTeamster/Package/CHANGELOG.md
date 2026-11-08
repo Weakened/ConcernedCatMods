@@ -10,6 +10,14 @@
   never takes everything, and never takes from a chest you have not marked, that somebody has open, or that a ward or
   its own privacy setting refuses. `ct_collect deposit <item>` puts one named item into the chosen destination chest.
   Single player or a host with nobody else connected. **Not yet observed in game.**
+* **Gunnar at home (#458).** Once this character has found the worn harness buckle and the introduction has begun,
+  Gunnar stands beside your bed (or the world start) as a local figure - Short Curls, Stonedweller, leather trousers -
+  seen only by you, on the host, and only while he has no worker body anywhere in the world. Nothing in the world
+  changes: no bed is claimed and nothing is saved. `ct_haul spawn` hands him over to his worker body where the figure
+  stood, and `ct_haul retire` brings him home again; `ct_haul status` says which body he has. `Companions/Gunnar` off
+  hides him. **Not yet observed in game.**
+* **Requires Concerned NPC 0.5.0 at load.** The plugin now declares that minimum version, so an older library is a clear
+  dependency error rather than a missing method.
 
 * **Gunnar's collection tour survives an interruption (#379).** The tour now writes down what it is about to do
   before every pick and every trip to the chest, in one small file per world beside Teamster's other files

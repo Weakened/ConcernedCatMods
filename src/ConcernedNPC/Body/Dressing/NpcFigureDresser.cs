@@ -24,8 +24,10 @@ namespace TheConcernedCat.ConcernedNPC.Body.Dressing;
 public sealed class NpcFigureDresser
 {
     private readonly GameObject _root;
+    private readonly Animator? _animator;
     private readonly NpcDressing _dressing;
     private bool _takenDown;
+    private bool _sitting;
     private NpcFigureTalk? _talk;
 
     /// <param name="figure">A figure <see cref="NpcPresentationBody.TryExtract"/>
@@ -37,6 +39,7 @@ public sealed class NpcFigureDresser
     public NpcFigureDresser(in NpcPresentationFigure figure, NpcLookSpec spec, string holderName, Action<string>? log)
     {
         _root = figure.Root ?? throw new ArgumentException("A built figure is required.", nameof(figure));
+        _animator = figure.Animator;
         _dressing = new NpcDressing(figure, spec, holderName, log);
     }
 
@@ -137,6 +140,47 @@ public sealed class NpcFigureDresser
         NpcFigureParts.Place(_root.transform, spot, facing);
     }
 
+    /// <summary>True while the figure is posed sitting on the ground.</summary>
+    public bool Sitting => _sitting;
+
+    /// <summary>Sits the figure on the ground where it stands (#295 S5). A
+    /// local pose of this dresser's own figure only: nothing is claimed, moved
+    /// or written anywhere else. False when this build's controller has no
+    /// sitting pose, in which case the figure keeps standing.</summary>
+    public bool SitOnGround()
+    {
+        if (_takenDown || _root == null)
+        {
+            return false;
+        }
+
+        if (!_sitting)
+        {
+            _sitting = SetSitting(true);
+        }
+
+        return _sitting;
+    }
+
+    /// <summary>Stands the figure up again. Nothing when it is not sitting.
+    /// </summary>
+    public void StandUp()
+    {
+        if (_takenDown || !_sitting)
+        {
+            return;
+        }
+
+        SetSitting(false);
+        _sitting = false;
+    }
+
+    /// <summary>The bool the game's character controller sits on the ground
+    /// with: <c>emote_sit</c>, the one Concerned Cartographer's companion uses.
+    /// An animator parameter, not a name anything saves.</summary>
+    private bool SetSitting(bool on) =>
+        _animator != null && NpcFigureParts.Pose(_animator, "emote_sit", on);
+
     /// <summary>Measures every piece once, after the figure has been drawn.</summary>
     public void VerifyOnce()
     {
@@ -158,6 +202,7 @@ public sealed class NpcFigureDresser
         }
 
         _takenDown = true;
+        _sitting = false;
         if (_root != null)
         {
             _root.SetActive(false);
