@@ -38,10 +38,12 @@ internal sealed class FellReport
 /// axe's plain damage. Vanilla then resolves resistances, the tool tier, health
 /// and, at zero, its own <c>DropOnDestroyed</c> drops.
 ///
-/// <b>Drops stay on the ground in this leaf.</b> Nothing is picked up, taken
-/// into custody or counted toward an order: the wood lies where vanilla dropped
-/// it, as it would after a player's swing. Taking it (same-call custody by
-/// instance id, D19's second grant) belongs to the collection-loop leaf.
+/// <b>This port takes nothing.</b> For <c>cf_collect fell</c> the drops stay
+/// on the ground: the wood lies where vanilla dropped it, as it would after a
+/// player's swing. Inside a collection order (#282 leaf 2) the same
+/// <see cref="StrikeOnce"/> lands the hit and the pickup port, which holds the
+/// one pinned <c>Humanoid.Pickup</c>, traces and takes only the Wood drops that
+/// hit spawned, by instance id in the same call (D19's second grant).
 ///
 /// <b>Durability.</b> Vanilla wears a weapon on a hit only when the attacker is
 /// a player (<c>Attack</c>: <c>if (m_weapon.m_shared.m_useDurability &amp;&amp;
@@ -55,7 +57,7 @@ internal sealed class FellReport
 /// are all re-checked immediately before the hit.</summary>
 internal sealed class WorldFellingPort
 {
-    private const float DropSearchMetres = 3f;
+    internal const float DropSearchMetres = 3f;
 
     private static readonly int[] AllowlistedHashes = BuildHashes();
 
@@ -66,6 +68,7 @@ internal sealed class WorldFellingPort
     private readonly float _reachMetres;
     private readonly Action<string> _log;
     private readonly HashSet<ItemDrop> _before = new HashSet<ItemDrop>();
+    private readonly List<ItemDrop> _spawned = new List<ItemDrop>();
     private readonly List<Piece> _pieces = new List<Piece>();
 
     public WorldFellingPort(
@@ -131,43 +134,10 @@ internal sealed class WorldFellingPort
                     : string.Empty));
         }
 
-        HitData hit = HitFrom(axe!, humanoid, workerAt, treeAt);
-        float healthBefore = HealthOf(tree, view);
-
-        _before.Clear();
-        foreach (ItemDrop existing in ItemDrop.s_instances)
-        {
-            if (existing != null)
-            {
-                _before.Add(existing);
-            }
-        }
-
-        bool threw = false;
-        try
-        {
-            tree.Damage(hit);
-        }
-        catch (Exception exception)
-        {
-            threw = true;
-            _log("Felling: the hit on " + kind.Prefab + " threw " + exception.GetType().Name + ".");
-        }
-
-        int newDrops = 0;
-        foreach (ItemDrop candidate in ItemDrop.s_instances)
-        {
-            if (candidate != null && !_before.Contains(candidate) &&
-                Utils.DistanceXZ(candidate.transform.position, treeAt) <= DropSearchMetres)
-            {
-                newDrops++;
-            }
-        }
-
-        _before.Clear();
-        bool gone = tree == null || view == null || !view.IsValid();
-        float healthAfter = gone ? 0f : HealthOf(tree!, view!);
-        FellOutcome outcome = SmallTreeFelling.Read(healthBefore, gone, healthAfter, newDrops, threw);
+        _spawned.Clear();
+        FellOutcome outcome = StrikeOnce(tree, view, kind, axe!, humanoid, workerAt, _spawned, out float healthBefore, out float healthAfter, out bool gone, out bool threw);
+        int newDrops = _spawned.Count;
+        _spawned.Clear();
         switch (outcome)
         {
             case FellOutcome.Felled:
@@ -187,6 +157,67 @@ internal sealed class WorldFellingPort
     }
 
     private static FellReport Refused(string why) => new FellReport(FellOutcome.Unspecified, "Not felled: " + why + ".");
+
+    /// <summary>The felling switch, as the port re-reads it before every hit.
+    /// </summary>
+    internal bool Enabled => _enabled();
+
+    /// <summary>The one hit (D19), for <c>cf_collect fell</c> and for a
+    /// collection order (#282) alike, after the caller has checked every site
+    /// rule in the same call. It lands exactly one
+    /// <c>Destructible.Damage</c> built from his own axe and reports what the
+    /// game did: vanilla resolves resistances, the tool tier and health and, at
+    /// zero, spawns its own <c>DropOnDestroyed</c> drops inside this call when
+    /// this process owns the tree. <paramref name="spawned"/> receives every
+    /// item drop that appeared within <see cref="DropSearchMetres"/> of the tree
+    /// during the call; this method takes, guards and changes none of them.
+    /// </summary>
+    internal FellOutcome StrikeOnce(
+        Destructible tree, ZNetView view, SmallTreeKind kind, ItemDrop.ItemData axe, Humanoid humanoid, Vector3 workerAt,
+        List<ItemDrop> spawned, out float healthBefore, out float healthAfter, out bool gone, out bool threw)
+    {
+        Vector3 treeAt = tree.transform.position;
+        HitData hit = HitFrom(axe, humanoid, workerAt, treeAt);
+        healthBefore = HealthOf(tree, view);
+
+        _before.Clear();
+        foreach (ItemDrop existing in ItemDrop.s_instances)
+        {
+            if (existing != null)
+            {
+                _before.Add(existing);
+            }
+        }
+
+        threw = false;
+        try
+        {
+            tree.Damage(hit);
+        }
+        catch (Exception exception)
+        {
+            threw = true;
+            _log("Felling: the hit on " + kind.Prefab + " threw " + exception.GetType().Name + ".");
+        }
+
+        foreach (ItemDrop candidate in ItemDrop.s_instances)
+        {
+            if (candidate != null && !_before.Contains(candidate) &&
+                Utils.DistanceXZ(candidate.transform.position, treeAt) <= DropSearchMetres)
+            {
+                spawned.Add(candidate);
+            }
+        }
+
+        _before.Clear();
+        gone = tree == null || view == null || !view.IsValid();
+        healthAfter = gone ? 0f : HealthOf(tree!, view!);
+        return SmallTreeFelling.Read(healthBefore, gone, healthAfter, spawned.Count, threw);
+    }
+
+    /// <summary>Is this network prefab hash one of D19's four small trees?
+    /// </summary>
+    internal static bool IsSmallTreeHash(int prefabHash) => Array.IndexOf(AllowlistedHashes, prefabHash) >= 0;
 
     private static string Pretty(SmallTreeKind kind) =>
         kind.Prefab.StartsWith("Beech", StringComparison.Ordinal) ? "beech" : "fir";
@@ -254,7 +285,7 @@ internal sealed class WorldFellingPort
         return false;
     }
 
-    private static SmallTreeFacts ReadFacts(ZNetView view, out Destructible? destructible, out SmallTreeKind? kind)
+    internal static SmallTreeFacts ReadFacts(ZNetView view, out Destructible? destructible, out SmallTreeKind? kind)
     {
         string prefab = Utils.GetPrefabName(view.gameObject);
         SmallTreeFelling.TryFind(prefab, out kind);
@@ -274,7 +305,7 @@ internal sealed class WorldFellingPort
 
     /// <summary>Health as vanilla's damage handler reads it, with the same
     /// default: base health plus the world-level bonus.</summary>
-    private static float HealthOf(Destructible tree, ZNetView view) =>
+    internal static float HealthOf(Destructible tree, ZNetView view) =>
         view.IsValid()
             ? view.GetZDO().GetFloat(
                 ZDOVars.s_health,
@@ -283,7 +314,7 @@ internal sealed class WorldFellingPort
 
     /// <summary>His own best usable axe, read from his own inventory: the
     /// issued tool, never a clone and never one conjured for the hit.</summary>
-    private static ItemDrop.ItemData? BestAxe(Humanoid humanoid)
+    internal static ItemDrop.ItemData? BestAxe(Humanoid humanoid)
     {
         ItemDrop.ItemData? best = null;
         foreach (ItemDrop.ItemData item in humanoid.GetInventory().GetAllItems())
@@ -325,7 +356,7 @@ internal sealed class WorldFellingPort
         return hit;
     }
 
-    private static float NearestPlayerMetres(Vector3 at)
+    internal static float NearestPlayerMetres(Vector3 at)
     {
         float nearest = float.PositiveInfinity;
         foreach (Player player in Player.GetAllPlayers())
@@ -343,7 +374,7 @@ internal sealed class WorldFellingPort
     /// search is a 3D sphere, so a piece 14 m away across a slope could sit
     /// outside a 15 m sphere; the search is therefore four times wider and the
     /// judgement is the flat distance, which errs towards refusing.</summary>
-    private float NearestPieceMetres(Vector3 at)
+    internal float NearestPieceMetres(Vector3 at)
     {
         _pieces.Clear();
         Piece.GetAllPiecesInRadius(at, SmallTreeFelling.ClearanceMetres * 4f, _pieces);

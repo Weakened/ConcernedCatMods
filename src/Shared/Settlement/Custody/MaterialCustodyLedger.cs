@@ -473,7 +473,7 @@ internal sealed class MaterialCustodyLedger : IMaterialCustodyView
         {
             foreach (SpawnedDrop drop in result.Drops)
             {
-                var ground = new CustodyLocation(CustodyPlace.SourceGround, drop.SessionId, record.Source.WorldLoadEpoch);
+                CustodyLocation ground = TheConcernedCat.Settlement.Collection.Planning.PickupTakes.GroundOf(drop, record.Source);
                 Add(record.Order, ground, drop.Item, drop.Count);
             }
         }

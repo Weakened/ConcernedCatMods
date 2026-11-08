@@ -12,6 +12,12 @@ internal enum NaturalSourceKind
     Unspecified = 0,
     LooseStone = 1,
     Branch = 2,
+
+    /// <summary>One of D19's four small trees (<c>Beech_small1</c>,
+    /// <c>Beech_small2</c>, <c>FirTree_small</c>, <c>FirTree_small_dead</c>),
+    /// felled with his own axe and yielding the Wood vanilla drops. Only ever
+    /// observed inside an explicit work area with felling switched on.</summary>
+    SmallTree = 3,
 }
 
 /// <summary>One source, for one world load: its prefab, its in-session network
