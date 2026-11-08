@@ -1601,7 +1601,7 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
     # them: `(from, to) = (to, from);` below the pinned lines reverses the deposit
     # into a withdrawal with every pinned call byte-identical (review of #381's
     # chest take, which found the same hole there).
-    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS)
+    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS, 3)
     if findings:
         for finding in findings:
             fail(f"{label}: {port.relative_to(ROOT)}: {finding}. Pinning the derivations means nothing if the two "
@@ -1652,7 +1652,8 @@ TEAMSTER_ROLE_LOCAL_FUNCTION = re.compile(
     r"[A-Za-z_][\w<>?,\[\]. ]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(?:\{.*)?$")
 
 
-def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: tuple) -> list[str]:
+def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: tuple,
+                            overloads_expected: int) -> list[str]:
     """Why a port's two ROLES (which inventory is the source, which the
     destination) could be exchanged below the pinned derivations - empty when
     they cannot, as far as a text audit can see.
@@ -1694,6 +1695,26 @@ def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: t
             found.append(f"the mover declares a local function (`{line.strip()}`), whose parameters may shadow the "
                          "two roles")
 
+    # Every assignment whose left-hand side ends in a parenthesis is a
+    # deconstruction, wherever the statement starts - `if (x) (a, b) = ...;` and
+    # `_ = ((a, b) = ...);` included, which a "statement starts with (" rule missed.
+    groups = []
+    for match in re.finditer(r"(?<![=!<>])=(?![=>])", blank):
+        left = match.start() - 1
+        while left >= 0 and blank[left].isspace():
+            left -= 1
+        if left < 0 or blank[left] != ")":
+            continue
+        depth = 0
+        for index in range(left, -1, -1):
+            if blank[index] == ")":
+                depth += 1
+            elif blank[index] == "(":
+                depth -= 1
+                if depth == 0:
+                    groups.append(blank[index:left + 1])
+                    break
+
     for role in roles:
         word = r"\b" + re.escape(role) + r"\b"
         declared = [match for match in re.finditer(
@@ -1702,31 +1723,49 @@ def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: t
         plain = re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
         by_reference = re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank)
         lambdas = re.findall(word + SPACE + r"=>|\([^()]*" + word + r"[^()]*\)" + SPACE + r"=>", blank)
-        deconstructed = 0
-        for statement in re.split(r"[;{}]", blank):
-            text = statement.strip()
-            if not text.startswith("("):
-                continue
-            depth = 0
-            for index, char in enumerate(text):
-                if char in "([":
-                    depth += 1
-                elif char in ")]":
-                    depth -= 1
-                elif (char == "=" and depth == 0 and text[index + 1:index + 2] not in ("=", ">")
-                      and text[index - 1:index] not in ("=", "!", "<", ">")):
-                    if re.search(word, text[:index]):
-                        deconstructed += 1
-                    break
+        deconstructed = sum(1 for group in groups if re.search(word, group))
         if len(declared) != 2:
             found.append(f"`{role}` is declared {len(declared)} time(s) (a local or a parameter); exactly two "
-                         "are authorized, the two pinned derivations")
+                         "are authorized, the two pinned derivations. A local function whose signature spans "
+                         "lines is caught here rather than by the mover's local-function check")
         if len(plain) != 2 or by_reference or deconstructed:
             found.append(f"`{role}` is written {len(plain)} time(s) by assignment, {len(by_reference)} through ref "
                          f"or out and {deconstructed} by deconstruction; exactly two assignments are authorized, "
                          "the two pinned derivations")
         if lambdas:
             found.append(f"a lambda parameter is named `{role}`")
+
+    # What the derivations derive FROM. `InventoryOf(worker)` means Gunnar only
+    # while that overload returns the worker's inventory and `worker` is the
+    # worker: an overload that returned the other party's inventory (through a
+    # field set in the entry point), or a parameter reassigned, would reverse the
+    # move and the measurement together, so the reversal would be recorded as a
+    # clean transfer.
+    for parameter in ("worker", "container", "source", "destination"):
+        word = r"\b" + re.escape(parameter) + r"\b"
+        written = (re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
+                   + re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank))
+        written += [group for group in groups if re.search(word, group)]
+        if written:
+            found.append(f"`{parameter}` is written {len(written)} time(s); the parameters the two roles are "
+                         "derived from are never reassigned")
+    overloads = re.findall(r"\bInventory" + SPACE + r"\?" + SPACE + r"(?:Read)?InventoryOf" + SPACE + r"\(", blank)
+    for spelling, why in (
+            ("private static Inventory? InventoryOf(Container? container)", "the container overload is declared once"),
+            ("private static Inventory? InventoryOf(Humanoid? worker)", "the worker overload is declared once"),
+            ("container == null ? null : container.GetInventory()", "the container overload returns the container's "
+                                                                    "own inventory"),
+            ("worker == null || worker.IsDead() ? null : worker.GetInventory()", "the worker overload returns the "
+                                                                                "living worker's own inventory")):
+        if len(_teamster_take_exact(spelling).findall(blank)) != 1:
+            found.append(f"`{spelling}` is not in the port exactly once - {why}")
+    getters = len(re.findall(r"\.\s*GetInventory" + SPACE + r"\(", blank))
+    if getters != 2:
+        found.append(f"the port reads an inventory with GetInventory {getters} time(s); exactly two are authorized, "
+                     "one in each pinned InventoryOf overload")
+    if len(overloads) != overloads_expected:
+        found.append(f"the port declares {len(overloads)} InventoryOf overload(s) and {overloads_expected} are "
+                     "authorized, one per party (the deposit's worker overload delegates to ReadInventoryOf)")
     return found
 
 
@@ -1815,7 +1854,7 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
 
     take_shape = _teamster_take_exact(
         "private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)")
-    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS)
+    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS, 2)
     if findings:
         for finding in findings:
             fail(f"{label}: src/ConcernedTeamster/{port_rel}: {finding}. Pinning the derivations means nothing if "

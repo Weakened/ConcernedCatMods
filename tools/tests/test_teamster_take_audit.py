@@ -179,6 +179,32 @@ class ChestTakeIsNarrow(unittest.TestCase):
                      "        (chest, (gunnar, _)) = (gunnar, (chest, 0));\n        int remaining = units;\n")
         self.assert_audit_refused("a nested deconstruction swapped the roles")
 
+    def test_a_guarded_deconstruction_may_not_swap_the_roles(self):
+        # The third review: a deconstruction was looked for only where a
+        # statement starts with a parenthesis.
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        if (units > 0) (chest, gunnar) = (gunnar, chest);\n        int remaining = units;\n")
+        self.assert_audit_refused("a deconstruction behind an if swapped the roles")
+
+    def test_a_deconstruction_inside_an_expression_may_not_swap_the_roles(self):
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        _ = ((chest, gunnar) = (gunnar, chest));\n        int remaining = units;\n")
+        self.assert_audit_refused("a deconstruction inside a discard swapped the roles")
+
+    def test_an_overload_may_not_return_the_other_partys_inventory(self):
+        # The third review: the derivations mean what they say only while each
+        # InventoryOf returns its own party's inventory, and the measurement
+        # reads through the same helpers - so a swapped overload would reverse
+        # the move AND record it as a clean take.
+        self.swap_in(PORT, "return container == null ? null : container.GetInventory();",
+                     "return _held == null ? null : _held.GetInventory();")
+        self.assert_audit_refused("an overload returned the other party's inventory")
+
+    def test_a_parameter_the_roles_come_from_may_not_be_reassigned(self):
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        source = null;\n        int remaining = units;\n")
+        self.assert_audit_refused("the source parameter was reassigned")
+
     def test_the_calls_may_not_move_into_a_helper_whose_parameters_swap_the_roles(self):
         # The re-review's first finding: parameters are bindings, not writes, so
         # `Shift(chest, gunnar, ...)` into `Shift(Inventory gunnar, Inventory

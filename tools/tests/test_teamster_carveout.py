@@ -897,6 +897,23 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         self.assert_refused("the roles were swapped after the pinned derivations", marker="#381",
                             contains="`from` is written")
 
+    def test_a_guarded_deconstruction_may_not_swap_the_roles(self):
+        self.swap_in_deposit(
+            "        int remaining = units;\n",
+            "        if (units > 0) (from, to) = (to, from);\n        int remaining = units;\n")
+        self.assert_refused("a deconstruction behind an if swapped the roles", marker="#381",
+                            contains="`from` is written")
+
+    def test_an_overload_may_not_return_the_other_partys_inventory(self):
+        # Found by the review of #381's chest take: the measurement reads through
+        # the same helpers, so a swapped overload reverses the move and records
+        # it as a clean deposit.
+        self.swap_in_deposit(
+            "return container == null ? null : container.GetInventory();",
+            "return _held == null ? null : _held.GetInventory();")
+        self.assert_refused("an overload returned the other party's inventory", marker="#381",
+                            contains="container overload returns")
+
     def test_the_move_may_not_take_two_interchangeable_inventories(self):
         # Going back to `(Inventory from, Inventory to, ...)` restores the
         # rename attack, so the shape itself is refused: the derivations have to
