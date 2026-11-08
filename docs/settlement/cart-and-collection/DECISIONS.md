@@ -492,6 +492,17 @@ attach, or that is not drawn where it was put on that rig, is taken off, and the
 
 **Never observed in game.** OWNER GO-AROUND PENDING.
 
+**Gunnar, as built by #458 (lead default pending owner confirmation, 2026-11-08).** Teamster now has Gunnar's
+presentation figure (`docs/mods/concerned-teamster/GUNNAR_PRESENTATION.md`). Two details the recorded decisions
+leave open were settled the smallest way:
+- **His worker body is not dressed yet.** D18 allows it behind a Teamster setting of its own; #458 does not build
+  it, and the Teamster figure audit names `NpcWorkerDresser` nowhere until a leaf adds the setting, the pinned call
+  and its plants.
+- **Megingjord is not drawn on the figure.** #381's appearance line is leather pants, bare torso, Megingjord. The
+  shared dresser dresses hair, beard, chest and legs only, so the figure wears leather trousers and no chest piece,
+  and the belt is left off rather than adding a slot to Concerned NPC from a Teamster issue. His carrying capacity
+  is unaffected (D17).
+
 ## D19. Thorstein may fell the four small trees, through vanilla's own damage, inside an explicit work area
 
 Status: **accepted** (owner decision 2026-10-31, #282 and the wood remainder of #296, asked by the lead). It is in
@@ -561,6 +572,45 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
   `tools/tests/test_foreman_felling_audit.py` plants each escape (in `Runtime/`, `Ui/`, `Plugin.cs`, `Domain/` and two
   linked shared trees). Each plant is refused by the rule and passes a validator without it.
 
+**Built in the second leaf (#282 leaf 2, the wood remainder of #296).** Felling inside a collection order, with the
+same-call custody granted above.
+- **Survey.** With the switch on and an explicit work area, the order's survey also records the four small trees, as a
+  Wood source of kind `SmallTree`, planned at their most Wood (beech 3, fir 5). A tree within 15 m of a player-built
+  piece, under a ward, in a dungeon or inside a world location is inaccessible; one whose ownership, ward, location or
+  building clearance could not be read is unknown. The default camp circle never records one, in the adapter and again
+  in the game-free scheduler.
+- **Labour tiers.** Cheapest labour first: loose stones and branches, then brush, then small trees. A lower tier always
+  wins whatever the walk, so a tree is felled only when no branch the order can use is left.
+- **One hit per swing.** At the tree he lands one hit through the same pinned `tree.Damage(hit)` as `cf_collect fell`,
+  every D19 gate re-asked in that call, then waits a swing before the next.
+- **Only his own Wood, only what is still needed.** On a fell the pickup port traces, by instance id, only the Wood
+  drops that hit spawned, owned here and beside the tree, up to the smallest of what the order still needs, what fits
+  on him and what fits the chest, and takes them through the existing pinned `Humanoid.Pickup`. Resin, fir cones and
+  Wood beyond that limit are never guarded or touched and lie on the ground as ordinary items.
+- **Journal first, no schema change.** Every hit is a pickup in the settlement record, started before it and finished
+  after it: a standing tree finishes `Refused` with no drops, a fell finishes `Picked` with exactly the traced drops.
+- **A cleared area ends exhausted.** An order that felled a small tree and finds nothing more pauses with
+  `SourcesExhausted`, not "no eligible sources".
+- The hit's verb, `WorldFellingPort.StrikeOnce`, is pinned to its declaration and exactly two callers (the command and
+  the order's strike) by `check_foreman_felling_strike_callers`, the "#282 felling strike audit"; its plants are
+  `tools/tests/test_foreman_felling_strike_audit.py`.
+
+**Lead defaults pending owner confirmation (2026-11-08).** D19 leaves these details open. Each is the smallest,
+most fail-closed reading of the decision:
+1. **No per-order opt-in.** The switch plus an explicit work area is the opt-in. An order given with the switch on in a
+   map area or the harvest area may fell after the branches; with the switch off, or in the camp circle, it never does.
+2. **The brush tier is empty.** The installed game has no natural sapling, its berry bushes are food, and D19 grants no
+   bush, so no source is in the tier. It is named only to keep the owner's order.
+3. **Wood only.** Resin and fir cones are not order resources and are left on the ground, never taken.
+4. **A tree may be chosen for fewer units than it can drop.** The take limit, not the plan, stops overcollection.
+5. **Cadence and bounds.** One hit per 1.5 s; a tree that has not fallen after 8 hits is given up for the order; with a
+   player within 15 m he waits up to 30 s at the tree, then leaves it for that survey only.
+6. **Locations and dungeons are excluded for trees too**, as D10 excludes them for stones and branches.
+7. **No swing animation.** `SetTrigger` stays refused in Foreman; vanilla's own hit effects play.
+8. **"Exhausted" is per session.** A reload forgets which trees this order felled, so a cleared area found only after a
+   reload reads "no eligible sources".
+9. `cf_collect preview` still counts branches only.
+
 **Not granted:**
 - full-size trees, logs, stumps, bushes or anything not on the list;
 - felling outside an explicit area;
@@ -570,7 +620,7 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
 - a second copy of any drop;
 - mod data in a vanilla object.
 
-**Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F6).
+**Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F11).
 
 ## D21. Gunnar's idle hammer swing is cosmetic, and is one pinned animation trigger on his own body
 

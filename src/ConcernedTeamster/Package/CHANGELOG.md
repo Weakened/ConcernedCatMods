@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+* **Gunnar at home (#458).** Once this character has found the worn harness buckle and the introduction has begun,
+  Gunnar stands beside your bed (or the world start) as a local figure - Short Curls, Stonedweller, leather trousers -
+  seen only by you, on the host, and only while he has no worker body anywhere in the world. Nothing in the world
+  changes: no bed is claimed and nothing is saved. `ct_haul spawn` hands him over to his worker body where the figure
+  stood, and `ct_haul retire` brings him home again; `ct_haul status` says which body he has. `Companions/Gunnar` off
+  hides him. **Not yet observed in game.**
+* **Requires Concerned NPC 0.5.0 at load.** The plugin now declares that minimum version, so an older library is a clear
+  dependency error rather than a missing method.
 * **Gunnar keeps busy beside his cart (#381).** While he is idle near the cart you assigned him, he now and then walks
   over, faces it and swings a hammer at it, using the game's own hammer swing. It is scenery: it repairs nothing,
   uses nothing and changes nothing about the cart, and it never happens while the cart is hitched to anyone, while he

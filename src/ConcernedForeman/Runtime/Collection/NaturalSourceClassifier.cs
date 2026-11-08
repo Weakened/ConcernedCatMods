@@ -188,8 +188,50 @@ internal sealed class SourceDirectory
 
     public bool TryResolve(SourceKey key, out ZNetView view, out Pickable pickable, out string failure)
     {
-        view = null!;
         pickable = null!;
+        if (!TryResolveView(key, out view, out failure))
+        {
+            return false;
+        }
+
+        Pickable? component = view.GetComponent<Pickable>();
+        if (component == null)
+        {
+            view = null!;
+            failure = "the source has no pickable part";
+            return false;
+        }
+
+        pickable = component;
+        return true;
+    }
+
+    /// <summary>D19 (#282): a surveyed small tree, back to its live object after
+    /// the same identity proof as a pickable (prefab hash, in-session id, still
+    /// valid), with exactly its one destructible part.</summary>
+    public bool TryResolveTree(SourceKey key, out ZNetView view, out Destructible tree, out string failure)
+    {
+        tree = null!;
+        if (!TryResolveView(key, out view, out failure))
+        {
+            return false;
+        }
+
+        Destructible[] parts = view.GetComponentsInChildren<Destructible>(true);
+        if (parts.Length != 1 || parts[0] == null)
+        {
+            view = null!;
+            failure = "the tree is not one plain destructible any more";
+            return false;
+        }
+
+        tree = parts[0];
+        return true;
+    }
+
+    private bool TryResolveView(SourceKey key, out ZNetView view, out string failure)
+    {
+        view = null!;
 
         if (key.IsEmpty || key.WorldLoadEpoch != WorldLoadEpoch || WorldLoadEpoch == Guid.Empty)
         {
@@ -213,15 +255,7 @@ internal sealed class SourceDirectory
             return false;
         }
 
-        Pickable? component = found.GetComponent<Pickable>();
-        if (component == null)
-        {
-            failure = "the source has no pickable part";
-            return false;
-        }
-
         view = found;
-        pickable = component;
         failure = string.Empty;
         return true;
     }

@@ -11,6 +11,35 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — interrupted work is never repeated (#379)
+
+- **Thorstein now keeps a work plan for each job**, collecting and building, beside the
+  settlement record. Every pick, felling hit, deposit, draw, placement and put-back is
+  written down before it happens and after. Hand-overs to Gunnar's cart and `cf_settle
+  release` are not: the settlement record alone covers those, as before.
+- **If the game stops mid-movement**, the next load does not repeat that movement. He stops
+  and waits for you: `cf_collect status` says why. Once you have looked at what he carries,
+  `cf_collect resolve` (or `cf_collect resolve build`) records it, and the work goes on.
+- **A reload or a pause between movements carries the same job on** rather than starting it again.
+  A reload while someone else is connected, or before his body is here, waits rather than stops.
+- The settlement record and its order are unchanged, and it still decides what was gathered and spent.
+- Not yet observed in game.
+
+### Added — felling inside a collection order (#282, #296, D19)
+
+- **A wood order can fell small trees too**, after the fallen branches are gone, when
+  `Collection/ThorsteinFellsSmallTrees` is on and the order works in a map area or your
+  harvest area (never the default camp circle).
+- **One swing at a time.** He strikes the tree about every 1.5 s until it falls, and waits
+  while anyone stands within 15 m of it.
+- **He takes only the Wood that tree dropped, and never more than the order still needs.**
+  Resin, fir cones and any extra Wood stay on the ground for you.
+- **A cleared area says so:** the order pauses as exhausted.
+- **Fixed, found in review:** what a pick or a fell dropped could never be taken into his
+  inventory. The take named the stone, branch or tree rather than the drop, so the settlement
+  record refused every take and the order stopped. Stones and branches were affected too.
+- Not yet observed in game.
+
 ### Added — small-tree felling (#282, owner decision 2026-10-31, D19)
 
 - **Thorstein can fell small trees** (small beech and small fir) with his own axe,
