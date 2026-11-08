@@ -13,7 +13,7 @@ One dedicated worktree/branch per leaf, stacked for explicit dependencies:
 |---|---|---|
 | #456 | feat/ct-456-gunnar-record | Scoped durable record; adapter/config now installed at the four pinned Plugin lifecycle sites. Native owner checks remain. |
 | #457 | feat/ct-457-gunnar-keepsake | Shared keepsake now has native plugin wiring, verified-anchor/ground queries, canonical other-memento snapshot and existing-census reads. Actual mesh/physics/game evidence remains. |
-| #458 | feat/ct-458-gunnar-presentation | Body decisions, role wrapper, real-library leases, dresser/metadata adapters; existing role registration, same-position worker handover, Teamster figure audit/plants, native presets and visual evidence remain. |
+| #458 | feat/ct-458-gunnar-figure | Code-complete: ForWorkerWithPresentation role at its sole registration, release-before-claim leases with an arrival guard, figure runtime wired through Plugin and ct_haul spawn/retire/status, installed-game preset ids, Teamster figure audit with plants (GUNNAR_PRESENTATION.md). Visual evidence remains OWNER GO-AROUND PENDING. |
 | #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
 | #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel remain; owner confirmed hauling opt-in + host authority on 2026-11-01. |
 | #461 | feat/ct-461-gunnar-camp | Cached no-allocation targets/range retention/seats; approved public Camp API release/pins, native pose and lifecycle wiring remain. Proposed Camp facade is uncompiled under proposals/. |
@@ -41,8 +41,8 @@ patch in artifacts/gunnar-handoff. No branch has been merged or published.
 | G12 | Full destination; conservation | Existing DepositOrderGateTests, GunnarCargoLedgerTests, GunnarTourPlanKillTests; no transfer added here | Pending laden native delivery |
 | G13 | Once-only pickup, write refusal | KeepsakeTests real sidecar/reopen/retry; RecordTests detached failed save and no in-memory hire | Pending native callback/removal |
 | G14 | No memento collision | Shared planner separation plus actual native-reader source tests for compass/shared footprints and own-spot exclusion; full buffers defer | Pending actual cross-product positions |
-| G15 | Appearance | BodyTests labels/palette/overrides; LookSource reads installed metadata only when invoked | Pending IDs and front/side/daylight |
-| G16 | One body; ordered handover | BodyTests real ConcernedNPC arbiter, removal failure, release-before-claim | Pending ct_haul/#317 wiring |
+| G15 | Appearance | GunnarLookTests label/token/id (ids read from the installed game), renumbering, language, fallback, palette, clothes, overrides | Pending front/side/daylight |
+| G16 | One body; ordered handover | BodyTests real ConcernedNPC arbiter, arrival guard, removal failure, release-before-claim; GunnarHandOverOrderTests shipped ct_haul spawn/retire and Plugin wiring; #458 figure audit plants | Pending native spawn/retire at his spot |
 | G17 | Safe camp/idle/range retention | CampTests real internal Camp via TEST-ONLY projection, seat targets and exact isolated hot-path allocation/probe budget | Pending approved public API and actual poses |
 | G18 | World/character/logout cleanup | Record/Session tests, body lease invalidation, recruitment token invalidation | Pending integrated lifecycle |
 

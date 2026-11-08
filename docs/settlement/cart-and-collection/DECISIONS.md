@@ -490,6 +490,17 @@ attach, or that is not drawn where it was put on that rig, is taken off, and the
 
 **Never observed in game.** OWNER GO-AROUND PENDING.
 
+**Gunnar, as built by #458 (lead default pending owner confirmation, 2026-11-08).** Teamster now has Gunnar's
+presentation figure (`docs/mods/concerned-teamster/GUNNAR_PRESENTATION.md`). Two details the recorded decisions
+leave open were settled the smallest way:
+- **His worker body is not dressed yet.** D18 allows it behind a Teamster setting of its own; #458 does not build
+  it, and the Teamster figure audit names `NpcWorkerDresser` nowhere until a leaf adds the setting, the pinned call
+  and its plants.
+- **Megingjord is not drawn on the figure.** #381's appearance line is leather pants, bare torso, Megingjord. The
+  shared dresser dresses hair, beard, chest and legs only, so the figure wears leather trousers and no chest piece,
+  and the belt is left off rather than adding a slot to Concerned NPC from a Teamster issue. His carrying capacity
+  is unaffected (D17).
+
 ## D19. Thorstein may fell the four small trees, through vanilla's own damage, inside an explicit work area
 
 Status: **accepted** (owner decision 2026-10-31, #282 and the wood remainder of #296, asked by the lead). It is in

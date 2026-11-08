@@ -1,105 +1,256 @@
+using TheConcernedCat.Companions.Placement;
 using TheConcernedCat.Companions.Quest;
-using TheConcernedCat.ConcernedNPC.Appearance;
 using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Domain.Companions;
 namespace TheConcernedCat.ConcernedTeamster.Tests.Companions;
+
+/// <summary>#458, modelled on Foreman's ThorsteinBodyTests: which of Gunnar's
+/// two bodies he should have, the contract he registers, and the hand-over,
+/// against the real Concerned NPC arbiter rather than a description of it.</summary>
 public sealed class GunnarBodyTests
 {
     private static GunnarBodyFacts Home(int saved = 0, QuestState? stage = QuestState.IntroPending,
         bool host = true, bool enabled = true, bool registered = true, bool loaded = true,
         bool resting = true, bool anchor = true, bool near = true) =>
         new(registered, loaded, host, enabled, stage, saved, resting, anchor, near);
+
     private sealed class Paths : INpcDataPaths
     {
         public string Root => Path.GetTempPath();
-        public bool TryResolveFile(string purpose, out string path) { path=""; return false; }
+        public bool TryResolveFile(string purpose, out string path) { path = ""; return false; }
     }
-    private sealed class WorkerRole : INpcRole
+
+    private sealed class Role : INpcRole
     {
+        public Role(NpcBodyContract body) { Body = body; }
         public NpcIdentity Identity => new("teamster", "gunnar");
-        public NpcBodyContract Body => NpcBodyContract.ForWorker("CT_TeamsterWorker", "tcc.worker.");
+        public NpcBodyContract Body { get; }
         public INpcDataPaths Paths { get; } = new Paths();
     }
-    private static (NpcRoleRegistry, GunnarBodyLeases, NpcIdentity) Setup()
+
+    private static (NpcRoleRegistry, GunnarBodyLeases, NpcIdentity) Setup(NpcBodyContract? contract = null)
     {
-        var registry = new NpcRoleRegistry(); var role = new GunnarPresentationRole(new WorkerRole());
-        Assert.True(registry.Register(role).IsRegistered); registry.BeginWorldLoad(out _);
+        var registry = new NpcRoleRegistry();
+        var role = new Role(contract ?? GunnarBodyContract.Create());
+        Assert.True(registry.Register(role).IsRegistered);
+        registry.BeginWorldLoad(out _);
         return (registry, new GunnarBodyLeases(registry, role.Identity), role.Identity);
     }
-    [Fact] public void PendingVisitorPresentationDoesNotGrantRecruitment()
+
+    // --- the contract ---------------------------------------------------------------------------
+
+    [Fact]
+    public void TheContractKeepsEveryDurableFactAndAdmitsTheFigure()
     {
-        string root=Path.Combine(Path.GetTempPath(),"ct-458-visitor-"+Guid.NewGuid().ToString("N"));
+        // Zero migrations: the prefab every saved Gunnar is found under and the
+        // key prefix his body stores itself beneath are the shipped literals.
+        NpcBodyContract contract = GunnarBodyContract.Create();
+        Assert.Equal("CT_TeamsterWorker", contract.PrefabName);
+        Assert.Equal("tcc.worker.", contract.ZdoKeyPrefix);
+        Assert.Equal(NpcBodyKind.Worker, contract.Kind);
+        Assert.True(contract.Admits(NpcBodyKind.Worker));
+        Assert.True(contract.Admits(NpcBodyKind.Presentation));
+        Assert.True(contract.TryValidate(out string why), why);
+    }
+
+    [Fact]
+    public void AWorkerOnlyRoleIsNotRegisteredForAFigure()
+    {
+        var (_, leases, _) = Setup(NpcBodyContract.ForWorker("CT_TeamsterWorker", "tcc.worker."));
+        Assert.False(leases.Registered);
+        Assert.False(leases.TakePresentation());
+        var (_, upgraded, _) = Setup();
+        Assert.True(upgraded.Registered);
+    }
+
+    [Fact]
+    public void AnUnregisteredIdentityHoldsNothing()
+    {
+        var registry = new NpcRoleRegistry();
+        registry.BeginWorldLoad(out _);
+        var leases = new GunnarBodyLeases(registry, new NpcIdentity("teamster", "gunnar"));
+        Assert.False(leases.Registered);
+        Assert.False(leases.TakePresentation());
+        Assert.False(leases.TryTakeWorker(() => { }, out string refusal));
+        Assert.NotEqual(string.Empty, refusal);
+    }
+
+    // --- the plan -------------------------------------------------------------------------------
+
+    [Theory] [InlineData(1)] [InlineData(2)]
+    public void SavedWorkerAnywhereOutranksFigure(int bodies)
+    { Assert.Equal(GunnarBodyKind.Worker, GunnarBodyPlan.Decide(Home(saved: bodies, enabled: false, host: false))); }
+
+    [Theory] [InlineData((int)QuestState.IntroPending)] [InlineData((int)QuestState.Recruited)]
+    public void VisitorAndRecruitedCanPresentAtRest(int stage)
+    { Assert.Equal(GunnarBodyKind.Presentation, GunnarBodyPlan.Decide(Home(stage: (QuestState)stage))); }
+
+    [Theory] [InlineData((int)QuestState.Unstarted)] [InlineData((int)QuestState.Discovered)]
+    [InlineData((int)QuestState.Collected)] [InlineData((int)QuestState.Skipped)]
+    public void OtherStagesDoNotPresent(int stage)
+    { Assert.Equal(GunnarBodyKind.None, GunnarBodyPlan.Decide(Home(stage: (QuestState)stage))); }
+
+    [Fact]
+    public void UnknownAndEveryMissingRequirementSuppressesFigure()
+    {
+        var refused = new[] { default(GunnarBodyFacts), Home(saved: -1), Home(stage: null),
+            Home(host: false), Home(enabled: false), Home(registered: false), Home(loaded: false),
+            Home(resting: false), Home(anchor: false), Home(near: false) };
+        foreach (var f in refused) Assert.Equal(GunnarBodyKind.None, GunnarBodyPlan.Decide(f));
+        Assert.False(GunnarBodyPlan.MaySurvey(true, true, true, false));
+        Assert.False(GunnarBodyPlan.MaySurvey(true, true, false, true));
+        Assert.False(GunnarBodyPlan.MaySurvey(false, true, true, true));
+        Assert.False(GunnarBodyPlan.MaySurvey(true, false, true, true));
+        Assert.True(GunnarBodyPlan.MaySurvey(true, true, true, true));
+    }
+
+    [Fact]
+    public void PendingVisitorPresentationDoesNotGrantRecruitment()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "ct-458-visitor-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var record=GunnarCompanionRecord.Open(root,11,22);
+            var record = GunnarCompanionRecord.Open(root, 11, 22);
             Assert.True(record.BeginIntroduction()); Assert.True(record.ShouldPresentFigure(true));
             Assert.False(record.IsRecruited); Assert.False(record.ShouldPresentFigure(false));
             Assert.True(record.Skip()); Assert.False(record.ShouldPresentFigure(true)); Assert.False(record.IsRecruited);
         }
-        finally { if(Directory.Exists(root)) Directory.Delete(root,true); }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
-    [Fact] public void RoleUpgradePreservesEveryDurableIdentity()
+
+    // --- the leases: never both, release before claim -------------------------------------------
+
+    [Fact]
+    public void HandOverTakesTheFigureDownThenReleasesThenClaimsTheWorker()
     {
-        var old = new WorkerRole(); var role = new GunnarPresentationRole(old);
-        Assert.Equal(old.Identity, role.Identity); Assert.Equal("CT_TeamsterWorker", role.Body.PrefabName);
-        Assert.Equal("tcc.worker.", role.Body.ZdoKeyPrefix); Assert.Same(old.Paths, role.Paths);
-    }
-    [Theory] [InlineData(1)] [InlineData(2)]
-    public void SavedWorkerAnywhereOutranksFigure(int bodies)
-    { Assert.Equal(GunnarBodyKind.Worker, GunnarBodyPlan.Decide(Home(saved:bodies, enabled:false))); }
-    [Theory] [InlineData((int)QuestState.IntroPending)] [InlineData((int)QuestState.Recruited)]
-    public void VisitorAndRecruitedCanPresentAtRest(int stage)
-    { Assert.Equal(GunnarBodyKind.Presentation, GunnarBodyPlan.Decide(Home(stage:(QuestState)stage))); }
-    [Theory] [InlineData((int)QuestState.Unstarted)] [InlineData((int)QuestState.Discovered)]
-    [InlineData((int)QuestState.Collected)] [InlineData((int)QuestState.Skipped)]
-    public void OtherStagesDoNotPresent(int stage)
-    { Assert.Equal(GunnarBodyKind.None, GunnarBodyPlan.Decide(Home(stage:(QuestState)stage))); }
-    [Fact] public void UnknownAndEveryMissingRequirementSuppressesFigure()
-    {
-        var refused = new[] { default(GunnarBodyFacts), Home(saved:-1), Home(stage:null),
-            Home(host:false), Home(enabled:false), Home(registered:false), Home(loaded:false),
-            Home(resting:false), Home(anchor:false), Home(near:false) };
-        foreach (var f in refused) Assert.Equal(GunnarBodyKind.None, GunnarBodyPlan.Decide(f));
-        Assert.False(GunnarBodyPlan.MaySurvey(true,true,true,false));
-        Assert.False(GunnarBodyPlan.MaySurvey(true,true,false,true));
-    }
-    [Fact] public void HandOverRemovesThenReleasesThenExistingWorkerClaims()
-    {
-        var (registry, leases, id) = Setup(); Assert.True(leases.TakePresentation());
+        var (registry, leases, id) = Setup();
+        Assert.True(leases.TakePresentation());
         var trace = new List<string>();
-        Assert.True(leases.HandOverToExistingWorker(() =>
-        { Assert.True(leases.HoldsPresentation); trace.Add("figure down"); }, () =>
+        Assert.True(leases.TryTakeWorker(() =>
         {
-            Assert.False(leases.HoldsPresentation); trace.Add("worker claim");
-            return registry.TryClaimBody(id, NpcBodyKind.Worker, "existing-worker").IsGranted;
-        }));
-        Assert.Equal(new[] { "figure down", "worker claim" }, trace);
+            // The figure comes down while its lease is still held...
+            Assert.True(leases.HoldsPresentation);
+            Assert.Equal(NpcBodyKind.Presentation, registry.CurrentBodyKind(id));
+            trace.Add("figure down");
+        }, out string refusal), refusal);
+        // ...and the worker lease is held only after it is gone.
+        trace.Add(registry.CurrentBodyKind(id).ToString());
+        Assert.Equal(new[] { "figure down", "Worker" }, trace);
+        Assert.False(leases.HoldsPresentation);
+        Assert.True(leases.HoldsWorker);
+    }
+
+    [Fact]
+    public void WhileTheArrivalGuardIsHeldNoFigureMayBeClaimed()
+    {
+        var (registry, leases, id) = Setup();
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
         Assert.False(leases.TakePresentation());
+        Assert.Contains(BodyClaimStatus.RefusedOtherKindExists.ToString(), leases.LastRefusal);
+        // Nor by any other runtime in the process.
+        Assert.False(registry.TryClaimBody(id, NpcBodyKind.Presentation, "someone-else").IsGranted);
     }
-    [Fact] public void RemovalFailureNeverClaimsWorkerOrReleasesLease()
+
+    [Fact]
+    public void ReleasingTheGuardLetsTheFigureAndAJobBackIn()
     {
-        var (_, leases, _) = Setup(); Assert.True(leases.TakePresentation()); bool claimed=false;
-        Assert.Throws<InvalidOperationException>(() => leases.HandOverToExistingWorker(
-            () => throw new InvalidOperationException(), () => { claimed=true; return true; }));
-        Assert.False(claimed); Assert.True(leases.HoldsPresentation);
+        var (registry, leases, id) = Setup();
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
+        leases.ReleaseWorker();
+        Assert.False(leases.HoldsWorker);
+        // A haul claims the worker kind under its own id once the guard is gone.
+        BodyClaim haul = registry.TryClaimBody(id, NpcBodyKind.Worker, "haul-1");
+        Assert.True(haul.IsGranted);
+        Assert.False(leases.TakePresentation());
+        haul.Lease!.Dispose();
+        Assert.True(leases.TakePresentation());
+        leases.ReleaseWorker(); // idempotent, and never touches somebody else's lease
+        Assert.True(leases.HoldsPresentation);
     }
-    [Fact] public void WorldUnloadInvalidatesLeaseAndRejectsNewClaim()
+
+    [Fact]
+    public void AJobAlreadyHoldingHimIsNotARefusal()
     {
-        var (registry, leases, _) = Setup(); Assert.True(leases.TakePresentation());
-        registry.EndWorldLoad(); Assert.False(leases.HoldsPresentation); Assert.False(leases.TakePresentation());
+        var (registry, leases, id) = Setup();
+        BodyClaim haul = registry.TryClaimBody(id, NpcBodyKind.Worker, "haul-1");
+        Assert.True(haul.IsGranted);
+        Assert.True(leases.TryTakeWorker(() => { }, out string refusal), refusal);
+        Assert.False(leases.HoldsWorker);
+        // The job's lease is untouched.
+        Assert.Equal(NpcBodyKind.Worker, registry.CurrentBodyKind(id));
+        Assert.True(haul.Lease!.IsActive);
     }
-    [Fact] public void AppearanceLabelsPaletteAndExplicitOverridesArePreserved()
+
+    [Fact]
+    public void RemovalFailureNeverClaimsWorkerOrReleasesLease()
     {
-        var spec=GunnarLook.Spec("observed-hair", "observed-beard", "custom-hair", "custom-beard");
-        Assert.Equal("Short Curls", spec.Hair!.DisplayName); Assert.Equal("Stonedweller", spec.Beard!.DisplayName);
-        Assert.Equal(0.52f, spec.SkinHue); Assert.Equal(0.05f, spec.HairTone); Assert.Equal(0.49f, spec.HairLevel);
-        Assert.Equal("custom-hair", spec.HairOverride); Assert.Equal("custom-beard", spec.BeardOverride);
-        Assert.Null(spec.Chest); Assert.Null(spec.Legs); // no unapproved costume
-        Assert.Empty(GunnarLook.Spec().Hair!.PrefabCandidates);
-        var options = new[] { new NpcLookOption("actual-preset", "Short Curls") };
-        Assert.Equal(NpcLookMatch.DisplayName, NpcLookPlan.Choose(options,spec.Hair).Match);
-        Assert.Equal(NpcLookMatch.None, NpcLookPlan.Choose(new[] { new NpcLookOption("HairOther","Other") },
-            GunnarLook.Spec().Hair!).Match);
+        var (registry, leases, id) = Setup();
+        Assert.True(leases.TakePresentation());
+        Assert.Throws<InvalidOperationException>(() =>
+            leases.TryTakeWorker(() => throw new InvalidOperationException(), out _));
+        Assert.True(leases.HoldsPresentation);
+        Assert.False(leases.HoldsWorker);
+        Assert.Equal(NpcBodyKind.Presentation, registry.CurrentBodyKind(id));
+        Assert.Throws<InvalidOperationException>(() => leases.ReleasePresentation(() => throw new InvalidOperationException()));
+        Assert.True(leases.HoldsPresentation);
+    }
+
+    [Fact]
+    public void WorldUnloadInvalidatesBothLeasesAndForgetDropsThem()
+    {
+        var (registry, leases, _) = Setup();
+        Assert.True(leases.TakePresentation());
+        registry.EndWorldLoad();
+        Assert.False(leases.HoldsPresentation);
+        Assert.False(leases.TakePresentation());
+        registry.BeginWorldLoad(out _);
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
+        registry.EndWorldLoad();
+        Assert.False(leases.HoldsWorker);
+        leases.Forget();
+        registry.BeginWorldLoad(out _);
+        Assert.True(leases.TakePresentation());
+    }
+
+    // --- where he stands ------------------------------------------------------------------------
+
+    private sealed class Flat : IPlacementProbe
+    {
+        public int Probes;
+        public PlacementProbeSample Probe(WorldPoint point) { Probes++; return new(point, PlacementRejection.None, -1f, SeatAvailability.None); }
+    }
+
+    private static readonly CompanionAnchor Bed = new(AnchorKind.ClaimedBed, new WorldPoint(10f, 30f, -4f));
+
+    [Fact]
+    public void HeStandsBesideHomeWithinTheBandAndTheProbeIsBounded()
+    {
+        var probe = new Flat();
+        PlacementResult spot = GunnarFigurePlacement.Plan(Bed, probe, Array.Empty<WorldPoint>());
+        Assert.True(spot.Found);
+        float distance = spot.Position.HorizontalDistanceTo(Bed.Position);
+        Assert.InRange(distance, GunnarFigurePlacement.Rules.MinimumRadius - 0.01f, GunnarFigurePlacement.Rules.MaximumRadius + 0.01f);
+        Assert.InRange(probe.Probes, 1, PlacementPlanner.MaximumCandidates);
+        Assert.Equal(CompanionPose.SitOnGround, spot.Pose);
+    }
+
+    [Fact]
+    public void HeKeepsClearOfAnotherProductsKeepsake()
+    {
+        PlacementResult first = GunnarFigurePlacement.Plan(Bed, new Flat(), Array.Empty<WorldPoint>());
+        PlacementResult moved = GunnarFigurePlacement.Plan(Bed, new Flat(), new[] { first.Position });
+        Assert.True(moved.Found);
+        Assert.True(moved.Position.HorizontalDistanceTo(first.Position) >= GunnarKeepsake.Clearance);
+    }
+
+    [Fact]
+    public void EveryUnknownDefersInsteadOfGuessingASpot()
+    {
+        Assert.False(GunnarFigurePlacement.Plan(CompanionAnchor.None, new Flat(), Array.Empty<WorldPoint>()).Found);
+        Assert.False(GunnarFigurePlacement.Plan(Bed, new Flat(), null).Found);
+        var nan = new CompanionAnchor(AnchorKind.ClaimedBed, new WorldPoint(float.NaN, 0f, 0f));
+        Assert.False(GunnarFigurePlacement.Plan(nan, new Flat(), Array.Empty<WorldPoint>()).Found);
+        Assert.False(GunnarFigurePlacement.Plan(Bed, new Flat(), new[] { new WorldPoint(float.NaN, 0f, 0f) }).Found);
     }
 }

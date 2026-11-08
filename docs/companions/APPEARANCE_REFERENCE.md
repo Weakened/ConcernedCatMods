@@ -15,14 +15,14 @@ by the #298 sweep; nothing below was rewritten.
 |---|---|---|
 | Hulgi | Concerned Cartographer | **Applied.** `AppearancePlan` resolves `Long Braid` and `Handlebar` through the installed game's own localization, not a hardcoded prefab id |
 | Thorstein | Concerned Foreman | **Applied to his presentation body** (#295 step 1, 2026-10-27): `ThorsteinLookPlan` resolves `Mullet` and `Mustache` by the installed game's own label and then by `Hair32`/`Beard22`, and his colours go through the character screen's palette. The figure is shown at home only while he has no worker body. His worker body is still the `Dverger` clone; since #295 S6 (owner decision 2026-10-29, DECISIONS.md D18) Concerned NPC's `NpcWorkerDresser` puts the same hair and beard pieces on it locally, behind `Thorstein/WorkerLook` (on), keeping the plain look for any piece that does not fit that rig. **Not observed in game.** See `docs/mods/concerned-foreman/PROJECT.md` |
-| Gunnar | Concerned Teamster | **Not applied**, same reason |
+| Gunnar | Concerned Teamster | **Applied to his presentation body** (#458, 2026-11-08): `GunnarLook` resolves `Short Curls` and `Stonedweller` by the installed game's own label, then by token (`$customization_hair23`, `$customization_beard16`), then by `Hair23`/`Beard16`. The tokens and ids were read read-only from the installed game's localization table (`valheim_Data/resources.assets`) and prefab manifest (`StreamingAssets/SoftRef/manifest_extended`), and agree with the Jotunn 1.0.7 list below. Colours go through the character screen's palette at skin 0.52, hair tone 0.05, blondness 0.49; where the palette cannot be read, a grey-brown hair fallback and the source skin. Clothes follow #381's appearance line and are this build's proposal: leather trousers (`Leather Trousers`, `ArmorLeatherLegs`) and a bare torso; Megingjord is not drawn, because the shared dresser has no belt slot. The figure is shown at home only while he has no worker body, from the visitor stage (`IntroPending`) on. His worker body keeps its plain look: D18 covers Sunniva and Thorstein, not Gunnar. **Not observed in game.** See `docs/mods/concerned-teamster/GUNNAR_PRESENTATION.md` |
 
 Since the #295 lift, the dresser that applies these rows is Concerned NPC's
 `NpcFigureDresser`, and each product supplies only its row as an `NpcLookSpec`:
 a body (`NpcBodyModel.Female` for a female row), a hair and beard request (by
 label, then localization token, then prefab id; no request means no beard), the
-slider readings and the clothes. Gunnar has no presentation body yet (#297). Thorstein has had one since #295 step 1,
-shown only while he has no worker body; the two never coexist.
+slider readings and the clothes. Thorstein has had a presentation body since #295 step 1 and Gunnar since #458,
+each shown only while he has no worker body; the two never coexist.
 
 ---
 

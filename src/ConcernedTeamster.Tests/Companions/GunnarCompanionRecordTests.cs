@@ -258,7 +258,23 @@ public sealed class GunnarCompanionRecordTests : IDisposable
                     "private Adapters.Companions.GunnarRecruitmentRuntime? _gunnarRecruitment;",
                     "_gunnarRecruitment = Adapters.Companions.GunnarRecruitmentRuntime.Install(_gunnarCompanion, () => _hauling?.Service, Logger);",
                     "_gunnarRecruitment?.Tick();",
-                    "_gunnarRecruitment?.Forget();" })
+                    "_gunnarRecruitment?.Forget();",
+                    // #458: the figure at home. It reads the hauling runtime's
+                    // census and is handed four seams; no utility consults it.
+                    "private Adapters.Companions.GunnarPresentation? _gunnarFigure;",
+                    "_gunnarFigure = Adapters.Companions.GunnarPresentation.Install(_gunnarCompanion,\n"+
+                    "            () => _hauling?.BodyStatus ?? Domain.Hauling.Execution.WorkerBodyStatus.Unspecified,\n"+
+                    "            () => _hauling?.BoundBody != null,\n"+
+                    "            () => _hauling?.CollectionIdentity?.MayRetireBody ?? false,\n"+
+                    "            Logger);",
+                    "if (_hauling != null && _gunnarFigure != null)\n        {\n"+
+                    "            _hauling.TakeWorkerBody = _gunnarFigure.TakeWorkerBody;\n"+
+                    "            _hauling.ReleaseWorkerBody = _gunnarFigure.ReleaseWorkerBody;\n"+
+                    "            _hauling.BodiesChanged = _gunnarFigure.NoteBodiesChanged;\n"+
+                    "            _hauling.BeforeWorldEnds = _gunnarFigure.OnWorldUnloading;\n"+
+                    "            _hauling.PresentationStatus = _gunnarFigure.Describe;\n        }",
+                    "_gunnarFigure?.Dispose();",
+                    "_gunnarFigure?.Tick(UnityEngine.Time.deltaTime);" })
                 {
                     Assert.Equal(1, source.Split(hook,StringSplitOptions.None).Length-1);
                     source=source.Replace(hook,"");
@@ -266,6 +282,7 @@ public sealed class GunnarCompanionRecordTests : IDisposable
                 Assert.DoesNotContain("_gunnarCompanion",source);
                 Assert.DoesNotContain("_gunnarKeepsake",source);
                 Assert.DoesNotContain("_gunnarRecruitment",source);
+                Assert.DoesNotContain("_gunnarFigure",source);
             }
             Assert.DoesNotContain("GunnarCompanion", source);
             Assert.DoesNotContain("TheConcernedCat.Companions", source);
