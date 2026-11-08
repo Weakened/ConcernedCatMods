@@ -3,7 +3,8 @@
 Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
 death door named in `GUNNAR_COLLECTION.md` §6c) and **C6** (2026-10-28, D17 - the collection tour's walking and
-load size). D16's fail-closed reading was confirmed by the owner on 2026-10-28.
+load size) and **C7** (2026-10-31, D21 - Gunnar's cosmetic idle hammer swing). D16's fail-closed reading was confirmed
+by the owner on 2026-10-28.
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -431,7 +432,8 @@ intended narrowing, not a defect to be widened later.
   `SetMaxHealth`, `.Damage(`, `ApplyDamage`, `RPC_Damage`) is refused anywhere in Teamster.
 - *Vanilla inside the call.* `Humanoid.DropItem` also plays the body's `interact` trigger and the drop effects, and
   places each stack a metre in front of the body with a small push. Those are vanilla's, inside the one pinned call,
-  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`.
+  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`. (Since D21, one file
+  does - the idle hammer port, for a cosmetic swing - and nothing on the death path does.)
 
 **Never observed in game.** The port binds Unity; the decision, the classification, the accounting and the record
 format are unit-tested (`WorkerDeathDropTests`), the shape is pinned, and nothing has been watched happening.
@@ -461,7 +463,7 @@ planning limit**: the rest of a larger look is the next load, never dropped and 
 that is an empty order, not a size judgement - but one or two units are walked to the chest like any other load.
 
 **What is not granted:** no cart use on a tour, no felling (`TreeBase.Damage`), no idle gesture
-(`ZSyncAnimation.SetTrigger`), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
+(`ZSyncAnimation.SetTrigger` - granted separately on 2026-10-31 as D21, outside the tour), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
 change to D15's deposit or D16's death drop. Each of those still needs its own owner decision.
 
 **Never observed in game.** The tour's rows in `GUNNAR_COLLECTION.md` §10 are OWNER GO-AROUND PENDING.
@@ -677,3 +679,70 @@ tour or into a cart's container (the cart-assisted round is its own decision, re
 `CLAUDE.md`); no widening of any other Teamster capability.
 
 **Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 49-55 are OWNER GO-AROUND PENDING.
+
+## D21. Gunnar's idle hammer swing is cosmetic, and is one pinned animation trigger on his own body
+
+Status: **accepted** (contract revision **C7**, owner decision 2026-10-31, given to the lead and relayed for #381).
+It answers the question `GUNNAR_COLLECTION.md` §10 row 10 put to the owner, and the "idle gesture" D17 left out.
+The brief that relayed it called it "D18"; D18 had already been used for the worker look, D19 for Thorstein's
+felling and D20 for Gunnar's chest take, so it is recorded here as D21.
+
+**What is granted.** While Gunnar is idle beside the cart assigned to him, his worker runtime may play the vanilla
+hammer swing on **his own body**, through vanilla's own `ZSyncAnimation.SetTrigger`, as scenery. One call, in one
+file (`Adapters/Workers/GunnarIdleHammerPort.cs`):
+- the receiver is the `ZSyncAnimation` of the body carrying `TeamsterWorkerAI` - Gunnar's worker prefab, and no other
+  body;
+- the trigger name is the one the vanilla Hammer item itself plays, read from the item database
+  (`m_shared.m_attack.m_attackAnimation`) - the name vanilla's own repair swing plays from the hammer in a player's
+  hand. The product invents no animation name;
+- the body's animator is asked first whether it has that trigger (`ZSyncAnimation.HasParameter`), and nothing is
+  played if it does not.
+
+Walking to the cart and turning to face it use the vanilla motor on his own body that D14.2 already allows.
+
+**Gates, all re-read in the worker tick that acts:** Teamster's master switch, `Workers/GunnarHaulingEnabled` (off by
+default), the new `Workers/GunnarIdleHammerEnabled` (**off by default**), the start-up capability probe, and the shared work-authority rule
+of D3. He must hold a cart lease with nothing else happening - phase `Ready`, no haul, no leg, no joint, no hold, no
+pending stop - and **nobody may hold his identity**. The cart must be the leased one, resolved, not hitched to anyone,
+and within 12 m of him. A job arriving, the cart being hitched, or any gate going away disarms the routine, hands the
+tick back to the haul executor, and banks no swing for later.
+
+**What is not granted:**
+- no repair, no consumption, no hit points restored, no buff, and no other effect: `CartUpkeepIdle` can say only
+  nothing, walk, face or swing, and has no way to hand a cart back;
+- no write to the cart or to any other object: the routine reads the executor's own last observation of the cart and
+  touches nothing;
+- no other animator state: no `SetBool`, `SetFloat`, `SetInt` (each of which writes the body's network object), speed,
+  reset, play or cross-fade;
+- no trigger on any other body, the player's included, and no trigger name the product chose;
+- no network message of the product's own: `SetTrigger` routes the trigger to every client's animator inside vanilla,
+  as `Pickup`'s destruction is vanilla's inside the pinned pickup;
+- no idle walking without an assigned cart, no walking further than 12 m to reach one, and no walking to it for more
+  than 20 s at a time;
+- no widening of D14-D18.
+
+**Where it is enforced.** `tools/validate_repo.py`: `.SetTrigger(` is refused everywhere in Teamster source and in the
+three `src/Shared` trees its project file compiles in, inside `Adapters/Workers` and out, except
+`animation.SetTrigger(swing)` verbatim and once in the port; the `D21 idle-hammer audit` pins the lines that decide
+whose animator (`body = gunnar.GetComponent<Character>()`, `animation = body.m_zanim`, each once) and which animation
+(`swing = HammerSwing()`, a read of the Hammer's own attack animation with no string literal), the `HasParameter`
+refusal above the call, and the absence of every other animator write in the port. Before this decision **nothing**
+refused `SetTrigger` in Teamster; the documents said "not authorized" while any file could spell it. The planted
+escapes in `tools/tests/test_teamster_carveout.py`'s `IdleHammerIsCosmetic`, each verified to pass the validator from
+before this change, are refused. `scripts/audit-teamster-hauling-api.ps1` pins the IL: `ZSyncAnimation::SetTrigger`
+exactly once, in the port's type, and no animator bool, float, int or speed write anywhere.
+
+**Proved to change nothing.** `CartUpkeepIdleTests` (the decision) and `CartUpkeepDriverTests` (the decision driven
+end to end beside a real haul executor holding a real lease for an in-game hour: the lease, the phase, the identity
+hold and the executor's revision are exactly as they were, and the only port calls are his own body's walk, turn and
+stop). The load-bearing part is that journal and the structural assertions - the routine has no way to hand a cart
+back - because the fake cart cannot move; a physical shove is the one effect a test here cannot see, so he walks to
+where a puller stands at the handle (`ApproachPoint`), never at the cart's centre, and row 50 checks the cart's
+position in game.
+
+**Not established.** Whether the body Gunnar is cloned from (`Dverger` by default) has the hammer's trigger in its
+animator could not be read without running the game. If it does not, the port refuses on every swing and logs why
+once, and he walks to his cart, faces it and stands there. The swing would then need a different base creature or a
+further decision; it is never replaced by a name the product invents.
+
+**Never observed in game.** OWNER GO-AROUND PENDING (`GUNNAR_COLLECTION.md` §10).

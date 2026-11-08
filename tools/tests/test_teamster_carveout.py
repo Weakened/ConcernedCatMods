@@ -1543,3 +1543,154 @@ class TourWriteAheadIsPinned(CarveOutFixture):
             "            _tourPlan.Died(report.Held, report.Dropped, report.Unresolved, kept);\n")
         self.assert_refused("a tour cancelled before the plan heard of the death passed", marker=TOUR_AUDIT,
                             contains="Died must tell the plan")
+
+
+HAMMER = os.path.join(WORKERS, "GunnarIdleHammerPort.cs")
+PINNED_SWING = "        animation.SetTrigger(swing);\n"
+HAMMER_AUDIT = "D21 idle-hammer audit"
+
+
+class IdleHammerIsCosmetic(CarveOutFixture):
+    """The D21 idle-hammer allowance (`DECISIONS.md` D21, owner decision
+    2026-10-31), proved by plants.
+
+    D21 grants one cosmetic thing: Gunnar's own body may play the vanilla
+    Hammer's own swing through `ZSyncAnimation.SetTrigger`. Where the trigger may
+    be spelled is the #313 token pin - one call, verbatim, in one file - and
+    whose animator it is and which animation it plays is the D21 audit. Before
+    this change nothing in Teamster refused `.SetTrigger(` at all, and every
+    plant below was run against the validator from before the rule (origin/main
+    436fdb1), which let each one through.
+    """
+
+    _restore_path = HAMMER
+
+    def swap_in_hammer(self, old, new):
+        self.swap_in(HAMMER, old, new)
+
+    # -- where the trigger may be spelled --
+
+    def test_another_animator_write_is_not_allowed_outside_the_port(self):
+        # Review of D21: `.SetTrigger(` was refused everywhere but the port, and
+        # any other animator write spelled no SetTrigger - only the IL audit,
+        # which cannot run in CI, would have seen it.
+        self.plant_file(os.path.join(WORKERS, "ZzWorkerBool.cs"),
+                        "        ((Character)who).m_zanim.SetBool(\"crouching\", true);")
+        self.assert_refused("an animator write outside the port passed", marker="D21", contains="reaches an animator ('m_zanim')")
+
+    def test_an_animator_is_not_reachable_from_domain_either(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainAnimator.cs"),
+                        "        ((UnityEngine.Animator)who).Play(\"swing_hammer\");")
+        self.assert_refused("an animator in Domain/ passed", marker="D21", contains="reaches an animator ('Animator')")
+
+    def test_an_animator_is_not_hidden_in_an_interpolation_hole(self):
+        # Re-review of D21: blanking every literal blanked an interpolated
+        # string's holes too, and a hole is code.
+        self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzInterpolatedAnimator.cs"),
+                        "        _ = $\"{Run(() => ((Character)who).m_zanim.SetBool(name, true))}\";")
+        self.assert_refused("an animator write inside an interpolation hole passed",
+                            marker="D21", contains="reaches an animator ('m_zanim')")
+
+    def test_a_literal_inside_the_hole_does_not_end_it(self):
+        # Re-review of D21: a literal nested in the hole split the regex's
+        # string match, and the rest of the hole was blanked as text.
+        self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzNestedInterpolation.cs"),
+                        "        _ = $\"{Run(() => Who(who, \"a\").m_zanim.SetBool(name, true))}\";")
+        self.assert_refused("an animator write after a literal inside a hole passed",
+                            marker="D21", contains="reaches an animator ('m_zanim')")
+
+    def test_a_trigger_is_not_allowed_in_another_worker_file(self):
+        self.plant_file(os.path.join(WORKERS, "ZzWorkerSwing.cs"),
+                        "        ((dynamic)who).SetTrigger(\"swing_hammer\");")
+        self.assert_refused("a trigger in another worker file passed", contains="'.SetTrigger('")
+
+    def test_a_trigger_is_not_allowed_outside_adapters_workers(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainSwing.cs"),
+                        "        ((dynamic)who).SetTrigger(\"swing_hammer\");")
+        self.assert_refused("a trigger in Domain/ passed", contains="'.SetTrigger('")
+
+    def test_a_trigger_is_not_allowed_in_the_ui_either(self):
+        self.plant_file(os.path.join(UI, "ZzUiSwing.cs"),
+                        "        ((dynamic)who).SetTrigger(\"emote_wave\");")
+        self.assert_refused("a trigger in Ui/ passed", contains="'.SetTrigger('")
+
+    def test_a_trigger_is_not_allowed_in_shared_sources_teamster_compiles(self):
+        self.plant_file(os.path.join(SHARED_WORKERS, "ZzSharedSwing.cs"),
+                        "        ((dynamic)who).SetTrigger(\"swing_hammer\");")
+        self.assert_refused("a trigger in a shared tree Teamster compiles passed", contains="'.SetTrigger('")
+
+    def test_the_allowance_does_not_follow_the_port_name_elsewhere(self):
+        self.plant_file(os.path.join(WORKERS, "Extra", "GunnarIdleHammerPort.cs"),
+                        "        ((dynamic)who).SetTrigger(\"swing_hammer\");")
+        self.assert_refused("a second file of the hammer port's name inherited the allowance",
+                            contains="'.SetTrigger('")
+
+    def test_a_space_and_a_newline_do_not_hide_a_trigger(self):
+        self.plant_file(os.path.join(WORKERS, "ZzSpacedSwing.cs"),
+                        "        ((dynamic)who).\n            SetTrigger (\"swing_hammer\");")
+        self.assert_refused("whitespace got a trigger past the audit", contains="'.SetTrigger('")
+
+    def test_the_trigger_is_authorized_once_and_not_twice(self):
+        self.swap_in_hammer(PINNED_SWING, PINNED_SWING + PINNED_SWING)
+        self.assert_refused("a second swing passed inside the authorized file", contains="appears 2 times")
+
+    # -- whose animator --
+
+    def test_the_trigger_may_not_play_on_the_players_animator(self):
+        self.swap_in_hammer(PINNED_SWING, "        Player.m_localPlayer.m_zanim.SetTrigger(swing);\n")
+        self.assert_refused("the swing was played on the player and passed", contains="'.SetTrigger('")
+
+    def test_the_animator_may_not_be_somebody_elses(self):
+        # The call stays byte-identical; only where `animation` comes from moves.
+        self.swap_in_hammer(
+            "ZSyncAnimation animation = body.m_zanim;",
+            "ZSyncAnimation animation = Player.m_localPlayer.m_zanim;")
+        self.assert_refused("another body's animator passed", marker=HAMMER_AUDIT,
+                            contains="his body's own animation sync")
+
+    def test_the_body_may_not_be_another_character(self):
+        self.swap_in_hammer(
+            "Character body = gunnar.GetComponent<Character>();",
+            "Character body = Player.m_localPlayer;")
+        self.assert_refused("a body that is not the worker's own passed", marker=HAMMER_AUDIT,
+                            contains="the worker's own Character")
+
+    # -- which animation --
+
+    def test_a_literal_trigger_name_may_not_replace_the_vanilla_one(self):
+        self.swap_in_hammer(PINNED_SWING, "        animation.SetTrigger(\"swing_hammer\");\n")
+        self.assert_refused("a literal trigger name passed", contains="'.SetTrigger('")
+
+    def test_the_name_may_not_be_a_literal_assigned_to_swing(self):
+        self.swap_in_hammer("string swing = HammerSwing();", "string swing = \"emote_dance\";")
+        self.assert_refused("a literal assigned to swing passed", marker=HAMMER_AUDIT,
+                            contains="read from the vanilla Hammer")
+
+    def test_the_vanilla_read_may_not_hide_a_literal(self):
+        self.swap_in_hammer(
+            "return string.IsNullOrEmpty(name) ? string.Empty : name!;",
+            "return string.IsNullOrEmpty(name) ? \"emote_dance\" : name!;")
+        self.assert_refused("a literal fallback inside HammerSwing passed", marker=HAMMER_AUDIT,
+                            contains="spells a string literal")
+
+    def test_the_item_read_may_not_be_another_item(self):
+        self.swap_in_hammer(
+            "database.GetItemPrefab(HammerItem)",
+            "database.GetItemPrefab(\"SwordIron\")")
+        self.assert_refused("another item's swing passed", marker=HAMMER_AUDIT,
+                            contains="the Hammer constant")
+
+    # -- nothing but the trigger --
+
+    def test_the_animator_check_may_not_be_removed(self):
+        self.swap_in_hammer(
+            "        if (!animation.HasParameter(swing, AnimatorControllerParameterType.Trigger))\n",
+            "        if (swing.Length > 64)\n")
+        self.assert_refused("a swing with no animator check passed", marker=HAMMER_AUDIT,
+                            contains="above the trigger")
+
+    def test_the_port_may_not_write_other_animator_state(self):
+        # SetBool on a ZSyncAnimation writes the body's network object.
+        self.swap_in_hammer(PINNED_SWING, PINNED_SWING + "        animation.SetBool(swing, true);\n")
+        self.assert_refused("an animator bool write passed in the port", marker=HAMMER_AUDIT,
+                            contains="writes other animator state")

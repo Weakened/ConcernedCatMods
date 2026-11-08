@@ -18,6 +18,13 @@
   hides him. **Not yet observed in game.**
 * **Requires Concerned NPC 0.5.0 at load.** The plugin now declares that minimum version, so an older library is a clear
   dependency error rather than a missing method.
+* **Gunnar keeps busy beside his cart (#381).** While he is idle near the cart you assigned him, he now and then walks
+  over, faces it and swings a hammer at it, using the game's own hammer swing. It is scenery: it repairs nothing,
+  uses nothing and changes nothing about the cart, and it never happens while the cart is hitched to anyone, while he
+  has a job, or for a cart further than 12 m away. It is behind a new `Workers/GunnarIdleHammerEnabled` setting, **off by default**,
+  and only ever takes effect while `Workers/GunnarHaulingEnabled` is on as well, which is still off by default.
+  If the body he is built from cannot play the hammer swing, he walks over, faces the cart and waits, and the log says
+  so once. **Not yet observed in game.**
 
 * **Gunnar's collection tour survives an interruption (#379).** The tour now writes down what it is about to do
   before every pick and every trip to the chest, in one small file per world beside Teamster's other files
