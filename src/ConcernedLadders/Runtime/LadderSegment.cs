@@ -125,6 +125,20 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
             Width, RungPitch, out geometry);
     }
 
+    /// <summary>Only live loaded sections, detached from the native registry.
+    /// A ghost or inactive prefab cannot extend a worker route.</summary>
+    internal static bool TryCopyWorkerSections(out List<WorkerLadderSection> measured)
+    {
+        measured = new List<WorkerLadderSection>();
+        if (Registered.Count > LadderRules.MaximumRegisteredSegments) return false;
+        foreach (LadderSegment candidate in Registered)
+        {
+            if (candidate == null || !candidate.IsLive || !candidate.TryGeometry(out LadderGeometry geometry)) continue;
+            measured.Add(new WorkerLadderSection(candidate.GetInstanceID(), geometry, candidate.FrontFaceDepth, candidate.BackFaceDepth));
+        }
+        return true;
+    }
+
     internal static bool TryRun(LadderSegment anchor, List<LadderSegment> segments, out LadderGeometry run)
     {
         segments.Clear();
