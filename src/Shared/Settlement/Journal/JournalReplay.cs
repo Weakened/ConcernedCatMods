@@ -698,8 +698,8 @@ internal static class CustodyReplay
             {
                 repairs.Add(
                     "Picking " + pickup.Source + " for order \"" + pickup.Order.Value + "\" (request \"" +
-                    pickup.Pickup.Value + "\") has no certain result, so nothing was credited from it. Any stone or " +
-                    "branch it dropped is an ordinary item on the ground. Run: cf_settle resolve " +
+                    pickup.Pickup.Value + "\") has no certain result, so nothing was credited from it. Anything it " +
+                    "dropped is an ordinary item on the ground. Run: cf_settle resolve " +
                     pickup.Pickup.Value + " source");
             }
         }

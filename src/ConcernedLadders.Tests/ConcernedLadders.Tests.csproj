@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\ConcernedLadders\Domain\**\*.cs" LinkBase="Product/Domain" />
+    <Compile Include="..\ConcernedLadders\Capabilities\WorkerLadderLinks.cs" Link="Product/WorkerLadderLinks.cs" />
     <Compile Include="..\Shared\Ladders\**\*.cs" LinkBase="Shared/Ladders" />
   </ItemGroup>
   <ItemGroup>

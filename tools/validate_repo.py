@@ -2750,6 +2750,10 @@ FOREMAN_AUDITED_CAPABILITIES = (
     )),
     ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
         ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+        # #356: the Residents panel's own Jotunn GUI objects at teardown - not a
+        # network object, and nothing of the world. Each name pinned once.
+        ("Ui/ResidentPanel.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*_panel\s*\)"), 1),
+        ("Ui/ResidentPanel.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*_button\s*\)"), 1),
     )),
     ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
@@ -3951,6 +3955,68 @@ def check_foreman_felling_scope(errors: list[str]) -> list[str]:
         "`.Damage(`, the pinned hit in Runtime/Collection/WorldFellingPort.cs; TreeBase, TreeLog, DestroyNow, "
         "ApplyDamage and RPC_Damage are refused everywhere in that scope. A text audit with comments stripped: "
         f"a call through a delegate spells none of these ({hits} violations)",
+    ]
+
+
+# #282 leaf 2: felling inside a collection order. The one pinned
+# `tree.Damage(hit)` above now sits inside `WorldFellingPort.StrikeOnce`, which
+# `cf_collect fell` and an order's strike both reach. So the D19 audit's single
+# `.Damage(` no longer says who can land a hit: the verb does. It is pinned to
+# its declaration and exactly two callers, each spelled verbatim - the command's
+# own call in the felling port, and the order's call in the pickup port, which is
+# where every D19 gate is re-asked, the strike is journaled first, and only the
+# Wood his own hit dropped is traced for the one pinned `Humanoid.Pickup`. A
+# third caller anywhere in the D19 scope (a construction job, a panel, a shared
+# helper), a second call in the pickup port, or the call moved to another
+# receiver fails here. A text audit with comments stripped: a call through a
+# delegate or a method group spells no `StrikeOnce(` and is invisible to it.
+FOREMAN_FELLING_PICKUP_PORT = "src/ConcernedForeman/Runtime/Collection/WorldSourcePickupPort.cs"
+FOREMAN_FELLING_STRIKE = re.compile(r"\bStrikeOnce\s*\(")
+FOREMAN_FELLING_STRIKE_SITES = (
+    (FOREMAN_FELLING_PORT,
+     re.compile(r"\binternal\s+FellOutcome\s+StrikeOnce\s*\("), 1, "the declaration"),
+    (FOREMAN_FELLING_PORT,
+     re.compile(r"\bFellOutcome\s+outcome\s*=\s*StrikeOnce\s*\(\s*tree\s*,\s*view\s*,\s*kind\s*,\s*axe\s*!\s*,"
+                r"\s*humanoid\s*,\s*workerAt\s*,\s*_spawned\s*,"), 1, "cf_collect fell"),
+    (FOREMAN_FELLING_PICKUP_PORT,
+     re.compile(r"\bFellOutcome\s+outcome\s*=\s*_felling\s*\.\s*StrikeOnce\s*\(\s*tree\s*,\s*view\s*,\s*kind\s*,"
+                r"\s*axe\s*!\s*,\s*humanoid\s*,\s*workerAt\s*,\s*_spawned\s*,"), 1, "an order's strike"),
+)
+
+
+def check_foreman_felling_strike_callers(errors: list[str]) -> list[str]:
+    """#282 leaf 2: the one hit is reached from exactly the command and an order's strike."""
+    before = len(errors)
+    sources, _ = _foreman_felling_sources(errors)
+    hits = len(errors) - before
+    for rel, code in sources.items():
+        allowed: list[tuple[int, int]] = []
+        for path, pattern, count, label in FOREMAN_FELLING_STRIKE_SITES:
+            if rel != path:
+                continue
+            spans = [(m.start(), m.end()) for m in pattern.finditer(code)]
+            if len(spans) != count:
+                hits += 1
+                fail(
+                    f"[foreman] #282 felling strike audit: {rel} has {len(spans)} pinned site(s) for {label}; "
+                    f"the population is exactly {count}", errors)
+            allowed.extend(spans)
+        for match in FOREMAN_FELLING_STRIKE.finditer(code):
+            if any(start <= match.start() < end for start, end in allowed):
+                continue
+            hits += 1
+            fail(
+                f"[foreman] #282 felling strike audit: an unpinned `StrikeOnce(` in "
+                f"{rel}:{code.count(chr(10), 0, match.start()) + 1} - the hit is reached only from cf_collect fell "
+                "and an order's strike in the pickup port", errors)
+    if FOREMAN_FELLING_PICKUP_PORT not in sources:
+        hits += 1
+        fail(f"[foreman] #282 felling strike audit: {FOREMAN_FELLING_PICKUP_PORT} is missing", errors)
+    return [
+        f"[foreman] #282 felling strike audit: {len(sources)} source(s), the D19 scope - WorldFellingPort.StrikeOnce, "
+        "which holds the one pinned hit, is declared once and called from exactly cf_collect fell and an order's "
+        f"strike in Runtime/Collection/WorldSourcePickupPort.cs; a call through a delegate is invisible to it "
+        f"({hits} violations)",
     ]
 
 
@@ -7168,6 +7234,7 @@ def main() -> int:
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_foreman_felling_scope(errors))
+    report.extend(check_foreman_felling_strike_callers(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
     report.extend(check_teamster_figure_is_confined(errors))

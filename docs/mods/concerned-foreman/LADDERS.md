@@ -1,3 +1,11 @@
+> **Worker decision update, 2026-11-01 (#334):** the owner approved scoped,
+> off-by-default host/no-peers traversal of an explicitly ordered worker's own
+> body, with its ground motor suspended. See
+> [the authority record](WORKER_LADDER_AUTHORITY_2026_11_01.md).
+> Multi-link search/execution policy is implemented in shared worker source;
+> the native scoped port, link publication and G5 game evidence remain pending.
+> This does not enable Foreman's superseded player motor or change any default.
+
 # Ladders: climbing, not teleporting
 
 > **Superseded for players (#436, 2026-10-27).** Player ladder climbing is owned by **Concerned Ladders**, published as

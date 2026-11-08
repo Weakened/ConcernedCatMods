@@ -85,6 +85,64 @@ public sealed class WorldHousingTests : IDisposable
         return bed;
     }
 
+    [Fact]
+    public void ResidentSlotsPreserveCloseBedsAndFloorsDespiteRoundedDisplayLabels()
+    {
+        PlaceBed(1, 1, y: 2);
+        PlaceBed(1.01f, 1, y: 2);
+        PlaceBed(1, 1, y: 5);
+        Assert.True(Survey().TryResidentSlots(Area(), out var slots));
+        Assert.Equal(3, slots.Count);
+        Assert.Equal(3, slots.Select(slot => slot.Key).Distinct().Count());
+        Assert.All(slots, slot => Assert.True(slot.IsHabitable));
+    }
+
+    [Fact]
+    public void ResidentSlotsRecheckClaimAndRoofOnConfirmation()
+    {
+        var bed = PlaceBed(1, 1);
+        Assert.True(Survey().TryResidentSlots(Area(), out var before));
+        Assert.True(before[0].IsHabitable);
+        Cover.Set(bed.SpawnPoint, 1, false);
+        Assert.True(Survey().TryResidentSlots(Area(), out var after));
+        Assert.False(after[0].IsHabitable);
+        Assert.Equal(before[0].Key, after[0].Key);
+        Cover.Set(bed.SpawnPoint, 1, true);
+        bed.GetComponent<ZNetView>().GetZDO().Set(ZDOVars.s_owner, SomebodyElse);
+        Assert.True(Survey().TryResidentSlots(Area(), out after));
+        Assert.False(after[0].IsHabitable);
+    }
+
+    [Fact]
+    public void UnloadedAmbiguousOrTruncatedResidentSurveyCannotReserve()
+    {
+        PlaceBed(1, 1);
+        Assert.False(Survey(groundLoaded: false).TryResidentSlots(Area(), out _));
+        PlaceBed(1, 1);
+        Assert.False(Survey().TryResidentSlots(Area(), out _));
+        Piece.s_allPieces.Clear();
+        for (int i = 0; i < 65; i++) PlaceBed(i * 0.1f, 1);
+        Assert.False(Survey().TryResidentSlots(Area(), out _));
+    }
+
+    [Fact]
+    public void ReservedBedRevalidationDistinguishesRemovedFromUnreadableAndAmbiguous()
+    {
+        PlaceBed(1, 1);
+        Assert.True(Survey().TryResidentSlots(Area(), out var slots));
+        string key = slots[0].Key;
+        Assert.True(Survey().TryResidentSlot(Area(), key, out var fresh, out bool exists));
+        Assert.True(exists); Assert.True(fresh.IsHabitable);
+        Assert.False(Survey(false).TryResidentSlot(Area(), key, out _, out _));
+        Piece.s_allPieces.Clear();
+        Assert.True(Survey().TryResidentSlot(Area(), key, out var missing, out exists));
+        Assert.False(exists);
+        Assert.Equal(key, missing.Key);
+        Assert.Equal(HousingRefusal.BedRemoved, HousingRules.Judge(missing.Facts));
+        PlaceBed(1, 1); PlaceBed(1, 1);
+        Assert.False(Survey().TryResidentSlot(Area(), key, out _, out _));
+    }
+
     /// <summary>A built piece that is not a bed.</summary>
     private static void PlaceWall(float x, float z)
     {

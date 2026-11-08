@@ -37,6 +37,10 @@ internal enum CollectionPhase
 
     /// <summary>Paused, needs attention, or ended.</summary>
     Stopped = 9,
+
+    /// <summary>At a small tree, landing one hit per swing (D19, #282).
+    /// </summary>
+    Felling = 10,
 }
 
 internal enum ControlOutcome
@@ -112,6 +116,7 @@ internal sealed class SoloCollectionLoop
     private readonly ICollectionCooperation? _cooperation;
     private readonly CollectionRequestIds _requestIds;
     private readonly Action<string>? _log;
+    private readonly ISourceFellingPort? _felling;
 
     /// <summary>Sources this order will not try again: unreachable, refused.
     /// Kept for the whole order so a failure cannot oscillate.</summary>
@@ -136,6 +141,9 @@ internal sealed class SoloCollectionLoop
     private float _lastReadinessAt = float.NegativeInfinity;
     private bool _tripOpen;
     private float _lastTickAt;
+    private int _strikes;
+    private float _nextStrikeAt;
+    private float? _fellWaitUntil;
 
     public SoloCollectionLoop(
         CollectionParameters parameters,
@@ -150,7 +158,8 @@ internal sealed class SoloCollectionLoop
         ICollectionWorld world,
         ICollectionCooperation? cooperation,
         CollectionRequestIds requestIds,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        ISourceFellingPort? felling = null)
     {
         _parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         if (workerKey.IsEmpty || workerId.IsEmpty)
@@ -175,6 +184,7 @@ internal sealed class SoloCollectionLoop
         _cooperation = cooperation;
         _requestIds = requestIds ?? throw new ArgumentNullException(nameof(requestIds));
         _log = log;
+        _felling = felling;
         _walkRetry = new BoundedRetry(parameters.WalkMaxFailures, parameters.WalkFirstRetrySeconds, parameters.WalkMaxRetrySeconds);
         _depositRetry = new BoundedRetry(
             parameters.TransferMaxFailures, parameters.TransferFirstRetrySeconds, parameters.TransferMaxRetrySeconds);
@@ -202,6 +212,13 @@ internal sealed class SoloCollectionLoop
     public SitePoint LastWorkerPosition { get; private set; }
 
     public int Picks { get; private set; }
+
+    /// <summary>Small trees this order felled (D19), whether or not anything
+    /// they dropped was the order's to take.</summary>
+    public int Fells { get; private set; }
+
+    /// <summary>Felling hits this order landed, felling or not.</summary>
+    public int Strikes { get; private set; }
 
     public int Trips { get; private set; }
 
@@ -501,6 +518,9 @@ internal sealed class SoloCollectionLoop
         _walkRetry.Reset();
         _depositRetry.Reset();
         Picks = 0;
+        Fells = 0;
+        Strikes = 0;
+        ResetFelling();
         Trips = 0;
         SurveysRun = 0;
         UnrecordedTransitions = 0;
@@ -819,6 +839,12 @@ internal sealed class SoloCollectionLoop
                 continue;
             }
 
+            if (_felling == null && source.Kind == NaturalSourceKind.SmallTree)
+            {
+                // No felling seam, no tree: it is not something he could collect.
+                continue;
+            }
+
             if (_failed.Contains(source.Key))
             {
                 failedButAvailable++;
@@ -859,6 +885,11 @@ internal sealed class SoloCollectionLoop
 
             unknown |= accounting.Unknown(quota.Resource) > 0;
             exhausted |= accounting.Exhausted(quota.Resource) > 0;
+
+            // A felled tree is gone from the world, so no survey can count it
+            // as exhausted the way a picked branch is. An order that felled the
+            // area's small trees has cleared it, and says so (#282).
+            exhausted |= quota.Resource == CollectedResource.Wood && Fells > 0;
         }
 
         if (unknown)
@@ -882,6 +913,9 @@ internal sealed class SoloCollectionLoop
         {
             case CollectionPhase.WalkingToSource:
                 StepWalkingToSource(now);
+                break;
+            case CollectionPhase.Felling:
+                StepFelling(now);
                 break;
             default:
                 Phase = CollectionPhase.Selecting;
@@ -1031,7 +1065,9 @@ internal sealed class SoloCollectionLoop
     /// <summary>Failed for this order, or already spent in this snapshot. A
     /// source held by another order is learned when its reservation is refused
     /// and is spent for the rest of the snapshot.</summary>
-    private bool IsExcluded(SourceKey key) => _failed.Contains(key) || _spentThisSnapshot.Contains(key);
+    private bool IsExcluded(SourceKey key) =>
+        _failed.Contains(key) || _spentThisSnapshot.Contains(key) ||
+        (_felling == null && SmallTreeSources.IsSmallTree(key));
 
     private void Reserve(SourceObservation source, float now)
     {
@@ -1097,7 +1133,18 @@ internal sealed class SoloCollectionLoop
         switch (_motion.Status)
         {
             case CollectionWalkStatus.Arrived:
-                PickTarget(now);
+                if (_target.Kind == NaturalSourceKind.SmallTree)
+                {
+                    ResetFelling();
+                    _nextStrikeAt = now;
+                    Phase = CollectionPhase.Felling;
+                    StepFelling(now);
+                }
+                else
+                {
+                    PickTarget(now);
+                }
+
                 break;
 
             case CollectionWalkStatus.Deferred:
@@ -1256,6 +1303,180 @@ internal sealed class SoloCollectionLoop
         if (taken < expected)
         {
             Stop(CollectionOrderState.NeedsAttention, CollectionAttentionReason.CarryFull, now);
+        }
+    }
+
+    // --- Felling (D19, #282) -----------------------------------------------------------------------------
+
+    /// <summary>At a reserved small tree: one hit per swing through the felling
+    /// port, every checkpoint asked again before each hit, until it is down,
+    /// refused, uncertain, or has taken <see cref="CollectionParameters.FellMaxStrikes"/>
+    /// hits. The reservation is held throughout, so nobody else counts it; a
+    /// tree is credited only with the Wood drops its own fell produced, taken in
+    /// the same tick.</summary>
+    private void StepFelling(float now)
+    {
+        CollectionOrderDefinition order = _order!;
+        SourceObservation? target = _target;
+        if (target == null || !_reservations.IsHeldBy(target.Key, order.Order))
+        {
+            ReleaseTarget();
+            Phase = CollectionPhase.Selecting;
+            return;
+        }
+
+        if (_felling == null)
+        {
+            // Never chosen without a port (IsExcluded); a guard, not a path.
+            _failed.Add(target.Key);
+            ReleaseTarget();
+            Phase = CollectionPhase.Selecting;
+            return;
+        }
+
+        if (!_motion.IsPresent)
+        {
+            StopForAbsentBody(now);
+            return;
+        }
+
+        if (now < _nextStrikeAt)
+        {
+            return;
+        }
+
+        if (!PassCheckpoint(now, Checkpoint.Pickup))
+        {
+            return;
+        }
+
+        if (!(_motion.Position.HorizontalDistanceTo(target.Key.Position) <= _parameters.PickupReachMetres))
+        {
+            // Moved away from the tree: count a failed approach and walk back,
+            // never swing from further away.
+            OnWalkToSourceFailed(now, WorkerDeferralReason.Unreachable);
+            if (_target != null)
+            {
+                // The walk resumes after its backoff, bounded by its ceiling.
+                Phase = CollectionPhase.WalkingToSource;
+            }
+
+            return;
+        }
+
+        if (!_custody.TryResolveWorker(out IInventoryPort? worker, out CollectionAttentionReason workerRefusal) || worker == null)
+        {
+            Stop(CollectionOrderState.Paused, WorkerReason(workerRefusal), now);
+            return;
+        }
+
+        OrderProgress progress = ReadProgress();
+        IInventoryPort? destination = null;
+        bool soloToContainer = order.Participation == ParticipationMode.Solo && order.Delivery.Kind == DeliveryKind.Container;
+        if (soloToContainer &&
+            (!_custody.TryResolveDestination(order.Delivery, out destination, out CollectionAttentionReason refusal) ||
+                destination == null))
+        {
+            Stop(CollectionOrderState.Paused, DestinationReason(refusal), now);
+            return;
+        }
+
+        // What he may take from this tree, asked again at the instant of the
+        // hit: never more than is still needed, fits on him, or fits the chest.
+        int takeLimit = 0;
+        int planned = 0;
+        foreach (ResourceNeed need in BuildNeeds(order, progress, worker, destination))
+        {
+            if (need.Resource == target.Yields)
+            {
+                takeLimit = Math.Min(need.Remaining, Math.Min(need.CarryRoom, need.ReturnRoom));
+                planned = SmallTreeSources.PlannedYield(target, need.Remaining);
+            }
+        }
+
+        if (takeLimit < 1 || takeLimit < planned)
+        {
+            // Things changed during the walk or the swings: choose again,
+            // which delivers first when he is full.
+            ReleaseTarget();
+            Phase = CollectionPhase.Selecting;
+            return;
+        }
+
+        FellStrikeResult result = _felling.TryStrike(target.Key, order.Order, takeLimit);
+        switch (result.Outcome)
+        {
+            case FellStrikeOutcome.Struck:
+                Strikes++;
+                _strikes++;
+                _fellWaitUntil = null;
+                if (_strikes >= _parameters.FellMaxStrikes)
+                {
+                    LastEvidence = "Gave up on " + target.Key + " after " + _strikes + " hit(s): " + result.Reason;
+                    _log?.Invoke(LastEvidence);
+                    _failed.Add(target.Key);
+                    ReleaseTarget();
+                    Phase = CollectionPhase.Selecting;
+                    return;
+                }
+
+                LastEvidence = "Struck " + target.Key + ": " + result.Reason;
+                _nextStrikeAt = now + _parameters.FellSwingSeconds;
+                return;
+
+            case FellStrikeOutcome.Waiting:
+                _fellWaitUntil ??= now + _parameters.FellPlayerWaitSeconds;
+                LastEvidence = "Waiting at " + target.Key + ": " + result.Reason;
+                if (now >= _fellWaitUntil.Value)
+                {
+                    // Left for this survey only: a player standing by is not a
+                    // reason to give the tree up for the whole order.
+                    _spentThisSnapshot.Add(target.Key);
+                    ReleaseTarget();
+                    Phase = CollectionPhase.Selecting;
+                    return;
+                }
+
+                _nextStrikeAt = now + _parameters.FellSwingSeconds;
+                return;
+
+            case FellStrikeOutcome.Felled:
+                Strikes++;
+                Fells++;
+                _reservations.Release(target.Key, order.Order);
+                _spentThisSnapshot.Add(target.Key);
+                _target = null;
+                _legDeadline = null;
+                _walkRetry.Reset();
+                ResetFelling();
+                Phase = CollectionPhase.Selecting;
+                if (result.Pickup!.Drops.Count == 0)
+                {
+                    // Down, and nothing it dropped was this order's to take (a
+                    // beech can drop only resin). Nothing is credited; what it
+                    // dropped lies on the ground as ordinary items.
+                    LastEvidence = "Felled " + target.Key + "; none of what it dropped was Wood this order could take.";
+                    return;
+                }
+
+                TakeDrops(result.Pickup, worker, now);
+                return;
+
+            case FellStrikeOutcome.Refused:
+                LastEvidence = "Felling refused at " + target.Key + ": " + result.Reason;
+                _failed.Add(target.Key);
+                ReleaseTarget();
+                Phase = CollectionPhase.Selecting;
+                return;
+
+            default:
+                LastEvidence = "Felling uncertain at " + target.Key + ": " + result.Reason;
+                ReleaseTarget();
+                Stop(
+                    CollectionOrderState.NeedsAttention,
+                    _custody.IsWritable ? CollectionAttentionReason.TransferUncertain : CollectionAttentionReason.JournalReadOnly,
+                    now);
+                return;
         }
     }
 
@@ -1888,6 +2109,14 @@ internal sealed class SoloCollectionLoop
         }
 
         _target = null;
+        ResetFelling();
+    }
+
+    private void ResetFelling()
+    {
+        _strikes = 0;
+        _nextStrikeAt = 0f;
+        _fellWaitUntil = null;
     }
 
     private static CollectionAttentionReason DestinationReason(CollectionAttentionReason refusal)
@@ -2107,7 +2336,8 @@ internal sealed class SoloCollectionLoop
             text.Append("; look-alikes rejected ").Append(accounting.RejectedNotNatural).Append('.');
         }
 
-        text.AppendLine().Append("  Picks ").Append(Picks).Append(", trips delivered ").Append(Trips)
+        text.AppendLine().Append("  Picks ").Append(Picks).Append(", small trees felled ").Append(Fells)
+            .Append(" (").Append(Strikes).Append(" hit(s)), trips delivered ").Append(Trips)
             .Append(", surveys ").Append(SurveysRun).Append('.');
         if (UnrecordedTransitions > 0)
         {

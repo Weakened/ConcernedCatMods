@@ -18,7 +18,8 @@ internal sealed class ThorsteinSettings
         ConfigEntry<string> beard,
         ConfigEntry<string> chest,
         ConfigEntry<string> legs,
-        ConfigEntry<bool> workerLook)
+        ConfigEntry<bool> workerLook,
+        ConfigEntry<bool> residentsEnabled)
     {
         ShowAtHome = showAtHome;
         Hair = hair;
@@ -26,6 +27,7 @@ internal sealed class ThorsteinSettings
         ChestGarment = chest;
         LegsGarment = legs;
         WorkerLook = workerLook;
+        ResidentsEnabled = residentsEnabled;
     }
 
     internal ConfigEntry<bool> ShowAtHome { get; }
@@ -41,6 +43,8 @@ internal sealed class ThorsteinSettings
     /// <summary>#295 S6 (owner decision 2026-10-29): his own hair and beard on
     /// his worker body, locally. On by default so the playtest judges it.</summary>
     internal ConfigEntry<bool> WorkerLook { get; }
+
+    internal ConfigEntry<bool> ResidentsEnabled { get; }
 
     internal static ThorsteinSettings Bind(ConfigFile config)
     {
@@ -88,6 +92,9 @@ internal sealed class ThorsteinSettings
             "networked. A piece that will not attach or does not fit on that body is taken off and he keeps the " +
             "plain look. Applies the next time his worker body loads.");
 
-        return new ThorsteinSettings(show, hair, beard, chest, legs, workerLook);
+        var residents = config.Bind("Residents", "Enabled", false,
+            "Opt in to one local presentation resident with a saved housing reservation. No jobs, inventory or network body. " +
+            "Use the Residents panel to reserve a measured bed and confirm admission. Needs SettlementRuntimeEnabled.");
+        return new ThorsteinSettings(show, hair, beard, chest, legs, workerLook, residents);
     }
 }

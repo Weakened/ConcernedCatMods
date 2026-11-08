@@ -197,7 +197,8 @@ internal sealed class LinkTraversal : ILadderTraversal
         // there. A ladder that went while somebody was on it ends in a fall from
         // where they are, never in a placement computed from a link that no
         // longer exists.
-        bool linkStillThere = _network.TryGet(handle.LinkId, out TraversalLink link, out _);
+        bool linkStillThere = _network.TryGet(handle.LinkId, out TraversalLink link, out int generation) &&
+            generation == handle.Generation;
 
         switch (kind)
         {
