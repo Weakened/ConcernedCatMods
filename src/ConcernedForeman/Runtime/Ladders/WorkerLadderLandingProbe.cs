@@ -60,11 +60,42 @@ internal sealed class WorkerLadderLandingProbe : IWorkerLadderSurveyProbe,IWorke
         catch(Exception exception)
         { try { _log("Worker ladder mount refused: "+SafeFailure.Brief(exception)); } catch { } return false; }
     }
+    /// <summary>#334: one motor step's capsule sweep, from where the body is to
+    /// where the checked path would put it next, with a budget of its own. A
+    /// checked publication is not permission to ignore a blocker that moved in
+    /// since: anything other than a clear sweep is a refusal. Cost per step: one
+    /// capsule cast plus the site policy at nine points along the step (each a
+    /// burning-area check, a solid-height ray and a liquid read) and 81 loaded-
+    /// zone lookups - at the worker's 20 Hz tick while he is on a ladder only.</summary>
+    internal bool IsMoveClear(WorkPoint from,WorkPoint to)
+    {
+        try
+        {
+            if(!TryBodyShape(out var body)) return false;
+            BeginSurvey();
+            return Clear(from,to,body)==WorkerLadderProbeResult.Supported;
+        }
+        catch { return false; }
+    }
+    /// <summary>#334: the landing is still a supported static floor with room
+    /// for this body, at the height the path ends at.</summary>
+    internal bool IsLandingSupported(WorkPoint target)
+    {
+        try
+        {
+            if(!TryBodyShape(out var body)) return false;
+            BeginSurvey();
+            return Support(target,body,out var foot)==WorkerLadderProbeResult.Supported&&
+                foot.HorizontalDistanceTo(target)<=.05f&&Math.Abs(foot.Y-target.Y)<=.1f;
+        }
+        catch { return false; }
+    }
     public int PhysicsQueries { get; private set; }
     public void BeginSurvey()
     {
         _remaining=256; PhysicsQueries=0;
-        _mask=LayerMask.GetMask("piece","Default","static_solid","Default_small","terrain","blocker","vehicle","character","character_net","character_ghost");
+        // #334 review m2: looked up once; the motor sweeps at 20 Hz.
+        if(_mask==0) _mask=LayerMask.GetMask("piece","Default","static_solid","Default_small","terrain","blocker","vehicle","character","character_net","character_ghost");
     }
     public WorkerLadderProbeResult TryMeasure(WorkerLadderRunData run,WorkerLadderFace face,WorkerLadderCapsule capsule,out WorkerLadderPassage passage)
     {

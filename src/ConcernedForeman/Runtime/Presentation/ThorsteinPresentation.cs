@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using TheConcernedCat.Companions.Placement;
+using TheConcernedCat.Companions.Surroundings;
 using TheConcernedCat.ConcernedForeman.Domain.Npc;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Collection;
@@ -9,6 +12,8 @@ using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedNPC.Body.Dressing;
 using TheConcernedCat.ConcernedNPC.Body.Keepsakes;
+using TheConcernedCat.ConcernedNPC.Camp;
+using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
@@ -39,6 +44,21 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Presentation;
 /// <see cref="NpcFigureDresser"/>, from <see cref="ThorsteinLookPlan.Spec"/>.
 /// It changes nothing in the world: no bed is claimed, nothing is
 /// placed, and nobody else sees it.
+///
+/// <b>At rest he sits (#295 S5).</b> The shared companion
+/// <see cref="PlacementPlanner"/>, asked through <see cref="ThorsteinRestProbe"/>
+/// with <see cref="ThorsteinRestPlan.Rules"/>, picks a spot on the ground near
+/// home, by a fire when there is one. The figure is stood there facing the
+/// fire, or home, and posed sitting through the dresser. Until a spot is found
+/// he stands beside the respawn point as before. He moves only when his spot
+/// stops being usable or a warmer one appears.
+///
+/// <b>Doors and camp.</b> He never touches a door and is never set down on
+/// the far side of a doorway from home (<see cref="ThorsteinRestBounds"/>):
+/// Foreman keeps no list of doors opened to companions, so every door counts
+/// as one he may not use. Once camp is established (Concerned NPC's
+/// <see cref="NpcCamp"/>, fed by <see cref="ThorsteinCampSight"/> from the
+/// pieces loaded around home) he rests inside it.
 ///
 /// <b>Where it runs.</b> On the host only (single player, or the host of a
 /// game), because only there is the census of saved bodies the whole world.
@@ -74,6 +94,13 @@ internal sealed class ThorsteinPresentation
     private string _figureRefusal = string.Empty;
     private bool _buildFailedThisWorld;
 
+    private readonly PlacementPlanner _restPlanner = new PlacementPlanner(ThorsteinRestPlan.Rules);
+    private readonly ThorsteinRestProbe _restProbe;
+    private readonly ThorsteinCampSight _campSight;
+    private ThorsteinRestChoice _rest = ThorsteinRestChoice.Standing("not placed yet");
+    private float _restLookIn;
+    private bool _cannotSit;
+
     private int _census = -1;
     private bool _censusDue = true;
     private float _sinceCensus;
@@ -98,6 +125,8 @@ internal sealed class ThorsteinPresentation
         _settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _bodies = new ThorsteinBodies(npc.Registry, npc.Identity);
+        _restProbe = new ThorsteinRestProbe(log, ThorsteinRestPlan.Rules.FireComfortRadius);
+        _campSight = new ThorsteinCampSight(log);
         _resident = new ResidentPresentation(() => settlementSettings.SettlementRuntimeEnabled.Value && settings.ResidentsEnabled.Value, npc.Registry, settlement, log);
     }
 
@@ -223,6 +252,7 @@ internal sealed class ThorsteinPresentation
         _buildFailedThisWorld = false;
         _figureRefusal = string.Empty;
         _faulted = false;
+        _cannotSit = false;
     }
 
     /// <summary>Called before Concerned NPC is told the world has gone, so the
@@ -231,6 +261,7 @@ internal sealed class ThorsteinPresentation
     {
         _resident.Forget();
         TakeDown();
+        _campSight.Forget();
         RemoveKeepsake();
         _keepsakeFailedThisWorld = false;
         ForgetWorkerLook();
@@ -320,6 +351,8 @@ internal sealed class ThorsteinPresentation
         if (_dresser != null)
         {
             text += " Look: " + _dresser.Describe() + ".";
+            text += " At rest: " + _rest + "; camp from " + _campSight.Known + " pieces, " +
+                _campSight.Doors.Count + " doorways near home.";
         }
 
         if (_keepsake != null && _keepsake.IsPlaced)
@@ -440,6 +473,17 @@ internal sealed class ThorsteinPresentation
         if (_figure == null && !_buildFailedThisWorld && _bodies.HoldsPresentation && player != null)
         {
             Build(home, player.transform.position);
+            Rest(home, player.transform.position);
+            return;
+        }
+
+        if (_figure != null)
+        {
+            _restLookIn -= PassSeconds;
+            if (_restLookIn <= 0f)
+            {
+                Rest(home, player != null ? player.transform.position : home);
+            }
         }
     }
 
@@ -627,9 +671,132 @@ internal sealed class ThorsteinPresentation
         }
     }
 
+    /// <summary>#295 S5: sits him somewhere near home, or moves him to a better
+    /// spot. Only the dresser's own figure is stood and posed; the probe reads
+    /// the ground and changes nothing.</summary>
+    private void Rest(Vector3 home, Vector3 viewer)
+    {
+        if (_dresser == null || _figure == null)
+        {
+            return;
+        }
+
+        if (_cannotSit)
+        {
+            _rest = ThorsteinRestChoice.Standing("this build's character has no sitting pose");
+            _restLookIn = float.MaxValue;
+            return;
+        }
+
+        bool onBed = HomeIsBed();
+        var homePoint = new WorldPoint(home.x, home.y, home.z);
+        if (!_campSight.TryLook(home, onBed ? NpcCampHome.PlayerBed : NpcCampHome.WorldSpawn, _npc.World,
+                out NpcCampView camp))
+        {
+            // Fails closed: with the doors near home unknown, he is seated
+            // nowhere new. A spot he already has was admitted when they were
+            // known, so he keeps it.
+            if (!_rest.IsSitting)
+            {
+                _rest = ThorsteinRestChoice.Standing("camp and the doors near home could not be read");
+            }
+
+            _restLookIn = ThorsteinRestPlan.ReplanSeconds;
+            return;
+        }
+
+        IReadOnlyList<DoorPortal> doors = _campSight.Doors;
+        var anchor = new CompanionAnchor(onBed ? AnchorKind.ClaimedBed : AnchorKind.DefaultSpawn, homePoint);
+        ThorsteinRestChoice best = ThorsteinRestPlan.Choose(_restPlanner.Plan(
+            anchor, _restProbe, accept: sample => Admits(home, sample.Position, camp, doors)));
+
+        bool usable = false;
+        int value = 0;
+        if (_rest.IsSitting)
+        {
+            PlacementProbeSample here = _restProbe.Recheck(_rest.Spot);
+            usable = here.IsUsable && Admits(home, _rest.Spot, camp, doors);
+            value = _restPlanner.ValueOf(here);
+        }
+
+        if (ThorsteinRestPlan.ShouldStandUp(_rest, usable, best))
+        {
+            // His spot was built over and nowhere else qualifies: up, and back
+            // beside the respawn point, rather than left sitting inside a wall.
+            Vector3 beside = ChooseSpot(home, viewer, out Vector3 outward);
+            Vector3 face = viewer - beside;
+            face.y = 0f;
+            if (face.sqrMagnitude < 0.01f)
+            {
+                face = outward;
+            }
+
+            _dresser.StandUp();
+            _dresser.StandAt(beside, Quaternion.LookRotation(face.normalized, Vector3.up));
+            _rest = best;
+        }
+        else if (ThorsteinRestPlan.ShouldMove(_rest, usable, value, best))
+        {
+            var spot = new Vector3(best.Spot.X, best.Spot.Y, best.Spot.Z);
+            Vector3 toward = best.Pose == ThorsteinRestPose.SitByFire && _restProbe.TryFindWarmth(spot, out Vector3 fire)
+                ? fire
+                : home;
+            Vector3 look = toward - spot;
+            look.y = 0f;
+            if (look.sqrMagnitude < 0.01f)
+            {
+                look = _figure.transform.forward;
+                look.y = 0f;
+            }
+
+            if (look.sqrMagnitude < 0.01f)
+            {
+                look = Vector3.forward;
+            }
+
+            _dresser.StandAt(spot, Quaternion.LookRotation(look.normalized, Vector3.up));
+            if (_dresser.SitOnGround())
+            {
+                _rest = best;
+            }
+            else
+            {
+                // No sitting pose on this build: he stands where the planner
+                // put him, and is not moved again.
+                _cannotSit = true;
+                _rest = ThorsteinRestChoice.Standing("this build's character has no sitting pose");
+                _log("Thorstein stands at home rather than sitting: this build's character has no sitting " +
+                    "pose. Nothing else is affected.");
+            }
+        }
+        else if (!_rest.IsSitting)
+        {
+            _rest = best;
+        }
+
+        _restLookIn = ThorsteinRestPlan.NextLookIn(_rest);
+    }
+
+    private static bool HomeIsBed() =>
+        RespawnAnchorSource.TryGetLatest(out RespawnAnchor anchor, out _) && anchor.Kind == RespawnAnchorKind.ClaimedBed;
+
+    /// <summary>The door rule, the wall check and camp
+    /// (<see cref="ThorsteinRestBounds"/>) for one spot that already passed
+    /// every ground rule.</summary>
+    private bool Admits(Vector3 home, WorldPoint spot, NpcCampView camp, IReadOnlyList<DoorPortal> doors) =>
+        ThorsteinRestBounds.Admits(
+            new WorldPoint(home.x, home.y, home.z),
+            spot,
+            camp.IsEstablished,
+            camp.Contains(new NpcPoint(spot.X, spot.Y, spot.Z)),
+            _restProbe.IsWallBetween(home, new Vector3(spot.X, spot.Y, spot.Z)),
+            doors);
+
     private void TakeDown()
     {
         _figure = null;
+        _rest = ThorsteinRestChoice.Standing("not placed yet");
+        _restLookIn = 0f;
 
         // Dark at once, gone at the end of the frame: never drawn beside a
         // worker body created in the same frame. The dresser owns the figure it

@@ -272,6 +272,37 @@ internal sealed class CollectionAccount
         }
     }
 
+    /// <summary>Records what a take from a marked chest moved into him
+    /// (`DECISIONS.md` D20). Only what was <b>measured arriving</b> is acquired,
+    /// onto his back; a refusal and an unmeasurable answer acquire nothing - the
+    /// first because nothing moved, the second because writing a guess down as
+    /// fact is how material is invented.</summary>
+    /// <returns>How many units the ledger acquired.</returns>
+    public int RecordTake(string step, TakeResult result)
+    {
+        if (result.Outcome != TakeOutcome.Taken && result.Outcome != TakeOutcome.PartlyTaken)
+        {
+            return 0;
+        }
+
+        int acquired = 0;
+        for (int index = 0; index < result.Moved.Count; index++)
+        {
+            KeyValuePair<string, int> entry = result.Moved[index];
+            if (entry.Value <= 0 || string.IsNullOrEmpty(entry.Key))
+            {
+                continue;
+            }
+
+            if (_ledger.Take(step + ":take:" + entry.Key, entry.Key, entry.Value) == CargoOutcome.Recorded)
+            {
+                acquired += entry.Value;
+            }
+        }
+
+        return acquired;
+    }
+
     /// <summary>The cart was destroyed. Everything it held is on the ground
     /// where it stood, exactly as the game left it: nothing is re-credited,
     /// nothing is re-acquired, and the totals do not move.</summary>

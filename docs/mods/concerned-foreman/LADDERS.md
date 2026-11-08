@@ -3,7 +3,9 @@
 > body, with its ground motor suspended. See
 > [the authority record](WORKER_LADDER_AUTHORITY_2026_11_01.md).
 > Multi-link search/execution policy is implemented in shared worker source;
-> the native scoped port, link publication and G5 game evidence remain pending.
+> since the #334 binding slice (2026-11-08) an explicit `cf_worker climb` order
+> drives it through the scoped motor `Runtime/Ladders/WorkerClimbMotor.cs`
+> (DECISIONS.md D14.6). G5 game evidence remains OWNER GO-AROUND PENDING.
 > This does not enable Foreman's superseded player motor or change any default.
 
 # Ladders: climbing, not teleporting
@@ -294,7 +296,7 @@ needs a human in Unity.
 | `ClimbSpeed` | `1.0` | Multiplier on the tuned speed. |
 | `StaminaCost` | `0` per second | Vanilla charges nothing to walk up stairs. |
 | `UseTeleport` | `false` | Restores vanilla's `Use` teleport for players who prefer it. |
-| `NpcClimbing` | `false` | Off until NPC traversal passes its own gate. |
+| `NpcClimbing` | `false` | Off by default. Lets an explicit `cf_worker climb` order move Thorstein's own body up or down a Concerned Ladders ladder (#334, D14.6); G5 not yet observed. |
 
 Nothing else, unless a gate proves it is needed.
 
@@ -309,7 +311,7 @@ everything else. What the values mean, and what happens to a silly one, is in
 | `ClimbSpeed` | `ClimbOptions.ClimbSpeedMultiplier` → `ClimbLimits.SpeedMultiplier` | 0.25 – 3 |
 | `StaminaCost` | `ClimbOptions.StaminaPerSecond` → `ClimbLimits.StaminaPerSecond` | 0 – 10 |
 | `UseTeleport` | the interaction prefix only; nothing in the domain | — |
-| `NpcClimbing` | nothing yet (CF-LAD-005) | — |
+| `NpcClimbing` | `WorkerClimbRuntime` / `WorkerClimbOrder`, read live: refuses an order while false, ends one when it goes false | — |
 
 Two rules hold this together. The configured ranges are **exactly** the ranges `ClimbLimits.Validate` accepts, and a
 test fails if they ever drift apart — otherwise a number a config file accepts becomes a throw at the moment somebody
@@ -338,7 +340,9 @@ No gate may be claimed without the evidence named in it. A passing test suite is
   Needs a second client; if the owner cannot run one, the gate is recorded as **not run**, and the feature ships (if
   the owner says so) with that limitation written down, never as a pass.
 - **G5 NPC.** Either a worker climbs under the opted-in runtime, or the traversal seam exists, the navigation links are
-  published, and the remaining navigation work is a filed follow-up issue.
+  published, and the remaining navigation work is a filed follow-up issue. Since #334's binding slice the code for the
+  first branch exists (`cf_worker climb`, `WorkerClimbOrder`, `WorkerClimbMotor`); the gate is **OWNER GO-AROUND
+  PENDING** - the rows are in `WORKER_LADDER_RECEIVER_2026_11_01.md`, "NOT RUN game rows".
 - **G6 Performance.** A tower with dozens of ladders and nobody climbing costs nothing measurable: no scene-wide
   searches, no per-frame reflection, no per-rung update loops, cached surveys, local detection only.
 - **G7 Packaging.** Foreman builds, packages, documents and changelogs cleanly, with a truthful version. Nothing is

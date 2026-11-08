@@ -1597,6 +1597,19 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
                  "loosen the pattern", errors)
             return []
 
+    # Pinning the derivations is not enough if a role can be reassigned after
+    # them: `(from, to) = (to, from);` below the pinned lines reverses the deposit
+    # into a withdrawal with every pinned call byte-identical (review of #381's
+    # chest take, which found the same hole there).
+    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS, 3,
+                                       TEAMSTER_DEPOSIT_INVENTORY_OF, ("GunnarDepositPort", "MoveTally"))
+    if findings:
+        for finding in findings:
+            fail(f"{label}: {port.relative_to(ROOT)}: {finding}. Pinning the derivations means nothing if the two "
+                 "roles can be exchanged below them - the deposit becomes a withdrawal with every pinned call "
+                 "byte-identical", errors)
+        return []
+
     return [
         f"{label}: the deposit port clones exactly the stack it removes from, assigns that clone "
         f"once, looks an item prefab up once and only as `database.GetItemPrefab(itemPrefab)`, "
@@ -1604,6 +1617,408 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
         f"and its destination from the chosen chest - so the authorized `AddItem` cannot carry "
         f"material built from a name, and the move cannot be reversed into a withdrawal by renaming "
         f"two parameters",
+    ]
+
+
+TEAMSTER_TAKE_LABEL = "[interop] #381 chest-take audit"
+TEAMSTER_TAKE_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Take.cs"
+TEAMSTER_TAKE_DEFAULTS_FILE = "Domain/Collection/GunnarCollectionDefaults.cs"
+TEAMSTER_TAKE_SETTINGS_FILE = "TeamsterSettings.cs"
+TEAMSTER_TAKE_PUNCTUATION = "().,;:?<>!&=|{}"
+
+
+def _teamster_take_exact(spelling: str) -> re.Pattern:
+    """`spelling` with the whitespace C# allows wherever it has a space and
+    around its punctuation - so a space or a newline cannot hide a pinned line,
+    and nothing else about it may change."""
+    out = []
+    for piece in re.split(r"(\s+|[" + re.escape(TEAMSTER_TAKE_PUNCTUATION) + r"])", spelling):
+        if not piece:
+            continue
+        if piece.isspace():
+            out.append(SPACE)
+        elif piece in TEAMSTER_TAKE_PUNCTUATION:
+            out.append(SPACE + re.escape(piece) + SPACE)
+        else:
+            out.append(re.escape(piece))
+    return re.compile("".join(out))
+
+
+TEAMSTER_ROLE_KEYWORDS = frozenset({
+    "return", "in", "is", "as", "out", "ref", "new", "await", "throw", "case", "when", "else", "yield",
+    "not", "and", "or", "typeof", "nameof", "sizeof", "default", "goto", "using", "lock", "params", "this",
+})
+TEAMSTER_ROLE_LOCAL_FUNCTION = re.compile(
+    r"^\s+(?:static\s+)?(?!(?:if|for|foreach|while|switch|catch|using|lock|return|else|new|throw|await|fixed)\b)"
+    r"[A-Za-z_][\w<>?,\[\]. ]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(?:\{.*)?$")
+
+
+TEAMSTER_INVENTORY_OF_CONTAINER = (
+    "private static Inventory? InventoryOf(Container? container) { try { return container == null ? null : "
+    "container.GetInventory(); } catch (Exception) { return null; } }")
+TEAMSTER_TAKE_INVENTORY_OF = (
+    TEAMSTER_INVENTORY_OF_CONTAINER,
+    "private static Inventory? InventoryOf(Humanoid? worker) { try { return worker == null || worker.IsDead() ? "
+    "null : worker.GetInventory(); } catch (Exception) { return null; } }",
+)
+TEAMSTER_DEPOSIT_INVENTORY_OF = (
+    TEAMSTER_INVENTORY_OF_CONTAINER,
+    "private static Inventory? InventoryOf(Humanoid? worker) => ReadInventoryOf(worker, out _);",
+    "private static Inventory? ReadInventoryOf(Humanoid? worker, out bool accessorFailed) { accessorFailed = false; "
+    "try { return worker == null || worker.IsDead() ? null : worker.GetInventory(); } catch (Exception) { "
+    "accessorFailed = true; return null; } }",
+)
+
+
+def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: tuple,
+                            overloads_expected: int, overload_bodies: tuple,
+                            types_expected: tuple) -> list[str]:
+    """Why a port's two ROLES (which inventory is the source, which the
+    destination) could be exchanged below the pinned derivations - empty when
+    they cannot, as far as a text audit can see.
+
+    A pinned derivation fixes a name to a role on one line. It means nothing if
+    the name can be bound again, or the pinned calls can run where the name means
+    something else. Reviews of #381's chest take found each of these escapes, in
+    the take port and mirrored in the deposit port, with every pinned call
+    byte-identical:
+
+    - a reassignment, a swap by deconstruction (nested ones included), or a
+      `ref`/`out` argument after the derivations;
+    - the pinned calls moved into a helper whose parameters bind the two names
+      the other way round, called from the mover with them exchanged;
+    - the same through a local function or a lambda inside the mover, which may
+      shadow its locals in this language version.
+
+    So: every pinned call sits in the pinned mover's own body; the mover holds no
+    lambda, delegate or local function; each role is declared exactly twice (the
+    two derivations) and written exactly twice; no untyped lambda parameter takes
+    a role's name anywhere in the file; the parameters the roles come from are
+    never written; each InventoryOf overload's whole method is pinned; the port
+    has one field (`_matching`) and declares no type but its own and MoveTally.
+    String literals are blanked first, so a sentence that happens to say
+    "to = ..." is not code.
+
+    **What this does not claim.** Five rounds of independent review each found
+    a further way to exchange the roles, and each is now refused and planted. A
+    text audit cannot prove there is no sixth - reflection, a delegate stored
+    elsewhere, or a helper class in another file reached through the port's own
+    types are outside what it reads - and a reversal that also exchanged what
+    is measured would be recorded as a clean move, so the measurement is no
+    backstop for it. A reviewer remains part of this boundary."""
+    blank = CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"', code)
+    found = []
+
+    movers = [(header, block) for header, _start, block in _teamster_tour_plan_methods(blank)
+              if shape.search(header)]
+    if len(movers) != 1:
+        return [f"the pinned mover was found {len(movers)} time(s), so where its calls run cannot be checked"]
+    body = "\n".join(movers[0][1])
+    for token, pattern, _what in calls:
+        if len(pattern.findall(body)) != 1:
+            found.append(f"the pinned `{token}` call is not inside the pinned mover's own body, exactly once - "
+                         "a call in a helper runs wherever that helper's parameters say the roles are")
+    if re.search(r"=>|\bdelegate\b", body):
+        found.append("the mover holds a lambda or a delegate, whose parameters may shadow the two roles")
+    for line in movers[0][1][1:]:
+        if TEAMSTER_ROLE_LOCAL_FUNCTION.match(line):
+            found.append(f"the mover declares a local function (`{line.strip()}`), whose parameters may shadow the "
+                         "two roles")
+
+    # Every assignment whose left-hand side ends in a parenthesis is a
+    # deconstruction, wherever the statement starts - `if (x) (a, b) = ...;` and
+    # `_ = ((a, b) = ...);` included, which a "statement starts with (" rule missed.
+    groups = []
+    for match in re.finditer(r"(?<![=!<>])=(?![=>])", blank):
+        left = match.start() - 1
+        while left >= 0 and blank[left].isspace():
+            left -= 1
+        if left < 0 or blank[left] != ")":
+            continue
+        depth = 0
+        for index in range(left, -1, -1):
+            if blank[index] == ")":
+                depth += 1
+            elif blank[index] == "(":
+                depth -= 1
+                if depth == 0:
+                    groups.append(blank[index:left + 1])
+                    break
+
+    for role in roles:
+        word = r"\b" + re.escape(role) + r"\b"
+        declared = [match for match in re.finditer(
+            r"(?<![\w.])([A-Za-z_][\w.]*(?:<[^<>;]*>)?\??|\])" + SPACES + word + r"(?!" + SPACE + r"\()", blank)
+            if match.group(1) not in TEAMSTER_ROLE_KEYWORDS]
+        plain = re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
+        by_reference = re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank)
+        lambdas = re.findall(word + SPACE + r"=>|\([^()]*" + word + r"[^()]*\)" + SPACE + r"=>", blank)
+        deconstructed = sum(1 for group in groups if re.search(word, group))
+        if len(declared) != 2:
+            found.append(f"`{role}` is declared {len(declared)} time(s) (a local or a parameter); exactly two "
+                         "are authorized, the two pinned derivations. A local function whose signature spans "
+                         "lines is caught here rather than by the mover's local-function check")
+        if len(plain) != 2 or by_reference or deconstructed:
+            found.append(f"`{role}` is written {len(plain)} time(s) by assignment, {len(by_reference)} through ref "
+                         f"or out and {deconstructed} by deconstruction; exactly two assignments are authorized, "
+                         "the two pinned derivations")
+        if lambdas:
+            found.append(f"a lambda parameter is named `{role}`")
+
+    # What the derivations derive FROM. `InventoryOf(worker)` means Gunnar only
+    # while that overload returns the worker's inventory and `worker` is the
+    # worker: an overload that returned the other party's inventory (through a
+    # field set in the entry point), or a parameter reassigned, would reverse the
+    # move and the measurement together, so the reversal would be recorded as a
+    # clean transfer.
+    for parameter in ("worker", "container", "source", "destination"):
+        word = r"\b" + re.escape(parameter) + r"\b"
+        written = (re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
+                   + re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank))
+        written += [group for group in groups if re.search(word, group)]
+        if written:
+            found.append(f"`{parameter}` is written {len(written)} time(s); the parameters the two roles are "
+                         "derived from are never reassigned")
+    overloads = re.findall(r"\bInventory" + SPACE + r"\?" + SPACE + r"(?:Read)?InventoryOf" + SPACE + r"\(", blank)
+    # Each overload's WHOLE method, header to closing brace. A substring pin let
+    # `_cache ?? (pinned)` through, and a whole-try-block pin let an early
+    # `return` sit in front of the try; nothing may be added to these bodies.
+    for spelling in overload_bodies:
+        if len(_teamster_take_exact(spelling).findall(blank)) != 1:
+            found.append(f"`{spelling}` is not in the port exactly once - each InventoryOf overload returns its own "
+                         "party's inventory and does nothing else, so its whole body is pinned")
+    declared_types = sorted(set(re.findall(
+        r"\b(?:class|struct|interface|enum|record|delegate)" + SPACES + r"([A-Za-z_]\w*)", blank)))
+    if declared_types != sorted(types_expected):
+        found.append(f"the port declares the types {declared_types}; exactly {sorted(types_expected)} are "
+                     "authorized - another type is state a derivation could answer from out of sight of the field "
+                     "pin")
+    # No state an overload could answer from instead: the port's only field is
+    # the list it reuses for matching stacks, and nothing at class level holds an
+    # inventory, a character or a container.
+    fields = re.findall(r"^    (?! )(?:(?:private|internal|public|protected|static|readonly|volatile)[ \t]+)*"
+                        r"(?!return\b|break\b|continue\b|throw\b)"
+                        r"([\w<>.?,\[\]][\w<>.?,\[\] \t]*?)[ \t]+([A-Za-z_]\w*)[ \t]*(?:=[^>=]|;)", blank, re.M)
+    others = sorted(name for _type, name in fields if name != "_matching")
+    if others or len(fields) != 1:
+        found.append(f"the port's fields are {sorted(name for _t, name in fields)}; exactly one is authorized, "
+                     "`_matching` - a field is state an InventoryOf overload or a derivation could answer from "
+                     "instead of its own argument")
+    getters = len(re.findall(r"\.\s*GetInventory" + SPACE + r"\(", blank))
+    if getters != 2:
+        found.append(f"the port reads an inventory with GetInventory {getters} time(s); exactly two are authorized, "
+                     "one in each pinned InventoryOf overload")
+    if len(overloads) != overloads_expected:
+        found.append(f"the port declares {len(overloads)} InventoryOf overload(s) and {overloads_expected} are "
+                     "authorized, one per party (the deposit's worker overload delegates to ReadInventoryOf)")
+    return found
+
+
+def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) -> list[str]:
+    """D20 (owner decision 2026-10-31, #381): Gunnar may take from a chest the
+    player marked Take or Both, measured on both sides, the remainder left in the
+    chest, off by default and pinned like the D15 deposit.
+
+    The scope audit pins the take port's three vanilla calls verbatim. This rule
+    pins what a call pin cannot see, the way `#381 deposit-mint audit` does for
+    the deposit, plus the take's own properties:
+
+    1. *Nothing built from a name, and the direction cannot be renamed away.* One
+       clone of the chest's own stack, assigned once; one item lookup, in
+       SafeRoom; no instantiation; the mover takes the two ROLES and derives
+       `chest` from the source and `gunnar` from the worker, twice each.
+    2. *The mint asks for Take and nothing else.* One `NpcContainerPermit.Issue`,
+       for `NpcContainerUse.Take`; no other use is spelled in the port, so a chest
+       marked for putting things in only cannot authorize a take.
+    3. *One call site, behind its own switch and gate.* The port is constructed
+       once and `TakeOne` called once, in the runtime's take part alone; that part
+       feeds the gate the take's own opt-in, which reads the take switch; the
+       gate's refusal returns before the call; an open tour plan refuses; the
+       switch is off by default; and the source is set only from the chest the
+       player pointed at, and cleared.
+
+    A text audit, like every Teamster rule: it does not follow delegates or prove
+    control flow."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = TEAMSTER_TAKE_LABEL
+    port = teamster_dir.joinpath(*TEAMSTER_TAKE_PORT_PATH)
+    port_rel = "/".join(TEAMSTER_TAKE_PORT_PATH)
+    if not port.is_file():
+        fail(f"{label}: missing src/ConcernedTeamster/{port_rel} - the take's authorized calls have no file "
+             "to be confined to", errors)
+        return []
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8-sig"))
+
+    def exactly(spelling: str, expected: int, why: str, text: str = code, where: str = port_rel) -> bool:
+        found = len(_teamster_take_exact(spelling).findall(text))
+        if found != expected:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of `{spelling}` and exactly "
+                 f"{expected} {'is' if expected == 1 else 'are'} expected - {why}", errors)
+            return False
+        return True
+
+    if not exactly("ItemDrop.ItemData part = stack.Clone()", 1,
+                   "that initializer is what makes the authorized `gunnar.AddItem(part)` a move of part of the "
+                   "chest's own stack rather than an item built from a name"):
+        return []
+    assignments = len(re.findall(r"\bpart" + SPACE + r"=" + SPACE + r"(?!=)", code))
+    if assignments != 1:
+        fail(f"{label}: `part` is assigned {assignments} time(s) in src/ConcernedTeamster/{port_rel}; exactly one "
+             "is authorized, the pinned clone. A second assignment replaces what the authorized add adds while "
+             "leaving that call byte-identical", errors)
+        return []
+    lookups = len(re.findall(r"GetItemPrefab" + SPACE + r"\(", code))
+    if lookups != 1:
+        fail(f"{label}: src/ConcernedTeamster/{port_rel} looks an item prefab up {lookups} time(s); exactly one "
+             "is authorized, in SafeRoom. Any other is a way to build material from a name", errors)
+        return []
+    if not exactly("database.GetItemPrefab(itemPrefab)", 1,
+                   "the one lookup asks what Gunnar's inventory would merge into, and nothing else"):
+        return []
+    for token, why in (
+            ("Instantiate", "instantiating anything - the take moves items that already exist"),
+            ("ObjectDB.instance.GetItemPrefab(", "reaching the item database inline, next to the authorized add"),
+            ("m_dropPrefab.GetComponent", "templating an item off its own prefab")):
+        if _audit_token(token).search(code):
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} spells `{token}`. That is {why}; creating or "
+                 "templating an item is outside D20, which authorizes moving what the chest already holds",
+                 errors)
+            return []
+
+    if not exactly("private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)", 1,
+                   "the mover takes the two ROLES and derives the inventories itself, because two same-typed "
+                   "`Inventory` parameters can be renamed into a deposit with every pinned call byte-identical"):
+        return []
+    for spelling, role in (("Inventory? chest = InventoryOf(source);", "the source is the chosen chest"),
+                           ("Inventory? gunnar = InventoryOf(worker);", "the destination is Gunnar")):
+        if not exactly(spelling, 2, f"the line that establishes that {role}, once where the counts are taken and "
+                                    "once where the items move. Reversing a take into a deposit needs only "
+                                    "their order if these can move"):
+            return []
+
+    take_shape = _teamster_take_exact(
+        "private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)")
+    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS, 2,
+                                       TEAMSTER_TAKE_INVENTORY_OF, ("GunnarTakePort", "MoveTally"))
+    if findings:
+        for finding in findings:
+            fail(f"{label}: src/ConcernedTeamster/{port_rel}: {finding}. Pinning the derivations means nothing if "
+                 "the two roles can be exchanged below them - the take becomes a deposit out of Gunnar with every "
+                 "pinned call byte-identical", errors)
+        return []
+
+    mints = len(re.findall(r"\bNpcContainerPermit" + SPACE + r"\." + SPACE + r"Issue" + SPACE + r"\(", code))
+    if mints != 1:
+        fail(f"{label}: src/ConcernedTeamster/{port_rel} mints {mints} permit(s); exactly one is authorized, "
+             "for Take", errors)
+        return []
+    if not exactly("NpcContainerPermit.Issue(subject, NpcContainerUse.Take, world, out refusal)", 1,
+                   "the one mint asks the chest for Take"):
+        return []
+    for other in ("Deposit", "Both", "Off"):
+        if re.search(r"\bNpcContainerUse" + SPACE + r"\." + SPACE + other + r"\b", code):
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} spells `NpcContainerUse.{other}`. The take port asks "
+                 "for Take and nothing else, so a chest the player marked for putting things in only can never "
+                 "authorize taking from it", errors)
+            return []
+
+    sources: dict[str, str] = {}
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        rel = path.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin"):
+            continue
+        sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+
+    for spelling, why in (("new GunnarTakePort()", "the take port is constructed once, by the runtime's take part"),
+                          ("_take.TakeOne(", "the take is made in one place, behind its own gate")):
+        pattern = _teamster_take_exact(spelling)
+        where = [(rel, len(pattern.findall(text))) for rel, text in sources.items() if pattern.search(text)]
+        if where != [(TEAMSTER_TAKE_RUNTIME_FILE, 1)]:
+            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly once, in "
+                 f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, is authorized - {why}", errors)
+            return []
+    stray = [rel for rel, text in sources.items()
+             if rel not in (TEAMSTER_TAKE_RUNTIME_FILE, port_rel) and re.search(r"\bTakeOne" + SPACE + r"\(", text)]
+    if stray:
+        fail(f"{label}: TakeOne is named in {stray} - the take is made in one place, "
+             f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, behind its own gate", errors)
+        return []
+
+    runtime = sources.get(TEAMSTER_TAKE_RUNTIME_FILE, "")
+    calls_here = len(re.findall(r"\bTakeOne" + SPACE + r"\(", runtime))
+    if calls_here != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE} names TakeOne {calls_here} time(s); "
+             "exactly one call is authorized - a second, through an alias of the port, would sit outside the "
+             "gate the first is pinned behind", errors)
+        return []
+    for spelling, why in (
+            ("collectionEnabled: OptedIn()", "the gate is told the collection switches, not a literal"),
+            ("takeEnabled: TakeOptedIn()", "the gate is told the take's own opt-in, not a literal or another switch"),
+            ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+            ("authority: TakeAuthority()", "the gate is told the work-authority rule (host, not dedicated, no "
+                                          "peers), not a literal"),
+            ("WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(TakeOptedIn()))",
+             "the take's authority is the shared rule, asked about the take's own opt-in"),
+            ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+            ("workerPresent: worker != null && !worker.IsDead()", "the gate is told whether he is here and alive"),
+            ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+            ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+            ("transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering",
+             "the gate is told what else is in flight"),
+            ("return OptedIn() && _settings.GunnarChestTakeEnabled.Value;",
+             "the take's opt-in reads the master and collection switches AND the take switch"),
+            ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a take (#379)"),
+            ("TakeRefusal refusal = TakeOrderGate.Evaluate(request);", "the gate decides"),
+            ("if (refusal != TakeRefusal.None)", "the gate's refusal is acted on"),
+            ("_source = chest;", "the source is the chest the player pointed at"),
+            ("_source = null;", "the source is cleared only when its name stops meaning anything")):
+        if not exactly(spelling, 1, why, runtime, TEAMSTER_TAKE_RUNTIME_FILE):
+            return []
+    # In the SAME method as the call: a gate in a helper nobody calls, above the
+    # take, would otherwise satisfy an order read over the whole file.
+    ordered = False
+    for _header, _start, block in _teamster_tour_plan_methods(runtime):
+        body = "\n".join(block)
+        call = _teamster_take_exact("_take.TakeOne(").search(body)
+        if call is None:
+            continue
+        evaluate = _teamster_take_exact("TakeRefusal refusal = TakeOrderGate.Evaluate(request);").search(body)
+        refused = _teamster_take_exact("if (refusal != TakeRefusal.None)").search(body)
+        ordered = bool(evaluate and refused and evaluate.start() < refused.start() < call.start()
+                       and re.match(SPACE + r"\{" + SPACE + r"return\b", body[refused.end():]))
+    if not ordered:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE} does not decide, refuse with a return, "
+             "and only then call the port, in that order and in the method that makes the call - a take the gate "
+             "did not admit", errors)
+        return []
+    writes = sum(len(re.findall(r"\b_source" + SPACE + r"(?:\?\?)?=(?!=)", text))
+                 for text in sources.values()
+                 if re.search(r"\bpartial\s+class\s+GunnarCollectionRuntime\b", text))
+    if writes != 2:
+        fail(f"{label}: the collection runtime assigns _source {writes} time(s); twice is authorized, the pointed "
+             f"chest and the clear, both in src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}", errors)
+        return []
+
+    if not exactly("public const bool ChestTakeEnabled = false;", 1, "the take is off by default",
+                   sources.get(TEAMSTER_TAKE_DEFAULTS_FILE, ""), TEAMSTER_TAKE_DEFAULTS_FILE):
+        return []
+    if not exactly('config.Bind("Workers", "GunnarChestTakeEnabled", GunnarCollectionDefaults.ChestTakeEnabled,', 1,
+                   "the switch is bound to the off default", sources.get(TEAMSTER_TAKE_SETTINGS_FILE, ""),
+                   TEAMSTER_TAKE_SETTINGS_FILE):
+        return []
+
+    return [
+        f"{label}: the take port clones exactly the chest's stack it removes from, assigns that clone once, looks "
+        "an item prefab up once and only in SafeRoom, instantiates nothing, derives its source from the chosen "
+        "chest and its destination from Gunnar inside the mover, and mints one permit, for Take; it is built and "
+        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, in the method whose take gate refuses with a return above "
+        "it, every gate input pinned (the switches, the world, the work-authority rule, the probe, his body and its "
+        "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); the "
+        "three calls sit in the mover's own body, which holds no lambda or local function, and `chest` and `gunnar` "
+        "are declared and written only by their derivations; an open tour plan refuses; and the "
+        "source is set from the pointed-at chest and cleared, nowhere else. A text audit; it does not follow "
+        "delegates or prove control flow",
     ]
 
 
@@ -2278,6 +2693,12 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     ".Translate(",
     ".Rotate(",
     ".RotateAround(",
+    # D21's animation trigger (owner decision 2026-10-31), forbidden here so the
+    # one pinned call in the idle hammer port is the only way it reaches the
+    # source tree. Before D21 nothing in Teamster called it and nothing refused
+    # it either: the comments said "not authorized" while the audit let any file
+    # spell it. Refused now in both places, like every other authorized token.
+    ".SetTrigger(",
 )
 
 # Allowed only in the prefab factory, which builds the inactive clone and strips
@@ -2334,6 +2755,9 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
     # ...and nothing may cause the death that reaches it (see the worker list),
     # including by sending vanilla's own damage message.
     "SetHealth", "UseHealth", "SetMaxHealth", ".Damage(", "ApplyDamage", "RPC_Damage", "InvokeRPC",
+    # D21's animation trigger: a helper in Adapters/, Domain/ or a shared tree
+    # must not be able to spell what the idle hammer port may spell once.
+    ".SetTrigger(",
 )
 
 # The one owner-authorized exception to the worker runtime's token list
@@ -2352,8 +2776,10 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
 # already owns, so the port spells no RPC of its own - verified against Foreman's
 # port, which makes exactly one game call and names no `InvokeRPC` anywhere.
 # Felling a tree (`TreeBase.Damage`) and the cosmetic hammer animation
-# (`ZSyncAnimation.SetTrigger`) are separate capabilities, were NOT authorized,
-# and would each need their own owner decision.
+# (`ZSyncAnimation.SetTrigger`) are separate capabilities and were NOT part of
+# this grant. Felling is still unauthorized. The hammer animation got its own
+# owner decision on 2026-10-31 (`DECISIONS.md` D21): one pinned call in its own
+# file, `TEAMSTER_IDLE_HAMMER_PORT_PATH` below, never in this one.
 #
 # So: two tokens, in one file. Every other forbidden token still fails in that
 # file, and both of these still fail in every other file, inside Workers and out.
@@ -2481,12 +2907,52 @@ TEAMSTER_DEATH_DROP_PORT_CALLS = (
      "vanilla's own drop of one carried stack, with its own count, on Gunnar's genuine death only"),
 )
 
+# The chest take (owner decision 2026-10-31, #381; `DECISIONS.md` D20). The
+# deposit's three calls with the two roles exchanged: the source is the chest
+# the player marked Take or Both, the destination is Gunnar. Same shape as the
+# deposit's pin and for the same reasons, and the variable names are part of it:
+# `gunnar` and `chest` are derived from the worker and the source inside the
+# mover (`#381 chest-take audit` pins both derivations), so the reversal of a
+# take into a deposit - `chest.MoveItemToThis(gunnar, stack)` - and a remove of
+# anything but what arrived, or from anything but the chest, spell a different
+# call and fail. Until this grant those tokens were refused here like everywhere
+# else, which is what "the validator refuses a Teamster take" meant.
+TEAMSTER_TAKE_PORT_PATH = ("Adapters", "Workers", "GunnarTakePort.cs")
+TEAMSTER_TAKE_PORT_CALLS = (
+    (".MoveItemToThis(",
+     re.compile(r"\bgunnar\s*\.\s*MoveItemToThis\s*\(\s*chest\s*,\s*stack\s*\)"),
+     "vanilla's whole-stack move out of the marked chest into Gunnar"),
+    (".AddItem(",
+     re.compile(r"\bgunnar\s*\.\s*AddItem\s*\(\s*part\s*\)"),
+     "the clone of part of the chest's stack, added to Gunnar before anything is removed"),
+    (".RemoveItem(",
+     re.compile(r"\bchest\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*arrived\s*\)"),
+     "exactly what arrived in Gunnar, taken off the chest's own stack after the add"),
+)
+
+# The idle hammer (owner decision 2026-10-31; `DECISIONS.md` D21). One call,
+# vanilla's own `ZSyncAnimation.SetTrigger`, cosmetic only: a transient,
+# unsaved animation trigger on Gunnar's own body. The argument and receiver
+# names are the pin, as for D16: `animation` is his own body's animation sync
+# and `swing` is the name the vanilla Hammer item itself plays, and
+# `check_teamster_idle_hammer_port` below pins where each of those comes from.
+# A literal trigger name, another body's or the player's animator, or a second
+# call is a different program and fails.
+TEAMSTER_IDLE_HAMMER_PORT_PATH = ("Adapters", "Workers", "GunnarIdleHammerPort.cs")
+TEAMSTER_IDLE_HAMMER_PORT_CALLS = (
+    (".SetTrigger(",
+     re.compile(r"\banimation\s*\.\s*SetTrigger\s*\(\s*swing\s*\)"),
+     "vanilla's own hammer swing, once, on Gunnar's own body, cosmetic only"),
+)
+
 # Which file may spell which authorized calls. A path absent from this table has
-# no allowance at all, which is every file in the product bar these three.
+# no allowance at all, which is every file in the product bar these five.
 TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
     TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
     TEAMSTER_DEATH_DROP_PORT_PATH: TEAMSTER_DEATH_DROP_PORT_CALLS,
+    TEAMSTER_TAKE_PORT_PATH: TEAMSTER_TAKE_PORT_CALLS,
+    TEAMSTER_IDLE_HAMMER_PORT_PATH: TEAMSTER_IDLE_HAMMER_PORT_CALLS,
 }
 
 
@@ -2650,13 +3116,21 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"add-then-remove pair that moves part of one); "
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_DEATH_DROP_PORT_CALLS)} "
         f"owner-authorized as one pinned call, verbatim and once, in "
-        f"{'/'.join(TEAMSTER_DEATH_DROP_PORT_PATH)} alone (D16's death drop); all six refused everywhere else in the "
+        f"{'/'.join(TEAMSTER_DEATH_DROP_PORT_PATH)} alone (D16's death drop); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_TAKE_PORT_CALLS)} "
+        f"owner-authorized as three pinned calls, each verbatim and each once, in "
+        f"{'/'.join(TEAMSTER_TAKE_PORT_PATH)} alone (D20's chest take, the deposit's calls with the chest as the "
+        f"source); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_IDLE_HAMMER_PORT_CALLS)} "
+        f"owner-authorized as one pinned call, verbatim and once, in "
+        f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D21's cosmetic idle hammer swing); every one refused "
+        f"everywhere else in the "
         f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"(scanned across the product AND the {len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) its "
         f"project file compiles in, which were outside this audit until D15) "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no direct Inventory.AddItem outside the one pinned call above, and no ZNetScene reference outside "
+        f"tuning writes, no direct Inventory.AddItem outside the two pinned calls above (the deposit's and the take's), and no ZNetScene reference outside "
         f"Adapters/Workers; no component surgery or reflection outside the prefab factory (inside "
         f"Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) "
         f"({hits} violations)",
@@ -2768,8 +3242,10 @@ FOREMAN_AUDITED_CAPABILITIES = (
         # name, which sets a progress number and touches no body or engine.
         ("../Shared/Ladders/ClimbTrack.cs", _foreman_exact(r"\bpublic\s+void\s+MoveTo\s*\(\s*float\s+progress\s*\)"), 1),
     )),
+    # #334: isKinematic joined this spelling with the worker ladder motor, the
+    # one place that turns a body's physics off and on again.
     ("physics position/velocity write", re.compile(
-        r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity)\s*[-+*/&|^]?=(?!=)"), (
+        r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity|isKinematic)\s*[-+*/&|^]?=(?!=)"), (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*false\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*true\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*velocity\s*;"), 1),
@@ -2780,6 +3256,13 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+        # #334 (owner decision 2026-11-01, D14.6): the worker ladder motor - the
+        # ordered worker's own rigidbody, made kinematic for the lease, restored
+        # to what it was, and one position write per checked path step. The
+        # #334 worker-climb audit pins the sweep in front of that write.
+        ("Runtime/Ladders/WorkerClimbMotor.cs", _foreman_exact(r"\blease\s*\.\s*_body\s*\.\s*isKinematic\s*=\s*true\s*;"), 1),
+        ("Runtime/Ladders/WorkerClimbMotor.cs", _foreman_exact(r"\b_body\s*\.\s*isKinematic\s*=\s*_wasKinematic\s*;"), 1),
+        ("Runtime/Ladders/WorkerClimbMotor.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*target\s*;"), 1),
     )),
 )
 
@@ -3876,7 +4359,7 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
         "src/ConcernedForeman less obj/ and bin/, and the "
         f"{len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - {pinned} direct engine mutation/capability site(s) "
         "pinned by full path and exact whitespace-tolerant spelling; SetTrigger, ownership "
-        "takeover, unpinned teleport/position/velocity/force writes, item spawning/drop calls, "
+        "takeover, unpinned teleport/position/velocity/kinematic/force writes, item spawning/drop calls, "
         "and arbitrary RPC are refused. This source-text audit strips comments; it does not "
         f"follow indirection or prove control flow ({hits} violations)",
     ]
@@ -3972,6 +4455,157 @@ def check_foreman_felling_scope(errors: list[str]) -> list[str]:
         "`.Damage(`, the pinned hit in Runtime/Collection/WorldFellingPort.cs; TreeBase, TreeLog, DestroyNow, "
         "ApplyDamage and RPC_Damage are refused everywhere in that scope. A text audit with comments stripped: "
         f"a call through a delegate spells none of these ({hits} violations)",
+    ]
+
+
+# #334 (owner decision 2026-11-01, DECISIONS.md D14.6): an explicitly ordered
+# Thorstein may have his OWN body moved along a checked Concerned Ladders path by
+# one scoped motor, off by default (Ladders/NpcClimbing), as the host with no
+# peers, with vanilla's ground motor suspended. The #400 audit pins the motor's
+# three physics writes by spelling. This audit pins what #400 cannot see:
+#
+# - the capsule sweep sits directly in front of the position write, and `from`
+#   is read from the body being moved;
+# - the rigidbody is the ordered worker's own, taken from the AI the lease was
+#   given - never a player's or another object's;
+# - only the motor file creates a lease, starts one on the AI and ends one, and
+#   only the climb runtime asks for one;
+# - the ground-motor suspension is exactly the lease: ForemanWorkerAI reports
+#   sleeping only while a lease is held, returns before any planning (so before
+#   its one pinned MoveTo) while one is, refuses a job goal while one is, and no
+#   other type in the scope overrides IsSleeping;
+# - only the climb runtime installs the route tick on the body.
+#
+# The scope is the #400/D19 scope: the whole product less obj/ and bin/ plus
+# every shared tree its project file compiles in. A text audit with comments
+# stripped: it does not follow delegates or prove control flow; that half is
+# WorkerClimbOrderTests' and a reviewer's.
+FOREMAN_CLIMB_MOTOR = "Runtime/Ladders/WorkerClimbMotor.cs"
+FOREMAN_CLIMB_RUNTIME = "Runtime/Ladders/WorkerClimbRuntime.cs"
+FOREMAN_CLIMB_AI = "Runtime/Settlement/ForemanWorkerAI.cs"
+
+# label, broad spelling, ((path under ConcernedForeman, exact spelling, count), ...)
+FOREMAN_CLIMB_CONFINED = (
+    ("IsSleeping override", re.compile(r"\boverride\s+bool\s+IsSleeping\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(
+            r"\bpublic\s+override\s+bool\s+IsSleeping\s*\(\s*\)\s*=>\s*_climbLease\s*!=\s*null\s*;"), 1),
+    )),
+    ("ladder-lease construction", re.compile(r"\bnew\s+WorkerClimbMotor\s*\("), (
+        (FOREMAN_CLIMB_MOTOR, re.compile(
+            r"\bnew\s+WorkerClimbMotor\s*\(\s*ai\s*,\s*body\s*,\s*worker\s*,\s*bodyEpoch\s*,\s*clear\s*\)"), 1),
+    )),
+    ("ladder-lease request", re.compile(r"\bWorkerClimbMotor\s*\.\s*TrySuspend\s*\("), (
+        (FOREMAN_CLIMB_RUNTIME, re.compile(
+            r"\bWorkerClimbMotor\s*\.\s*TrySuspend\s*\(\s*_ai\s*,\s*worker\s*,\s*bodyEpoch\s*,\s*"
+            r"_receiver\s*\.\s*IsMoveClear\s*\)"), 1),
+    )),
+    # Unqualified spellings count too (review m1): a call inside ForemanWorkerAI
+    # itself needs no receiver, so each name is matched without one and the
+    # declaration is pinned beside the one call.
+    ("ladder-lease start", re.compile(r"(?<![A-Za-z0-9_])TryBeginClimb\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(r"\binternal\s+bool\s+TryBeginClimb\s*\(\s*object\s+lease\s*\)"), 1),
+        (FOREMAN_CLIMB_MOTOR, re.compile(r"\bai\s*\.\s*TryBeginClimb\s*\(\s*lease\s*\)"), 1),
+    )),
+    ("ladder-lease end", re.compile(r"(?<![A-Za-z0-9_])EndClimb\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(r"\binternal\s+bool\s+EndClimb\s*\(\s*object\s+lease\s*\)"), 1),
+        (FOREMAN_CLIMB_MOTOR, re.compile(r"\b_ai\s*\.\s*EndClimb\s*\(\s*this\s*\)"), 1),
+    )),
+    ("ladder-lease field write", re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*(?:\?\?)?=(?!=)"), (
+        (FOREMAN_CLIMB_AI, re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*=\s*lease\s*;"), 1),
+        (FOREMAN_CLIMB_AI, re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*=\s*null\s*;"), 1),
+    )),
+    ("route-tick installation", re.compile(r"(?<![A-Za-z0-9_])RouteTick\s*[-+]?=(?!=)"), (
+        (FOREMAN_CLIMB_RUNTIME, re.compile(r"\b_ai\s*\.\s*RouteTick\s*=\s*_installed\s*;"), 1),
+        (FOREMAN_CLIMB_RUNTIME, re.compile(r"\b_ai\s*\.\s*RouteTick\s*=\s*null\s*;"), 1),
+    )),
+)
+
+# path, exact program shape, what it proves - each must appear exactly once.
+FOREMAN_CLIMB_SHAPES = (
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bpublic\s+bool\s+TryPlaceOwnBody\s*\(\s*WorkPoint\s+position\s*\)\s*\{\s*"
+        r"if\s*\(\s*!\s*GroundMotorSuspended\s*\|\|\s*!\s*position\s*\.\s*IsFinite\s*\)\s*\{\s*return\s+false\s*;\s*\}"),
+     "the refusal to write unless this lease still suspends the ground motor"),
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bRigidbody\s+body\s*=\s*ai\s*\.\s*GetComponent\s*<\s*Rigidbody\s*>\s*\(\s*\)\s*;"),
+     "the ordered worker's own rigidbody, taken from the AI the lease was given"),
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bVector3\s+at\s*=\s*_body\s*\.\s*position\s*;\s*"
+        r"var\s+from\s*=\s*new\s+WorkPoint\s*\(\s*at\s*\.\s*x\s*,\s*at\s*\.\s*y\s*,\s*at\s*\.\s*z\s*\)\s*;\s*"
+        r"var\s+target\s*=\s*new\s+Vector3\s*\(\s*position\s*\.\s*X\s*,\s*position\s*\.\s*Y\s*,\s*position\s*\.\s*Z\s*\)\s*;\s*"
+        r"if\s*\(\s*!\s*_clear\s*\(\s*from\s*,\s*position\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}\s*"
+        r"_body\s*\.\s*position\s*=\s*target\s*;"),
+     "the sweep from the body's own position directly in front of the one position write"),
+    (FOREMAN_CLIMB_AI, re.compile(
+        r"\bRouteTick\s*\?\s*\.\s*Invoke\s*\(\s*this\s*,\s*dt\s*\)\s*;\s*"
+        r"if\s*\(\s*_climbLease\s*!=\s*null\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*"
+        r"_planner\s*\.\s*BeginTick\s*\(\s*\)\s*;"),
+     "the return before any planning or MoveTo while a ladder lease holds the body"),
+    (FOREMAN_CLIMB_AI, re.compile(
+        r"\binternal\s+bool\s+SetJobGoal\s*\([^)]*\)\s*\{\s*if\s*\(\s*_faulted\s*\|\|\s*_climbLease\s*!=\s*null\s*\|\|"),
+     "the job-goal refusal while a ladder lease holds the body"),
+)
+
+
+def check_foreman_worker_climb_scope(errors: list[str]) -> list[str]:
+    """#334: the worker ladder motor's sweep, lease and ground-motor suspension are where they were decided."""
+    label = "[foreman] #334 worker climb audit"
+    before = len(errors)
+    scoped, linked = _foreman_felling_sources(errors)
+    hits = len(errors) - before
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    foreman_prefix = foreman_dir.relative_to(ROOT).as_posix() + "/"
+    sources: dict[str, str] = {}
+    for rel, code in scoped.items():
+        sources[rel[len(foreman_prefix):] if rel.startswith(foreman_prefix) else "../" + rel[len("src/"):]] = code
+
+    def shown(rel: str) -> str:
+        return "src/" + rel[3:] if rel.startswith("../") else f"src/ConcernedForeman/{rel}"
+
+    pinned = 0
+    for what, broad, allowances in FOREMAN_CLIMB_CONFINED:
+        allowed: dict[str, list[tuple[int, int]]] = {}
+        for rel, exact, expected in allowances:
+            code = sources.get(rel)
+            matches = list(exact.finditer(code)) if code is not None else []
+            if len(matches) != expected:
+                hits += 1
+                fail(f"{label}: {shown(rel)} has {len(matches)} exact {what} site(s); the pinned population is "
+                     f"{expected}", errors)
+            else:
+                pinned += expected
+            allowed.setdefault(rel, []).extend((m.start(), m.end()) for m in matches)
+        for rel, code in sources.items():
+            spans = allowed.get(rel, ())
+            for match in broad.finditer(code):
+                if any(start <= match.start() < end for start, end in spans):
+                    continue
+                hits += 1
+                fail(f"{label}: unpinned {what} in {shown(rel)}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+
+    motor = sources.get(FOREMAN_CLIMB_MOTOR, "")
+    lookups = len(re.findall(r"\bGetComponent\s*<\s*Rigidbody\s*>", motor))
+    if lookups != 1:
+        hits += 1
+        fail(f"{label}: {shown(FOREMAN_CLIMB_MOTOR)} looks up a rigidbody {lookups} time(s); the one body it may "
+             "move is the ordered worker's own, looked up once", errors)
+    for rel, shape, why in FOREMAN_CLIMB_SHAPES:
+        code = sources.get(rel)
+        found = len(shape.findall(code)) if code is not None else 0
+        if found != 1:
+            hits += 1
+            fail(f"{label}: {shown(rel)} must hold {why} exactly once; found {found}", errors)
+        else:
+            pinned += 1
+
+    return [
+        f"{label}: {len(sources)} source(s) - the whole of src/ConcernedForeman less obj/ and bin/, and the "
+        f"{len(linked)} shared tree(s) its project file compiles in - {pinned} site(s) pinned: the sweep directly "
+        "in front of the ladder motor's one position write, the ordered worker's own rigidbody, the lease created, "
+        "started and ended only in Runtime/Ladders/WorkerClimbMotor.cs and requested only by the climb runtime, and "
+        "ForemanWorkerAI's ground motor suspended (IsSleeping, no planning or MoveTo, no job goal) exactly while a "
+        "lease holds the body. A text audit with comments stripped: it does not follow delegates or prove control "
+        f"flow ({hits} violations)",
     ]
 
 
@@ -4296,6 +4930,258 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
         "inventory; and nothing in Teamster may take health away (SetHealth/UseHealth/Damage/RPC_Damage are "
         "refused by the #313 token pin), so no retire, cancel, unload or teardown verb can reach it or cause "
         "the death that does. A source-text audit: it does not follow delegates or prove control flow "
+        f"({hits} violations)",
+    ]
+
+
+# D21 (owner decision 2026-10-31): the idle hammer. The #313 token pin says the
+# trigger is spelled once, in one file, as `animation.SetTrigger(swing)`. That
+# alone would let `animation` be the player's animator or `swing` be a name the
+# product made up - both one-line changes the token pin cannot see. So the lines
+# that decide WHOSE animator and WHICH animation are pinned here, the way D16
+# pins `_inventory = _humanoid.GetInventory();`:
+#
+# - the port is handed a `TeamsterWorkerAI` - a component only Gunnar's worker
+#   prefab carries - and never reassigns it;
+# - `body` is that worker's own `Character`, assigned once;
+# - `animation` is that body's own `m_zanim`, assigned once;
+# - `swing` is `HammerSwing()`, assigned once, and `HammerSwing` reads the
+#   vanilla Hammer item's own `m_shared.m_attack.m_attackAnimation` out of the
+#   item database, with no string literal of its own;
+# - the body's animator is asked whether it has that trigger, and the port
+#   refuses if not, ABOVE the call;
+# - and the port writes no other animator state: no bool, float, int, speed,
+#   reset, play or cross-fade. `SetBool`/`SetFloat`/`SetInt` on a ZSyncAnimation
+#   write the body's network object, which a trigger does not.
+#
+# A source-text audit: it does not prove control flow or follow delegates.
+TEAMSTER_IDLE_HAMMER_PINS = (
+    ("the port is handed Gunnar's worker and nothing else",
+     re.compile(r"\binternal\s+bool\s+PlayOnce\s*\(\s*TeamsterWorkerAI\s*\?\s*gunnar\s*\)"), 1),
+    ("the worker is never reassigned", re.compile(r"\bgunnar\s*=(?!=)"), 0),
+    ("his body is the worker's own Character",
+     re.compile(r"\bCharacter\s+body\s*=\s*gunnar\s*\.\s*GetComponent\s*<\s*Character\s*>\s*\(\s*\)\s*;"), 1),
+    ("the body is assigned once", re.compile(r"\bbody\s*=(?!=)"), 1),
+    ("the animator is his body's own animation sync",
+     re.compile(r"\bZSyncAnimation\s+animation\s*=\s*body\s*\.\s*m_zanim\s*;"), 1),
+    ("the animator is assigned once", re.compile(r"\banimation\s*=(?!=)"), 1),
+    ("the trigger name is read from the vanilla Hammer",
+     re.compile(r"\bstring\s+swing\s*=\s*HammerSwing\s*\(\s*\)\s*;"), 1),
+    ("the trigger name is assigned once", re.compile(r"\bswing\s*=(?!=)"), 1),
+    ("the item looked up is the Hammer constant",
+     re.compile(r"\bdatabase\s*\.\s*GetItemPrefab\s*\(\s*HammerItem\s*\)"), 1),
+    ("the one item lookup", re.compile(r"\bGetItemPrefab\s*\("), 1),
+    ("the Hammer constant is the vanilla item's prefab name",
+     re.compile(r"\bconst\s+string\s+HammerItem\s*=\s*\"Hammer\"\s*;"), 1),
+    ("the attack is the Hammer's own",
+     re.compile(r"\bAttack\s*\?\s*attack\s*=\s*shared\s*!=\s*null\s*\?\s*shared\s*\.\s*m_attack\s*:\s*null\s*;"), 1),
+    ("the name is the attack's own animation",
+     re.compile(r"\bstring\s*\?\s*name\s*=\s*attack\s*!=\s*null\s*\?\s*attack\s*\.\s*m_attackAnimation\s*:\s*null\s*;"), 1),
+    ("the name is assigned once", re.compile(r"\bname\s*=(?!=)"), 1),
+    ("what HammerSwing returns is that name or nothing",
+     re.compile(r"\breturn\s+string\s*\.\s*IsNullOrEmpty\s*\(\s*name\s*\)\s*\?\s*string\s*\.\s*Empty\s*:\s*name\s*!\s*;"), 1),
+)
+TEAMSTER_IDLE_HAMMER_REFUSAL = re.compile(
+    r"if\s*\(\s*!\s*animation\s*\.\s*HasParameter\s*\(\s*swing\s*,\s*AnimatorControllerParameterType\s*\.\s*Trigger"
+    r"\s*\)\s*\)\s*\{\s*return\s+Refuse\s*\(")
+TEAMSTER_IDLE_HAMMER_SWING_BODY = re.compile(
+    r"private\s+static\s+string\s+HammerSwing\s*\(\s*\)\s*\{(.*?)\n    \}", re.DOTALL)
+TEAMSTER_IDLE_HAMMER_ANIMATOR_WRITES = re.compile(
+    r"\.\s*(?:SetBool|SetFloat|SetInt|SetInteger|SetSpeed|ResetTrigger|Play|PlayInFixedTime|CrossFade|"
+    r"CrossFadeInFixedTime|SetLayerWeight|Rebind|speed\s*=(?!=))")
+
+
+# Outside the port, nothing in Teamster or the shared trees it compiles in may
+# reach an animator at all. `.SetTrigger(` is refused by the #313 token pin, but
+# `m_zanim.SetBool(...)` or `m_animator.Play(...)` spells no SetTrigger, and the
+# IL audit that would see them (scripts/audit-teamster-hauling-api.ps1) needs the
+# game assemblies and cannot run in CI (review of D21). So the identifiers are
+# refused instead, string literals blanked (the capability probe names them as
+# data), with one pinned exception: the prefab factory's check that a clone
+# carries the component BaseAI.Awake requires.
+TEAMSTER_ANIMATOR_REACH = re.compile(
+    r"\b(?:m_zanim|m_animator|ZSyncAnimation|Animator|AnimatorControllerParameterType|GetAnimator)\b")
+TEAMSTER_ANIMATOR_REACH_SITES = {
+    "Adapters/Workers/TeamsterWorkerPrefab.cs":
+        (re.compile(r"\bclone\s*\.\s*GetComponent\s*<\s*ZSyncAnimation\s*>\s*\(\s*\)\s*==\s*null"), 1),
+}
+
+
+def _teamster_blank_literals(code: str) -> str:
+    """Comment-stripped C# with the TEXT of every string and char literal
+    blanked and every interpolation hole kept as code - holes nested to any
+    depth, with literals inside holes handled the same way. A regex over string
+    literals cannot do this: a literal inside a hole (`$"{f("a").x}"`) splits its
+    match and the rest of the hole was blanked as text (review of D21). Lengths
+    and newlines are kept, so line numbers still hold. LangVersion 10: there are
+    no raw string literals to handle."""
+    out = list(code)
+    length = len(code)
+
+    def blank(index: int) -> None:
+        if out[index] not in "\r\n":
+            out[index] = " "
+
+    def string(index: int, verbatim: bool, interpolated: bool) -> int:
+        # `index` is at the opening quote; returns the index after the closing one.
+        index += 1
+        while index < length:
+            char = code[index]
+            if verbatim and char == '"' and index + 1 < length and code[index + 1] == '"':
+                blank(index)
+                blank(index + 1)
+                index += 2
+                continue
+            if not verbatim and char == "\\":
+                blank(index)
+                if index + 1 < length:
+                    blank(index + 1)
+                index += 2
+                continue
+            if char == '"':
+                return index + 1
+            if interpolated and char == "{":
+                if index + 1 < length and code[index + 1] == "{":
+                    blank(index)
+                    blank(index + 1)
+                    index += 2
+                    continue
+                index = hole(index + 1)
+                continue
+            if interpolated and char == "}" and index + 1 < length and code[index + 1] == "}":
+                blank(index)
+                blank(index + 1)
+                index += 2
+                continue
+            blank(index)
+            index += 1
+        return index
+
+    def hole(index: int) -> int:
+        # Code until the matching `}`; returns the index after it.
+        depth = 0
+        while index < length:
+            index, closed = token(index, depth)
+            if closed:
+                return index
+            char = code[index - 1]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+        return index
+
+    def token(index: int, depth: int) -> tuple:
+        char = code[index]
+        if char == "}" and depth == 0:
+            return index + 1, True
+        prefix = code[index:index + 3]
+        if prefix in ('$@"', '@$"'):
+            return string(index + 2, True, True), False
+        if code[index:index + 2] == '$"':
+            return string(index + 1, False, True), False
+        if code[index:index + 2] == '@"':
+            return string(index + 1, True, False), False
+        if char == '"':
+            return string(index, False, False), False
+        if char == "'":
+            index += 1
+            while index < length and code[index] != "'":
+                blank(index)
+                if code[index] == "\\" and index + 1 < length:
+                    blank(index + 1)
+                    index += 1
+                index += 1
+            return index + 1, False
+        return index + 1, False
+
+    index = 0
+    while index < length:
+        index, _closed = token(index, 1)
+    return "".join(out)
+
+
+def _teamster_animator_reach(errors: list[str], label: str, port_rel: str) -> int:
+    """How many animator reaches outside the port were refused."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    hits = 0
+    roots = [(teamster_dir, teamster_dir)] + [
+        (ROOT / "src" / "Shared" / name, ROOT / "src" / "Shared" / name) for name in TEAMSTER_LINKED_SHARED_DIRS]
+    for root, base in roots:
+        for path in sorted(root.rglob("*.cs")):
+            rel = path.relative_to(base).as_posix()
+            if rel.split("/")[0] in ("obj", "bin") or (base == teamster_dir and rel == port_rel):
+                continue
+            # Literal text blanked, interpolation holes kept as code (review
+            # of D21: a hole is code, and a literal inside one must not end it).
+            code = _teamster_blank_literals(_strip_cs_comments(path.read_text(encoding="utf-8-sig")))
+            allowed = []
+            site = TEAMSTER_ANIMATOR_REACH_SITES.get(rel) if base == teamster_dir else None
+            if site is not None:
+                pinned = list(site[0].finditer(code))
+                if len(pinned) != site[1]:
+                    hits += 1
+                    fail(f"{label}: {path.relative_to(ROOT).as_posix()} has {len(pinned)} pinned animator "
+                         f"reach(es); {site[1]} expected", errors)
+                allowed = [(m.start(), m.end()) for m in pinned]
+            for match in TEAMSTER_ANIMATOR_REACH.finditer(code):
+                if any(start <= match.start() < end for start, end in allowed):
+                    continue
+                hits += 1
+                fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{code.count(chr(10), 0, match.start()) + 1} "
+                     f"reaches an animator ('{match.group(0)}') outside {port_rel} - D21 authorizes one trigger, "
+                     "in that file, and no other animator state anywhere", errors)
+    return hits
+
+
+def check_teamster_idle_hammer_port(errors: list[str]) -> list[str]:
+    """Fails when the D21 trigger could play anything but the vanilla Hammer's own
+    swing on Gunnar's own body, or when the port writes other animator state."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    port = teamster_dir.joinpath(*TEAMSTER_IDLE_HAMMER_PORT_PATH)
+    label = "[interop] D21 idle-hammer audit"
+    port_rel = Path(*TEAMSTER_IDLE_HAMMER_PORT_PATH).as_posix()
+    if not port.is_file():
+        fail(f"{label}: missing {port.relative_to(ROOT)} - the idle hammer has no pinned home", errors)
+        return []
+
+    hits = 0
+    code = _strip_cs_comments(port.read_text(encoding="utf-8-sig"))
+    for what, pattern, expected in TEAMSTER_IDLE_HAMMER_PINS:
+        found = len(pattern.findall(code))
+        if found != expected:
+            hits += 1
+            fail(f"{label}: {port_rel} breaks '{what}' (found {found}, expected {expected}) - the trigger "
+                 "must be the vanilla Hammer's own swing, on Gunnar's own body", errors)
+
+    call = TEAMSTER_IDLE_HAMMER_PORT_CALLS[0][1].search(code)
+    refusal = TEAMSTER_IDLE_HAMMER_REFUSAL.search(code)
+    if call is None or refusal is None or refusal.start() > call.start():
+        hits += 1
+        fail(f"{label}: {port_rel} does not refuse, above the trigger, when his body's animator has no such "
+             "trigger (`if (!animation.HasParameter(swing, AnimatorControllerParameterType.Trigger)) "
+             "{ return Refuse(...); }`)", errors)
+
+    swing = TEAMSTER_IDLE_HAMMER_SWING_BODY.search(code)
+    if swing is None or '"' in swing.group(1):
+        hits += 1
+        fail(f"{label}: {port_rel}'s HammerSwing() is missing or spells a string literal - the trigger name "
+             "comes from the item database, never from this product", errors)
+
+    for match in TEAMSTER_IDLE_HAMMER_ANIMATOR_WRITES.finditer(code):
+        hits += 1
+        fail(f"{label}: {port_rel}:{code.count(chr(10), 0, match.start()) + 1} writes other animator state "
+             f"('{match.group(0).strip()}') - D21 authorizes one trigger and nothing else", errors)
+
+    hits += _teamster_animator_reach(errors, label, port_rel)
+
+    return [
+        f"{label}: the one pinned SetTrigger in {port_rel} plays the vanilla Hammer item's own "
+        "m_shared.m_attack.m_attackAnimation, read from the item database with no literal of the product's "
+        "own, on the ZSyncAnimation of the TeamsterWorkerAI it is handed, after asking that animator whether "
+        "it has the trigger; it writes no other animator state; and nothing else in Teamster or the shared trees "
+        "it compiles in names an animator (m_zanim, m_animator, ZSyncAnimation, Animator), the prefab factory's "
+        "one component check aside. A source-text audit "
         f"({hits} violations)",
     ]
 
@@ -7427,6 +8313,7 @@ def main() -> int:
     report.extend(check_container_permissions_stay_reachable(errors))
     report.extend(check_container_permit_stays_unforgeable(errors))
     report.extend(check_teamster_deposit_adds_only_what_it_is_removing(errors))
+    report.extend(check_teamster_take_moves_only_out_of_the_marked_chest(errors))
     report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_console_command_copies_agree(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
@@ -7437,6 +8324,7 @@ def main() -> int:
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_foreman_felling_scope(errors))
+    report.extend(check_foreman_worker_climb_scope(errors))
     report.extend(check_foreman_felling_strike_callers(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
@@ -7444,6 +8332,7 @@ def main() -> int:
     report.extend(check_npc_keepsake_confined(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
+    report.extend(check_teamster_idle_hammer_port(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))

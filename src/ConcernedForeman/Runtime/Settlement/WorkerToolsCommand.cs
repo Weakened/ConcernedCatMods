@@ -30,7 +30,8 @@ internal sealed class WorkerToolsCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Foreman settlement worker spike. Subcommands: status, spawn, " +
-        "goto <x> <z>, stop, despawn. Requires the settlement runtime to be " +
+        "goto <x> <z>, stop, despawn, climb here|<x> <y> <z>|cancel|status " +
+        "(climb also needs Ladders/NpcClimbing). Requires the settlement runtime to be " +
         "enabled in the config and this peer to be the host.";
 
     public override void Run(string[] args, Terminal context)
@@ -54,6 +55,6 @@ internal sealed class WorkerToolsCommand : ConsoleCommand
 
     public override List<string> CommandOptionList()
     {
-        return new List<string> { "status", "spawn", "goto", "stop", "despawn" };
+        return new List<string> { "status", "spawn", "goto", "stop", "despawn", "climb" };
     }
 }

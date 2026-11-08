@@ -110,7 +110,8 @@ internal readonly struct LadderSettingValues
     internal bool UseTeleport { get; }
 
     /// <summary>Let a worker climb, once the NPC seam has passed its own gate.
-    /// Off, and nothing reads it yet.</summary>
+    /// Off by default. #334: an explicit <c>cf_worker climb</c> order reads the
+    /// live entry (<c>WorkerClimbRuntime</c>), not this snapshot.</summary>
     internal bool NpcClimbing { get; }
 
     /// <summary>Exactly the table in LADDERS.md §8. <c>enabled</c> is false
