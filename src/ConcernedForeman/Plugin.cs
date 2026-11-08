@@ -57,6 +57,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private SettlementRuntime? _settlement;
     private ForemanNpcAdoption? _npc;
+    private ThorsteinPlans? _plans;
     private CollectionRuntime? _collection;
     private HaulProviderDiscovery? _haulProvider;
     private PresenceProviderDiscovery? _presenceProvider;
@@ -145,6 +146,10 @@ public sealed class Plugin : BaseUnityPlugin
         _cooperativeDelivery = new ForemanCooperativeDelivery(
             _haulProvider, custody, () => Time.time, message => Logger.LogInfo(message), PluginVersion);
 
+        // #379: Thorstein's two shared-interruption plans, one per job, beside the
+        // settlement record. They witness the loops; the record stays the truth.
+        _plans = new ThorsteinPlans(ForemanPaths.Settlements);
+
         _collection = new CollectionRuntime(
             settings,
             collectionSettings,
@@ -152,7 +157,8 @@ public sealed class Plugin : BaseUnityPlugin
             npc.Modes,
             custody,
             cooperation: _cooperativeDelivery,
-            sharedEpoch: () => custody.Epoch);
+            sharedEpoch: () => custody.Epoch,
+            plans: _plans);
 
         CollectionRuntime collection = _collection;
         ForemanCooperativeDelivery delivery = _cooperativeDelivery;
@@ -194,7 +200,8 @@ public sealed class Plugin : BaseUnityPlugin
                 ? Runtime.Construction.SupplyChests.From(marked, stale)
                 : default,
             () => Time.time,
-            message => Logger.LogInfo(message));
+            message => Logger.LogInfo(message),
+            plans: _plans);
         // The order's status line is wired by the runtime's own constructor, not
         // here: a hookup in this file is a hookup nothing can test.
 
@@ -431,6 +438,7 @@ public sealed class Plugin : BaseUnityPlugin
             // A build-order marker names a place in a world that is going away,
             // and the loop that was building it has to give his body back first.
             _construction?.OnWorldUnloaded();
+            _plans?.OnWorldUnloaded();
             _buildOrders?.Forget();
 
             // Before anything else drops the scene: a climber is holding a
@@ -455,10 +463,16 @@ public sealed class Plugin : BaseUnityPlugin
             // The library mints this world load's epoch, or adopts the one
             // another product's runtime minted a frame earlier. A mode hold or a
             // body hold from the previous world ends here.
-            _npc?.NoteWorldLoaded();
+            TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch world =
+                _npc?.NoteWorldLoaded() ?? TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch.Unknown;
 
             // Before net time advances, custody reads the loaded world time.
             _settlement?.OnWorldLoaded();
+
+            // #379: the plans open once the settlement record they sit beside is
+            // open. What was in flight when the last session ended comes back to
+            // be revalidated by the next start, and nothing moves here.
+            _plans?.OnWorldLoaded(_settlement?.Custody.Scope, world);
             _presentation?.OnWorldLoaded();
         }
 

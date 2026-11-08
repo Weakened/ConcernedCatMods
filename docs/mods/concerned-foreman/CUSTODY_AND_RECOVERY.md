@@ -428,6 +428,10 @@ body, with everything in it** (D9). So before removing the mod, in the world he 
 5. **Retire the body:** `cf_worker despawn` answers `Worker despawned.`
 6. **Save the world** by logging out, then remove the mod.
 
+Thorstein's work plans (#379) sit beside the settlement record as `<settlement>.thorstein-foreman-collect.plan.tsv`
+and `<settlement>.thorstein-foreman-build.plan.tsv`. They hold no material and nothing reads them without Foreman;
+leaving them behind is harmless, and deleting them with the mod removed changes nothing in the world.
+
 If the mod was removed while he still held items, reinstalling it does not bring them back. §10 describes how the
 record then writes material off; tools stay recorded as held (§5).
 

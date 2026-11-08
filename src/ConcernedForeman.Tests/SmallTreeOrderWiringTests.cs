@@ -141,7 +141,7 @@ public sealed class SmallTreeOrderWiringTests
         string world = Between(runtime, "private sealed class WorldState", "public Guid Epoch { get; }");
         Assert.Contains("WorldFellingPort felling = runtime.FellingPort(Parameters);", world);
         Assert.Contains("new WorldSourceSurvey(Directory, runtime._site, felling)", world);
-        Assert.Matches(new Regex(@"runtime\._log,\s*Pickup\);"), world);
+        Assert.Matches(new Regex(@"runtime\._log,\s*Pickup,"), world);
         Assert.Matches(new Regex(@"runtime\._log,\s*felling\);"), world);
     }
 }

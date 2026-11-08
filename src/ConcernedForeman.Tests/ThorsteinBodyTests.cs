@@ -3,7 +3,7 @@ using System.IO;
 using TheConcernedCat.ConcernedForeman.Domain.Npc;
 using TheConcernedCat.ConcernedNPC.Roles;
 using Lib = TheConcernedCat.ConcernedNPC.Bodies;
-using Shared = TheConcernedCat.Workers;
+using SharedWorkers = TheConcernedCat.Workers;
 
 namespace ConcernedForeman.Tests;
 
@@ -195,8 +195,8 @@ public sealed class ThorsteinBodyTests
         ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
         var bodies = new ThorsteinBodies(registry, adoption.Identity);
         Assert.Equal(
-            Shared.ActorModeOutcome.Entered,
-            adoption.Modes.Enter(Shared.ActorMode.Working, "collect-1"));
+            SharedWorkers.ActorModeOutcome.Entered,
+            adoption.Modes.Enter(SharedWorkers.ActorMode.Working, "collect-1"));
 
         Assert.Equal(ThorsteinBodyKind.None, bodies.Reconcile(ThorsteinBodyKind.Presentation));
         Assert.False(bodies.HoldsPresentation);
@@ -212,13 +212,13 @@ public sealed class ThorsteinBodyTests
         var bodies = new ThorsteinBodies(registry, adoption.Identity);
         bodies.Reconcile(ThorsteinBodyKind.Worker);
         Assert.Equal(
-            Shared.ActorModeOutcome.Entered,
-            adoption.Modes.Enter(Shared.ActorMode.Working, "collect-1"));
+            SharedWorkers.ActorModeOutcome.Entered,
+            adoption.Modes.Enter(SharedWorkers.ActorMode.Working, "collect-1"));
 
         bodies.ReleaseWorker();
 
         Assert.Equal("collect-1", adoption.Modes.JobId);
-        Assert.Equal(Shared.ActorMode.Working, adoption.Modes.Mode);
+        Assert.Equal(SharedWorkers.ActorMode.Working, adoption.Modes.Mode);
     }
 
     [Fact]
