@@ -121,6 +121,10 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
         }
     }
 
+    /// <summary>#379: the settlement this world load's record belongs to, for
+    /// Thorstein's plan files beside it; null when no record is open.</summary>
+    internal SettlementScope? Scope => _core?.Journal.Journal.Scope;
+
     // ------------------------------------------------------------------
     // World lifecycle
     // ------------------------------------------------------------------

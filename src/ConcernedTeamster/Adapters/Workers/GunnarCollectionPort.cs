@@ -502,10 +502,13 @@ internal sealed class GunnarCollectionPort : IPickLifecycle
     // exactly that, and its own comment says the other two would each need
     // their own owner decision.
     //
-    // So the gesture's state machine stays where it is - Domain/Collection's
+    // So the gesture's state machine stayed where it was - Domain/Collection's
     // CartUpkeepIdle, which is game-free and proves it changes nothing - and
-    // the one call that would make it visible waits for a decision rather than
-    // for somebody to notice it went in. It is one line when it comes.
+    // the one call that would make it visible waited for a decision rather than
+    // for somebody to notice it went in. The decision came on 2026-10-31
+    // (DECISIONS.md D21), and the call went into its own pinned file,
+    // GunnarIdleHammerPort.cs, driven by the hauling runtime. It is still not
+    // here, and the validator refuses it here.
 
     private PickProgress Finish(PickPhase phase, string detail)
     {

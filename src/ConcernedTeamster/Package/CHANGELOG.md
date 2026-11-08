@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+* **Gunnar can take from a chest you marked for taking (#381).** A new `Workers/GunnarChestTakeEnabled` setting, **off
+  by default** and needing `Workers/GunnarCollectionEnabled` too, lets him take one item you name out of a chest you
+  chose and marked `Take` or `Both`: look at the chest and run `ct_collect source`, then, with him standing at it,
+  `ct_collect take <item> [count]`. He counts both sides, takes only what fits under the carry limit and in his own
+  slots, leaves the rest in the chest, and stops and says so if a move cannot be confirmed. He never chooses a chest,
+  never takes everything, and never takes from a chest you have not marked, that somebody has open, or that a ward or
+  its own privacy setting refuses. `ct_collect deposit <item>` puts one named item into the chosen destination chest.
+  Single player or a host with nobody else connected. **Not yet observed in game.**
+* **Gunnar at home (#458).** Once this character has found the worn harness buckle and the introduction has begun,
+  Gunnar stands beside your bed (or the world start) as a local figure - Short Curls, Stonedweller, leather trousers -
+  seen only by you, on the host, and only while he has no worker body anywhere in the world. Nothing in the world
+  changes: no bed is claimed and nothing is saved. `ct_haul spawn` hands him over to his worker body where the figure
+  stood, and `ct_haul retire` brings him home again; `ct_haul status` says which body he has. `Companions/Gunnar` off
+  hides him. **Not yet observed in game.**
+* **Requires Concerned NPC 0.5.0 at load.** The plugin now declares that minimum version, so an older library is a clear
+  dependency error rather than a missing method.
+* **Gunnar keeps busy beside his cart (#381).** While he is idle near the cart you assigned him, he now and then walks
+  over, faces it and swings a hammer at it, using the game's own hammer swing. It is scenery: it repairs nothing,
+  uses nothing and changes nothing about the cart, and it never happens while the cart is hitched to anyone, while he
+  has a job, or for a cart further than 12 m away. It is behind a new `Workers/GunnarIdleHammerEnabled` setting, **off by default**,
+  and only ever takes effect while `Workers/GunnarHaulingEnabled` is on as well, which is still off by default.
+  If the body he is built from cannot play the hammer swing, he walks over, faces the cart and waits, and the log says
+  so once. **Not yet observed in game.**
+
 * **Gunnar's collection tour survives an interruption (#379).** The tour now writes down what it is about to do
   before every pick and every trip to the chest, in one small file per world beside Teamster's other files
   (`teamster_gunnar_tour_<world>.tsv`), never in the world itself. After a reload it checks that record against

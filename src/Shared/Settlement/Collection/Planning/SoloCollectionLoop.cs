@@ -117,6 +117,7 @@ internal sealed class SoloCollectionLoop
     private readonly CollectionRequestIds _requestIds;
     private readonly Action<string>? _log;
     private readonly ISourceFellingPort? _felling;
+    private readonly ICollectionWorkWitness? _witness;
 
     /// <summary>Sources this order will not try again: unreachable, refused.
     /// Kept for the whole order so a failure cannot oscillate.</summary>
@@ -159,7 +160,8 @@ internal sealed class SoloCollectionLoop
         ICollectionCooperation? cooperation,
         CollectionRequestIds requestIds,
         Action<string>? log = null,
-        ISourceFellingPort? felling = null)
+        ISourceFellingPort? felling = null,
+        ICollectionWorkWitness? witness = null)
     {
         _parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         if (workerKey.IsEmpty || workerId.IsEmpty)
@@ -185,6 +187,7 @@ internal sealed class SoloCollectionLoop
         _requestIds = requestIds ?? throw new ArgumentNullException(nameof(requestIds));
         _log = log;
         _felling = felling;
+        _witness = witness;
         _walkRetry = new BoundedRetry(parameters.WalkMaxFailures, parameters.WalkFirstRetrySeconds, parameters.WalkMaxRetrySeconds);
         _depositRetry = new BoundedRetry(
             parameters.TransferMaxFailures, parameters.TransferFirstRetrySeconds, parameters.TransferMaxRetrySeconds);
@@ -328,9 +331,19 @@ internal sealed class SoloCollectionLoop
                 : CollectionIntakeRefusal.WorkerIdentityUnknown;
         }
 
+        // #379: the shared plan is written before the settlement journal's
+        // acceptance row, so an order the journal holds always has a plan.
+        if (_witness != null && !_witness.Start(order, out _, out string planRefusal))
+        {
+            _modes.Release(jobId);
+            LastEvidence = "Not accepted: " + planRefusal;
+            return CollectionIntakeRefusal.WorkPlanBlocked;
+        }
+
         if (!_custody.RecordAccepted(order))
         {
             _modes.Release(jobId);
+            _witness?.Ended(false, "the acceptance could not be journaled");
             return CollectionIntakeRefusal.NotRecorded;
         }
 
@@ -679,6 +692,19 @@ internal sealed class SoloCollectionLoop
                         "run cf_collect rebind, or cancel it."
                     : "This order was given before the world was reloaded. Run cf_collect rebind to set its work area " +
                         "again, or cancel it.");
+        }
+
+        if (_witness != null && !_witness.Start(_order!, out CollectionAttentionReason planReason, out string planRefusal))
+        {
+            // #379: a plan read back after a reload is revalidated here, and a
+            // movement whose outcome was never written is never resumed.
+            LastEvidence = "Not resumed: " + planRefusal;
+            if (planReason == CollectionAttentionReason.TransferUncertain)
+            {
+                Stop(CollectionOrderState.NeedsAttention, planReason, now);
+            }
+
+            return new ControlResult(ControlOutcome.Refused, "It cannot resume: " + planRefusal);
         }
 
         PausedByPlayer = false;
@@ -1240,6 +1266,11 @@ internal sealed class SoloCollectionLoop
             }
         }
 
+        if (!Announce("about to pick " + target.Key, now))
+        {
+            return;
+        }
+
         PickupResult result = _pickup.TryPick(target.Key, order.Order);
         _reservations.Release(target.Key, order.Order);
         _spentThisSnapshot.Add(target.Key);
@@ -1258,10 +1289,14 @@ internal sealed class SoloCollectionLoop
                 // One attempt per reservation (CONTRACTS.md §7): next source.
                 _failed.Add(target.Key);
                 LastEvidence = "Pick refused at " + target.Key + ": " + result.Reason;
+                Witnessed(true, "the pick was refused and nothing moved", now);
                 break;
 
             default:
                 LastEvidence = "Pick uncertain at " + target.Key + ": " + result.Reason;
+                Witnessed(
+                    false, "the pick's outcome is uncertain", now,
+                    _custody.IsWritable ? CollectionAttentionReason.TransferUncertain : CollectionAttentionReason.JournalReadOnly);
                 Stop(
                     CollectionOrderState.NeedsAttention,
                     _custody.IsWritable ? CollectionAttentionReason.TransferUncertain : CollectionAttentionReason.JournalReadOnly,
@@ -1286,6 +1321,13 @@ internal sealed class SoloCollectionLoop
         }
 
         LastEvidence = "Picked " + taken + " of " + expected + " traced unit(s).";
+
+        // #379: the conclusion follows the last take's receipt.
+        bool uncertain = _custody.View.HasUncertainTransfer(_order!.Order) || expected == 0;
+        if (!Witnessed(!uncertain, "took " + taken + " of " + expected + " traced unit(s)", now))
+        {
+            return;
+        }
 
         if (_custody.View.HasUncertainTransfer(_order!.Order))
         {
@@ -1403,7 +1445,25 @@ internal sealed class SoloCollectionLoop
             return;
         }
 
+        if (!Announce("about to strike " + target.Key, now))
+        {
+            return;
+        }
+
         FellStrikeResult result = _felling.TryStrike(target.Key, order.Order, takeLimit);
+        if (result.Outcome != FellStrikeOutcome.Felled || result.Pickup!.Drops.Count == 0)
+        {
+            // A fell with drops is concluded after its takes, in TakeDrops.
+            bool settled = result.Outcome != FellStrikeOutcome.Uncertain && result.Outcome != FellStrikeOutcome.Unspecified;
+            if (!Witnessed(
+                    settled, "the strike: " + result.Outcome, now,
+                    _custody.IsWritable ? CollectionAttentionReason.TransferUncertain : CollectionAttentionReason.JournalReadOnly))
+            {
+                ReleaseTarget();
+                return;
+            }
+        }
+
         switch (result.Outcome)
         {
             case FellStrikeOutcome.Struck:
@@ -1478,6 +1538,57 @@ internal sealed class SoloCollectionLoop
                     now);
                 return;
         }
+    }
+
+    // --- The shared plan's write-ahead witness (#379) ----------------------------------------------------
+
+    /// <summary>Writes the movement down before the world is touched. False:
+    /// the order has stopped, and nothing moves.</summary>
+    private bool Announce(string note, float now)
+    {
+        if (_witness == null)
+        {
+            return true;
+        }
+
+        if (_witness.Intend(note, out CollectionAttentionReason reason, out string why))
+        {
+            return true;
+        }
+
+        LastEvidence = "Not moved: " + why;
+        ReleaseTarget();
+        Stop(
+            reason == CollectionAttentionReason.Unspecified ? CollectionAttentionReason.JournalReadOnly : reason,
+            now);
+        return false;
+    }
+
+    private void Stop(CollectionAttentionReason reason, float now) =>
+        Stop(
+            reason == CollectionAttentionReason.TransferUncertain ? CollectionOrderState.NeedsAttention : CollectionOrderState.Paused,
+            reason,
+            now);
+
+    /// <summary>Writes what the movement came to. False: the plan stopped for a
+    /// person, and so has the order.</summary>
+    private bool Witnessed(
+        bool established, string note, float now,
+        CollectionAttentionReason onFailure = CollectionAttentionReason.TransferUncertain)
+    {
+        if (_witness == null)
+        {
+            return true;
+        }
+
+        if (_witness.Conclude(established, note, out string why))
+        {
+            return true;
+        }
+
+        LastEvidence = "The work plan stopped: " + why;
+        Stop(CollectionOrderState.NeedsAttention, onFailure, now);
+        return false;
     }
 
     // --- Delivering --------------------------------------------------------------------------------------
@@ -1724,9 +1835,23 @@ internal sealed class SoloCollectionLoop
                 new CustodyLocation(CustodyPlace.Destination, order.Delivery.ContainerKey, order.Delivery.WorldLoadEpoch),
                 item, count, _custody.View.Revision);
 
+            if (!Announce("about to deposit " + count + " " + item, now))
+            {
+                return;
+            }
+
             TransferReceipt receipt = _custody.Executor.Execute(intent, worker, destination);
+            bool depositKnown = receipt.Outcome == TransferOutcome.Completed || receipt.Outcome == TransferOutcome.AlreadySatisfied ||
+                receipt.Outcome == TransferOutcome.Partial || receipt.Outcome == TransferOutcome.Refused ||
+                receipt.Outcome == TransferOutcome.Stale;
             LastEvidence = "Deposit " + intent.Request + ": " + receipt.Outcome + ", " + receipt.Accepted + " of " + count +
                 " " + item + (receipt.Evidence.Length > 0 ? " (" + receipt.Evidence + ")" : string.Empty);
+            string depositEvidence = LastEvidence;
+            if (!Witnessed(depositKnown, "the deposit: " + receipt.Outcome + ", " + receipt.Accepted + " of " + count, now))
+            {
+                LastEvidence = depositEvidence + " " + LastEvidence;
+                return;
+            }
 
             switch (receipt.Outcome)
             {
@@ -2062,6 +2187,17 @@ internal sealed class SoloCollectionLoop
             _survey = null;
             _legDeadline = null;
             Phase = CollectionOrderStates.IsTerminal(to) ? CollectionPhase.Idle : CollectionPhase.Stopped;
+            if (_witness != null)
+            {
+                if (CollectionOrderStates.IsTerminal(to))
+                {
+                    _witness.Ended(to == CollectionOrderState.Completed, "the order " + to);
+                }
+                else
+                {
+                    _witness.Suspend("the order " + to + (reason != CollectionAttentionReason.Unspecified ? " (" + reason + ")" : string.Empty));
+                }
+            }
         }
 
         switch (to)

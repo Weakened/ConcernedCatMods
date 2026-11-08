@@ -26,6 +26,19 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   not used.
 - **Stand a few metres clear** of the ladder while he uses it: anybody at its
   foot, in its lane or on the landing counts as in the way, and he stops.
+
+### Added — interrupted work is never repeated (#379)
+
+- **Thorstein now keeps a work plan for each job**, collecting and building, beside the
+  settlement record. Every pick, felling hit, deposit, draw, placement and put-back is
+  written down before it happens and after. Hand-overs to Gunnar's cart and `cf_settle
+  release` are not: the settlement record alone covers those, as before.
+- **If the game stops mid-movement**, the next load does not repeat that movement. He stops
+  and waits for you: `cf_collect status` says why. Once you have looked at what he carries,
+  `cf_collect resolve` (or `cf_collect resolve build`) records it, and the work goes on.
+- **A reload or a pause between movements carries the same job on** rather than starting it again.
+  A reload while someone else is connected, or before his body is here, waits rather than stops.
+- The settlement record and its order are unchanged, and it still decides what was gathered and spent.
 - Not yet observed in game.
 
 ### Added — felling inside a collection order (#282, #296, D19)
@@ -56,6 +69,23 @@ moved: 0.1.0 has never shipped, so these are still its notes.
 - **Never felled:** full-size trees, saplings you planted, berry bushes, and
   anything else.
 - Not yet observed in game.
+
+### Added — Thorstein sits at home (#295 S5)
+
+- **At rest he sits on the ground near home** rather than standing beside the respawn
+  point: 1.5-6 m out, on the same floor, by a fire when there is one, facing it, or facing
+  home.
+- **The spot** comes from the shared companion placement planner, the one Hulgi uses. It
+  refuses water, slopes, obstructions, beds, doorways, the fire itself and the starting
+  temple. Foreman's own read-only probe answers it.
+- **Doors.** He never uses a door and is never set down through a doorway from home. Every
+  door counts as closed to him.
+- **Camp.** He rests inside Concerned NPC's camp once it is established.
+- **The pose** is Concerned NPC's `NpcFigureDresser.SitOnGround` on his own local figure.
+  Nothing is claimed or changed.
+- **He moves only** when his spot is built over or a warmer one appears.
+- Until a spot is found he stands as before, and `cf_worker status` says why. Chairs are
+  not used yet. **Not observed in game.**
 
 ### Added — Thorstein's tools panel (#295 S4)
 

@@ -97,6 +97,36 @@ internal static class NpcFigureParts
         body.sharedMesh = mesh;
     }
 
+    /// <summary>Turns one of the figure's own animator poses on or off (#295
+    /// S5): the bool the game's character controller sits with, asked for by
+    /// name. The animator is the figure's own extracted copy, which nothing
+    /// networks or saves. A controller without that bool is left alone and the
+    /// answer is false, because <c>SetBool</c> on an absent parameter logs an
+    /// engine error on every call. Root motion is turned off first, so a
+    /// sitting clip cannot carry the figure away from where it was stood.
+    /// </summary>
+    internal static bool Pose(Animator animator, string parameter, bool on)
+    {
+        bool present = false;
+        foreach (AnimatorControllerParameter candidate in animator.parameters)
+        {
+            if (candidate.type == AnimatorControllerParameterType.Bool && candidate.name == parameter)
+            {
+                present = true;
+                break;
+            }
+        }
+
+        if (!present)
+        {
+            return false;
+        }
+
+        animator.applyRootMotion = false;
+        animator.SetBool(parameter, on);
+        return true;
+    }
+
     /// <summary>A place to talk to the figure (#295 S3): a child of the
     /// figure's root carrying a body-sized capsule and the game's own hover and
     /// use. The collider is for looking at, never walking into: it is put on a

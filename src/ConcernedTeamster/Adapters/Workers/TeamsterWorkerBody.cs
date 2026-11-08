@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
 using UnityEngine;
@@ -22,7 +23,7 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// <b>Upright.</b> His rigidbody's rotation constraints must match the local
 /// player's, measured at the same time, because the joint holds him 0.8 m above
 /// his pivot with free angular motion.</summary>
-internal sealed class TeamsterWorkerBody : IPullerBody
+internal sealed class TeamsterWorkerBody : IPullerBody, ICartUpkeepMotor
 {
     private const RigidbodyConstraints RotationMask =
         RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationY | RigidbodyConstraints.FreezeRotationZ;
