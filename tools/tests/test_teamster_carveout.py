@@ -1547,12 +1547,12 @@ class IdleHammerIsCosmetic(CarveOutFixture):
         # which cannot run in CI, would have seen it.
         self.plant_file(os.path.join(WORKERS, "ZzWorkerBool.cs"),
                         "        ((Character)who).m_zanim.SetBool(\"crouching\", true);")
-        self.assert_refused("an animator write outside the port passed", contains="reaches an animator ('m_zanim')")
+        self.assert_refused("an animator write outside the port passed", marker="D21", contains="reaches an animator ('m_zanim')")
 
     def test_an_animator_is_not_reachable_from_domain_either(self):
         self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainAnimator.cs"),
                         "        ((UnityEngine.Animator)who).Play(\"swing_hammer\");")
-        self.assert_refused("an animator in Domain/ passed", contains="reaches an animator ('Animator')")
+        self.assert_refused("an animator in Domain/ passed", marker="D21", contains="reaches an animator ('Animator')")
 
     def test_an_animator_is_not_hidden_in_an_interpolation_hole(self):
         # Re-review of D21: blanking every literal blanked an interpolated
@@ -1560,7 +1560,7 @@ class IdleHammerIsCosmetic(CarveOutFixture):
         self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzInterpolatedAnimator.cs"),
                         "        _ = $\"{Run(() => ((Character)who).m_zanim.SetBool(name, true))}\";")
         self.assert_refused("an animator write inside an interpolation hole passed",
-                            contains="reaches an animator ('m_zanim')")
+                            marker="D21", contains="reaches an animator ('m_zanim')")
 
     def test_a_literal_inside_the_hole_does_not_end_it(self):
         # Re-review of D21: a literal nested in the hole split the regex's
@@ -1568,7 +1568,7 @@ class IdleHammerIsCosmetic(CarveOutFixture):
         self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzNestedInterpolation.cs"),
                         "        _ = $\"{Run(() => Who(who, \"a\").m_zanim.SetBool(name, true))}\";")
         self.assert_refused("an animator write after a literal inside a hole passed",
-                            contains="reaches an animator ('m_zanim')")
+                            marker="D21", contains="reaches an animator ('m_zanim')")
 
     def test_a_trigger_is_not_allowed_in_another_worker_file(self):
         self.plant_file(os.path.join(WORKERS, "ZzWorkerSwing.cs"),
