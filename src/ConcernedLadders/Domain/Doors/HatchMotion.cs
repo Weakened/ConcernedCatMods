@@ -22,8 +22,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 /// interpolated, so two clients can briefly disagree about when a held lid resumes, but each player's own client,
 /// which is authoritative for that player's collision, never moves the lid into them.</para>
 ///
-/// <para>Progress is the runtime's own float. The runtime keeps its last finite value; NaN reads as closed and an
-/// infinity as its end of the swing, so a corrupt value can never stand for an unchecked pose silently.</para></summary>
+/// <para>Progress is the runtime's own float, and the runtime must keep its last finite value and never pass NaN. An
+/// infinity reads as its end of the swing; NaN reads as the closed pose without any occupancy check.</para></summary>
 internal static class HatchMotion
 {
     /// <summary>Shortest and longest swing the policy accepts; a donor outside this range is a census error.</summary>

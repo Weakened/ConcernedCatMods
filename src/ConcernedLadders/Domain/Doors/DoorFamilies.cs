@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
-/// <summary>How a native prefab carrying a <c>Door</c> component (or sitting in the hammer's door tag) is treated by
+/// <summary>How a native prefab carrying a <c>Door</c> component (or a hammer piece in the Doors usage tag, or named like a door) is treated by
 /// the door-family pieces (CL-004 #485, CL-005 #486). Every classified prefab has exactly one class, so no family can
 /// disappear silently: an exclusion is a recorded decision with its reason.</summary>
 internal enum DoorDonorClass

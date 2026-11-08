@@ -21,8 +21,8 @@ observation.** Every placed-piece, interaction, traversal and multiplayer row is
 
 ## 2. Census: every native prefab with a `Door`, and the hammer's Doors tag
 
-23 prefabs in the main bundle carry a `Door` component. The hammer's *Doors and Windows* usage tag (`m_usage` flag
-`0x40000`) holds 15 pieces: the 12 buildable Door prefabs and three that carry no `Door` (the two grausten windows and
+23 prefabs in the main bundle carry a `Door` component. The hammer's Doors usage tag (`$tag_doors`, English "Doors and Windows"; `m_usage`
+flag `0x40000`) holds 15 pieces: the 12 buildable Door prefabs and three that carry no `Door` (the two grausten windows and
 `crystal_wall_1x1`). No hammer piece with a `Door` is missing the tag. The three cloth curtains named `hanging_door` are
 in neither, and are recorded so their absence is a decision too. Each of the 29 has exactly one decision
 (`DoorFamilies.Census`; a test fails if one is missing or doubled, and pins the count of each class).
@@ -163,10 +163,11 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
 - **Obstruction policy: the lid never moves into anything but fixed world and the hatch itself.** The occupancy query
   covers characters, dynamic bodies (dropped items, carts, boats) and other building pieces. A frame's move is split
   into sub-steps of at most 5° of hinge turn (`SubSteps`; the lid's free edge then moves at most 0.14 m between checked
-  poses, less than any capsule's diameter); at the first sub-step whose pose would overlap, the lid holds at the last
+  poses, less than any character capsule's diameter); at the first sub-step whose pose would overlap, the lid holds at the last
   clear one and tries again next frame. A lid with someone or something on it, or a piece built on it, stays closed
   until it is clear; a lid closing over a head waits. Nothing the query covers is launched, pushed through a wall or
-  shut in. The native state and hover text keep saying what was asked. A frame step is capped at 0.05 s, so a hitch is
+  shut in. A small falling item could pass between two checked poses; anything resting on the lid touches it and is
+  caught by the first sub-step. The native state and hover text keep saying what was asked. A frame step is capped at 0.05 s, so a hitch is
   slower, not a jump.
 - **Clients**: each client moves its own copy of the lid against the positions it sees. Remote characters are
   interpolated, so two clients can briefly disagree about when a held lid resumes; each player's own client, which is
