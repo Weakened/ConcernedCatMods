@@ -4078,8 +4078,14 @@ def _teamster_animator_reach(errors: list[str], label: str, port_rel: str) -> in
             rel = path.relative_to(base).as_posix()
             if rel.split("/")[0] in ("obj", "bin") or (base == teamster_dir and rel == port_rel):
                 continue
-            code = CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"',
-                                 _strip_cs_comments(path.read_text(encoding="utf-8-sig")))
+            # A literal with a brace is kept whole: an interpolated string's
+            # holes are code (`$"{Run(() => who.m_zanim.SetBool(...))}"`), and
+            # blanking the whole literal hid one (review of D21). The same rule
+            # `_cs_code_keeping_interpolations` uses for `.Message`.
+            code = CS_STRING.sub(
+                lambda match: match.group(0) if "{" in match.group(0)
+                else '"' + " " * max(0, len(match.group(0)) - 2) + '"',
+                _strip_cs_comments(path.read_text(encoding="utf-8-sig")))
             allowed = []
             site = TEAMSTER_ANIMATOR_REACH_SITES.get(rel) if base == teamster_dir else None
             if site is not None:

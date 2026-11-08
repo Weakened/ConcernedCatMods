@@ -1554,6 +1554,14 @@ class IdleHammerIsCosmetic(CarveOutFixture):
                         "        ((UnityEngine.Animator)who).Play(\"swing_hammer\");")
         self.assert_refused("an animator in Domain/ passed", contains="reaches an animator ('Animator')")
 
+    def test_an_animator_is_not_hidden_in_an_interpolation_hole(self):
+        # Re-review of D21: blanking every literal blanked an interpolated
+        # string's holes too, and a hole is code.
+        self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzInterpolatedAnimator.cs"),
+                        "        _ = $\"{Run(() => ((Character)who).m_zanim.SetBool(\\\"x\\\", true))}\";")
+        self.assert_refused("an animator write inside an interpolation hole passed",
+                            contains="reaches an animator ('m_zanim')")
+
     def test_a_trigger_is_not_allowed_in_another_worker_file(self):
         self.plant_file(os.path.join(WORKERS, "ZzWorkerSwing.cs"),
                         "        ((dynamic)who).SetTrigger(\"swing_hammer\");")
