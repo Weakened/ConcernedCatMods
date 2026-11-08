@@ -269,8 +269,10 @@ internal enum PickupOutcome
     /// <summary>The source was picked and its drops identified.</summary>
     Picked = 1,
 
-    /// <summary>Refused before any mutation: gone, exhausted, not loaded, not
-    /// allowed, not natural, out of reach, not owned here.</summary>
+    /// <summary>Nothing was picked: refused before any mutation (gone,
+    /// exhausted, not loaded, not allowed, not natural, out of reach, not owned
+    /// here), or - for a D19 felling hit (#282) - a hit that left the tree
+    /// standing. Nothing is credited either way.</summary>
     Refused = 2,
 
     /// <summary>The pick may have happened but its drops could not be
