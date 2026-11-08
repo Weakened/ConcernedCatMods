@@ -13,6 +13,8 @@ supported-only mount and fixed walk-speed adapter require revision.
 | `Domain/` | Game-free reach/face/mode/progression policy and bounded movement decisions |
 | `Runtime/LadderSegment.cs` | Custom marker, native hover/interaction and loaded segment registry |
 | `Runtime/` | Narrow native input/motor/skill/collision/presentation adapters; local ownership |
+| `Domain/Excavation/` | Game-free excavation planner, terrain-read rules, commit gate and one-in-flight rule (#487; [EXCAVATION.md](EXCAVATION.md)) |
+| `Excavation/` | Excavation terrain ops, read-only terrain/ward/object adapters, the single terrain-tool call and its `cl_excavate` harness, off by default (#487) |
 | `src/Shared/Ladders/` | Existing BCL-only primitives; preserve other consumers |
 | `src/ConcernedLadders.Tests/` | Source-linked production policy tests; no invented game stubs |
 | `tools/prepare_ladders_profile.py` | Dependency-only profile archive, not the mod ZIP |

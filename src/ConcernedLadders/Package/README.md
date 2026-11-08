@@ -113,6 +113,7 @@ server must have it at a matching version, and Jötunn checks that when a player
 | Setting | Default | Meaning |
 |---|---|---|
 | `General` / `ClimbingEnabled` | `true` | Turns climbing on or off. Placed ladders and the Climbing skill stay registered either way. |
+| `Excavation` / `Enabled` | `false` | Experimental and not yet tested in game: adds the `cl_excavate` console command that digs one measured basement hole. Leave it off. |
 
 ## Known limitations
 
