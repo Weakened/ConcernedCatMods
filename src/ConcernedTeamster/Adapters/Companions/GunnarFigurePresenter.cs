@@ -53,9 +53,9 @@ internal sealed class GunnarFigurePresenter
     /// <summary>Shows him at <paramref name="spot"/>. The caller has already
     /// decided, from <see cref="GunnarBodyPlan"/>, that the figure is wanted.
     /// <paramref name="talk"/> is optional: with none, the figure is not
-    /// interactive.</summary>
+    /// interactive; <paramref name="verb"/> is the hover prompt's word.</summary>
     public void Show(GameObject? source, Vector3 spot, Quaternion facing, NpcLookSpec look,
-        string displayName, Action? talk)
+        string displayName, string verb, Action? talk)
     {
         if (!Finite(spot)) { Hide(); return; }
 
@@ -94,7 +94,7 @@ internal sealed class GunnarFigurePresenter
         _dresser.StandAt(spot, facing);
         _standing = spot;
         _dresser.Apply();
-        if (talk != null) _dresser.EnableTalk(displayName, "Talk", talk, _log);
+        if (talk != null) _dresser.EnableTalk(displayName, verb, talk, _log);
     }
 
     /// <summary>Measures the dressed pieces once, after the figure was drawn.</summary>

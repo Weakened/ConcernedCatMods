@@ -14,7 +14,7 @@ One dedicated worktree/branch per leaf, stacked for explicit dependencies:
 | #456 | feat/ct-456-gunnar-record | Scoped durable record; adapter/config now installed at the four pinned Plugin lifecycle sites. Native owner checks remain. |
 | #457 | feat/ct-457-gunnar-keepsake | Shared keepsake now has native plugin wiring, verified-anchor/ground queries, canonical other-memento snapshot and existing-census reads. Actual mesh/physics/game evidence remains. |
 | #458 | feat/ct-458-gunnar-figure | Code-complete: ForWorkerWithPresentation role at its sole registration, release-before-claim leases with an arrival guard, figure runtime wired through Plugin and ct_haul spawn/retire/status, installed-game preset ids, Teamster figure audit with plants (GUNNAR_PRESENTATION.md). Visual evidence remains OWNER GO-AROUND PENDING. |
-| #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
+| #459 | feat/ct-459-gunnar-talk | Code-complete: every gunnar.* row in TeamsterStrings; his figure's use key speaks through GunnarTalk (GUNNAR_DIALOGUE.md). In-game rows OWNER GO-AROUND PENDING. |
 | #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel remain; owner confirmed hauling opt-in + host authority on 2026-11-01. |
 | #461 | feat/ct-461-gunnar-camp | Cached no-allocation targets/range retention/seats; approved public Camp API release/pins, native pose and lifecycle wiring remain. Proposed Camp facade is uncompiled under proposals/. |
 | #462 | feat/ct-462-gunnar-coverage | Cross-feature tests and this matrix; native campaign/evidence remains. |
