@@ -218,5 +218,73 @@ class ForemanRuntimeCapabilitiesArePinned(unittest.TestCase):
         self.assertIn("does not follow indirection or prove control flow", out)
 
 
+class ForemanCapabilityScopeIsTheProduct(unittest.TestCase):
+    """#497: the #400 audit walked Runtime/ alone, so a capability anywhere else
+    in what Foreman compiles was read by nobody. Each plant below was run against
+    the validator from before the widening (origin/main fd0f029), which let it
+    through at exit 0."""
+
+    # The fixture's helpers, not its tests: inheriting would run them twice.
+    setUp = ForemanRuntimeCapabilitiesArePinned.setUp
+    tearDown = ForemanRuntimeCapabilitiesArePinned.tearDown
+    assert_refused = ForemanRuntimeCapabilitiesArePinned.assert_refused
+
+    PANEL = os.path.join(FOREMAN, "Ui", "CollectionOrderPanel.cs")
+    PLUGIN = os.path.join(FOREMAN, "Plugin.cs")
+    DOMAIN = os.path.join(FOREMAN, "Domain", "Construction", "ZzPlanted497.cs")
+    SHARED = os.path.join(ROOT, "src", "Shared", "Settlement", "Orders", "ZzPlanted497.cs")
+    SHARED_TWIN = os.path.join(ROOT, "src", "Shared", "Settlement", "Runtime", "Settlement", "ForemanWorkerAI.cs")
+
+    def append_to(self, path, text):
+        with open(path, encoding="utf-8-sig") as handle:
+            original = handle.read()
+        self._restore.append((path, original))
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(original + text)
+
+    def plant_at(self, path, body):
+        self.assertFalse(os.path.exists(path), "plant would overwrite a real file: " + path)
+        directory = os.path.dirname(path)
+        created = []
+        while not os.path.isdir(directory):
+            created.append(directory)
+            directory = os.path.dirname(directory)
+        for made in reversed(created):
+            os.makedirs(made)
+            self._planted.append(made)
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(body)
+        self._planted.append(path)
+
+    def test_a_trigger_in_the_ui_is_refused(self):
+        self.append_to(self.PANEL, "\ninternal static class Zz497Ui\n{\n"
+                       "    internal static void Wave(dynamic animation) => animation.SetTrigger(\"wave\");\n}\n")
+        self.assert_refused("SetTrigger in Ui/ stayed green")
+
+    def test_a_teleport_in_the_plugin_is_refused(self):
+        self.append_to(self.PLUGIN, "\ninternal static class Zz497Plugin\n{\n"
+                       "    internal static void Jump(dynamic body) => body.Teleport(UnityEngine.Vector3.zero);\n}\n")
+        self.assert_refused("a teleport in Plugin.cs stayed green")
+
+    def test_an_ownership_takeover_in_domain_is_refused(self):
+        self.plant_at(self.DOMAIN, "internal static class Zz497Domain\n{\n"
+                      "    internal static void Take(dynamic view) => view.SetOwner(1L);\n}\n")
+        self.assert_refused("an ownership takeover in Domain/ stayed green")
+
+    def test_a_force_in_a_linked_shared_tree_is_refused(self):
+        self.plant_at(self.SHARED, "internal static class Zz497Shared\n{\n"
+                      "    internal static void Push(dynamic body) => body.AddForce(UnityEngine.Vector3.up);\n}\n")
+        self.assert_refused("a force in a shared tree Foreman compiles stayed green")
+
+    def test_a_shared_file_does_not_inherit_a_product_allowance(self):
+        # The exact pinned MoveTo, at the pinned file's product-relative path but
+        # inside a shared tree. Its key is ../Shared/..., so the allowance for
+        # Runtime/Settlement/ForemanWorkerAI.cs must not cover it.
+        self.plant_at(self.SHARED_TWIN, "internal sealed class Zz497Twin\n{\n"
+                      "    internal void Step(dynamic ai, float dt, dynamic goal, dynamic _planner)\n"
+                      "        => ai.MoveTo(dt, goal, _planner.Goal.ArrivalTolerance, run: false);\n}\n")
+        self.assert_refused("a shared file inherited the product's MoveTo allowance")
+
+
 if __name__ == "__main__":
     unittest.main()
