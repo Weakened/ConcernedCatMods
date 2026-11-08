@@ -667,7 +667,11 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             case "destination":
                 return Designate();
             case "deposit":
-                return Deposit();
+                return Deposit(args);
+            case "source":
+                return DesignateSource();
+            case "take":
+                return TakeFromSource(args);
             case "area":
                 return SetArea(args);
             case "start":
@@ -684,7 +688,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                     : _containers.Console(args != null && args.Length > 1 ? args[1] : "");
             default:
                 return "ct_collect: status, pick (the thing you are pointing at), cancel, "
-                    + "destination (the chest you are pointing at), deposit, "
+                    + "destination (the chest you are pointing at), deposit [item], "
+                    + "source (the chest you are pointing at, to take from), take <item> [count], "
                     + "area [radius] (around where you stand), start (a tour of the area), stop, "
                     + "resolve (after you have looked at a tour stopped for you), "
                     + "chest [status|list|clear].";
@@ -714,6 +719,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             " (phase " + _port.Phase + ")" +
             "; chest " + (_destination == null ? "NOT CHOSEN - he never looks for the nearest one"
                 : "chosen") +
+            "; taking from a chest is " + (TakeOptedIn() ? "on" : "OFF (the default)") +
+            ", source chest " + (_source == null ? "not chosen" : "chosen") +
             "; tour plan: " + _tourPlan.Describe() +
             (_tourPlan.Standing == TourPlanStanding.Recovered && TourPlanWaitingFor().Length != 0
                 ? " - it is checked once nothing stands in the way, and now " + TourPlanWaitingFor()
@@ -834,9 +841,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 "never changed under a tour that is walking to it.";
         }
 
-        Player? player = Player.m_localPlayer;
-        GameObject? hover = player != null ? player.GetHoverObject() : null;
-        Container? chest = hover != null ? hover.GetComponentInParent<Container>() : null;
+        Container? chest = PointedChest();
         if (chest == null)
         {
             return "Look at the chest he should use, then run this again. He never looks for the " +
@@ -865,6 +870,17 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             "actually moves something, so changing it takes effect at once.";
     }
 
+    /// <summary>The chest the player is looking at, or null. <b>The only way the
+    /// runtime reaches a container</b>: both the destination (D15) and the take's
+    /// source (D20) are chosen by pointing, through this one lookup, which
+    /// `#381 destination audit` pins.</summary>
+    private static Container? PointedChest()
+    {
+        Player? player = Player.m_localPlayer;
+        GameObject? hover = player != null ? player.GetHoverObject() : null;
+        return hover != null ? hover.GetComponentInParent<Container>() : null;
+    }
+
     /// <summary>Moves everything he is carrying into the designated chest, one
     /// material at a time.
     ///
@@ -875,15 +891,29 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
     /// whole deposit where it stands: the legs that verifiably completed keep
     /// their measured credit, and nothing after the uncertain one is
     /// attempted.</summary>
-    private string Deposit()
+    private string Deposit(string[]? args)
     {
         Humanoid? worker = _worker();
         // The cargo filter for an automatic collection deposit is what
         // collecting yields, read off the same allowlist that decides what he may
         // pick up. So widening one widens the other, in one edit, and a tool he
         // is ever issued is not swept into the chest with the stone.
+        //
+        // An ordered deposit may instead name ONE item exactly (D20): what he
+        // took out of a chest is not a collected yield, and without this he
+        // could take it and never put it down. A name that cannot be an item is
+        // refused rather than read as "everything".
+        string named = args != null && args.Length > 1 ? args[1] ?? string.Empty : string.Empty;
+        if (named.Length != 0 && !TakeOrderGate.IsCargoName(named))
+        {
+            return TakeSentences.Describe(TakeRefusal.NoCargoNamed, WorkAuthorityVerdict.Granted);
+        }
+
+        Func<string, bool> filter = named.Length == 0
+            ? GunnarCollectionAllowlist.IsCollectedYield
+            : item => string.Equals(item, named, StringComparison.Ordinal);
         IReadOnlyList<KeyValuePair<string, int>> carried =
-            _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable);
+            _deposit.Carrying(worker, filter, out bool readable);
 
         var request = new DepositRequest(
             featureEnabled: OptedIn(),

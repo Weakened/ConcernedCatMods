@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* **Gunnar can take from a chest you marked for taking (#381).** A new `Workers/GunnarChestTakeEnabled` setting, **off
+  by default** and needing `Workers/GunnarCollectionEnabled` too, lets him take one item you name out of a chest you
+  chose and marked `Take` or `Both`: look at the chest and run `ct_collect source`, then, with him standing at it,
+  `ct_collect take <item> [count]`. He counts both sides, takes only what fits under the carry limit and in his own
+  slots, leaves the rest in the chest, and stops and says so if a move cannot be confirmed. He never chooses a chest,
+  never takes everything, and never takes from a chest you have not marked, that somebody has open, or that a ward or
+  its own privacy setting refuses. `ct_collect deposit <item>` puts one named item into the chosen destination chest.
+  Single player or a host with nobody else connected. **Not yet observed in game.**
+
 * **Gunnar's collection tour survives an interruption (#379).** The tour now writes down what it is about to do
   before every pick and every trip to the chest, in one small file per world beside Teamster's other files
   (`teamster_gunnar_tour_<world>.tsv`), never in the world itself. After a reload it checks that record against
