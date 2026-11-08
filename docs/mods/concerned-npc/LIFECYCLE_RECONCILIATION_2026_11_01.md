@@ -112,7 +112,7 @@ recorded in the integration handoff.
 
 ## 2026-11-08 addendum: body factory adoption and consumer confinement
 
-Base `origin/main` `ffa187b`. This addendum supersedes the "Remaining native adoption/confinement work" section above
+Base `origin/main` `ffa187b`, later merged with the lead's verified chain `9d8603f` (#512, #513, #517, #521). This addendum supersedes the "Remaining native adoption/confinement work" section above
 for Foreman and Steward; Teamster's half is still open.
 
 | Criterion | What now holds | State |
@@ -121,7 +121,7 @@ for Foreman and Steward; Teamster's half is still open.
 | Consumer instantiation confined, with planted violation caught | `tools/validate_repo.py` `check_npc_consumer_bodies_come_from_the_gated_build`: every product whose project references the library, whole (less obj/bin) plus every shared tree it compiles in, may spell `Instantiate`, `CreateNewZDO` or `SpawnObject` nowhere except one stated pending site (Teamster's prefab, pinned by spelling and count, keyed by product and path), and may not put a network view on an object in any spelling the audit can see (`AddComponent<ZNetView>`, the Type-taking `AddComponent(`, `AddComponent<T>` of a type parameter, an alias of the type, or a subclass of it; added after the 2026-11-08 re-review, with six plants, because a network view on a `new GameObject` is a saved object made without the gate and no existing pin refused it); each adopted product's call into the gated build is pinned by path and count; the factory's one instantiation must follow the gate's refusal and the gate must end on the lease check and its one grant. `tools/tests/test_npc_body_factory_audit.py` plants both owner-named violations (an instantiation outside the factory; a factory that ignores a disposed lease) in several shapes, each verified to pass the validator copy without the rule. Foreman's #400 audit no longer pins an instantiation, so any in Foreman is unpinned there too. | MET for Foreman and Steward; Teamster pending |
 | Foreman spawns through the gated build | `ForemanWorkerPrefab.Spawn(lease, ...)` calls `TrySpawnRoleBody`; `SettlementRuntime.Spawn` gets the lease from the presentation hand-over (`ThorsteinBodies.WorkerLease`). While an order holds him the spawn is now refused (cancel the order first; a paused or recovered-paused order still holds him, and the order holding him at a spawn has no body to finish with). The `WorkerBodyLost` write-off therefore cancels before it spawns, and a cancel keeps what the record holds on him, so the loss can still be written off against the cancelled order (`FaultInjectionTests.AnOrderStoppedForALostBodyCanBeCancelledAndItsMaterialStillWrittenOff`, `CollectionRecoveryTests.AnOrderStoppedForAMissingBodyHoldsHimUntilCancelledAndThenLetsGo`, `ThorsteinBodyTests.AnOrderStoppedForAMissingBodyRefusesTheLeaseUntilItIsCancelled`); before #372 that branch built a body with no lease at all. Borrowing the order's name was tried and rejected: the arbiter's release of a body held in a job's name releases that job's mode too (a Foreman test caught it), and keeping such a lease would leave a hold nothing could release. No hand-over wired means no lease and no body. This refusal is a lead default pending owner confirmation. | MET in source |
 | Steward spawns through the gated build | `StewardRuntime.EnsureBody` yields the figure, claims the worker lease, and only then calls `StewardWorkerPrefab.Spawn(claim.Lease, ...)`; a refused claim refuses the spawn and a failed build releases the hold. Before #372 the claim came after the body existed. | MET in source |
-| Teamster spawns through the gated build | Not done. `TeamsterWorkerPrefab.cs` and its caller are in `Adapters/Workers`, which Lane J's open PRs #512 and #513 change. Its one instantiation is the audit's single pinned pending site. | OPEN follow-up |
+| Teamster spawns through the gated build | Not done. `TeamsterWorkerPrefab.cs` and its caller are in `Adapters/Workers`, which Lane J's #512 and #513 changed (#513 is on main; #512 reached this branch through `9d8603f`). The lead kept Teamster's adoption out of this PR. Its one instantiation is the audit's single pinned pending site. | OPEN follow-up |
 
 Behaviour that changed, stated because none of it has been watched in game (OWNER GO-AROUND PENDING): a body whose
 identity write fails is now destroyed by the library instead of being left standing unidentified (Steward said so in
@@ -131,7 +131,7 @@ count of saved bodies is not finished and empty, in addition to each product's o
 What this does not do: no product mind or body component moved. `ForemanWorkerAI`, `WorkerBody`, `StewardWorkerAI`
 and `StewardBody` are unchanged, as are every prefab name, key field and the registration timing. Moving the minds
 onto `NpcBodyMind`/`NpcBody` (the "body AI" and "body inventory" moves in ARCHITECTURE.md section 5) is separate work
-with its own behaviour to prove, and Foreman's mind is also in open PR #521.
+with its own behaviour to prove, and Foreman's mind was also changed by #521 (in `9d8603f`, merged here).
 
 Review follow-ups at this head, not done here: `TrySpawnRoleBody` does not yet check that the contract passed is the
 one the lease's role registered (both callers pass their role's own static contract, and the stamped key is now read

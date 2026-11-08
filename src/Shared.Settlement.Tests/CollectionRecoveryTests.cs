@@ -183,10 +183,13 @@ public sealed class CollectionRecoveryTests
         // WorkerBodyLost write-off needs is refused until the order is cancelled.
         // This is the loop's half of that recovery: an order the record kept as
         // NeedsAttention, taken up with no body anywhere, holds his mode (so
-        // nothing may give him a body), and a cancel ends that hold.
+        // nothing may give him a body), and a cancel ends that hold - while
+        // what the record holds on him stays exactly where it was, so the loss
+        // can still be written off after the spawn (FaultInjectionTests has the
+        // custody half).
         CollectionRig rig = Recovered(state: CollectionOrderState.NeedsAttention);
         rig.Motion.IsPresent = false;
-        rig.WorkerInventory.Set(CollectedResource.Stone, 0);
+        CollectionOrderDefinition recorded = rig.Custody.RecoverableOrder!;
 
         Assert.True(rig.Loop.AdoptRecovered(rig.Now));
         Assert.Equal(CollectionOrderState.NeedsAttention, rig.Loop.State);
@@ -203,6 +206,15 @@ public sealed class CollectionRecoveryTests
         Assert.Equal(ActorMode.Resting, rig.Modes.Mode);
         Assert.Null(rig.Modes.JobId);
         Assert.True(rig.Modes.MayRetireBody);
+
+        // The cancel wrote one transition and nothing else: no transfer, no
+        // write-off, no return. The seven stone are still recorded as carried.
+        Assert.Single(rig.Custody.Transitions);
+        Assert.Empty(rig.Custody.Executed);
+        ResourceProgress after = rig.Custody.Bucket(recorded, CollectedResource.Stone);
+        Assert.Equal(7, after.Carried);
+        Assert.Equal(0, after.Lost);
+        Assert.Equal(0, after.Delivered);
     }
 
     [Fact]

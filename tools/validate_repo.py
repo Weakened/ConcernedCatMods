@@ -8107,7 +8107,9 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
 NPC_BODY_LABEL = "[interop] #372 body factory audit"
 # `CreateNewZDO` and `SpawnObject` too (#372 review): a saved object created
 # directly is a body the scene builds on the next zone load, without the gate.
-NPC_BODY_INSTANTIATION = re.compile(r"\b(?:Instantiate|CreateNewZDO|SpawnObject)\b")
+# `Instantiate\w*` (#372 re-review), so a newer engine's `InstantiateAsync` is
+# not a way round it; nothing in a consumer spells that prefix today.
+NPC_BODY_INSTANTIATION = re.compile(r"\b(?:Instantiate\w*|CreateNewZDO|SpawnObject)\b")
 NPC_BODY_ROLE_SPAWN = re.compile(r"\bNpcWorkerPrefabFactory\s*\.\s*TrySpawnRoleBody\s*\(")
 # (product key, path relative to the product): calls into the gated build.
 NPC_BODY_ROLE_SPAWN_SITES = {
@@ -8115,8 +8117,9 @@ NPC_BODY_ROLE_SPAWN_SITES = {
     ("steward", "Runtime/StewardWorkerPrefab.cs"): 1,
 }
 # Not adopted yet, stated rather than hidden. Gunnar's prefab is in the folder
-# Lane J's open #512/#513 change, so its move onto the gated build is #372's
-# named follow-up. Pinned by exact spelling and population so it cannot grow, and
+# Lane J's #512/#513 changed (#513 is on main; #512 reached this branch through
+# the lead's 9d8603f merge chain), and its move onto the gated build is #372's
+# named follow-up, kept out of this PR by the lead. Pinned by exact spelling and population so it cannot grow, and
 # keyed by product AND path so no other file inherits it by name.
 NPC_BODY_PENDING_INSTANTIATIONS = {
     ("teamster", "Adapters/Workers/TeamsterWorkerPrefab.cs"): (
@@ -8138,20 +8141,29 @@ NPC_BODY_GATE_ENDS_ON_THE_LEASE = re.compile(
 NPC_BODY_GRANT = re.compile(r"\bNpcBuildPermission\s*\.\s*Granted\s*\(")
 # #372 re-review: a network view put on a new object is a saved object the
 # scene keeps and rebuilds - a body made without the gate, which spells none of
-# the three words above. Consumers add components only in the generic form with
-# a concrete type today, so every way to make that type a network view is
-# refused: naming it, the Type-taking overload (whose argument can be any
-# `typeof` or Type variable), a generic helper passing its own type parameter
-# (`AddComponent<T>`, by the `T`/`TName` convention), an alias that renames the
-# type, and a subclass of it. A text audit's limit, stated: a type parameter
-# named against that convention, or reflection, is not seen.
+# the three words above. Consumers add components only through the generic
+# `AddComponent<Concrete>()` today, so the ways this audit can see to make that
+# type a network view are refused: naming it; any method whose name contains
+# `AddComponent` (Jotunn's `GetOrAddComponent<T>` and `AddComponentCopy<T>`
+# included) in its Type-taking or generic-parameter form; `typeof(ZNetView)`
+# anywhere; the GameObject constructor that takes component types; an alias that
+# renames the type; and a subclass of it. A text audit's limits, stated: a type
+# parameter named against the `T`/`TName` convention; reflection; a constructor
+# argument nested more than one parenthesis deep; an alias declared outside a
+# `.cs` file (an MSBuild `<Using Alias=...>`); and a subclass of the view
+# declared outside the consumer trees (the library is pinned by its own audit).
 NPC_BODY_NETWORK_VIEW_ADDED = (
     ("adds a network view to an object",
-     re.compile(r"\bAddComponent\s*<\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*>")),
-    ("adds a component by Type, which can be a network view",
-     re.compile(r"\bAddComponent\s*\(")),
+     re.compile(r"AddComponent\w*\s*<\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*>")),
+    ("adds a component by Type or by copy, which can be a network view",
+     re.compile(r"AddComponent\w*\s*\(")),
     ("adds a component of a generic type parameter, which can be a network view",
-     re.compile(r"\bAddComponent\s*<\s*T(?:[A-Z]\w*)?\s*>")),
+     re.compile(r"AddComponent\w*\s*<\s*T(?:[A-Z]\w*)?\s*>")),
+    ("names the network view type as a Type",
+     re.compile(r"\btypeof\s*\(\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*\)")),
+    ("creates an object with component types, which can be a network view",
+     re.compile(r"\bnew\s+(?:global\s*::\s*)?(?:UnityEngine\s*\.\s*)?GameObject\s*\(\s*(?:[^(),;]|\([^()]*\))*,"
+                r"|\bGameObject\s*\??\s+\w+\s*=\s*new\s*\(\s*(?:[^(),;]|\([^()]*\))*,")),
     ("renames the network view type",
      re.compile(r"\busing\s+\w+\s*=\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*;")),
     ("derives from the network view type",

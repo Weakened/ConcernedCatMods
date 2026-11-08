@@ -212,6 +212,38 @@ class BodiesComeOnlyFromTheGatedBuild(unittest.TestCase):
             "    internal static void Make() => new GameObject(\"CS_Steward\").AddComponent<SavedView>();\n}\n")
         self.assert_refused("a network view subclass was added to a new object")
 
+    # Found by the exact-head review of 195e2d2: names the first rule's leading
+    # word boundary missed, and a constructor that spells no AddComponent.
+
+    def test_jotunns_get_or_add_component_is_refused(self):
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        new GameObject(\"CS_Steward\").GetOrAddComponent<ZNetView>();\n")
+        self.assert_refused("Jotunn's GetOrAddComponent added a network view")
+
+    def test_jotunns_add_component_copy_is_refused(self):
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        new GameObject(\"CS_Steward\").AddComponentCopy(_census.Live!.View);\n")
+        self.assert_refused("a network view was copied onto a new object")
+
+    def test_a_game_object_constructed_with_the_view_type_is_refused(self):
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        _ = new GameObject(\"CS_Steward\", typeof(ZNetView));\n")
+        self.assert_refused("a GameObject was constructed with a network view")
+
+    def test_a_target_typed_game_object_with_component_types_is_refused(self):
+        self.plant_file(
+            os.path.join(STEWARD, "Runtime", "PlantedSavedObject.cs"),
+            "using System;\nusing UnityEngine;\n\nnamespace Planted;\n\ninternal static class Planted\n{\n"
+            "    internal static GameObject Make(Type[] parts)\n    {\n"
+            "        GameObject made = new(Name(), parts);\n        return made;\n    }\n\n"
+            "    private static string Name() => \"CS_Steward\";\n}\n")
+        self.assert_refused("a GameObject was constructed with component types it was handed")
+
+    def test_an_asynchronous_instantiation_is_refused(self):
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        UnityEngine.Object.InstantiateAsync(_census.Live!.gameObject);\n")
+        self.assert_refused("an asynchronous instantiation got past the word pattern")
+
     # ---- a factory that ignores a disposed lease -----------------------------
 
     def test_a_gate_that_never_asks_about_the_lease_is_refused(self):
