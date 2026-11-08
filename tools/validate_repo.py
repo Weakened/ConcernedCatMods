@@ -2907,6 +2907,7 @@ NPC_FIGURE_PARTS_USES = {
     (NPC_DRESSING_CORE_FILE, "Seat"): 4,
     (NPC_FIGURE_DRESSER_FILE, "Drop"): 1,
     (NPC_FIGURE_DRESSER_FILE, "Place"): 1,
+    (NPC_FIGURE_DRESSER_FILE, "Pose"): 1,
     (NPC_FIGURE_DRESSER_FILE, "TalkPoint"): 1,
 }
 # Where the shared dressing may be constructed: once by each public dresser.
@@ -3021,6 +3022,16 @@ NPC_ENGINE_WRITES = (
     ("non-solid layer names", re.compile(r"\bin\s+new\s*\[\s*\]\s*\{[^}]*\}"), (
         ("Body/Dressing/NpcFigureDresser.cs", _npc_exact(r'\bin\s+new\s*\[\s*\]\s*\{\s*"piece_nonsolid"\s*,\s*"item"\s*\}'), 1),
         ("Body/Keepsakes/NpcKeepsake.cs", _npc_exact(r'\bin\s+new\s*\[\s*\]\s*\{\s*"piece_nonsolid"\s*,\s*"item"\s*\}'), 1),
+    )),
+    # #295 S5: a figure sits on the ground. The only animator writes in the
+    # library: root motion off and the one bool, on the figure's own extracted
+    # animator, in the figure helpers. Any other animator write - a trigger, a
+    # float, a state played or cross-faded, a second bool - is unpinned.
+    ("animator write", re.compile(
+        r"\.\s*(?:SetBool|SetTrigger|ResetTrigger|SetFloat|SetInteger|SetLayerWeight|Play|PlayInFixedTime|"
+        r"CrossFade|CrossFadeInFixedTime|Rebind)\s*\(|\.\s*(?:applyRootMotion|speed|runtimeAnimatorController)\s*=(?!=)"), (
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\banimator\s*\.\s*applyRootMotion\s*=\s*false\s*;"), 1),
+        (NPC_FIGURE_PARTS_FILE, _npc_exact(r"\banimator\s*\.\s*SetBool\s*\(\s*parameter\s*,\s*on\s*\)\s*;"), 1),
     )),
 )
 

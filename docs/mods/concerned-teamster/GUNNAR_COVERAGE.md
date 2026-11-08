@@ -14,7 +14,7 @@ row by row below. No package was built and nothing was published.
 | #458 | His presentation figure at home and the hand-over to his worker body | `GUNNAR_PRESENTATION.md` |
 | #459 | Catalogued lines and talking to his figure | `GUNNAR_DIALOGUE.md` |
 | #460 | Recruitment against an explicitly chosen real cart | `GUNNAR_RECRUITMENT.md` |
-| #461 | Camp idle and poses (Lane H, PR #515 open when this was written) | `GUNNAR_CAMP.md` |
+| #461 | Camp idle and poses: the public `NpcCamp` facade and the figure's ground-sitting pose are in Concerned NPC (PR #515); Teamster lifecycle wiring remains | `GUNNAR_CAMP.md` |
 | #313/#314/#317, #381 | The haul, collection tour, deposit and death drop (not redone here) | `GUNNAR_HAULING.md`, `GUNNAR_COLLECTION.md` |
 
 ## The #297 matrix

@@ -2,14 +2,16 @@
 
 ## 0.5.0
 
-Six additive changes share this version:
+Eight additive changes share this version:
 * a worker can rest as a presentation figure (#295, #298, Concerned Foreman's Thorstein);
 * a job can say that doing a target leaves the NPC carrying something (#381, Concerned Teamster's Gunnar);
 * that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and Gunnar share it;
 * a worker body can wear its character's own hair and beard, locally (#295 S6, owner decision 2026-10-29);
 * one shared companion keepsake, the small local object that starts an introduction (#295 S2, owner decision
   2026-10-30);
-* a presentation figure can be talked to with the use key (#295 S3).
+* a presentation figure can be talked to with the use key (#295 S3);
+* a presentation figure can sit on the ground (#295 S5);
+* a role can keep a camp and ask where it is, through a public facade (#461, #295 S5).
 
 ### A worker may rest as a presentation figure (#295, #298)
 
@@ -114,13 +116,36 @@ Six additive changes share this version:
 * Its engine writes are pinned in the NPC census; `NpcFigureTalk` is internal and confined to `Body/Dressing`;
   `Action` joins the dresser's allowed parameter types for the callback. **Not observed in game.**
 
+### A presentation figure can sit on the ground (#295 S5)
+
+* `NpcFigureDresser.SitOnGround()`, `StandUp()` and `Sitting`. They use the game's `emote_sit` animator bool,
+  the one Concerned Cartographer's companion sits with. They pose the dresser's own figure through its own extracted
+  animator. Nothing is claimed, moved or written anywhere else. A controller without that bool is left alone and
+  `SitOnGround` answers false, so the figure keeps standing.
+* The two animator writes (root motion off, the bool) are pinned in the NPC census, in `NpcFigureParts` only.
+  **Not observed in game.**
+
+### A role can keep a camp (#461, #295 S5)
+
+* `Camp.NpcCamp`, `Camp.NpcCampView` and `Camp.NpcCampHome` are the public door to the cached camp registry that has
+  been in the library since 0.1.0 and was reachable by nothing. A role keeps one camp per character and world:
+  `BeginWorld(epoch)`, `NotePiece(key, position, playerBuiltStructure, epoch)` for what it saw built,
+  `ForgetPiece(key)` for what is gone, and `Survey(home, position)` for where camp is.
+* The view is read-only: established or not, provisional (world start) or not, the home kind, revision, member
+  count, epoch, centre, extent, `Contains` and `TryNearestInteriorPoint`. There is no list of pieces, so no role can
+  re-decide membership.
+* A survey that finds nothing changed hands back the same view object and allocates nothing.
+* It never scans the world, names a prefab, writes a file or touches a game object; the role classifies what it saw.
+  The registry, snapshot, piece, anchor, resolver and survey options stay internal.
+
 ### Versioning
 
 * An additive minor version that widens the public surface by four members: `NpcBodyContract.ForWorkerWithPresentation`,
   `NpcBodyContract.Admits`, one `JobTarget` constructor and the `JobTarget.Carries` property. It also adds the
   dressing types: `Appearance.*` and `Body.Dressing.NpcFigureDresser` / `NpcWorkerDresser` /
-  `NpcCustomizationPalette`, and the keepsake types: `Keepsakes.NpcKeepsakeSpec` and `Body.Keepsakes.NpcKeepsake`.
-  A role that does not
+  `NpcCustomizationPalette`, the keepsake types: `Keepsakes.NpcKeepsakeSpec` and `Body.Keepsakes.NpcKeepsake`, the camp facade
+  (`Camp.NpcCamp`, `NpcCampView`, `NpcCampHome`) and the dresser's sitting members (`SitOnGround`, `StandUp`,
+  `Sitting`). 0.5.0 has never been published, so these join it rather than a new number. A role that does not
   use them is unaffected. Every in-repository consumer pin moves with it, so no product can compile against one
   contract and install another.
 

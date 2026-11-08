@@ -258,6 +258,13 @@ in-session key a reconstructed plan holds is stale rather than dangerous. No pur
 `INpcDataPaths` - the journal takes the path directly - so that interface's "there are no purposes yet" is still
 true, and adopting this is a code move rather than a migration.
 
+**Opened (#461, #295 S5, inside the unpublished 0.5.0):** camp, through a facade. `Camp/NpcCamp` with
+`NpcCampView` and `NpcCampHome` is the public door to the cached registry: a role notes what it saw built and
+destroyed, and surveys from its bed, settlement or world start. A survey that finds nothing changed returns the same
+view and allocates nothing. The registry, snapshot, piece, anchor and survey options stay internal. The figure
+dresser also gains a local sitting pose (`SitOnGround`, `StandUp`, `Sitting`) on its own figure's animator; its two
+animator writes are pinned in the NPC census. Nothing is claimed: no chair, bed or other world object is touched.
+
 Priority and arbitration live in the same area: seven rungs, strictly-higher-wins, and an interruption that changes
 the phase and the note and nothing else about the work.
 
