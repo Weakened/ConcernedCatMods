@@ -214,7 +214,7 @@ public sealed class RoleBodySpawnTests : IDisposable
         Assert.Null(body);
         Assert.NotNull(view);
         Assert.True(view!.DestroyCalled);
-        Assert.Contains("valid, owned network object", failure, StringComparison.Ordinal);
+        Assert.Contains("could not be given its identity", failure, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -238,6 +238,30 @@ public sealed class RoleBodySpawnTests : IDisposable
         Assert.Contains("threw", failure, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_stamp_that_writes_another_identity_is_a_refusal_and_the_body_is_destroyed_again()
+    {
+        // The census counts by the lease's identity under the contract's key
+        // field; a body stamped as anybody else is one that count never finds.
+        GameObject prefab = Registered();
+        BodyLease lease = Claim(new NpcRoleRegistry());
+        ZNetView? view = null;
+
+        GameObject? body = NpcWorkerPrefabFactory.TrySpawnRoleBody(
+            lease, BodyFixtures.ForemanContract(), prefab, Vector3.zero, Quaternion.identity,
+            instance =>
+            {
+                view = instance.GetComponent<ZNetView>();
+                view!.GetZDO().Set(BodyFixtures.WorkerKeyField, "foreman/somebody");
+                return true;
+            },
+            out string failure);
+
+        Assert.Null(body);
+        Assert.True(view!.DestroyCalled);
+        Assert.Contains("identity other than", failure, StringComparison.Ordinal);
+    }
+
     // -----------------------------------------------------------------
 
     private GameObject? Spawn(BodyLease? lease, GameObject? prefab, out string failure, Vector3? at = null) =>
@@ -250,6 +274,8 @@ public sealed class RoleBodySpawnTests : IDisposable
             instance =>
             {
                 _stamped.Add(instance);
+                instance.GetComponent<ZNetView>()!.GetZDO()
+                    .Set(BodyFixtures.WorkerKeyField, BodyFixtures.Thorstein.Value);
                 return true;
             },
             out failure);

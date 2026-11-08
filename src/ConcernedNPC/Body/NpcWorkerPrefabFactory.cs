@@ -462,9 +462,22 @@ public sealed class NpcWorkerPrefabFactory
             try
             {
                 stamped = stamp!(instance);
+                if (!stamped)
+                {
+                    why = "the new body could not be given its identity";
+                }
+                else if (!CarriesLeasedIdentity(view, contract, lease!.Identity))
+                {
+                    // The census counts by the contract's key field and the
+                    // lease's identity; a stamp that wrote anything else would
+                    // make a body that count can never find.
+                    stamped = false;
+                    why = "the new body was stamped with an identity other than " + lease.Identity;
+                }
             }
             catch (Exception exception)
             {
+                stamped = false;
                 why = "giving the new body its identity threw " + SafeFailure.Brief(exception);
             }
         }
@@ -478,6 +491,21 @@ public sealed class NpcWorkerPrefabFactory
 
         failure = string.Empty;
         return instance;
+    }
+
+    /// <summary>True when the new body's own network object carries exactly the
+    /// leased identity under the contract's key field: what the census reads.
+    /// </summary>
+    private static bool CarriesLeasedIdentity(ZNetView view, NpcBodyContract contract, NpcIdentity identity)
+    {
+        if (!NpcBodyFields.TryFor(contract, out NpcBodyFields fields, out _))
+        {
+            return false;
+        }
+
+        ZDO? zdo = view.GetZDO();
+        return zdo != null
+            && string.Equals(zdo.GetString(fields.Key, string.Empty), identity.Value, StringComparison.Ordinal);
     }
 
     /// <summary>Why <paramref name="rolePrefab"/> cannot be built from, or null

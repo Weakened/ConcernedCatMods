@@ -7201,7 +7201,9 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
 #   whole - every folder less obj/ and bin/, and every shared tree its project
 #   file compiles in (#401's lesson: a folder is not a boundary). `Instantiate`
 #   as a word, so a method group or a generic spelling is caught as well as a
-#   call, may appear nowhere in them except one stated, pinned pending site.
+#   call, may appear nowhere in them except one stated, pinned pending site;
+#   nor may `CreateNewZDO` or `SpawnObject`, which make a saved object the
+#   scene builds into a body on its own.
 #   Each adopted product's call into the gated build is pinned by path and
 #   population, so a product that stops calling it - a helper with no
 #   production caller - fails too.
@@ -7217,7 +7219,9 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
 # them - that is BodyInstantiationAuditTests', RoleBodySpawnTests' and a
 # reviewer's job.
 NPC_BODY_LABEL = "[interop] #372 body factory audit"
-NPC_BODY_INSTANTIATION = re.compile(r"\bInstantiate\b")
+# `CreateNewZDO` and `SpawnObject` too (#372 review): a saved object created
+# directly is a body the scene builds on the next zone load, without the gate.
+NPC_BODY_INSTANTIATION = re.compile(r"\b(?:Instantiate|CreateNewZDO|SpawnObject)\b")
 NPC_BODY_ROLE_SPAWN = re.compile(r"\bNpcWorkerPrefabFactory\s*\.\s*TrySpawnRoleBody\s*\(")
 # (product key, path relative to the product): calls into the gated build.
 NPC_BODY_ROLE_SPAWN_SITES = {
@@ -7317,7 +7321,7 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
             if any(start <= match.start() < end for start, end in allowed):
                 continue
             fail(f"{NPC_BODY_LABEL}: [{product}] {rel}:{code.count(chr(10), 0, match.start()) + 1} instantiates "
-                 "something itself. A product that consumes Concerned NPC creates a body only through "
+                 "or creates a saved object itself. A product that consumes Concerned NPC creates a body only through "
                  "NpcWorkerPrefabFactory, which requires a BodyLease and re-checks it immediately before the "
                  "build; an engine instantiation here never asks the arbiter at all", errors)
     for key in NPC_BODY_PENDING_INSTANTIATIONS:

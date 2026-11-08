@@ -164,7 +164,7 @@ internal sealed class ThorsteinPresentation
     /// lease back afterwards releases the job's mode with it, and keeping it
     /// leaves a hold nothing here could release, so his figure could never come
     /// back. Refusing is the smallest choice that creates no body without
-    /// permission: pausing or cancelling the order lets the next spawn go
+    /// permission: cancelling the order, or letting it finish, lets the next spawn go
     /// through.</summary>
     internal bool TakeWorkerBody(out Vector3? at, out BodyLease? lease, out string refusal)
     {
@@ -176,7 +176,7 @@ internal sealed class ThorsteinPresentation
         if (!granted && _npc.IsRegistered && !_npc.Modes.MayRetireBody)
         {
             refusal = "an order ('" + (_npc.Modes.JobId ?? "unnamed") + "') holds him, and only that order may "
-                + "be given a body; pause or cancel it first";
+                + "be given a body; cancel it, or let it finish, first (a paused order still holds him)";
             return false;
         }
 

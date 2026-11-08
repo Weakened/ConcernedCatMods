@@ -139,6 +139,13 @@ class BodiesComeOnlyFromTheGatedBuild(unittest.TestCase):
                      STEWARD_MARKER + "        UnityEngine.Object.Instantiate<GameObject>(_census.Live!.gameObject);\n")
         self.assert_refused("a generic instantiation got past the call pattern")
 
+    def test_a_saved_object_created_directly_is_refused(self):
+        # The scene builds a body from a saved object on the next zone load,
+        # so creating the object is creating the body - without the gate.
+        self.swap_in(STEWARD_RUNTIME, STEWARD_MARKER,
+                     STEWARD_MARKER + "        ZDOMan.instance.CreateNewZDO(at.Value, 0);\n")
+        self.assert_refused("a CS_Steward saved object was created without the gate")
+
     def test_the_pending_teamster_site_cannot_grow(self):
         self.swap_in(TEAMSTER_PREFAB, TEAMSTER_INSTANTIATION,
                      TEAMSTER_INSTANTIATION + "        UnityEngine.Object.Instantiate(Prefab, position, rotation);\n")
