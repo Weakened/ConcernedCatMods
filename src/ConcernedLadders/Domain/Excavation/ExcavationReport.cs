@@ -56,7 +56,7 @@ internal static class ExcavationReport
             case ExcavationReadFault.Rebuilding: return "The terrain here is still updating from another edit. Try again in a moment.";
             case ExcavationReadFault.LegacyTerrainModifier: return "An old-style terrain edit touches this area; its dig limit cannot be measured. Pick another spot.";
             case ExcavationReadFault.CompilerUnreadable: return "This area's terrain edits could not be read. Nothing is changed.";
-            case ExcavationReadFault.TilesDisagree: return "Two terrain tiles disagree at their shared edge here (one is still updating). Try again in a moment.";
+            case ExcavationReadFault.TilesDisagree: return "Two terrain tiles disagree at their shared edge here. If one is still updating, try again in a moment; if it stays, it is an old seam, so pick another spot.";
             default: return "The terrain could not be read.";
         }
     }
@@ -92,7 +92,7 @@ internal static class ExcavationReport
             case ExcavationOutcome.Complete: return head + ": done. Floor level at " + F1(plan.Bottom) + " m.";
             case ExcavationOutcome.Overshot: return head + ": the floor went lower than planned (another edit landed at the same time). Reported only; nothing is repaired or retried.";
             case ExcavationOutcome.Unreadable: return head + ": the result could not be read. Nothing is retried; plan again to see the terrain as it is.";
-            case ExcavationOutcome.TimedOut: return head + ": the floor did not arrive within " + F0(ExcavationInFlight.TimeoutSeconds) + " s (the player who owns this terrain may not have this build of the mod; see their log). Nothing is retried; plan again to see the terrain as it is.";
+            case ExcavationOutcome.TimedOut: return head + ": the floor did not arrive within " + F0(ExcavationInFlight.TimeoutSeconds) + " s (in multiplayer, the player who owns this terrain may not have this build of the mod; see their log). Nothing is retried; plan again to see the terrain as it is.";
             case ExcavationOutcome.Abandoned: return head + ": the world closed before the result could be read.";
             default: return head + ": waiting for the result.";
         }
