@@ -348,9 +348,12 @@ inventory.
   removed automatically**.
 - **Missing body with material recorded on him:** NeedsAttention `WorkerBodyLost`. Nothing is refunded. To write the
   material off:
-  1. `cf_worker spawn` (his new body carries nothing);
-  2. `cf_settle reconcile`: the record now shows below expected;
-  3. `cf_settle resolve <order> lost`.
+  1. `cf_collect cancel`. The stopped order still holds him, and while it does `cf_worker spawn` is refused (#372: a
+     body is created only under a worker lease, and only the holding order may have one). Cancelling is not a refund
+     and does not lose the record: what it holds on him stays recorded against the cancelled order;
+  2. `cf_worker spawn` (his new body carries nothing);
+  3. `cf_settle reconcile`: the record now shows below expected;
+  4. `cf_settle resolve <order> lost`, naming the cancelled order. It is accepted for a cancelled order.
 
 ---
 
@@ -463,7 +466,7 @@ record then writes material off; tools stay recorded as held (§5).
 | L9 | He carries N and holds the axe. Let him die, for example to a hostile creature; this build has no command for it. | The log says `The worker died at (x, y, z)…`, and N Stone and the axe lie there with no other loot. Status shows lost N and the axe as unsettled. Pick the axe up and run `cf_settle resolve give-… mine`, which answers `Recorded: you have it.` |
 | L10 | Run `cf_worker despawn` three times: while an order runs; after `cf_collect cancel` while he still carries or holds a tool; and after `cf_settle takeback` and `cf_settle release`. | `Refused: Thorstein is working…`, then `Refused: he is carrying…` (and he has not moved: the refusal is decided before his goal is cleared), then `Worker despawned.` |
 | L11 | Follow §13 in the disposable world. Remove the DLL, load the world, restore the DLL, and load again. | Without the mod, the world loads cleanly. With it back, status shows no holdings and `cf_worker spawn` works. |
-| L12 | Negative, disposable world only: remove the DLL while he carries N, load, restore the DLL, load. Then run `cf_worker spawn`, `cf_settle reconcile` and `cf_settle resolve <order> lost`. | At load the order is `NeedsAttention (WorkerBodyLost)`. After the spawn, reconcile shows below expected, and `lost` records N. Tools stay recorded as held (§5). |
+| L12 | Negative, disposable world only: remove the DLL while he carries N, load, restore the DLL, load. Run `cf_worker spawn` once before cancelling, then `cf_collect cancel`, `cf_worker spawn`, `cf_settle reconcile` and `cf_settle resolve <order> lost`. | At load the order is `NeedsAttention (WorkerBodyLost)`. The first spawn is refused and says an order holds him and to cancel it first; no body appears. After the cancel the spawn goes through, reconcile shows below expected for the cancelled order, and `lost` records N. Tools stay recorded as held (§5). |
 | L13 | Run `cf_collect start 5 0 hold`; when `cf_settle status` shows carried ≥ 1, stand next to him and run `cf_settle release`. | He hands the stone over, the record notes the hand-over, and the order reaches `Completed` without being cancelled. `cf_settle reconcile` says everything matches. |
 
 **Kill points and evidence.**

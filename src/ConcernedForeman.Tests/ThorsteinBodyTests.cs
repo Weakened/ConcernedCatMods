@@ -259,6 +259,32 @@ public sealed class ThorsteinBodyTests
     }
 
     [Fact]
+    public void AnOrderStoppedForAMissingBodyRefusesTheLeaseUntilItIsCancelled()
+    {
+        // #372, the WorkerBodyLost write-off (CUSTODY_AND_RECOVERY.md §10): an
+        // order the record kept is taken up Paused in its own name even with no
+        // body anywhere, so cf_worker spawn is refused until it is cancelled -
+        // and a cancel, which releases that name, is all it takes for the lease
+        // (and so the spawn) to go through. Nothing else has to be undone.
+        ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
+        var bodies = new ThorsteinBodies(registry, adoption.Identity);
+        Assert.Equal(
+            SharedWorkers.ActorModeOutcome.Entered,
+            adoption.Modes.Enter(SharedWorkers.ActorMode.Paused, "collect-ab12cd34"));
+        Assert.False(adoption.Modes.MayRetireBody);
+        Assert.False(bodies.TryTakeWorker(out _));
+        Assert.Null(bodies.WorkerLease);
+
+        // cf_collect cancel ends the order, which releases its mode.
+        Assert.Equal(SharedWorkers.ActorModeOutcome.Released, adoption.Modes.Release("collect-ab12cd34"));
+        Assert.True(adoption.Modes.MayRetireBody);
+
+        Assert.True(bodies.TryTakeWorker(out string refusal), refusal);
+        Assert.NotNull(bodies.WorkerLease);
+        Assert.True(bodies.WorkerLease!.IsActive);
+    }
+
+    [Fact]
     public void AWorldUnloadDropsBothAndTheNextWorldStartsClean()
     {
         ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);

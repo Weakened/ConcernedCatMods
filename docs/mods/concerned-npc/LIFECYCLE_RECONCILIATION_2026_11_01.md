@@ -37,7 +37,9 @@ plan/recovery tests. These are storage/recovery tests, not gameplay captures.
 
 ## Remaining native adoption/confinement work
 
-Current native body creation still lives in:
+**Superseded for Foreman and Steward by the 2026-11-08 addendum below**: both now build their bodies through
+`NpcWorkerPrefabFactory.TrySpawnRoleBody` under a worker lease, and the validator refuses any other body creation in
+them. Only Teamster's entry in this list is still current. As written on 2026-11-01, native body creation lived in:
 
 - `src/ConcernedForeman/Runtime/Settlement/ForemanWorkerPrefab.cs`: Spawn takes
   position/rotation and directly instantiates its prefab, with no BodyLease input.
@@ -52,8 +54,8 @@ plant both the outside-factory bypass and disposed-token violation. Keep GUI,
 keepsake, item-drop and render-harvest creation distinct from live body creation;
 a blanket ban over every Instantiate/AddComponent would break valid product UI.
 
-The live caller/worker files and validator are in Claude's active PR/hammer lanes.
-They are not edited here. The integration handoff names this remaining work; no
+The live caller/worker files and validator were then in Claude's active PR/hammer lanes,
+and were not edited by this report (the addendum below records the later change). The integration handoff names this remaining work; no
 new callback, reflected engine write, duplicate registry or alternate spawn path
 is introduced to avoid that ownership boundary.
 
@@ -117,7 +119,7 @@ for Foreman and Steward; Teamster's half is still open.
 |---|---|---|
 | Factory takes an active BodyLease and re-checks it immediately before construction | Unchanged for `TrySpawn`. New `NpcWorkerPrefabFactory.TrySpawnRoleBody` for a role's own prefab goes through the same private build: `NpcBodyBuildGate.May` (lease asked last), then the library's one instantiation of a saved body with nothing between. The census is the library's, taken in the call; the prefab must be the one the network scene knows by the contract's name; the identity is stamped in the same call and a body whose stamp fails is destroyed again. `RoleBodySpawnTests` (no lease, disposed lease, unloaded world, saved body present, uncountable world, unregistered/misnamed/absent prefab, no scene, unloaded ground, presentation lease, failed and throwing stamp). | MET for the library and for both adopted roles |
 | Consumer instantiation confined, with planted violation caught | `tools/validate_repo.py` `check_npc_consumer_bodies_come_from_the_gated_build`: every product whose project references the library, whole (less obj/bin) plus every shared tree it compiles in, may spell `Instantiate`, `CreateNewZDO` or `SpawnObject` nowhere except one stated pending site (Teamster's prefab, pinned by spelling and count, keyed by product and path); each adopted product's call into the gated build is pinned by path and count; the factory's one instantiation must follow the gate's refusal and the gate must end on the lease check and its one grant. `tools/tests/test_npc_body_factory_audit.py` plants both owner-named violations (an instantiation outside the factory; a factory that ignores a disposed lease) in several shapes, each verified to pass the validator copy without the rule. Foreman's #400 audit no longer pins an instantiation, so any in Foreman is unpinned there too. | MET for Foreman and Steward; Teamster pending |
-| Foreman spawns through the gated build | `ForemanWorkerPrefab.Spawn(lease, ...)` calls `TrySpawnRoleBody`; `SettlementRuntime.Spawn` gets the lease from the presentation hand-over (`ThorsteinBodies.WorkerLease`). While an order holds him the spawn is now refused (cancel the order or let it finish; a paused or recovered-paused order still holds him); before #372 that branch built a body with no lease at all. Borrowing the order's name was tried and rejected: the arbiter's release of a body held in a job's name releases that job's mode too (a Foreman test caught it), and keeping such a lease would leave a hold nothing could release. No hand-over wired means no lease and no body. This refusal is a lead default pending owner confirmation. | MET in source |
+| Foreman spawns through the gated build | `ForemanWorkerPrefab.Spawn(lease, ...)` calls `TrySpawnRoleBody`; `SettlementRuntime.Spawn` gets the lease from the presentation hand-over (`ThorsteinBodies.WorkerLease`). While an order holds him the spawn is now refused (cancel the order first; a paused or recovered-paused order still holds him, and the order holding him at a spawn has no body to finish with). The `WorkerBodyLost` write-off therefore cancels before it spawns, and a cancel keeps what the record holds on him, so the loss can still be written off against the cancelled order (`FaultInjectionTests.AnOrderStoppedForALostBodyCanBeCancelledAndItsMaterialStillWrittenOff`, `CollectionRecoveryTests.AnOrderStoppedForAMissingBodyHoldsHimUntilCancelledAndThenLetsGo`, `ThorsteinBodyTests.AnOrderStoppedForAMissingBodyRefusesTheLeaseUntilItIsCancelled`); before #372 that branch built a body with no lease at all. Borrowing the order's name was tried and rejected: the arbiter's release of a body held in a job's name releases that job's mode too (a Foreman test caught it), and keeping such a lease would leave a hold nothing could release. No hand-over wired means no lease and no body. This refusal is a lead default pending owner confirmation. | MET in source |
 | Steward spawns through the gated build | `StewardRuntime.EnsureBody` yields the figure, claims the worker lease, and only then calls `StewardWorkerPrefab.Spawn(claim.Lease, ...)`; a refused claim refuses the spawn and a failed build releases the hold. Before #372 the claim came after the body existed. | MET in source |
 | Teamster spawns through the gated build | Not done. `TeamsterWorkerPrefab.cs` and its caller are in `Adapters/Workers`, which Lane J's open PRs #512 and #513 change. Its one instantiation is the audit's single pinned pending site. | OPEN follow-up |
 

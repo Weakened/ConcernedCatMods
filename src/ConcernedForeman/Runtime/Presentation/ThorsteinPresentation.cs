@@ -164,8 +164,12 @@ internal sealed class ThorsteinPresentation
     /// lease back afterwards releases the job's mode with it, and keeping it
     /// leaves a hold nothing here could release, so his figure could never come
     /// back. Refusing is the smallest choice that creates no body without
-    /// permission: cancelling the order, or letting it finish, lets the next spawn go
-    /// through.</summary>
+    /// permission: cancelling the order lets the next spawn go through. In
+    /// practice the order holding him here has no body to finish with (one
+    /// with a body is refused earlier, for that body), so cancelling is the
+    /// only advice worth giving. A cancel leaves what the record holds on him in
+    /// place, so the WorkerBodyLost write-off still works after the spawn
+    /// (CUSTODY_AND_RECOVERY.md §10).</summary>
     internal bool TakeWorkerBody(out Vector3? at, out BodyLease? lease, out string refusal)
     {
         at = _figure != null ? _figure.transform.position : (Vector3?)null;
@@ -176,7 +180,8 @@ internal sealed class ThorsteinPresentation
         if (!granted && _npc.IsRegistered && !_npc.Modes.MayRetireBody)
         {
             refusal = "an order ('" + (_npc.Modes.JobId ?? "unnamed") + "') holds him, and only that order may "
-                + "be given a body; cancel it, or let it finish, first (a paused order still holds him)";
+                + "be given a body; cancel it first (a paused order still holds him; what he carried stays in the "
+                + "record, so it can still be written off after the spawn)";
             return false;
         }
 
