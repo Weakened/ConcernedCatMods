@@ -4067,6 +4067,100 @@ TEAMSTER_ANIMATOR_REACH_SITES = {
 }
 
 
+def _teamster_blank_literals(code: str) -> str:
+    """Comment-stripped C# with the TEXT of every string and char literal
+    blanked and every interpolation hole kept as code - holes nested to any
+    depth, with literals inside holes handled the same way. A regex over string
+    literals cannot do this: a literal inside a hole (`$"{f("a").x}"`) splits its
+    match and the rest of the hole was blanked as text (review of D21). Lengths
+    and newlines are kept, so line numbers still hold. LangVersion 10: there are
+    no raw string literals to handle."""
+    out = list(code)
+    length = len(code)
+
+    def blank(index: int) -> None:
+        if out[index] not in "\r\n":
+            out[index] = " "
+
+    def string(index: int, verbatim: bool, interpolated: bool) -> int:
+        # `index` is at the opening quote; returns the index after the closing one.
+        index += 1
+        while index < length:
+            char = code[index]
+            if verbatim and char == '"' and index + 1 < length and code[index + 1] == '"':
+                blank(index)
+                blank(index + 1)
+                index += 2
+                continue
+            if not verbatim and char == "\\":
+                blank(index)
+                if index + 1 < length:
+                    blank(index + 1)
+                index += 2
+                continue
+            if char == '"':
+                return index + 1
+            if interpolated and char == "{":
+                if index + 1 < length and code[index + 1] == "{":
+                    blank(index)
+                    blank(index + 1)
+                    index += 2
+                    continue
+                index = hole(index + 1)
+                continue
+            if interpolated and char == "}" and index + 1 < length and code[index + 1] == "}":
+                blank(index)
+                blank(index + 1)
+                index += 2
+                continue
+            blank(index)
+            index += 1
+        return index
+
+    def hole(index: int) -> int:
+        # Code until the matching `}`; returns the index after it.
+        depth = 0
+        while index < length:
+            index, closed = token(index, depth)
+            if closed:
+                return index
+            char = code[index - 1]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+        return index
+
+    def token(index: int, depth: int) -> tuple:
+        char = code[index]
+        if char == "}" and depth == 0:
+            return index + 1, True
+        prefix = code[index:index + 3]
+        if prefix in ('$@"', '@$"'):
+            return string(index + 2, True, True), False
+        if code[index:index + 2] == '$"':
+            return string(index + 1, False, True), False
+        if code[index:index + 2] == '@"':
+            return string(index + 1, True, False), False
+        if char == '"':
+            return string(index, False, False), False
+        if char == "'":
+            index += 1
+            while index < length and code[index] != "'":
+                blank(index)
+                if code[index] == "\\" and index + 1 < length:
+                    blank(index + 1)
+                    index += 1
+                index += 1
+            return index + 1, False
+        return index + 1, False
+
+    index = 0
+    while index < length:
+        index, _closed = token(index, 1)
+    return "".join(out)
+
+
 def _teamster_animator_reach(errors: list[str], label: str, port_rel: str) -> int:
     """How many animator reaches outside the port were refused."""
     teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
@@ -4078,14 +4172,9 @@ def _teamster_animator_reach(errors: list[str], label: str, port_rel: str) -> in
             rel = path.relative_to(base).as_posix()
             if rel.split("/")[0] in ("obj", "bin") or (base == teamster_dir and rel == port_rel):
                 continue
-            # A literal with a brace is kept whole: an interpolated string's
-            # holes are code (`$"{Run(() => who.m_zanim.SetBool(...))}"`), and
-            # blanking the whole literal hid one (review of D21). The same rule
-            # `_cs_code_keeping_interpolations` uses for `.Message`.
-            code = CS_STRING.sub(
-                lambda match: match.group(0) if "{" in match.group(0)
-                else '"' + " " * max(0, len(match.group(0)) - 2) + '"',
-                _strip_cs_comments(path.read_text(encoding="utf-8-sig")))
+            # Literal text blanked, interpolation holes kept as code (review
+            # of D21: a hole is code, and a literal inside one must not end it).
+            code = _teamster_blank_literals(_strip_cs_comments(path.read_text(encoding="utf-8-sig")))
             allowed = []
             site = TEAMSTER_ANIMATOR_REACH_SITES.get(rel) if base == teamster_dir else None
             if site is not None:

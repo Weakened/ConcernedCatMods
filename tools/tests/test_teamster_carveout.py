@@ -1558,8 +1558,16 @@ class IdleHammerIsCosmetic(CarveOutFixture):
         # Re-review of D21: blanking every literal blanked an interpolated
         # string's holes too, and a hole is code.
         self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzInterpolatedAnimator.cs"),
-                        "        _ = $\"{Run(() => ((Character)who).m_zanim.SetBool(\\\"x\\\", true))}\";")
+                        "        _ = $\"{Run(() => ((Character)who).m_zanim.SetBool(name, true))}\";")
         self.assert_refused("an animator write inside an interpolation hole passed",
+                            contains="reaches an animator ('m_zanim')")
+
+    def test_a_literal_inside_the_hole_does_not_end_it(self):
+        # Re-review of D21: a literal nested in the hole split the regex's
+        # string match, and the rest of the hole was blanked as text.
+        self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzNestedInterpolation.cs"),
+                        "        _ = $\"{Run(() => Who(who, \"a\").m_zanim.SetBool(name, true))}\";")
+        self.assert_refused("an animator write after a literal inside a hole passed",
                             contains="reaches an animator ('m_zanim')")
 
     def test_a_trigger_is_not_allowed_in_another_worker_file(self):
