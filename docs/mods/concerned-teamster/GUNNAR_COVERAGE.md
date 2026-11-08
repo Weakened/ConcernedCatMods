@@ -16,7 +16,7 @@ One dedicated worktree/branch per leaf, stacked for explicit dependencies:
 | #458 | feat/ct-458-gunnar-presentation | Body decisions, role wrapper, real-library leases, dresser/metadata adapters; existing role registration, same-position worker handover, Teamster figure audit/plants, native presets and visual evidence remain. |
 | #459 | feat/ct-459-gunnar-dialogue | Authored corpus/shared rotation/live attention keys; lead appends source rows into TeamsterStrings and wires current-scope talk. |
 | #460 | feat/ct-460-gunnar-recruitment | Exact-cart named confirmation, epoch/scope/token checks, durable hire; native pointed-cart facts/panel remain; owner confirmed hauling opt-in + host authority on 2026-11-01. |
-| #461 | feat/ct-461-gunnar-camp | Cached no-allocation targets/range retention/seats; approved public Camp API release/pins, native pose and lifecycle wiring remain. Proposed Camp facade is uncompiled under proposals/. |
+| #461 | feat/ct-461-gunnar-camp | Cached no-allocation targets/range retention/seats; public Camp facade (`NpcCamp`) and the figure's ground-sitting pose are in Concerned NPC 0.5.0 (library PR); Teamster lifecycle wiring remains. |
 | #462 | feat/ct-462-gunnar-coverage | Cross-feature tests and this matrix; native campaign/evidence remains. |
 
 Do not cherry-pick each full branch as an independent base: later branches include

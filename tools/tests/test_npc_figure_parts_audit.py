@@ -301,6 +301,43 @@ class NpcFigurePartsArePinned(unittest.TestCase):
         self.swap_in(dresser, 'in new[] { "piece_nonsolid", "item" }', 'in new[] { "Default", "piece_nonsolid" }')
         self.assert_refused("the talk point's layer could be chosen from a solid layer")
 
+    # --- S5: the figure sits; the animator writes are pinned ------------------------------------
+
+    def assert_animator_refused(self, why):
+        self.assert_refused(why)
+        _, out = validate()
+        self.assertIn("animator write", out, why)
+
+    def test_a_trigger_fired_on_the_figure_is_refused(self):
+        marker = "        animator.SetBool(parameter, on);"
+        self.after(PARTS, marker, '        animator.SetTrigger("emote_wave");')
+        self.assert_animator_refused("a trigger is a second animator write nobody pinned")
+
+    def test_a_pose_forced_on_regardless_is_refused(self):
+        self.swap_in(PARTS, "        animator.SetBool(parameter, on);", "        animator.SetBool(parameter, true);")
+        self.assert_animator_refused("a pose that cannot be turned off again left the pinned spelling")
+
+    def test_root_motion_turned_on_is_refused(self):
+        self.swap_in(PARTS, "        animator.applyRootMotion = false;", "        animator.applyRootMotion = true;")
+        self.assert_animator_refused("root motion would let a clip carry the figure off its spot")
+
+    def test_an_animator_write_in_another_library_file_is_refused(self):
+        self.plant_file(LIBRARY, ("Work", "ZzWave.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Work;\n"
+                        "internal static class ZzWave\n"
+                        "{\n"
+                        "    internal static void Run(UnityEngine.Animator animator) =>\n"
+                        "        animator.SetBool(\"emote_sit\", true);\n"
+                        "}\n")
+        self.assert_animator_refused("an animator write outside the figure helpers passed the census")
+
+    def test_a_second_pose_call_in_the_dresser_is_refused(self):
+        marker = "        _animator != null && NpcFigureParts.Pose(_animator, \"emote_sit\", on);"
+        self.swap_in(DRESSER, marker,
+                     "        _animator != null && NpcFigureParts.Pose(_animator, \"emote_sit\", on)\n"
+                     "            && NpcFigureParts.Pose(_animator, \"attach_bed\", on);")
+        self.assert_refused("a second pose call in the dresser went unpinned")
+
     def test_a_legitimate_new_constraint_elsewhere_in_the_library_is_not_refused(self):
         # Not a plant: the target-typed `new(` rule is about the two dresser
         # files. Ordinary code elsewhere in the library - a `where T : new()`

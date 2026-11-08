@@ -53,8 +53,8 @@ internal abstract class CustodyRow
 {
     public abstract JournalEntryKind Kind { get; }
 
-    /// <summary>The order the row belongs to. Empty only for a world-save
-    /// marker, which belongs to the whole record.</summary>
+    /// <summary>The order the row belongs to. Empty for a world-save
+    /// marker or a local resident event, neither of which is a worker order.</summary>
     public abstract OrderId Order { get; }
 
     /// <summary>The idempotence key, for the kinds that have one.</summary>
@@ -441,6 +441,10 @@ internal static class CustodyRowCodec
         var fields = new JournalFields();
         switch (row)
         {
+            case ResidentRecordedRow resident:
+                fields.Add("resident",resident.Resident).Add("slot",resident.Slot)
+                    .Add("reservation",resident.Reservation.Value).AddName("phase",resident.Phase).AddName("housing",resident.Housing);
+                break;
             case BuildOrderRecordedRow build:
                 fields.Add("order", build.Order.Value).Add("worker", build.Worker.Value)
                     .AddName("transition", build.Transition).Add("payload", build.Payload);
@@ -579,7 +583,7 @@ internal static class CustodyRowCodec
                 }
             }
 
-            if (unknown.Count > 0 && decoded is BuildOrderRecordedRow)
+            if (unknown.Count > 0 && (decoded is BuildOrderRecordedRow || decoded is ResidentRecordedRow))
                 return false; // An approval with unknown authority fields is not this approval.
 
             if (unknown.Count > 0)
@@ -733,6 +737,15 @@ internal static class CustodyRowCodec
                         ? new HandoverFinishedRow(handoverRequest, handoverOrder, handoverItem, handoverCount)
                         : null;
 
+            case JournalEntryKind.ResidentRecorded:
+                return reader.Required("resident",out string residentId)
+                    && reader.Required("slot",out string residentSlot)
+                    && reader.Request("reservation",out RequestId residentRequest)
+                    && reader.Required("phase",out string residentPhase)
+                    && Enum.TryParse(residentPhase,out ResidentJournalPhase phase)
+                    && reader.Required("housing",out string residentHousing)
+                    && Enum.TryParse(residentHousing,out TheConcernedCat.Settlement.Housing.HousingRefusal housing)
+                        ? new ResidentRecordedRow(residentId,residentSlot,residentRequest,phase,housing) : null;
             case JournalEntryKind.BuildOrderRecorded:
                 return reader.Order("order", out OrderId buildOrder)
                     && reader.Required("worker", out string buildWorker)
