@@ -18,6 +18,16 @@ public sealed class HousingCapacityTests
         BedClaim claim = BedClaim.Unclaimed) =>
         new HousingFacts(key, measured, inside, roof, cover, warm, claim);
 
+    [Fact]
+    public void BedAbsenceIsNotInferredFromUnmeasuredOrMissingRoofFacts()
+    {
+        Assert.Equal(HousingRefusal.BedRemoved, HousingRules.Judge(
+            new HousingFacts("removed", true, true, false, 0, false, BedClaim.Unclaimed, exists: false)));
+        Assert.Equal(HousingRefusal.NotMeasured, HousingRules.Judge(
+            new HousingFacts("unknown", false, true, false, 0, false, BedClaim.Unclaimed, exists: false)));
+        Assert.Equal(HousingRefusal.NoRoof, HousingRules.Judge(Bed(roof: false)));
+    }
+
     // ---- vanilla's own rules ----------------------------------------------
 
     [Fact]
@@ -313,6 +323,7 @@ public sealed class HousingCapacityTests
             Bed(claim: BedClaim.YoursAndCurrent),
             Bed(inside: false),
             HousingFacts.Unmeasured("x"),
+            new HousingFacts("removed", true, true, false, 0, false, BedClaim.Unclaimed, exists: false),
         })
         {
             produced.Add(HousingRules.Judge(facts));

@@ -3193,6 +3193,10 @@ FOREMAN_AUDITED_CAPABILITIES = (
     )),
     ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
         ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+        # #356: the Residents panel's own Jotunn GUI objects at teardown - not a
+        # network object, and nothing of the world. Each name pinned once.
+        ("Ui/ResidentPanel.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*_panel\s*\)"), 1),
+        ("Ui/ResidentPanel.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*_button\s*\)"), 1),
     )),
     ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
