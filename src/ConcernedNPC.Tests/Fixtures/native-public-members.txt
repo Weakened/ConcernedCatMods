@@ -117,7 +117,9 @@ TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser ctor(figure:TheConce
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method Apply() : System.Void Public, HideBySig
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method Describe() : System.String Public, HideBySig
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method EnableTalk(hoverName:System.String None,hoverVerb:System.String None,onTalk:System.Action None,log:System.Action`1<System.String> None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method SitOnGround() : System.Boolean Public, HideBySig
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method StandAt(spot:UnityEngine.Vector3 None,facing:UnityEngine.Quaternion None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method StandUp() : System.Void Public, HideBySig
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method TakeDown() : System.Void Public, HideBySig
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser method VerifyOnce() : System.Void Public, HideBySig
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Beard() : TheConcernedCat.ConcernedNPC.Appearance.NpcLookChoice get=Public, HideBySig, SpecialName set=-
@@ -131,6 +133,7 @@ TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Legs() : Th
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property LegsWorn() : System.Boolean get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property ModelApplied() : System.Boolean get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property PaletteObserved() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property Sitting() : System.Boolean get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property SkinApplied() : System.Boolean get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcFigureDresser property TalkHovered() : System.Boolean get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Body.Dressing.NpcWorkerDresser method Describe() : System.String Public, HideBySig
@@ -253,6 +256,29 @@ TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method TallyFor(identity:TheCon
 TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies method TryFor(contract:TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract None,keeps:TheConcernedCat.ConcernedNPC.Body.NpcBodyKeeps None,census:TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies& Out,reason:System.String& Out) : System.Boolean Public, Static, HideBySig
 TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies property IsComplete() : System.Boolean get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies property Unidentified() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp ctor() Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp method BeginWorld(epoch:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp method ForgetPiece(key:System.String None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp method NotePiece(key:System.String None,position:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,playerBuiltStructure:System.Boolean None,epoch:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp method Survey(home:TheConcernedCat.ConcernedNPC.Camp.NpcCampHome None,position:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : TheConcernedCat.ConcernedNPC.Camp.NpcCampView Public, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCamp property Known() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampHome field PlayerBed : TheConcernedCat.ConcernedNPC.Camp.NpcCampHome Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Camp.NpcCampHome field Settlement : TheConcernedCat.ConcernedNPC.Camp.NpcCampHome Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Camp.NpcCampHome field Unknown : TheConcernedCat.ConcernedNPC.Camp.NpcCampHome Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Camp.NpcCampHome field WorldSpawn : TheConcernedCat.ConcernedNPC.Camp.NpcCampHome Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Camp.NpcCampHome field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView method Contains(point:TheConcernedCat.ConcernedNPC.Work.NpcPoint None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView method TryNearestInteriorPoint(from:TheConcernedCat.ConcernedNPC.Work.NpcPoint None,interior:TheConcernedCat.ConcernedNPC.Work.NpcPoint& Out) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property Centre() : TheConcernedCat.ConcernedNPC.Work.NpcPoint get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property ExtentMetres() : System.Single get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property Home() : TheConcernedCat.ConcernedNPC.Camp.NpcCampHome get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property IsEstablished() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property IsProvisional() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property Members() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Camp.NpcCampView property Revision() : System.Int32 get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Access() : TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Describe() : System.String get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Containers.INpcContainer property Key() : System.String get=Public, Virtual, HideBySig, VtableLayoutMask, Abstract, SpecialName set=-
@@ -796,6 +822,9 @@ type TheConcernedCat.ConcernedNPC.Body.NpcPresentationFigure Public, SequentialL
 type TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory Public, Sealed, BeforeFieldInit : System.Object interfaces=
 type TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
 type TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Camp.NpcCamp Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Camp.NpcCampHome Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Camp.NpcCampView Public, Sealed, BeforeFieldInit : System.Object interfaces=
 type TheConcernedCat.ConcernedNPC.Containers.INpcContainer Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped
 type TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
 type TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable

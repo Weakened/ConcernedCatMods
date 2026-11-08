@@ -129,6 +129,14 @@ public class PublicSurfaceTests
     /// NPC figure-parts audit instead of by this list. The fit tolerances, the
     /// skin-binding rule and the engine-write helpers stay internal.
     ///
+    /// <b>Camp (#461, #295 S5, inside the unpublished 0.5.0).</b>
+    /// <c>NpcCamp</c>, <c>NpcCampView</c> and <c>NpcCampHome</c>: one cached
+    /// camp per role, fed with what a role saw built and destroyed, and a
+    /// read-only view of where camp is. Concerned Teamster's Gunnar and
+    /// Concerned Foreman's Thorstein rest inside it. The registry, snapshot,
+    /// piece, anchor, resolver and survey options stay internal: publishing
+    /// them would publish the membership rule and the cell grid as an API.
+    ///
     /// <b>What is still internal, and why that is not an oversight.</b> The
     /// arbiter, the mode owner, the slug rules, the build gate, the key
     /// composition, the prefab-to-contract table, the sidecar and the atomic
@@ -178,6 +186,9 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory",
         "TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions",
         "TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies",
+        "TheConcernedCat.ConcernedNPC.Camp.NpcCamp",
+        "TheConcernedCat.ConcernedNPC.Camp.NpcCampHome",
+        "TheConcernedCat.ConcernedNPC.Camp.NpcCampView",
         "TheConcernedCat.ConcernedNPC.Containers.INpcContainer",
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess",
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal",
