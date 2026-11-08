@@ -309,7 +309,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _monitor = _navigation.Kit.Motion;
         Service = new GunnarHaulService(_authority);
 
-        // D19 (owner decision 2026-10-31): the idle hammer. The driver is
+        // D21 (owner decision 2026-10-31): the idle hammer. The driver is
         // game-free and reaches only his own body's motor and this one port.
         _hammer = new GunnarIdleHammerPort(message => _log.LogInfo(message));
         _upkeep = new CartUpkeepDriver(new CartUpkeepIdle(), _body, () => _hammer.PlayOnce(_body.Bound));
@@ -422,7 +422,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return;
         }
 
-        // D19: between jobs, beside the cart assigned to him, the idle hammer
+        // D21: between jobs, beside the cart assigned to him, the idle hammer
         // may take the tick. Whenever it answers Nothing - a job arrived, the
         // cart was hitched, a switch or authority went away - the executor gets
         // the tick as before, and stops him if he is still walking.
@@ -434,7 +434,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _executor.Tick();
     }
 
-    /// <summary>One worker tick of the idle hammer (D19). Answers whether it
+    /// <summary>One worker tick of the idle hammer (D21). Answers whether it
     /// steered him this tick.
     ///
     /// Every gate is re-read here, in the tick that acts: Teamster's master

@@ -264,6 +264,32 @@ internal sealed class NpcReservedSourceAvailability : INpcSourceAvailability
 
         _asks++;
 
+        // #376: an uncertain commit of this item out of this chest may have
+        // spent the units or may still owe them, and what is seen cannot tell
+        // which. This seam answers a count, not "unknown", so it answers none:
+        // the planner plans a shortfall rather than spending the same units
+        // twice. The claim's own exclusion does not lift it, for the reason the
+        // book gives. Matched by container key and item name - the planner's
+        // vocabulary - which is coarser than the book's identity and so errs
+        // toward refusing.
+        foreach (NpcMaterialReservation reservation in _book.Reservations)
+        {
+            if (reservation.State != NpcReservationState.Uncertain
+                || !string.Equals(reservation.Container.Key, containerKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (NpcMaterialStack stack in reservation.Stacks)
+            {
+                if (string.Equals(stack.Material.ItemName, item, StringComparison.Ordinal))
+                {
+                    _unitsSubtracted += observed;
+                    return 0;
+                }
+            }
+        }
+
         int reserved = 0;
         foreach (NpcMaterialReservation reservation in _book.Reservations)
         {

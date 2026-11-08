@@ -128,6 +128,17 @@ class NpcKeepsakeIsConfined(unittest.TestCase):
                         "}\n")
         self.assert_refused("Foreman grew its own render-only keepsake")
 
+    # --- S3/S4 review: "never blocks" is pinned, not review-only ---------------------------------
+
+    def test_a_keepsake_whose_trigger_fallback_is_turned_off_is_refused(self):
+        self.swap_in(KEEPSAKE, "                    collider.isTrigger = true;",
+                     "                    collider.isTrigger = false;")
+        self.assert_refused("the keepsake's no-layer fallback became a solid sphere", rule=CENSUS)
+
+    def test_a_changed_keepsake_layer_list_is_refused(self):
+        self.swap_in(KEEPSAKE, 'in new[] { "piece_nonsolid", "item" }', 'in new[] { "Default" }')
+        self.assert_refused("the keepsake's layer could be chosen from a solid layer", rule=CENSUS)
+
     def test_success_sentence_states_the_limits(self):
         code, out = validate()
         self.assertEqual(0, code)

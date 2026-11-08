@@ -1269,6 +1269,99 @@ class CollectionTourIsBounded(CarveOutFixture):
                             marker="#381 destination audit", contains="assigns the runtime's _destination")
 
 
+
+CART_NAVIGATION = os.path.join(WORKERS, "CartNavigationBridge.cs")
+LEXICAL_ANCHOR = "    {\n        _measured = false;\n"
+LEXICAL_AUDIT = "#473 lexical audit"
+
+
+class LexicalEscapesAreRefused(CarveOutFixture):
+    """Four lexical forms make the text every Teamster audit reads differ from
+    the text the compiler builds (#473, #480). Each plant below hides a real
+    destruction - `ZNetScene.instance.Destroy(null)` in a worker file, which the
+    #381 carried-material audit would otherwise count - and each was run against
+    the validator from before this rule (origin/main 640a6b5), which let every
+    one of them through at exit 0.
+    """
+
+    _restore_path = CART_NAVIGATION
+
+    def plant_lexical(self, lines):
+        self.swap_in(CART_NAVIGATION, LEXICAL_ANCHOR, LEXICAL_ANCHOR.split("\n")[0] + "\n" + lines)
+
+    def test_an_apostrophe_on_a_directive_line_does_not_hide_a_destruction(self):
+        # The stripper reads `it's` as the start of a char literal, closes it at
+        # the apostrophe inside the next comment, and then reads that comment's
+        # `/*` as code - so the destruction below is "inside a block comment" to
+        # every count and real code to the compiler.
+        self.plant_lexical("#region it's\n"
+                           "        // a ' /*\n"
+                           "        _measured = false;\n"
+                           "        ZNetScene.instance.Destroy(null);\n"
+                           "        // */\n"
+                           "#endregion\n")
+        self.assert_refused("a directive line's apostrophe hid a destruction", marker=LEXICAL_AUDIT,
+                            contains="has the directive line `#region it's`")
+
+    def test_a_unicode_escape_does_not_spell_destroy_past_the_counts(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ZNetScene.instance.Destr\\u006Fy(null);\n")
+        self.assert_refused("Destr\\u006Fy passed as something other than Destroy", marker=LEXICAL_AUDIT,
+                            contains="holds the Unicode escape `\\u0`")
+
+    def test_a_zero_width_space_does_not_split_destroy_past_the_counts(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ZNetScene.instance.Dest\u200broy(null);\n")
+        self.assert_refused("a zero-width space split Destroy past the audit", marker=LEXICAL_AUDIT,
+                            contains="holds the format character U+200B")
+
+    def test_a_soft_hyphen_does_not_split_destroy_past_the_counts(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ZNetScene.instance.Dest\u00adroy(null);\n")
+        self.assert_refused("a soft hyphen split Destroy past the audit", marker=LEXICAL_AUDIT,
+                            contains="holds the format character U+00AD")
+
+    def test_a_line_separator_does_not_end_a_comment_only_for_the_compiler(self):
+        self.plant_lexical("        _measured = false; // tidy\u2028        ZNetScene.instance.Destroy(null);\n")
+        self.assert_refused("code after a U+2028 inside a comment passed", marker=LEXICAL_AUDIT,
+                            contains="holds U+2028")
+
+
+    # #494: a verbatim identifier is the same name to the compiler and a
+    # different spelling to every dotted token pattern. Each of these four was run
+    # against the validator from before the rule (origin/main 82bbe7f).
+
+    def test_a_verbatim_interact_is_refused(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ((dynamic)null).@Interact(null, false, false);\n")
+        self.assert_refused("x.@Interact( passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@I`")
+
+    def test_a_verbatim_pickup_is_refused(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ((dynamic)null).@Pickup(null, true, true);\n")
+        self.assert_refused("x.@Pickup( passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@P`")
+
+    def test_a_verbatim_add_item_is_refused(self):
+        self.plant_lexical("        _measured = false;\n"
+                           "        ((dynamic)null).@AddItem(null);\n")
+        self.assert_refused("inventory.@AddItem( passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@A`")
+
+    def test_a_verbatim_destroy_is_refused(self):
+        # Not in the worker file: a new `Destroy(` there is already counted by
+        # the #381 destruction pin. The escape is a SUBSTITUTION in a file whose
+        # one destruction is pinned as Unity's static - the destruction count
+        # still sees one, and the routed and body-removal pins, which look for
+        # `.Destroy(`, see none, so a network object goes at exit 0.
+        self.swap_in(os.path.join(TEAMSTER, "Plugin.cs"),
+                     "UnityEngine.Object.Destroy(_containers);",
+                     "((dynamic)_containers).@Destroy();")
+        self.assert_refused("view.@Destroy() passed", marker=LEXICAL_AUDIT,
+                            contains="holds the verbatim identifier `@D`")
+
+
 # -- #379: the tour writes every move down before it happens --
 
 PICK_GUARD = (
@@ -1425,17 +1518,17 @@ class TourWriteAheadIsPinned(CarveOutFixture):
 
 HAMMER = os.path.join(WORKERS, "GunnarIdleHammerPort.cs")
 PINNED_SWING = "        animation.SetTrigger(swing);\n"
-HAMMER_AUDIT = "D19 idle-hammer audit"
+HAMMER_AUDIT = "D21 idle-hammer audit"
 
 
 class IdleHammerIsCosmetic(CarveOutFixture):
-    """The D19 idle-hammer allowance (`DECISIONS.md` D19, owner decision
+    """The D21 idle-hammer allowance (`DECISIONS.md` D21, owner decision
     2026-10-31), proved by plants.
 
-    D19 grants one cosmetic thing: Gunnar's own body may play the vanilla
+    D21 grants one cosmetic thing: Gunnar's own body may play the vanilla
     Hammer's own swing through `ZSyncAnimation.SetTrigger`. Where the trigger may
     be spelled is the #313 token pin - one call, verbatim, in one file - and
-    whose animator it is and which animation it plays is the D19 audit. Before
+    whose animator it is and which animation it plays is the D21 audit. Before
     this change nothing in Teamster refused `.SetTrigger(` at all, and every
     plant below was run against the validator from before the rule (origin/main
     436fdb1), which let each one through.

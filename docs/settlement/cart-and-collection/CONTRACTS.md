@@ -521,7 +521,7 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 ### C7 (2026-10-31): documentation only
 
 Owner decision given to the lead for #381, recorded in `DECISIONS.md`:
-- **D19:** Gunnar's idle hammer swing is cosmetic. While idle beside his assigned, unhitched cart, with every worker
+- **D21:** Gunnar's idle hammer swing is cosmetic. While idle beside his assigned, unhitched cart, with every worker
   gate open, he may walk to it and face it with his own body's vanilla motor and play the vanilla Hammer's own swing
   through one pinned `ZSyncAnimation.SetTrigger` on his own body. Behind `Workers/GunnarIdleHammerEnabled`, effective
   only while `Workers/GunnarHaulingEnabled` is on. `.SetTrigger(` is refused everywhere else in Teamster.

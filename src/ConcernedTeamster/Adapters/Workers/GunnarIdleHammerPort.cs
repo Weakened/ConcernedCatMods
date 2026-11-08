@@ -4,7 +4,7 @@ using UnityEngine;
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
 /// <summary>Gunnar's idle hammer swing (#381, owner decision 2026-10-31,
-/// <c>DECISIONS.md</c> D19): the one vanilla call that makes
+/// <c>DECISIONS.md</c> D21): the one vanilla call that makes
 /// <c>CartUpkeepIdle</c> visible.
 ///
 /// <b>One call, on his own body, of vanilla's own animation.</b>

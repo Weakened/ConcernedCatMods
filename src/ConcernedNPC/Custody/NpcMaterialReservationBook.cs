@@ -218,13 +218,37 @@ internal sealed class NpcMaterialReservationBook
     /// nullable for the same reason the observer seam's count is: a chest that
     /// could not be read is not an empty chest. A planner told "zero" plans a
     /// shortfall and sends the player looking for material that is sitting in
-    /// an unloaded zone; a planner told "unknown" waits.</summary>
+    /// an unloaded zone; a planner told "unknown" waits.
+    /// An uncertain commit of this material from this exact container/load
+    /// also answers unknown, including when exceptThis names that claim.
+    /// A physical count alone cannot decide whether those units were spent
+    /// or are still owed back.</summary>
     internal int? AvailableIn(
         NpcCustodyLocation container, NpcMaterial material, int? actuallyPresent, ReservationId exceptThis)
     {
         if (!actuallyPresent.HasValue)
         {
             return null;
+        }
+
+        // An uncertain commit may have spent these units or may still owe
+        // them. Seeing physical stock does not reconcile that history. Even
+        // the claim's own exclusion cannot authorize reusing unresolved units.
+        foreach (string name in _order)
+        {
+            NpcMaterialReservation reservation = _byName[name];
+            if (reservation.State != NpcReservationState.Uncertain || !reservation.CameFrom(container))
+            {
+                continue;
+            }
+
+            for (int index = 0; index < reservation.Stacks.Count; index++)
+            {
+                if (reservation.Stacks[index].Material.Equals(material))
+                {
+                    return null;
+                }
+            }
         }
 
         int present = actuallyPresent.Value < 0 ? 0 : actuallyPresent.Value;

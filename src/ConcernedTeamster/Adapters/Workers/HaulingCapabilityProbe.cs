@@ -247,7 +247,7 @@ internal static class HaulingCapabilityProbe
                 new("ZoneSystem+LocationInstance", locationInstance, "m_position", GameMemberKind.InstanceField, vector3),
                 new("ZoneSystem+ZoneLocation", zoneLocation, "m_exteriorRadius", GameMemberKind.InstanceField, typeof(float)),
 
-                // D19 (owner decision 2026-10-31): the idle hammer swing. The one
+                // D21 (owner decision 2026-10-31): the idle hammer swing. The one
                 // call GunnarIdleHammerPort makes, the animator check it asks
                 // first, and every member of the item-database read the trigger
                 // name comes from. A changed game turns the worker runtime off -

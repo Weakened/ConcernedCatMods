@@ -284,7 +284,7 @@ $requirements = @(
     @("ZoneSystem", "game", "ZoneSystem.LocationInstance.m_location", 'public ZoneLocation m_location;'),
     @("ZoneSystem", "game", "ZoneSystem.ZoneLocation.m_exteriorRadius", 'public float m_exteriorRadius;'),
 
-    # D19 (owner decision 2026-10-31): the idle hammer swing. Every member
+    # D21 (owner decision 2026-10-31): the idle hammer swing. Every member
     # GunnarIdleHammerPort binds, and the FACTS the decision rests on: the
     # trigger is routed to every client's animator and written nowhere (no ZDO
     # field, unlike SetBool/SetFloat/SetInt); the animator can be asked whether
@@ -382,7 +382,7 @@ Assert-OnlyIn 'Vagon::AttachTo' { param($h) $h.Type.StartsWith($workersNamespace
 Assert-OnlyIn 'Vagon::Detach(' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's detach is called only by Gunnar's worker runtime" 2
 # D16: vanilla's own drop, called once, by the death-drop port alone.
 Assert-OnlyIn 'Humanoid::DropItem' { param($h) $h.Type -eq ($workersNamespace + "GunnarDeathDropPort") } "a carried stack is dropped only by the death-drop port, on Gunnar's own death" 1
-# D19: the idle hammer's one trigger, by its port alone; and no other animator
+# D21: the idle hammer's one trigger, by its port alone; and no other animator
 # write anywhere in Teamster (SetBool/SetFloat/SetInt on ZSyncAnimation write the
 # body's network object, and a direct Animator write is outside the grant).
 Assert-OnlyIn 'ZSyncAnimation::SetTrigger' { param($h) $h.Type -eq ($workersNamespace + "GunnarIdleHammerPort") } "the hammer swing is triggered only by the idle hammer port, on Gunnar's own body" 1

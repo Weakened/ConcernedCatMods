@@ -3,7 +3,7 @@
 Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
 death door named in `GUNNAR_COLLECTION.md` §6c) and **C6** (2026-10-28, D17 - the collection tour's walking and
-load size) and **C7** (2026-10-31, D19 - Gunnar's cosmetic idle hammer swing). D16's fail-closed reading was confirmed
+load size) and **C7** (2026-10-31, D21 - Gunnar's cosmetic idle hammer swing). D16's fail-closed reading was confirmed
 by the owner on 2026-10-28.
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
@@ -432,7 +432,7 @@ intended narrowing, not a defect to be widened later.
   `SetMaxHealth`, `.Damage(`, `ApplyDamage`, `RPC_Damage`) is refused anywhere in Teamster.
 - *Vanilla inside the call.* `Humanoid.DropItem` also plays the body's `interact` trigger and the drop effects, and
   places each stack a metre in front of the body with a small push. Those are vanilla's, inside the one pinned call,
-  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`. (Since D19, one file
+  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`. (Since D21, one file
   does - the idle hammer port, for a cosmetic swing - and nothing on the death path does.)
 
 **Never observed in game.** The port binds Unity; the decision, the classification, the accounting and the record
@@ -463,7 +463,7 @@ planning limit**: the rest of a larger look is the next load, never dropped and 
 that is an empty order, not a size judgement - but one or two units are walked to the chest like any other load.
 
 **What is not granted:** no cart use on a tour, no felling (`TreeBase.Damage`), no idle gesture
-(`ZSyncAnimation.SetTrigger` - granted separately on 2026-10-31 as D19, outside the tour), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
+(`ZSyncAnimation.SetTrigger` - granted separately on 2026-10-31 as D21, outside the tour), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
 change to D15's deposit or D16's death drop. Each of those still needs its own owner decision.
 
 **Never observed in game.** The tour's rows in `GUNNAR_COLLECTION.md` §10 are OWNER GO-AROUND PENDING.
@@ -492,12 +492,92 @@ attach, or that is not drawn where it was put on that rig, is taken off, and the
 
 **Never observed in game.** OWNER GO-AROUND PENDING.
 
-## D19. Gunnar's idle hammer swing is cosmetic, and is one pinned animation trigger on his own body
+## D19. Thorstein may fell the four small trees, through vanilla's own damage, inside an explicit work area
+
+Status: **accepted** (owner decision 2026-10-31, #282 and the wood remainder of #296, asked by the lead). It is in
+two parts: the decision as first given, then a correction made once the installed game had been read. Recorded on
+2026-10-31.
+
+**First given.** Small trees only, saplings and small trees, felled through vanilla `TreeBase.Damage` with the real
+issued axe. Felling happens only inside an explicit work area, is off by default, and leaves wood dropping exactly as
+vanilla drops it. The owner added that cutting the log he felled (`TreeLog.Damage`) and picking up only the wood his
+own cuts produced (same-call custody, by instance id) are inside the permission.
+
+**What the installed game says** (Valheim **1.0.21**). The main prefab bundle `SoftRef/Bundles/c4210710` (756,139,651
+bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompiled. Nothing was extracted or committed.
+- **Valheim's small trees are not `TreeBase`.** They are `Destructible` objects with a `DropOnDestroyed` component, and
+  they drop their items in the same call that destroys them. There is no log and no falling physics:
+
+  | Prefab | Tool tier | Health | Drop table |
+  |---|---|---|---|
+  | `Beech_small1` | 0 | 20 | 2-3 picks: Wood (weight 1), Resin (weight 0.2) |
+  | `Beech_small2` | 0 | 20 | 2-3 picks: Wood (weight 1), Resin (weight 0.2) |
+  | `FirTree_small` | 0 | 40 | 4-5 picks: Wood (weight 1), FirCone (weight 0.1), Resin (weight 0.1) |
+  | `FirTree_small_dead` | 0 | 40 | 4-5 picks: Wood (weight 1) |
+
+- **There are no natural saplings.** Every `*_Sapling` is `Destructible` + `Piece` + `Plant`, which is player-planted
+  cultivation.
+- **Berry bushes carry `Pickable`.**
+- **`TreeBase` exists only on full-size trees,** and destroying one always spawns a falling physics `TreeLog`.
+- **An owner-side RPC runs in this process synchronously** (`ZRoutedRpc.InvokeRoutedRPC` with `targetPeerID == m_id`
+  calls `HandleRoutedRPC` directly).
+
+**Corrected decision (owner, option A).**
+- **Granted:** `Destructible.Damage` on exactly the four prefabs above, all tool tier 0, one hit per call.
+  - The call is pinned in the single file `src/ConcernedForeman/Runtime/Collection/WorldFellingPort.cs`.
+  - The hit is built from the issued axe's own item data: its damage, tool tier, item level and skill, with the
+    worker as attacker. It is the axe's plain damage: no skill factor, attack multipliers or status effects are
+    applied. Vanilla's damage handler resolves resistances, tool tier and health.
+  - Durability follows vanilla's own rule. Vanilla wears a weapon on a hit only when the attacker is a player
+    (`Attack`, `if (m_weapon.m_shared.m_useDurability && m_character.IsPlayer())`), so Thorstein's axe is not worn by
+    felling. A broken axe is refused.
+- **Granted, for the drops:** taking only the drops his own hit produced, tracked by instance id in the same call. This
+  is allowed only when this process owns the tree, so the game's handler ran in the call; otherwise it fails closed.
+- **Where:** only inside an explicit work area, meaning a map area the player chose or the harvest designation. The
+  default camp circle never authorises felling.
+- **Clearances:** never within 15 m of a player or of a player-built piece, and never through a ward.
+- **Default:** off (`Collection/ThorsteinFellsSmallTrees`).
+- **Decided but unused:** `TreeBase.Damage` and `TreeLog.Damage`. There is no call site.
+- **The validator** (`check_foreman_felling_scope`, "D19 felling audit") covers the whole of Foreman, less `obj/`
+  and `bin/`, plus every shared tree its project file compiles in (read from the project file):
+  - it allows exactly one `.Damage(`: the pinned `tree.Damage(hit)` in the felling port;
+  - it refuses `TreeBase`, `TreeLog`, `DestroyNow`, `ApplyDamage` and `RPC_Damage` anywhere in that scope, until a
+    mature-tree scope is decided.
+  - a project file that is missing, a shared include it cannot follow, or a linked tree that is missing fails the
+    audit rather than shrinking its scope;
+  - the Concerned NPC library, referenced as a separate project, is outside this walk. It has its own audits and
+    does not fell.
+- **Excluded:** saplings (cultivation), berry bushes (food), and every other prefab.
+
+**Built in the first leaf (#282).**
+- `cf_collect fell` lands one hit on the eligible small tree nearest Thorstein, inside the area an order would use.
+- The drops stay on the ground; nothing is taken or counted yet.
+- Taking the wood, and felling as part of a collection order, belong to the next leaf, which will use the same-call
+  custody granted above.
+- The eligibility rules are game-free in `src/Shared/Workers/Felling/SmallTreeFelling.cs`, so Teamster's Gunnar can
+  reuse them. **D19 grants felling to Thorstein only:** Gunnar felling anything still needs its own owner decision.
+- The felling audit's limit is stated rather than left to be found. It is a text audit with comments stripped, so a
+  call reached through a delegate spells none of these tokens and is invisible to it.
+  `tools/tests/test_foreman_felling_audit.py` plants each escape (in `Runtime/`, `Ui/`, `Plugin.cs`, `Domain/` and two
+  linked shared trees). Each plant is refused by the rule and passes a validator without it.
+
+**Not granted:**
+- full-size trees, logs, stumps, bushes or anything not on the list;
+- felling outside an explicit area;
+- teleporting, forces, or movement of the player;
+- ownership takeover;
+- minted, estimated or replacement wood;
+- a second copy of any drop;
+- mod data in a vanilla object.
+
+**Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F6).
+
+## D21. Gunnar's idle hammer swing is cosmetic, and is one pinned animation trigger on his own body
 
 Status: **accepted** (contract revision **C7**, owner decision 2026-10-31, given to the lead and relayed for #381).
 It answers the question `GUNNAR_COLLECTION.md` §10 row 10 put to the owner, and the "idle gesture" D17 left out.
-The brief that relayed it called it "D18"; D18 had already been used for the worker look two days earlier, so it is
-recorded here as D19.
+The brief that relayed it called it "D18"; D18 had already been used for the worker look, D19 for Thorstein's
+felling and D20 for Gunnar's chest take, so it is recorded here as D21.
 
 **What is granted.** While Gunnar is idle beside the cart assigned to him, his worker runtime may play the vanilla
 hammer swing on **his own body**, through vanilla's own `ZSyncAnimation.SetTrigger`, as scenery. One call, in one
@@ -513,7 +593,7 @@ file (`Adapters/Workers/GunnarIdleHammerPort.cs`):
 Walking to the cart and turning to face it use the vanilla motor on his own body that D14.2 already allows.
 
 **Gates, all re-read in the worker tick that acts:** Teamster's master switch, `Workers/GunnarHaulingEnabled` (off by
-default), the new `Workers/GunnarIdleHammerEnabled`, the start-up capability probe, and the shared work-authority rule
+default), the new `Workers/GunnarIdleHammerEnabled` (**off by default**), the start-up capability probe, and the shared work-authority rule
 of D3. He must hold a cart lease with nothing else happening - phase `Ready`, no haul, no leg, no joint, no hold, no
 pending stop - and **nobody may hold his identity**. The cart must be the leased one, resolved, not hitched to anyone,
 and within 12 m of him. A job arriving, the cart being hitched, or any gate going away disarms the routine, hands the
@@ -535,7 +615,7 @@ tick back to the haul executor, and banks no swing for later.
 
 **Where it is enforced.** `tools/validate_repo.py`: `.SetTrigger(` is refused everywhere in Teamster source and in the
 three `src/Shared` trees its project file compiles in, inside `Adapters/Workers` and out, except
-`animation.SetTrigger(swing)` verbatim and once in the port; the `D19 idle-hammer audit` pins the lines that decide
+`animation.SetTrigger(swing)` verbatim and once in the port; the `D21 idle-hammer audit` pins the lines that decide
 whose animator (`body = gunnar.GetComponent<Character>()`, `animation = body.m_zanim`, each once) and which animation
 (`swing = HammerSwing()`, a read of the Hammer's own attack animation with no string literal), the `HasParameter`
 refusal above the call, and the absence of every other animator write in the port. Before this decision **nothing**

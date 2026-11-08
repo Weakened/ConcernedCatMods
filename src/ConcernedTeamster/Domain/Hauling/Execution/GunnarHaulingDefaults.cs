@@ -30,11 +30,12 @@ internal static class GunnarHaulingDefaults
     /// on.</summary>
     public const bool HaulingEnabled = false;
 
-    /// <summary><c>Workers/GunnarIdleHammerEnabled</c> (D19). On, because it
-    /// enrols nobody: it is read only while <see cref="HaulingEnabled"/> has been
-    /// turned on by a person, and what it adds is a cosmetic animation on his own
-    /// body that the owner asked for by name.</summary>
-    public const bool IdleHammerEnabled = true;
+    /// <summary><c>Workers/GunnarIdleHammerEnabled</c> (D21). <b>Off</b>, like
+    /// every grant of 2026-10-31: each arrives behind its own off-by-default
+    /// switch, and a player who turned hauling on has not thereby asked for him
+    /// to walk about between jobs. It is read only while
+    /// <see cref="HaulingEnabled"/> is on as well.</summary>
+    public const bool IdleHammerEnabled = false;
 
     /// <summary><c>Workers/GunnarPullStrength</c>, the only supported value.
     /// </summary>

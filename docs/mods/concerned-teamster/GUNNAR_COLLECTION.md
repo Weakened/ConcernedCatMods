@@ -50,7 +50,7 @@ driver already answers.
 | How much he can carry | **Teamster** | `GunnarCarry`, from the game's own numbers |
 | Where every unit of material physically is | **Teamster** | `CargoLedger`, `CollectionAccount` |
 | Whether a manual haul may start | **Teamster** | `HaulRequestGate` |
-| The idle hammer | **Teamster** | `CartUpkeepIdle`, `CartUpkeepDriver`, `GunnarIdleHammerPort` (§8, D19) |
+| The idle hammer | **Teamster** | `CartUpkeepIdle`, `CartUpkeepDriver`, `GunnarIdleHammerPort` (§8, D21) |
 
 An earlier draft of this work contained a batch planner, a round loop and a tour partitioner of its own. They were
 written before the driver existed and they are **deleted**, not kept beside it: a second answer to "how many trips
@@ -279,7 +279,7 @@ Still deliberately absent, and each for its own reason:
   semantics belong with #282 rather than riding in on a pickup commit. `CollectableKind` has no fellable value,
   and a test pins the enum so that adding one sends somebody here first.
 - **The idle gesture's one call.** Not in this file. It was not authorized when this section was written; the owner
-  authorized it on 2026-10-31 (`DECISIONS.md` D19), and it lives in its own pinned file,
+  authorized it on 2026-10-31 (`DECISIONS.md` D21), and it lives in its own pinned file,
   `Adapters/Workers/GunnarIdleHammerPort.cs`, driven by the hauling runtime rather than by collection (§8).
 - **A `TeamsterFeature` value of its own.** The collection runs under the existing off-by-default worker feature.
   A second one lands if and when collection is separately switchable.
@@ -1045,7 +1045,7 @@ reason, and stays there. Not a portal, not with a cart, and never to recover a s
 
 When Gunnar is idle near his assigned cart he occasionally walks over, faces it and plays the hammer animation.
 It repairs nothing, consumes nothing, restores no hit points and grants no buff. **Built since 2026-10-31**, under
-the owner's decision recorded as `DECISIONS.md` D19; never observed in game.
+the owner's decision recorded as `DECISIONS.md` D21; never observed in game.
 
 ### The decision, which cannot say anything else
 
@@ -1093,11 +1093,10 @@ master switch, `Workers/GunnarHaulingEnabled`, `Workers/GunnarIdleHammerEnabled`
 the shared work-authority rule (D3) is asked in that tick, and the driver steps. The routine is reset on every world
 load and teardown. `ct_haul status` prints whether it is on, how many swings it asked for and how many vanilla played.
 
-**`Workers/GunnarIdleHammerEnabled` defaults to on**, and that choice is the lead's to review. It enrols nobody: it is
-read only while `GunnarHaulingEnabled` is on, which is off by default and turned on by a person. What it adds for that
-person is a cosmetic animation the owner asked for by name, and Concerned NPC's worker look (D18) set the precedent
-of a cosmetic worker setting on by default so the playtest judges it. The one thing it does that is not an animation
-is walk him a few metres on his own feet without an order, under the D14.2 carve-out; turn it off and he stands still.
+**`Workers/GunnarIdleHammerEnabled` defaults to off**, like each of the owner's 2026-10-31 grants, which arrive
+behind their own off-by-default switches. It is read only while `GunnarHaulingEnabled` is on as well. The one thing it
+does that is not an animation is walk him a few metres on his own feet without an order, under the D14.2 carve-out;
+with it off he stands still.
 
 ### The one call, and what pins it
 
@@ -1109,8 +1108,8 @@ no body, a dead or unowned one, no animation sync, no Hammer in the item databas
 `HasParameter` says has no such trigger.
 
 `.SetTrigger(` is refused everywhere else in Teamster and in its three linked `src/Shared` trees, inside
-`Adapters/Workers` and out — before D19 nothing refused it anywhere, while three documents said it was "not
-authorized". The `D19 idle-hammer audit` pins the receiver's and the name's derivations, the `HasParameter` refusal
+`Adapters/Workers` and out — before D21 nothing refused it anywhere, while three documents said it was "not
+authorized". The `D21 idle-hammer audit` pins the receiver's and the name's derivations, the `HasParameter` refusal
 above the call, and the absence of any other animator write in the port. `IdleHammerIsCosmetic` plants the escapes:
 the call in another worker file, in `Domain/`, in `Ui/`, in a shared tree, in a second file of the port's name, behind
 whitespace, twice, on the player's animator, through a different `animation` or `body`, with a literal name in the
@@ -1203,7 +1202,7 @@ Gunnar who already exists still works.
    a reason, and the next order must not conjure replacement cargo.
 9. **No route.** Put the work area across water with no walkable approach: `NeedsAttention`, with a reason, and he
    must stay where he is.
-10. **The idle gesture — decided.** The owner authorized it on 2026-10-31 (`DECISIONS.md` D19), as the vanilla
+10. **The idle gesture — decided.** The owner authorized it on 2026-10-31 (`DECISIONS.md` D21), as the vanilla
     Hammer's own swing rather than the `interact` gesture this row once proposed. The rows to run are 49-53.
 11. **What he gets from one source.** Pick a single loose stone with Gunnar and with your own character in the same
     world. The counts must match: he is not a Player, so no skill, statistic or bonus-yield branch runs for him.
@@ -1333,10 +1332,10 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.
 
-### The idle hammer (§8, D19) - OWNER GO-AROUND PENDING
+### The idle hammer (§8, D21) - OWNER GO-AROUND PENDING
 
 49. **Does his body have the swing at all?** With `[Workers] GunnarHaulingEnabled = true` and
-    `GunnarIdleHammerEnabled` at its default, assign a cart (`ct_haul assign`, `ct_haul confirm`) and stand back.
+    `GunnarIdleHammerEnabled = true` (it is off by default), assign a cart (`ct_haul assign`, `ct_haul confirm`) and stand back.
     Within about a minute he walks to it and faces it. Either he swings, or the log says once
     `Gunnar's idle hammer swing is not played: his body's animator has no '…' trigger…`. Copy that line verbatim:
     it decides whether the default `Dverger` body can play the hammer at all.

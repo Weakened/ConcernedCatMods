@@ -130,7 +130,7 @@ internal readonly struct CartUpkeepFacts
 
 /// <summary>Turns <see cref="CartUpkeepIdle"/>'s answer into his own body's
 /// motion and, once in a while, one call to the hammer port (#381, owner
-/// decision 2026-10-31, <c>DECISIONS.md</c> D19).
+/// decision 2026-10-31, <c>DECISIONS.md</c> D21).
 ///
 /// <b>Game-free, so the claim is tested rather than promised.</b> Its whole
 /// reach is the three own-body motor calls of <see cref="ICartUpkeepMotor"/> and

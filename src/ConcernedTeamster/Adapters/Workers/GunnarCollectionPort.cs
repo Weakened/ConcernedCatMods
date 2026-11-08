@@ -506,7 +506,7 @@ internal sealed class GunnarCollectionPort : IPickLifecycle
     // CartUpkeepIdle, which is game-free and proves it changes nothing - and
     // the one call that would make it visible waited for a decision rather than
     // for somebody to notice it went in. The decision came on 2026-10-31
-    // (DECISIONS.md D19), and the call went into its own pinned file,
+    // (DECISIONS.md D21), and the call went into its own pinned file,
     // GunnarIdleHammerPort.cs, driven by the hauling runtime. It is still not
     // here, and the validator refuses it here.
 

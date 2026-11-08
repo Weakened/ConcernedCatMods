@@ -99,7 +99,7 @@ still holds him nothing is dropped. Exactly what the body holds, once, measured 
 a name; every death - dropped, refused or interrupted - is appended to a per-world death record beside Teamster's
 sidecars as durable reconciliation evidence.
 
-### The 2026-10-31 grant (`DECISIONS.md` D19): the idle hammer swing
+### The 2026-10-31 grant (`DECISIONS.md` D21): the idle hammer swing
 
 **Built, pinned to one file, never observed in game.** Part of `GunnarHauling` rather than a feature of its own: it
 touches no cart, so it needs no `CartAuthorityPolicy` row, and it runs only inside the hauling runtime's worker tick.
@@ -110,12 +110,12 @@ motor (D14.2) and play the vanilla Hammer's own swing through **one** `ZSyncAnim
 (`m_shared.m_attack.m_attackAnimation`), never invented, and his animator is asked first whether it has it.
 
 Gated by Teamster's `General/Enabled`, `Workers/GunnarHaulingEnabled` (off by default), `Workers/GunnarIdleHammerEnabled`
-(on by default, so it decides only what an already opted-in Gunnar does between jobs), the start-up capability probe
+(off by default, like each of the owner's 2026-10-31 grants), the start-up capability probe
 and the work-authority rule, all re-read in the tick that acts. Cosmetic: it repairs, consumes, restores and grants
 nothing, writes no network-object field and no other animator state, and reads the cart only through the executor's
 own last observation. Inside vanilla, `SetTrigger` routes the trigger to every client's animator; the product spells
 no RPC of its own, as with `Pickable.Interact`. `.SetTrigger(` is refused everywhere else in Teamster and its linked
-shared trees; the `D19 idle-hammer audit` pins whose animator and which animation; `IdleHammerIsCosmetic` plants the
+shared trees; the `D21 idle-hammer audit` pins whose animator and which animation; `IdleHammerIsCosmetic` plants the
 escapes; `CartUpkeepDriverTests` proves an hour of it changes no cart, lease, phase, identity hold or carried
 material.
 
@@ -169,6 +169,15 @@ material.
   `Destroy…(` at all is still outside a text audit, and the pins establish that
   a refusal is *written above* each removal, not that control flow obeys it —
   `WorkerRetirementTests` and a reviewer own that.
+  Four lexical forms that would make that text differ from what the compiler
+  builds are refused outright by the `#473 lexical audit` (#473, #480), over the
+  product and the three shared trees it compiles in: any directive line (the
+  comment stripper does not know them, so `#region it's` hid a destruction),
+  any `\u`/`\U` escape (`Destr\u006Fy(` is `Destroy(`), any Unicode format
+  (Cf) character (`Dest` + U+200B + `roy(` is too; a leading BOM aside), and
+  U+0085/U+2028/U+2029, which end a `//` comment for the compiler only. Each
+  was reproduced at exit 0 before the rule and is planted in
+  `LexicalEscapesAreRefused`.
 
 - `ConcernedTeamster.Tests` proves matrix completeness, the mutation truth
   table, fail-closed resolution, and that the brake's authority gate equals

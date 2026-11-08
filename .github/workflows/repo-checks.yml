@@ -8,6 +8,70 @@ permissions:
   contents: read
 
 jobs:
+  # The tools/tests suites plant violations into the tree and run the whole
+  # validator once per plant. Run one after another in a single job they had
+  # grown to 3-4 hours. Each matrix job has its own checkout, so a plant in one
+  # runner is invisible to the others, and the classes run in parallel.
+  # The matrix is discovered, never hand-listed: a hand-written list would
+  # silently stop running a test added later (tools/ci_plant_matrix.py).
+  discover-plant-suites:
+    runs-on: ubuntu-latest
+    outputs:
+      classes: ${{ steps.discover.outputs.classes }}
+      total: ${{ steps.discover.outputs.total }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Discover test classes
+        id: discover
+        # Plain assignments, so a failing discovery fails this step under bash -e
+        # (a command substitution inside echo's arguments would not).
+        run: |
+          classes=$(python tools/ci_plant_matrix.py)
+          total=$(python tools/ci_plant_matrix.py --count)
+          echo "classes=$classes" >> "$GITHUB_OUTPUT"
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+
+  plant-suite:
+    needs: discover-plant-suites
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        class: ${{ fromJSON(needs.discover-plant-suites.outputs.classes) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run ${{ matrix.class }}
+        run: python -m unittest -v ${{ matrix.class }}
+
+  # One stable check that is green only when discovery found suites and every
+  # one of them passed. A skipped or cancelled matrix is a failure here.
+  plant-suites:
+    needs: [discover-plant-suites, plant-suite]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every plant suite to have run and passed
+        run: |
+          echo "Discovered ${{ needs.discover-plant-suites.outputs.total }} tests"
+          test "${{ needs.discover-plant-suites.result }}" = "success"
+          test "${{ needs.plant-suite.result }}" = "success"
+          test -n "${{ needs.discover-plant-suites.outputs.total }}"
+          test "${{ needs.discover-plant-suites.outputs.total }}" -gt 0
+
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -18,9 +82,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Test reproducible package tooling
-        run: python -m unittest discover -s tools/tests -p "test_*.py"
 
       - name: Validate repository and package metadata
         run: python tools/validate_repo.py

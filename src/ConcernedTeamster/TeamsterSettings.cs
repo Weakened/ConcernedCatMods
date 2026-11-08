@@ -140,7 +140,7 @@ internal sealed class TeamsterSettings
     /// picked up.</summary>
     public ConfigEntry<bool> GunnarCollectionEnabled { get; }
 
-    /// <summary>Workers (#381, owner decision 2026-10-31, D19): while Gunnar is
+    /// <summary>Workers (#381, owner decision 2026-10-31, D21): while Gunnar is
     /// idle beside the cart assigned to him, he now and then walks over, faces it
     /// and plays the vanilla hammer swing. Cosmetic only. Effective only while
     /// <see cref="GunnarHaulingEnabled"/> is on - which is off by default - so
@@ -287,7 +287,7 @@ internal sealed class TeamsterSettings
                 "and plays the game's own hammer swing. Scenery only: it repairs nothing, uses nothing and changes " +
                 "nothing about the cart, and it never happens while the cart is hitched to anyone or he has a job. " +
                 "Takes effect only while GunnarHaulingEnabled is on, and under the same rule - single player or " +
-                "the host with nobody else connected. Turn it off to have him simply stand and wait."),
+                "the host with nobody else connected. OFF by default; with it off he simply stands and waits."),
             config.Bind("Workers", "ContainerPermissionShortcut",
                 new KeyboardShortcut(KeyCode.F9),
                 "While looking at a chest, press this to choose what Gunnar may do with it: nothing, take " +

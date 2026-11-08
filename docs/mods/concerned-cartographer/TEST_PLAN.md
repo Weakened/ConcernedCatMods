@@ -69,6 +69,25 @@ Test at least five samples of each:
 - [ ] Speed, stamina, collision, fog, attack, interaction, networking, and route data remain unchanged.
 - [ ] Record Valheim 1.0.12 log and video evidence; automated tests are not a substitute for this owner check.
 
+## Hulgi introduction input (#264): LIVE CHECK PENDING
+
+The story panel has two input paths: direct keyboard paging and the focused UI
+button's submit callback. `StoryInteractionTests` exercises both callback orders,
+the press that reveals the final page, replay, cancellation and scene reopening
+against the production policy. These are automated policy checks, not observed
+Unity EventSystem/controller or recruitment evidence.
+
+- [ ] Examine the Broken Compass with the current Use binding (also test Use remapped to Return). The opening press leaves the first page visible.
+- [ ] On an intermediate page, focus Back or Close, then press Return/Keypad Enter: the documented keyboard paging advances exactly one page. Left/Right arrows page once as well.
+- [ ] Press Return from the penultimate page. The final page appears, with neither Welcome nor Tools-only activated by that same press. A later deliberate click/submit on a choice completes once.
+- [ ] Navigate and submit using the controller, then repeat with mouse buttons. Each action changes one page; the final choice requires its own submit.
+- [ ] Replay the completed introduction through Settings. All pages remain readable, no completion choices appear, and recruitment/tool access/preferences stay unchanged.
+- [ ] Escape closes even if it coincides with paging/submit; Close works by mouse/controller. Death, logout/world switch and reopening leave no input block or stale choice behind. Normal game/menu controls work afterward.
+
+Record exact source/package/game versions, isolated profile/world, callback-order
+trace if used, and keyboard/controller footage. No game operation or profile import
+is implied by the automated results.
+
 ## Work Areas editor (#296 slice 2): OWNER GO-AROUND PENDING
 
 Game-free coverage is `WorkAreaEditorTests`. None of the rows below has been observed in game.

@@ -12,6 +12,12 @@
          they have no Unity/BepInEx dependencies, and shipping stays a single
          plugin DLL because no extra domain assembly exists. -->
     <Compile Include="..\ConcernedTeamster\Domain\**\*.cs" LinkBase="Domain" />
+    <!-- #457: run the actual native-query adapter against deterministic API stubs.
+         The product build still proves it compiles against the installed game. -->
+    <Compile Include="..\ConcernedTeamster\Adapters\Companions\GunnarKeepsakeEnvironment.cs" LinkBase="NativeEnvironment" />
+    <Compile Include="..\ConcernedTeamster\Adapters\Workers\GunnarRecruitmentCartPort.cs" LinkBase="NativeRecruitment" />
+    <!-- #456: game-free companion identity and scoped quest persistence. -->
+    <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
     <!-- #411: the one path scrubber and the one failure wording, shared as

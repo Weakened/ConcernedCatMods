@@ -8,7 +8,7 @@ using TheConcernedCat.Workers;
 namespace ConcernedTeamster.Tests;
 
 /// <summary>The idle hammer, driven end to end through its game-free half
-/// (owner decision 2026-10-31, <c>DECISIONS.md</c> D19).
+/// (owner decision 2026-10-31, <c>DECISIONS.md</c> D21).
 ///
 /// <c>CartUpkeepIdleTests</c> proves the decision changes nothing. These prove
 /// the step after it does not either: the driver is run beside a <b>real</b>
