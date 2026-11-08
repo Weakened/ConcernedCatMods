@@ -208,6 +208,20 @@ class ChestTakeIsNarrow(unittest.TestCase):
                      "return _g ?? (container == null ? null : container.GetInventory());")
         self.assert_audit_refused("an overload answered from a field cache")
 
+    def test_an_overload_may_not_return_early_from_a_stash(self):
+        # The fifth review: with the try block pinned, an early return in front
+        # of it, fed by a nested static, still answered for the other party.
+        self.swap_in(PORT, "    private static Inventory? InventoryOf(Container? container)\n    {\n",
+                     "    private static Inventory? InventoryOf(Container? container)\n    {\n"
+                     "        if (Stash.G != null) { return Stash.G; }\n")
+        self.assert_audit_refused("an overload returned early from a stash")
+
+    def test_the_port_may_not_declare_another_type(self):
+        self.swap_in(PORT, "    private readonly List<ItemDrop.ItemData> _matching",
+                     "    private static class Stash { internal static Inventory? G; }\n\n"
+                     "    private readonly List<ItemDrop.ItemData> _matching")
+        self.assert_audit_refused("the port declared a type to hide state in")
+
     def test_the_port_may_not_hold_an_inventory_in_a_field(self):
         self.swap_in(PORT, "    private readonly List<ItemDrop.ItemData> _matching",
                      "    private Inventory? _held;\n\n    private readonly List<ItemDrop.ItemData> _matching")

@@ -1601,7 +1601,8 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
     # them: `(from, to) = (to, from);` below the pinned lines reverses the deposit
     # into a withdrawal with every pinned call byte-identical (review of #381's
     # chest take, which found the same hole there).
-    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS, 3)
+    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS, 3,
+                                       TEAMSTER_DEPOSIT_INVENTORY_OF, ("GunnarDepositPort", "MoveTally"))
     if findings:
         for finding in findings:
             fail(f"{label}: {port.relative_to(ROOT)}: {finding}. Pinning the derivations means nothing if the two "
@@ -1652,8 +1653,26 @@ TEAMSTER_ROLE_LOCAL_FUNCTION = re.compile(
     r"[A-Za-z_][\w<>?,\[\]. ]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(?:\{.*)?$")
 
 
+TEAMSTER_INVENTORY_OF_CONTAINER = (
+    "private static Inventory? InventoryOf(Container? container) { try { return container == null ? null : "
+    "container.GetInventory(); } catch (Exception) { return null; } }")
+TEAMSTER_TAKE_INVENTORY_OF = (
+    TEAMSTER_INVENTORY_OF_CONTAINER,
+    "private static Inventory? InventoryOf(Humanoid? worker) { try { return worker == null || worker.IsDead() ? "
+    "null : worker.GetInventory(); } catch (Exception) { return null; } }",
+)
+TEAMSTER_DEPOSIT_INVENTORY_OF = (
+    TEAMSTER_INVENTORY_OF_CONTAINER,
+    "private static Inventory? InventoryOf(Humanoid? worker) => ReadInventoryOf(worker, out _);",
+    "private static Inventory? ReadInventoryOf(Humanoid? worker, out bool accessorFailed) { accessorFailed = false; "
+    "try { return worker == null || worker.IsDead() ? null : worker.GetInventory(); } catch (Exception) { "
+    "accessorFailed = true; return null; } }",
+)
+
+
 def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: tuple,
-                            overloads_expected: int) -> list[str]:
+                            overloads_expected: int, overload_bodies: tuple,
+                            types_expected: tuple) -> list[str]:
     """Why a port's two ROLES (which inventory is the source, which the
     destination) could be exchanged below the pinned derivations - empty when
     they cannot, as far as a text audit can see.
@@ -1673,9 +1692,20 @@ def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: t
 
     So: every pinned call sits in the pinned mover's own body; the mover holds no
     lambda, delegate or local function; each role is declared exactly twice (the
-    two derivations) and written exactly twice; and no untyped lambda parameter
-    takes a role's name anywhere in the file. String literals are blanked first,
-    so a sentence that happens to say "to = ..." is not code."""
+    two derivations) and written exactly twice; no untyped lambda parameter takes
+    a role's name anywhere in the file; the parameters the roles come from are
+    never written; each InventoryOf overload's whole method is pinned; the port
+    has one field (`_matching`) and declares no type but its own and MoveTally.
+    String literals are blanked first, so a sentence that happens to say
+    "to = ..." is not code.
+
+    **What this does not claim.** Five rounds of independent review each found
+    a further way to exchange the roles, and each is now refused and planted. A
+    text audit cannot prove there is no sixth - reflection, a delegate stored
+    elsewhere, or a helper class in another file reached through the port's own
+    types are outside what it reads - and a reversal that also exchanged what
+    is measured would be recorded as a clean move, so the measurement is no
+    backstop for it. A reviewer remains part of this boundary."""
     blank = CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"', code)
     found = []
 
@@ -1750,17 +1780,19 @@ def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: t
             found.append(f"`{parameter}` is written {len(written)} time(s); the parameters the two roles are "
                          "derived from are never reassigned")
     overloads = re.findall(r"\bInventory" + SPACE + r"\?" + SPACE + r"(?:Read)?InventoryOf" + SPACE + r"\(", blank)
-    for spelling, why in (
-            ("private static Inventory? InventoryOf(Container? container)", "the container overload is declared once"),
-            ("private static Inventory? InventoryOf(Humanoid? worker)", "the worker overload is declared once"),
-            # The WHOLE try block, not a substring of it: `_cache ?? (pinned)`
-            # contains the pinned expression and returns something else.
-            ("try { return container == null ? null : container.GetInventory(); }",
-             "the container overload returns the container's own inventory and nothing else"),
-            ("try { return worker == null || worker.IsDead() ? null : worker.GetInventory(); }",
-             "the worker overload returns the living worker's own inventory and nothing else")):
+    # Each overload's WHOLE method, header to closing brace. A substring pin let
+    # `_cache ?? (pinned)` through, and a whole-try-block pin let an early
+    # `return` sit in front of the try; nothing may be added to these bodies.
+    for spelling in overload_bodies:
         if len(_teamster_take_exact(spelling).findall(blank)) != 1:
-            found.append(f"`{spelling}` is not in the port exactly once - {why}")
+            found.append(f"`{spelling}` is not in the port exactly once - each InventoryOf overload returns its own "
+                         "party's inventory and does nothing else, so its whole body is pinned")
+    declared_types = sorted(set(re.findall(
+        r"\b(?:class|struct|interface|enum|record|delegate)" + SPACES + r"([A-Za-z_]\w*)", blank)))
+    if declared_types != sorted(types_expected):
+        found.append(f"the port declares the types {declared_types}; exactly {sorted(types_expected)} are "
+                     "authorized - another type is state a derivation could answer from out of sight of the field "
+                     "pin")
     # No state an overload could answer from instead: the port's only field is
     # the list it reuses for matching stacks, and nothing at class level holds an
     # inventory, a character or a container.
@@ -1867,7 +1899,8 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
 
     take_shape = _teamster_take_exact(
         "private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)")
-    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS, 2)
+    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS, 2,
+                                       TEAMSTER_TAKE_INVENTORY_OF, ("GunnarTakePort", "MoveTally"))
     if findings:
         for finding in findings:
             fail(f"{label}: src/ConcernedTeamster/{port_rel}: {finding}. Pinning the derivations means nothing if "
