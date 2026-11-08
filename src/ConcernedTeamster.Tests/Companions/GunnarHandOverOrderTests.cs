@@ -51,7 +51,11 @@ public sealed class GunnarHandOverOrderTests
         string pass = Method(Runtime, "private void Pass(");
         Assert.Contains("GunnarArrival.SavedWorkers(_arrivalPending || _leases.HoldsWorker,", pass);
         AssertBefore(pass, "if (saved != 0)", "_environment.TryAnchor(");
-        Assert.Contains("if (granted && standing.HasValue && !HasHeadroom(standing.Value)) standing = null;", Method(Runtime, "public bool TakeWorkerBody("));
+        string take = Method(Runtime, "public bool TakeWorkerBody(");
+        Assert.Contains("if (standing.HasValue && !HasHeadroom(standing.Value)) standing = null;", take);
+        // A second spawn before the first body is counted is refused even when
+        // a job's lease meant no arrival guard was taken.
+        AssertBefore(take, "if (_arrivalPending)", "_figure.HandOverToWorker(");
     }
 
     [Fact]
