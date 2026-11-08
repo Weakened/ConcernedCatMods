@@ -60,6 +60,33 @@ internal sealed class WorkerLadderLandingProbe : IWorkerLadderSurveyProbe,IWorke
         catch(Exception exception)
         { try { _log("Worker ladder mount refused: "+SafeFailure.Brief(exception)); } catch { } return false; }
     }
+    /// <summary>#334: one motor step's capsule sweep, from where the body is to
+    /// where the checked path would put it next, with a budget of its own. A
+    /// checked publication is not permission to ignore a blocker that moved in
+    /// since: anything other than a clear sweep is a refusal.</summary>
+    internal bool IsMoveClear(WorkPoint from,WorkPoint to)
+    {
+        try
+        {
+            if(!TryBodyShape(out var body)) return false;
+            BeginSurvey();
+            return Clear(from,to,body)==WorkerLadderProbeResult.Supported;
+        }
+        catch { return false; }
+    }
+    /// <summary>#334: the landing is still a supported static floor with room
+    /// for this body, at the height the path ends at.</summary>
+    internal bool IsLandingSupported(WorkPoint target)
+    {
+        try
+        {
+            if(!TryBodyShape(out var body)) return false;
+            BeginSurvey();
+            return Support(target,body,out var foot)==WorkerLadderProbeResult.Supported&&
+                foot.HorizontalDistanceTo(target)<=.05f&&Math.Abs(foot.Y-target.Y)<=.1f;
+        }
+        catch { return false; }
+    }
     public int PhysicsQueries { get; private set; }
     public void BeginSurvey()
     {

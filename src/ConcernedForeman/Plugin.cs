@@ -66,6 +66,7 @@ public sealed class Plugin : BaseUnityPlugin
     private LadderSettings? _ladderSettings;
     private ClimbPose? _climbPose;
     private ClimbSounds? _climbSounds;
+    private WorkerClimbRuntime? _workerClimb;
     private Runtime.Construction.BuildOrderRuntime? _buildOrders;
     private Runtime.Construction.ShelterConstructionRuntime? _construction;
     private Runtime.Presentation.ThorsteinPresentation? _presentation;
@@ -281,6 +282,16 @@ public sealed class Plugin : BaseUnityPlugin
         Logger.LogInfo(VanillaConsoleCommands.Describe(names));
 
         InstallLadders();
+
+        // #334: the explicit ladder-route order for Thorstein's own body. Bound
+        // whatever Ladders/PlayerClimbing says - the two have nothing to do with
+        // each other - and refusing everything while Ladders/NpcClimbing is off.
+        if (_ladderSettings != null)
+        {
+            _workerClimb = new WorkerClimbRuntime(
+                _settlement, npc.Modes, _ladderSettings, message => Logger.LogInfo(message));
+            _settlement.Climb = _workerClimb.Execute;
+        }
     }
 
     /// <summary>The release identity including the build commit (the SDK stamps
@@ -421,6 +432,9 @@ public sealed class Plugin : BaseUnityPlugin
         bool worldIsUp = ZNetScene.instance != null;
         if (_worldWasUp && !worldIsUp)
         {
+            // #334 first: a body on a ladder is given back to its own motor
+            // before anything else lets go of the world it is standing in.
+            _workerClimb?.OnWorldUnloaded();
             _settlement?.OnWorldUnloaded();
             _collection?.OnWorldUnloaded();
             _cooperativeDelivery?.OnWorldUnloaded();
@@ -464,6 +478,10 @@ public sealed class Plugin : BaseUnityPlugin
 
         _collection?.Update();
 
+        // #334: ends a climb order whose body stopped ticking, died, faulted or
+        // lost its switches, and finishes giving a body back.
+        _workerClimb?.Update(Time.time);
+
         // #380: one round of the shelter build, rate limited inside. It refuses
         // unless a player confirmed an order and this runtime may work at all, and
         // it is the only thing in this plugin that places a piece.
@@ -501,6 +519,7 @@ public sealed class Plugin : BaseUnityPlugin
     /// One of the nine ways a climb ends.</summary>
     private void OnDestroy()
     {
+        _workerClimb?.Shutdown();
         _presentation?.Dispose();
         _cooperativeDelivery?.OnWorldUnloaded();
         _haulProvider?.Forget();

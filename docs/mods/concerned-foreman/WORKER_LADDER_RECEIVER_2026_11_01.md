@@ -87,6 +87,23 @@ This branch does not touch Claude's active worker caller/validator files. The
 native motor, collision writes, actor handoff and real order/settlement binding
 remain CODE rows, not owner-observation-only rows. They must be integrated and
 proved with the required pins/plants before any worker is enabled to climb.
+
+**Bound by #334's binding slice (2026-11-08).** `cf_worker climb here | <x> <y> <z>`
+(`Runtime/Ladders/WorkerClimbRuntime.cs`) makes this receiver for the bound body
+and hands it to the game-free `Domain/Ladders/WorkerClimbOrder.cs`, which holds
+Thorstein's actor mode, forces the admission survey, runs `WorkerRouteSearch`
+over the receiver's network with `WorkerNavMeshWalkProbe` (vanilla navigation
+mesh, verified in height at both ends) as walk evidence, then `WorkerRouteRunner`
+with the receiver's own checked traversal. Before every entry it forces
+`RevalidateForAdmission` again and refuses an entry whose link generation moved.
+`WorkerClimbMotor` is the scoped motor: the AI reports sleeping (vanilla skips
+walking; `ForemanWorkerAI` neither plans nor calls `MoveTo`), the rigidbody is
+kinematic and restored, and every position write follows a fresh
+`IsMoveClear` capsule sweep. `Forget` runs on every order end; the plugin
+supervises death, unload, a lost or unsimulated body, the switch and authority
+every frame. Pins: the #400 capability audit and the #334 worker climb audit
+(`tools/tests/test_foreman_worker_climb_audit.py`); every exit:
+`WorkerClimbOrderTests`. The rows below are still NOT RUN.
 Vanilla teleport ladders are NOT admitted by this CL-only receiver. No vanilla
 interaction, player admission, animation, snap, input or movement is changed.
 

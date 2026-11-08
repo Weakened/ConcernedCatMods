@@ -257,6 +257,36 @@ suspended, and #282's broader harvesting stays open as deferred scope.
    or operates the game.
 5. **Live criteria.** A PR whose issue carries live gameplay criteria uses `Refs #`, not `Closes #`. Such an issue
    closes only on observed evidence.
+6. **Foreman ladder traversal** (owner decision 2026-11-01, #334; the owner's words and question are in
+   `docs/mods/concerned-foreman/WORKER_LADDER_AUTHORITY_2026_11_01.md`). The single exception to "moved only through
+   the vanilla motor". Built by #334's binding slice (2026-11-08), and only this:
+   - **Who and when.** Thorstein's own worker body, on an explicit `cf_worker climb here | <x> <y> <z>` order, with
+     `Ladders/NpcClimbing` on (off by default) and D3's authority granted (opted in, host, not dedicated, no other
+     peers). Either switch off refuses the order and ends it. His actor mode is held through Concerned NPC's arbiter
+     for the whole order, so presentation, collection, construction and a despawn all see him as busy.
+   - **Where.** Only along a Concerned Ladders link the #501 receiver published after measuring it against the real
+     colliders and his real capsule - supported foot, mount lane, vertical lane, supported top - reached by a route
+     whose walk edges are vanilla navigation-mesh paths verified in height at both ends. A fresh survey runs at
+     admission and again immediately before every ladder entry, and an entry whose link generation moved is refused.
+     Vanilla ladders are not admitted.
+   - **How.** One scoped motor, `src/ConcernedForeman/Runtime/Ladders/WorkerClimbMotor.cs`. While it holds him his AI
+     reports sleeping - vanilla's own switch that makes `Character.UpdateMotion` skip walking - and `ForemanWorkerAI`
+     neither plans nor calls `BaseAI.MoveTo`; his own rigidbody is made kinematic and its original flag is restored
+     after; each step of the checked path is one rigidbody position write, after a fresh capsule sweep from where he
+     is to where he is going. Walking legs stay on vanilla's motor.
+   - **Every exit gives the body back where it stands.** Arrival, a blocked or refused leg, a cancel, a world unload,
+     death, a lost, faulted or unsimulated body, the switch going off, lost authority and plugin teardown all restore
+     the motor first; the identity is released only once that succeeds. An interrupted climb is never finished by
+     placing him at a landing - vanilla physics has him from where he is (lead default pending owner confirmation:
+     a non-player takes no fall damage in 1.0.12, so this costs nothing but a drop).
+   - **Not granted.** No teleport, entry snap, velocity, force or rotation write, ownership takeover, RPC, cart or
+     cargo movement, generic worker positioning, other body, player motor, or world-save write. Concerned Ladders
+     never drives a worker.
+   - **Proof.** The #400 capability audit pins the motor's two kinematic writes and one position write; the #334
+     worker climb audit pins the sweep directly in front of that write, the worker's own rigidbody, who may create,
+     request, start and end a lease, and the ground-motor suspension. Planted escapes:
+     `tools/tests/test_foreman_worker_climb_audit.py`; every exit: `WorkerClimbOrderTests`. Text audits, so they do not
+     prove control flow. **Never observed in game**; gate G5 is OWNER GO-AROUND PENDING.
 
 ---
 

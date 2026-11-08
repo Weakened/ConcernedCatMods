@@ -1,12 +1,16 @@
 using System;
+using TheConcernedCat.ConcernedForeman.Domain.Ladders;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Workers;
 using TheConcernedCat.Workers.Traversal;
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 /// <summary>Assembled optional worker receiver, suitable for the ordered-job
 /// integration. No movement is installed here. The active runtime must bind its
-/// own actor hold/scoped motor and run the identity/authority checks every tick.</summary>
-internal sealed class WorkerLadderReceiver
+/// own actor hold/scoped motor and run the identity/authority checks every tick.
+/// #334: <c>WorkerClimbOrder</c> is that runtime; it reads this receiver through
+/// <see cref="IWorkerClimbLinks"/>, and the scoped motor asks
+/// <see cref="IsMoveClear"/> before every position write.</summary>
+internal sealed class WorkerLadderReceiver : IWorkerClimbLinks
 {
     private readonly WorkerLadderLandingProbe _probe;
     private readonly WorkerLadderLinkFeed _feed;
@@ -27,9 +31,9 @@ internal sealed class WorkerLadderReceiver
         _feed=new WorkerLadderLinkFeed(new ConcernedLaddersWorkerSource(log),_probe,survey);
         Traversal=new WorkerLadderPathTraversal(new LinkTraversal(Network,capabilities,limits),survey,limits.TraversalSpeedMetresPerSecond,WorkerKey.Thorstein,_probe);
     }
-    internal TraversalLinkNetwork Network { get; }
-    internal ILadderTraversal Traversal { get; }
-    internal WorkerLadderSurveyResult Tick(float dt,bool npcClimbing,bool explicitOrder,WorkAuthorityVerdict authority,WorkPoint settlement,float radius)
+    public TraversalLinkNetwork Network { get; }
+    public ILadderTraversal Traversal { get; }
+    public WorkerLadderSurveyResult Tick(float dt,bool npcClimbing,bool explicitOrder,WorkAuthorityVerdict authority,WorkPoint settlement,float radius)
     {
         bool allowed=npcClimbing&&explicitOrder&&authority==WorkAuthorityVerdict.Granted&&_capabilities.NpcClimbingEnabled;
         WorkerLadderSurveyResult result;
@@ -44,11 +48,16 @@ internal sealed class WorkerLadderReceiver
         }
         return result;
     }
-    internal bool RevalidateForAdmission(bool npcClimbing,bool explicitOrder,WorkAuthorityVerdict authority,WorkPoint settlement,float radius)
+    public bool RevalidateForAdmission(bool npcClimbing,bool explicitOrder,WorkAuthorityVerdict authority,WorkPoint settlement,float radius)
     {
         if(!npcClimbing||!explicitOrder||authority!=WorkAuthorityVerdict.Granted||!_capabilities.NpcClimbingEnabled||!_probe.TryBodyShape(out var body))
         { _feed.Forget(); return false; }
         return _feed.RefreshNow(true,settlement,radius,body)==WorkerLadderSurveyResult.Ready;
     }
-    internal void Forget()=>_feed.Forget();
+    public void Forget()=>_feed.Forget();
+    /// <summary>#334: a fresh capsule sweep for one motor step, against the
+    /// real collider world and the current site policy.</summary>
+    internal bool IsMoveClear(WorkPoint from,WorkPoint to)=>_probe.IsMoveClear(from,to);
+    /// <summary>#334: the landing is a supported, clear, static floor now.</summary>
+    internal bool IsLandingSupported(WorkPoint target)=>_probe.IsLandingSupported(target);
 }

@@ -11,6 +11,21 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — Thorstein climbs a ladder when you send him (#334, owner decision 2026-11-01, D14.6)
+
+- **`cf_worker climb here`** (or `cf_worker climb <x> <y> <z>`) sends Thorstein's
+  worker body to that spot. He walks, and where a Concerned Ladders ladder is the
+  way up or down he climbs it, steps off at the top or bottom and walks on.
+  `cf_worker climb cancel` stops him; `cf_worker climb status` says where he is.
+- **Off by default**, under `Ladders/NpcClimbing`. It also needs the settlement
+  runtime on, and works only as the host with nobody else connected.
+- **Only ladders it has measured.** Before he sets off, and again just before
+  each ladder, it checks the ladder, the floor at both ends and the room for his
+  body. Anything new in the way stops him. Stopped part-way, he lets go where he
+  is; he is never put at the top or bottom by magic. The game's own ladders are
+  not used.
+- Not yet observed in game.
+
 ### Added — small-tree felling (#282, owner decision 2026-10-31, D19)
 
 - **Thorstein can fell small trees** (small beech and small fir) with his own axe,
