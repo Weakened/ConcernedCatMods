@@ -69,30 +69,6 @@ internal sealed class GunnarTakePort
 
     private readonly List<ItemDrop.ItemData> _matching = new List<ItemDrop.ItemData>();
 
-    /// <summary>What one unit of <paramref name="itemPrefab"/> in the chest
-    /// weighs, read off the chest's own stack, for the carry limit. <c>null</c>
-    /// when the chest holds none or it could not be read - which the caller
-    /// refuses rather than treating as weightless.</summary>
-    public float? UnitKilogramsIn(Container? source, string itemPrefab)
-    {
-        try
-        {
-            Inventory? inventory = InventoryOf(source);
-            ItemDrop.ItemData? stack = inventory == null ? null : FirstMatching(inventory, itemPrefab);
-            if (stack == null || stack.m_shared == null)
-            {
-                return null;
-            }
-
-            float weight = stack.m_shared.m_weight;
-            return float.IsNaN(weight) || weight < 0f ? (float?)null : weight;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
     /// <summary>Moves up to <paramref name="wanted"/> units of one item out of
     /// the designated chest and into Gunnar, or says why it will not.
     ///

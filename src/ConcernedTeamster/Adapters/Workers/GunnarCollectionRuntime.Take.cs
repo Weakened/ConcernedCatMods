@@ -88,11 +88,20 @@ internal sealed partial class GunnarCollectionRuntime
                     : NpcContainerRefusal.UseNotAllowed);
         }
 
+        NpcWorldEpoch chosenIn = CurrentEpoch();
+        if (chosenIn.IsUnknown)
+        {
+            // A source with no world load to belong to would be forgotten by
+            // the very next take; refusing now says so honestly.
+            return "The world load could not be read, so that chest cannot be chosen yet. Try again in a moment.";
+        }
+
         _source = chest;
         _sourceKey = key;
-        _sourceEpoch = CurrentEpoch();
+        _sourceEpoch = chosenIn;
         return "He will take from that chest when you name the item (ct_collect take <item> [count]). The " +
-            "mark on it is re-checked every time he actually takes something.";
+            "mark on it is re-checked every time he actually takes something." +
+            (TakeOptedIn() ? string.Empty : " Taking from a chest is off: turn on Workers/GunnarChestTakeEnabled first.");
     }
 
     /// <summary>Takes up to the asked-for count of one named item out of the

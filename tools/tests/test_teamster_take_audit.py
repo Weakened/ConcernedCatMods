@@ -94,18 +94,21 @@ class ChestTakeIsNarrow(unittest.TestCase):
         return path
 
     def assert_refused(self, why, phrase):
+        # The success line carries each audit's label too, so the phrase is
+        # looked for only on a line the validator printed as an ERROR.
         code, out = run(VALIDATOR)
         self.assertNotEqual(0, code, why + "\n" + out[-3000:])
-        self.assertIn(phrase, out, why + ": refused, but not by the take rules\n" + out[-3000:])
+        refusals = [line for line in out.splitlines() if line.startswith("ERROR: ") and phrase in line]
+        self.assertTrue(refusals, why + ": refused, but not by the take rules\n" + out[-3000:])
         code, out = run(self.without_the_take_rules())
         self.assertEqual(0, code, why + ": without the take rules something else still refuses it, so the "
                          "plant does not prove them\n" + out[-3000:])
 
     def assert_pin_refused(self, why):
-        self.assert_refused(why, "GunnarTakePort.cs")
+        self.assert_refused(why, "Adapters/Workers/GunnarTakePort.cs")
 
     def assert_audit_refused(self, why):
-        self.assert_refused(why, "#381 chest-take audit: src/")
+        self.assert_refused(why, "#381 chest-take audit")
 
     # --- the three pinned calls -----------------------------------------------------------------
 
@@ -149,6 +152,25 @@ class ChestTakeIsNarrow(unittest.TestCase):
                      "    private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)",
                      "    private MoveTally Move(Inventory chest, Inventory gunnar, string itemPrefab, int units)")
         self.assert_audit_refused("the mover went back to two renameable inventories")
+
+    def test_the_roles_may_not_be_swapped_after_the_derivations(self):
+        # The review's first finding: both derivations stay pinned and every
+        # call stays byte-identical, and a deconstruction one line below them
+        # turns the take into a deposit out of Gunnar.
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        (chest, gunnar) = (gunnar, chest);\n        int remaining = units;\n")
+        self.assert_audit_refused("the roles were swapped after the pinned derivations")
+
+    def test_a_role_may_not_be_reassigned_after_its_derivation(self):
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        Inventory? held = chest;\n        chest = gunnar;\n        gunnar = held;\n"
+                     "        int remaining = units;\n")
+        self.assert_audit_refused("a role was reassigned after its derivation")
+
+    def test_a_role_may_not_be_rewritten_through_a_reference(self):
+        self.swap_in(PORT, "        int remaining = units;\n",
+                     "        Exchange(ref chest, ref gunnar);\n        int remaining = units;\n")
+        self.assert_audit_refused("a role was rewritten through a ref argument")
 
     # --- nothing built from a name --------------------------------------------------------------
 
@@ -196,6 +218,54 @@ class ChestTakeIsNarrow(unittest.TestCase):
                      "default, default, _ => default, () => null, 1f, out _);\n}\n\n"
                      "internal sealed class CollectConsoleCommand")
         self.assert_audit_refused("a take from a second call site passed")
+
+    def test_a_second_call_through_an_alias_in_the_take_part_is_refused(self):
+        # The review's second finding: `_take.TakeOne(` still counts one, and a
+        # helper above the gated method calls the port through a local.
+        self.swap_in(TAKE_RUNTIME, "    private static string DescribeTake(",
+                     "    private TakeResult Early(Humanoid? worker)\n    {\n        GunnarTakePort port = _take;\n"
+                     "        return port.TakeOne(_source, worker, _sourceKey, \"Stone\", 1, _sourceEpoch, "
+                     "CurrentEpoch(), Allowance, WorkerPosition, 1f, out _);\n    }\n\n"
+                     "    private static string DescribeTake(")
+        self.assert_audit_refused("a second take through an alias passed")
+
+    def test_the_gate_may_not_be_told_authority_is_granted(self):
+        # The review's third finding: the switches were pinned and the
+        # work-authority rule - host, not dedicated, no peers - was not.
+        self.swap_in(TAKE_RUNTIME, "authority: TakeAuthority(),", "authority: WorkAuthorityVerdict.Granted,")
+        self.assert_audit_refused("the take gate was told authority was granted")
+
+    def test_the_gate_may_not_be_told_the_probe_passed(self):
+        self.swap_in(TAKE_RUNTIME, "seamAvailable: _seamAvailable(),", "seamAvailable: true,")
+        self.assert_audit_refused("the take gate was told the probe passed")
+
+    def test_the_gate_may_not_be_told_his_record_is_fine(self):
+        self.swap_in(TAKE_RUNTIME, "workerRecordUnwritable: _recordUnwritable(),", "workerRecordUnwritable: false,")
+        self.assert_audit_refused("the take gate was told his record is writable")
+
+    def test_the_gate_may_not_be_told_nothing_is_in_flight(self):
+        self.swap_in(TAKE_RUNTIME, "transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering,",
+                     "transferInFlight: false,")
+        self.assert_audit_refused("the take gate was told nothing is in flight")
+
+    def test_the_gate_may_not_live_in_a_helper_nobody_calls(self):
+        # The review's fourth finding: the order check read the whole file, so a
+        # gate moved into a dead helper above the take method satisfied it.
+        self.swap_in(TAKE_RUNTIME, "        TakeRefusal refusal = TakeOrderGate.Evaluate(request);\n"
+                                   "        if (refusal != TakeRefusal.None)\n"
+                                   "        {\n"
+                                   "            return TakeSentences.Describe(refusal, request.Authority);\n"
+                                   "        }\n",
+                     "        Unused(request);\n")
+        self.swap_in(TAKE_RUNTIME, "    private string DesignateSource()",
+                     "    private string Unused(TakeRequest request)\n    {\n"
+                     "        TakeRefusal refusal = TakeOrderGate.Evaluate(request);\n"
+                     "        if (refusal != TakeRefusal.None)\n"
+                     "        {\n"
+                     "            return TakeSentences.Describe(refusal, request.Authority);\n"
+                     "        }\n\n        return string.Empty;\n    }\n\n"
+                     "    private string DesignateSource()")
+        self.assert_audit_refused("the take gate was moved into a helper nobody calls")
 
     def test_a_second_port_is_refused(self):
         self.swap_in(RUNTIME, "    private readonly GunnarDepositPort _deposit = new GunnarDepositPort();\n",

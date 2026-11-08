@@ -906,7 +906,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         string named = args != null && args.Length > 1 ? args[1] ?? string.Empty : string.Empty;
         if (named.Length != 0 && !TakeOrderGate.IsCargoName(named))
         {
-            return TakeSentences.Describe(TakeRefusal.NoCargoNamed, WorkAuthorityVerdict.Granted);
+            return "Name the one item he should put in the chest, exactly as the game names it (for example " +
+                "Stone). Nothing was moved.";
         }
 
         Func<string, bool> filter = named.Length == 0

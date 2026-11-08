@@ -1597,6 +1597,18 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
                  "loosen the pattern", errors)
             return []
 
+    # Pinning the derivations is not enough if a role can be reassigned after
+    # them: `(from, to) = (to, from);` below the pinned lines reverses the deposit
+    # into a withdrawal with every pinned call byte-identical (review of #381's
+    # chest take, which found the same hole there).
+    for role in ("from", "to"):
+        writes = _teamster_role_writes(code, role)
+        if writes != 2:
+            fail(f"{label}: {port.relative_to(ROOT)} writes `{role}` {writes} time(s); exactly two are authorized, "
+                 "the two pinned derivations. Any other write changes which inventory is which after the pin",
+                 errors)
+            return []
+
     return [
         f"{label}: the deposit port clones exactly the stack it removes from, assigns that clone "
         f"once, looks an item prefab up once and only as `database.GetItemPrefab(itemPrefab)`, "
@@ -1629,6 +1641,19 @@ def _teamster_take_exact(spelling: str) -> re.Pattern:
         else:
             out.append(re.escape(piece))
     return re.compile("".join(out))
+
+
+def _teamster_role_writes(code: str, name: str) -> int:
+    """How many times `name` is written in comment-stripped C#: a plain or
+    compound assignment (a lambda's `=>` and a comparison are not), a
+    deconstruction that names it, or a `ref`/`out` argument. The two role
+    derivations of a port are two such writes; any other is a way to swap which
+    inventory is which after the pinned derivation, with every call identical."""
+    word = r"\b" + re.escape(name) + r"\b"
+    plain = re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", code)
+    deconstructed = re.findall(r"\([^()]*" + word + r"[^()]*\)" + SPACE + r"=(?![=>])", code)
+    by_reference = re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, code)
+    return len(plain) + len(deconstructed) + len(by_reference)
 
 
 def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) -> list[str]:
@@ -1714,6 +1739,15 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
                                     "their order if these can move"):
             return []
 
+    for role in ("chest", "gunnar"):
+        writes = _teamster_role_writes(code, role)
+        if writes != 2:
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} writes `{role}` {writes} time(s); exactly two are "
+                 "authorized, the two pinned derivations. Any other write - a reassignment, a swap by "
+                 "deconstruction, a ref or out argument - changes which inventory is which after the pin, and "
+                 "turns the take into a deposit with every pinned call byte-identical", errors)
+            return []
+
     mints = len(re.findall(r"\bNpcContainerPermit" + SPACE + r"\." + SPACE + r"Issue" + SPACE + r"\(", code))
     if mints != 1:
         fail(f"{label}: src/ConcernedTeamster/{port_rel} mints {mints} permit(s); exactly one is authorized, "
@@ -1752,8 +1786,26 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
         return []
 
     runtime = sources.get(TEAMSTER_TAKE_RUNTIME_FILE, "")
+    calls_here = len(re.findall(r"\bTakeOne" + SPACE + r"\(", runtime))
+    if calls_here != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE} names TakeOne {calls_here} time(s); "
+             "exactly one call is authorized - a second, through an alias of the port, would sit outside the "
+             "gate the first is pinned behind", errors)
+        return []
     for spelling, why in (
+            ("collectionEnabled: OptedIn()", "the gate is told the collection switches, not a literal"),
             ("takeEnabled: TakeOptedIn()", "the gate is told the take's own opt-in, not a literal or another switch"),
+            ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+            ("authority: TakeAuthority()", "the gate is told the work-authority rule (host, not dedicated, no "
+                                          "peers), not a literal"),
+            ("WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(TakeOptedIn()))",
+             "the take's authority is the shared rule, asked about the take's own opt-in"),
+            ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+            ("workerPresent: worker != null && !worker.IsDead()", "the gate is told whether he is here and alive"),
+            ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+            ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+            ("transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering",
+             "the gate is told what else is in flight"),
             ("return OptedIn() && _settings.GunnarChestTakeEnabled.Value;",
              "the take's opt-in reads the master and collection switches AND the take switch"),
             ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a take (#379)"),
@@ -1763,13 +1815,22 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
             ("_source = null;", "the source is cleared only when its name stops meaning anything")):
         if not exactly(spelling, 1, why, runtime, TEAMSTER_TAKE_RUNTIME_FILE):
             return []
-    evaluate = _teamster_take_exact("TakeRefusal refusal = TakeOrderGate.Evaluate(request);").search(runtime)
-    refused = _teamster_take_exact("if (refusal != TakeRefusal.None)").search(runtime)
-    call = _teamster_take_exact("_take.TakeOne(").search(runtime)
-    if not (evaluate and refused and call and evaluate.start() < refused.start() < call.start()
-            and re.match(SPACE + r"\{" + SPACE + r"return\b", runtime[refused.end():])):
+    # In the SAME method as the call: a gate in a helper nobody calls, above the
+    # take, would otherwise satisfy an order read over the whole file.
+    ordered = False
+    for _header, _start, block in _teamster_tour_plan_methods(runtime):
+        body = "\n".join(block)
+        call = _teamster_take_exact("_take.TakeOne(").search(body)
+        if call is None:
+            continue
+        evaluate = _teamster_take_exact("TakeRefusal refusal = TakeOrderGate.Evaluate(request);").search(body)
+        refused = _teamster_take_exact("if (refusal != TakeRefusal.None)").search(body)
+        ordered = bool(evaluate and refused and evaluate.start() < refused.start() < call.start()
+                       and re.match(SPACE + r"\{" + SPACE + r"return\b", body[refused.end():]))
+    if not ordered:
         fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE} does not decide, refuse with a return, "
-             "and only then call the port, in that order - a take the gate did not admit", errors)
+             "and only then call the port, in that order and in the method that makes the call - a take the gate "
+             "did not admit", errors)
         return []
     writes = sum(len(re.findall(r"\b_source" + SPACE + r"(?:\?\?)?=(?!=)", text))
                  for text in sources.values()
@@ -1791,8 +1852,10 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
         f"{label}: the take port clones exactly the chest's stack it removes from, assigns that clone once, looks "
         "an item prefab up once and only in SafeRoom, instantiates nothing, derives its source from the chosen "
         "chest and its destination from Gunnar inside the mover, and mints one permit, for Take; it is built and "
-        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, after the take gate refuses with a return and fed its own "
-        "opt-in, which reads Workers/GunnarChestTakeEnabled (off by default); an open tour plan refuses; and the "
+        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, in the method whose take gate refuses with a return above "
+        "it, every gate input pinned (the switches, the world, the work-authority rule, the probe, his body and its "
+        "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); `chest` "
+        "and `gunnar` are written only by their derivations; an open tour plan refuses; and the "
         "source is set from the pointed-at chest and cleared, nowhere else. A text audit; it does not follow "
         "delegates or prove control flow",
     ]

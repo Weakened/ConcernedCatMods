@@ -886,6 +886,17 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             "        Inventory? to = InventoryOf(worker);")
         self.assert_refused("the deposit was reversed into a withdrawal", marker="#381")
 
+    def test_the_roles_may_not_be_swapped_after_the_derivations(self):
+        # Found by the review of #381's chest take, which had the same hole: the
+        # two derivations are pinned, and a deconstruction one line below them
+        # reverses the deposit into a withdrawal with every pinned call
+        # byte-identical.
+        self.swap_in_deposit(
+            "        int remaining = units;\n",
+            "        (from, to) = (to, from);\n        int remaining = units;\n")
+        self.assert_refused("the roles were swapped after the pinned derivations", marker="#381",
+                            contains="writes `from`")
+
     def test_the_move_may_not_take_two_interchangeable_inventories(self):
         # Going back to `(Inventory from, Inventory to, ...)` restores the
         # rename attack, so the shape itself is refused: the derivations have to

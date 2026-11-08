@@ -613,7 +613,12 @@ smallest and most fail-closed reading the brief allows:
   between chests is a separate leaf of #381 and uses D14.2's own-body pathfinding when it is built.
 - *Putting it down again.* `ct_collect deposit <item>` deposits one named item through D15's unchanged port, so what
   he took is not stranded in him. D15's grant already covers any item in his inventory; the default deposit filter
-  (what collecting yields) is unchanged.
+  (what collecting yields) is unchanged. Equipped stacks are never offered. **A known edge:** if Gunnar is ever
+  issued a tool (the felling decision would), an unequipped issued tool could be named and deposited; the leaf that
+  issues one must filter issued items out of this path.
+- *The ledger.* A take is acquired in `CollectionAccount` like a pick, so the session's "taken" total counts what he
+  took from chests as well as what he collected; it is a record of where material physically is, not of what was
+  collected.
 
 **What is not granted:** no nearest-chest inference; no take from an unmarked chest, one marked `Deposit` only, or one
 marked and then unmarked; no ownership takeover; no synthetic or replacement resources; no extra copies; no teleporting
