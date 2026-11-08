@@ -25,10 +25,12 @@ appears top-left, as `Gunnar: "..."`, and in the log.
   walks every `HaulAttentionReason`. **This is narrow on purpose and stated:**
   he can only be talked to at home, and he is at home only while he has no
   worker body and no job holds him. During a running haul he is his worker
-  body, which has no talk point, so the attention line is heard only in the
-  cases where the service keeps a reason with no body (for example after his
-  body was lost). The haul panel stays the place to read a running haul's
-  reason. Giving the worker body a talk point is not part of this issue.
+  body, which has no talk point, and while a haul needs attention it stays
+  open, so a job holds him and no figure is shown. **No reachable case is
+  known in the current executor** in which he is at home while a haul still
+  reports attention; the line is kept as a safeguard, and the haul panel is
+  the place to read a haul's reason. Giving the worker body a talk point is
+  not part of this issue.
 - A skipped story or an unmet character gets no line.
 
 The buckle's introduction and the recruitment panel's completion line use the
@@ -78,7 +80,8 @@ this player's evidence. Teamster takes no compile reference to another product.
 ## OWNER GO-AROUND PENDING
 
 - D1 the hover prompt and a line on the use key, visitor and recruited.
-- D2 at home, after a haul ended needing attention with no body (for example
-  his body lost), the attention line names the panel's reason.
+- D2 expected N/A: no reachable state puts him at home while a haul reports
+  attention (see above). Confirm only that talking to him at home never shows
+  an attention line with no haul open.
 - D3 repetition feel; no ambient speech across a relog.
 - D4 a translator file's override shows in game.
