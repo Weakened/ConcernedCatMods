@@ -15,7 +15,10 @@ TEAMSTER_FIGURE_PLANT_VALIDATOR to such a validator's path re-runs that check,
 expecting every plant except the #313 regression pin to get through it.
 The nine plants an independent review constructed against the first version
 of this rule (4674c97) were also each verified to get through that version's
-validator, whose rule they defeated.
+validator, whose rule they defeated. The six from the re-review of 92c6ab1
+were verified against that head's validator and against origin/main
+346d18b's (once main moved on, 4457f20's own rules no longer pass the merged
+tree).
 """
 import os
 import shutil
@@ -247,6 +250,49 @@ class TeamsterFigureIsConfined(unittest.TestCase):
                         "    internal const string Name = \"NpcFigureDresser\";\n"
                         "}\n")
         self.assert_refused("the shared tree the project file compiles in but the audit skipped")
+
+    # --- escapes the re-review constructed against 92c6ab1 ---------------------------------------
+
+    def test_an_instantiation_method_group_is_refused(self):
+        self.after(PRESENTER, APPLIED,
+                   "        System.Func<UnityEngine.Object, UnityEngine.Object> make = UnityEngine.Object.Instantiate;"
+                   " make(source!);\n")
+        self.assert_refused("a method group instantiated the player prefab without a parenthesis")
+
+    def test_an_extraction_method_group_is_refused(self):
+        self.after(PRESENTER, APPLIED,
+                   "        var extract = (System.Func<GameObject?, string, string, string, string, System.Action<string>?, "
+                   "NpcPresentationFigure>)NpcPresentationBody.TryExtract;\n")
+        self.assert_refused("a method group built a second, unleased figure")
+
+    def test_a_target_typed_object_with_a_collider_is_refused(self):
+        self.swap_in(RUNTIME, COUNT,
+                     "    private static void ZzBuild() { UnityEngine.GameObject g = new(\"CT_X\", "
+                     "typeof(UnityEngine.CapsuleCollider)); }\n\n" + COUNT)
+        self.assert_refused("a target-typed GameObject with a collider was built beside the figure")
+
+    def test_a_global_qualified_object_is_refused(self):
+        self.plant_file(COMPANIONS, ("ZzGlobal.cs",),
+                        "namespace TheConcernedCat.ConcernedTeamster.Adapters.Companions;\n"
+                        "internal static class ZzGlobal\n"
+                        "{\n"
+                        "    internal static object Run() => new global::UnityEngine.GameObject(\"CT_X\");\n"
+                        "}\n")
+        self.assert_refused("global:: carried an object construction past the pattern")
+
+    def test_an_alias_to_game_object_is_refused(self):
+        self.plant_file(COMPANIONS, ("ZzAlias.cs",),
+                        "using GO = UnityEngine.GameObject;\n"
+                        "namespace TheConcernedCat.ConcernedTeamster.Adapters.Companions;\n"
+                        "internal static class ZzAlias\n"
+                        "{\n"
+                        "    internal static object Run() => new GO(\"CT_X\");\n"
+                        "}\n")
+        self.assert_refused("an alias carried an object construction past the pattern")
+
+    def test_a_raw_string_is_refused_in_the_figure_file(self):
+        self.after(PRESENTER, APPLIED, "        _log(\"\"\"\"x\"\"\"\");\n")
+        self.assert_refused("a raw string would pair the masker's quotes wrongly")
 
     # --- the rest of the companion layer builds nothing ----------------------------------------
 
