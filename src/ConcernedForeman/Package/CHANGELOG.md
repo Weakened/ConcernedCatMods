@@ -25,6 +25,23 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   anything else.
 - Not yet observed in game.
 
+### Added — Thorstein sits at home (#295 S5)
+
+- **At rest he sits on the ground near home** rather than standing beside the respawn
+  point: 1.5-6 m out, on the same floor, by a fire when there is one, facing it, or facing
+  home.
+- **The spot** comes from the shared companion placement planner, the one Hulgi uses. It
+  refuses water, slopes, obstructions, beds, doorways, the fire itself and the starting
+  temple. Foreman's own read-only probe answers it.
+- **Doors.** He never uses a door and is never set down through a doorway from home. Every
+  door counts as closed to him.
+- **Camp.** He rests inside Concerned NPC's camp once it is established.
+- **The pose** is Concerned NPC's `NpcFigureDresser.SitOnGround` on his own local figure.
+  Nothing is claimed or changed.
+- **He moves only** when his spot is built over or a warmer one appears.
+- Until a spot is found he stands as before, and `cf_worker status` says why. Chairs are
+  not used yet. **Not observed in game.**
+
 ### Added — Thorstein's tools panel (#295 S4)
 
 - **A "His tools" button** opens a panel showing his introduction and the tools he holds.

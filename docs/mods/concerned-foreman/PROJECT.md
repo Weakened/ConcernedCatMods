@@ -287,6 +287,59 @@ record that cannot be read or saved, missing authority, or an unresolved handove
 5. With both tools given but the settlement records read-only (or with no settlement area),
    talk to him. He names that cause.
 
+### Sitting at home (slice S5)
+
+At rest, his figure sits on the ground near home instead of standing beside the
+respawn point:
+- **The spot** is chosen by the shared companion `PlacementPlanner` (Hulgi's), with
+  Thorstein's own band: 1.5 to 6 m from home, at most 1.5 m above or below it.
+  - It prefers a fire's warmth.
+  - It refuses water, steep ground, a body-sized obstruction, another body, a bed, a
+    doorway, the fire piece itself, burning ground, and a location that clears its own
+    ground (the starting temple).
+  - It waits rather than guesses while any of that ground is still loading.
+- **The probe** is Foreman's own `ThorsteinRestProbe`, which reads physics and effect
+  areas and changes nothing.
+- **Doors.** He never opens, closes or uses a door, and is never set down on the far side
+  of a doorway from home: a spot whose straight line from home passes through a doorway
+  is refused (`ThorsteinRestBounds`). Foreman keeps no list of doors players have opened
+  to companions, so every door counts as one he may not use. **Lead default pending owner
+  confirmation** (2026-11-08): a bed inside a house whose door is shut still counts as
+  home, so he may rest in that room. He is set down there, not walked in through the door.
+- **Camp.** Concerned NPC's camp (`NpcCamp`) is fed from the player-built pieces loaded
+  within 32 m of home each time he looks. Once camp is established he rests inside it.
+  If that look fails, he is seated nowhere new until it works again.
+- **The pose.** He faces the fire, or home when there is none. Concerned NPC's
+  `NpcFigureDresser.SitOnGround` poses his own figure with the game's `emote_sit` bool.
+- **He moves only** when something is built on his spot or a warmer one appears. He looks
+  again every 30 s, or every 5 s while the ground around home is still loading. A fire going
+  out does not get him up, and neither does you standing next to him to talk. If his spot
+  is built over and nowhere else qualifies, he stands up beside the respawn point again.
+- **Until a spot is found** he stands as before, and `cf_worker status` says why ("At rest: ...").
+
+Not in this slice:
+- Chairs and benches. A seat has to be given up the moment a player sits down, which needs
+  watching of its own.
+- Walking between spots. He is moved, not walked, because the figure has no motor.
+
+**OWNER GO-AROUND PENDING:**
+1. With no fire near your bed, come home after the introduction. He sits on the ground
+   1.5-6 m from the bed, on the same floor, facing it, and not in a doorway or against the
+   bed. `cf_worker status` says "At rest: sitting on the ground".
+2. Build and light a campfire about 3 m from the bed and wait up to 30 s. He moves to sit
+   by it, facing it ("sitting by the fire"). Let it burn out: he stays.
+3. Build a wall through where he sits and wait up to 30 s. He moves to clear ground, or
+   stands beside the bed if nowhere near home is left.
+4. Respawn at the world start with no bed. He is not seated inside the temple stones. If
+   nothing qualifies, he stands beside the start point and the status names what blocked it.
+5. Talk to him while he sits, and stay beside him for over 30 s. The prompt still appears,
+   walking into him is not blocked, and he does not get up and move away from you. Say
+   whether the 2.1 hover offset now feels too high for a seated figure.
+6. Judge the pop: when he moves to a better spot he appears there at once.
+7. Build a small hut with a door 3-4 m from the bed and a campfire inside it, door shut.
+   Wait up to 30 s. He does not sit by that fire: it is through a door. `cf_worker
+   status` counts the doorway.
+
 ### His look while working, slice S6 (owner decision 2026-10-29, DECISIONS.md D18)
 
 His worker body stays the `Dverger` clone, with the same prefab, the same saved data and
