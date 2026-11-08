@@ -578,8 +578,17 @@ internal sealed class FakePickup : ISourcePickupPort, ISourceFellingPort
 
     public bool Exists(SourceKey key) => _sources.ContainsKey(key);
 
+    /// <summary>#379: the process dies inside this pick, before anything the
+    /// pick would have done.</summary>
+    public Func<SourceKey, bool>? DieOn { get; set; }
+
     public PickupResult TryPick(SourceKey source, OrderId order)
     {
+        if (DieOn != null && DieOn(source))
+        {
+            throw new InvalidOperationException("the process died inside the pick");
+        }
+
         Assert.True(_book.IsHeldBy(source, order), "picked without holding the reservation");
         Assert.True(_motion.Position.HorizontalDistanceTo(source.Position) <= 2f, "picked out of reach");
 
@@ -798,7 +807,8 @@ internal sealed class CollectionRig
     /// authorises felling.</param>
     public CollectionRig(
         CollectionParameters? parameters = null, bool withHauler = false, IActorModeHold? modes = null,
-        bool withFelling = false, WorkScopeSource scopeSource = WorkScopeSource.DefaultCampCircle)
+        bool withFelling = false, WorkScopeSource scopeSource = WorkScopeSource.DefaultCampCircle,
+        ICollectionWorkWitness? witness = null)
     {
         ScopeSource = scopeSource;
         Parameters = parameters ?? CollectionParameters.Default;
@@ -839,7 +849,8 @@ internal sealed class CollectionRig
         Pickup.OnFelled = key => Probe.Candidates.RemoveAll(candidate => candidate.Key.Equals(key));
         Loop = new SoloCollectionLoop(
             Parameters, WorkerKey.Thorstein, new WorkerId("thorstein"), Hold, Book, Motion, Custody, Pickup, Probe,
-            World, Cooperation, new CollectionRequestIds(Epoch), log: null, felling: withFelling ? Pickup : null);
+            World, Cooperation, new CollectionRequestIds(Epoch), log: null, felling: withFelling ? Pickup : null,
+            witness: witness);
     }
 
     public WorkScopeSource ScopeSource { get; }

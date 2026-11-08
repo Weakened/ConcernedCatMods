@@ -1,5 +1,8 @@
 using System;
 using TheConcernedCat.Diagnostics;
+using TheConcernedCat.ConcernedForeman.Domain.Npc;
+using TheConcernedCat.ConcernedNPC.Interruption;
+using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.Interop.WorkArea;
 using System.Collections.Generic;
 using System.Globalization;
@@ -10,6 +13,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
+using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
@@ -60,6 +64,7 @@ internal sealed class CollectionRuntime
     private readonly CollectionSettings _settings;
     private readonly Action<string> _log;
     private readonly ICustodyRuntime? _custody;
+    private readonly ThorsteinPlans? _plans;
     private readonly ICooperativeDelivery? _cooperation;
     private readonly Func<Guid>? _sharedEpoch;
     private readonly SettlementDiskReader _reader = new SettlementDiskReader();
@@ -108,7 +113,8 @@ internal sealed class CollectionRuntime
         IActorModeHold modes,
         ICustodyRuntime? custody = null,
         ICooperativeDelivery? cooperation = null,
-        Func<Guid>? sharedEpoch = null)
+        Func<Guid>? sharedEpoch = null,
+        ThorsteinPlans? plans = null)
     {
         _settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
         Modes = modes ?? throw new ArgumentNullException(nameof(modes));
@@ -123,6 +129,12 @@ internal sealed class CollectionRuntime
         _custody = custody;
         _cooperation = cooperation;
         _sharedEpoch = sharedEpoch;
+        _plans = plans;
+        if (_plans != null)
+        {
+            _plans.MeasureCollect = MeasureCarried;
+        }
+
         _cartographerAreas = new CartographerWorkAreas(_log);
         _scopes = new WorkScopeBuilder(_reader, _cartographerAreas.Describe);
         _workTick = OnWorkerTick;
@@ -446,6 +458,11 @@ internal sealed class CollectionRuntime
                     return Fell();
                 case "cancel":
                     return Control(loop => loop.Cancel(Time.time));
+                case "resolve":
+                    // #379: the human exit from a work plan stopped for a person.
+                    return _plans == null
+                        ? "Thorstein's work plans are not available in this build."
+                        : _plans.Resolve(args.Length > 1 ? args[1] : null);
                 default:
                     return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold] [gunnar], " +
                         "rebind (look at the chest), pause, resume, cancel, area [list | next | default | <name>], fell.";
@@ -465,6 +482,10 @@ internal sealed class CollectionRuntime
         WorkAuthorityVerdict authority = WorkAuthorityPolicy.Evaluate(
             CollectionWorldFacts.ReadAuthorityFacts(_settlement.SettlementRuntimeEnabled.Value));
         text.Append("Collection: ").Append(WorkAuthorityPolicy.Describe(authority));
+        if (_plans != null)
+        {
+            text.AppendLine().Append("  ").Append(_plans.Describe().Replace("\n", "\n  "));
+        }
         if (_faulted)
         {
             text.AppendLine().Append("  COLLECTION FAULTED (").Append(_fault).Append("); see the log.");
@@ -945,6 +966,38 @@ internal sealed class CollectionRuntime
 
     private WorldFellingPort? _felling;
 
+    /// <summary>#379: what the shared recovery policy is told about the world
+    /// when Thorstein's collection plan starts or resumes. Every answer fails
+    /// closed: no body is no body, authority is the shared rule's.</summary>
+    private NpcPlanEvidence PlanEvidence()
+    {
+        ForemanWorkerAI? body = _body;
+        bool present = body != null && body.IsOwnedAndValid && !body.IsFaulted;
+        bool mayWork = WorkAuthorityPolicy.Evaluate(
+            CollectionWorldFacts.ReadAuthorityFacts(_settlement.SettlementRuntimeEnabled.Value)) == WorkAuthorityVerdict.Granted;
+        return new NpcPlanEvidence(
+            _plans?.World ?? NpcWorldEpoch.Unknown, present ? 1 : 0, bodyDied: false, areaIsReadable: true, areaMoved: false,
+            mayWork: mayWork, containersAvailable: true, routeAvailable: true, playerPaused: false, at: Time.time);
+    }
+
+    /// <summary>#379: what he carries of the collected materials, read from his
+    /// own inventory through custody; null when it cannot be read.</summary>
+    private IReadOnlyList<KeyValuePair<string, int>>? MeasureCarried()
+    {
+        if (_custody == null || !_custody.TryResolveWorker(WorkerKey.Thorstein, out IInventoryPort? port, out _) || port == null)
+        {
+            return null;
+        }
+
+        return new[]
+        {
+            new KeyValuePair<string, int>(
+                CollectedResources.ItemPrefabName(CollectedResource.Stone), Math.Max(0, port.Count(MaterialItem.Of(CollectedResource.Stone)))),
+            new KeyValuePair<string, int>(
+                CollectedResources.ItemPrefabName(CollectedResource.Wood), Math.Max(0, port.Count(MaterialItem.Of(CollectedResource.Wood)))),
+        };
+    }
+
     /// <summary>The one felling port (D19) of this runtime, shared by
     /// <c>cf_collect fell</c> and by collection orders (#282 leaf 2), so the
     /// single pinned hit is reached the same way from both.</summary>
@@ -1059,7 +1112,10 @@ internal sealed class CollectionRuntime
                 runtime._cooperation != null ? new CooperationBridge(runtime._cooperation) : null,
                 RequestIds,
                 runtime._log,
-                Pickup);
+                Pickup,
+                runtime._plans != null
+                    ? new CollectionPlanWitness(runtime._plans.Collect, runtime.PlanEvidence, runtime.MeasureCarried)
+                    : null);
             Loop = loop;
         }
 

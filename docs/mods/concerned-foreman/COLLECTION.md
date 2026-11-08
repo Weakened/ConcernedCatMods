@@ -352,6 +352,9 @@ and the commit.
 | F9 standing close | During F7, stand within 15 m of the tree he is at | He stops striking and the status says someone is within 15 m; step back and he resumes. If you stay about 30 s he leaves that tree for the next survey. **OWNER GO-AROUND PENDING** |
 | F10 a cleared area | Give an order for more Wood than the area's branches and small trees hold | When nothing is left he pauses with "exhausted", not "no eligible sources". **OWNER GO-AROUND PENDING** |
 | F11 where he never fells in an order | Repeat F7 (a) with the setting off, (b) in the default camp circle, (c) with a tree within 15 m of a built piece | (a) and (b): branches only, and no tree is struck. (c) That tree is never walked to. **OWNER GO-AROUND PENDING** |
+| P1 interrupted mid-pick (#379) | During an order, quit the game (Alt+F4 or end the process) the moment he bends to pick, reload, then `cf_collect status` and `cf_collect start 10 0` | The status names his work plan as stopped for a person; the order is refused and nothing is picked. `cf_collect resolve` records what he carries; a new start then works and no stone he already had is counted twice. **OWNER GO-AROUND PENDING** |
+| P2 a reload between picks (#379) | Save and quit between two picks, reload, rebind and resume | He carries on the same job (status shows the plan continued, not a new one) and what he carried is unchanged. **OWNER GO-AROUND PENDING** |
+| P3 a build interrupted mid-piece (#379) | During a shelter build, end the process while he places a piece, reload | No piece is placed or paid for twice; if the plan stopped, `cf_collect resolve build` lets the build go on. **OWNER GO-AROUND PENDING** |
 
 ### 7.4 Runtime unknowns to settle while doing the above
 

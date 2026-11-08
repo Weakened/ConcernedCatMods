@@ -9,6 +9,9 @@ using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using TheConcernedCat.Diagnostics;
+using TheConcernedCat.ConcernedForeman.Domain.Npc;
+using TheConcernedCat.ConcernedNPC.Interruption;
+using TheConcernedCat.ConcernedNPC.Work;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -85,6 +88,8 @@ internal sealed class ShelterConstructionRuntime
     private readonly GatedPiecePlacer _placer;
     private readonly WorldBuildMaterials _materials;
     private readonly ShelterBuildLoop _loop;
+    private readonly ThorsteinPlans? _plans;
+    private readonly WitnessedBuildMaterials? _witness;
 
     private string? _job;
     // Outstanding construction survives release of the loaded-body hold.
@@ -123,7 +128,8 @@ internal sealed class ShelterConstructionRuntime
         Func<float> now,
         Action<string> log,
         IBuildPose? pose = null,
-        IPieceInstaller? installer = null)
+        IPieceInstaller? installer = null,
+        ThorsteinPlans? plans = null)
     {
         _orders = orders ?? throw new ArgumentNullException(nameof(orders));
         _modes = modes ?? throw new ArgumentNullException(nameof(modes));
@@ -152,6 +158,17 @@ internal sealed class ShelterConstructionRuntime
             supply ?? throw new ArgumentNullException(nameof(supply)),
             _log);
 
+        // #379: the shared plan witnesses every movement of the building
+        // material, around the unchanged custody path.
+        _plans = plans;
+        IBuildMaterials loopMaterials = _materials;
+        if (plans != null)
+        {
+            _witness = new WitnessedBuildMaterials(_materials, plans.Build, PlanEvidence);
+            plans.MeasureBuild = _witness.Measure;
+            loopMaterials = _witness;
+        }
+
         // The single authority-gated placement call in the product: the gate,
         // then the installer, and nothing in between.
         _placer = new GatedPiecePlacer(new WorldPiecePlacer(
@@ -164,7 +181,7 @@ internal sealed class ShelterConstructionRuntime
             () => _orders.IsAuthorised,
             _orders.Sight,
             new WorkerBuildWalk(motion, () => _job),
-            _materials,
+            loopMaterials,
             _placer,
             pose ?? new BuildPose(() => WorkerBody.FindLive(worker.Value), _log),
             _log,
@@ -253,6 +270,7 @@ internal sealed class ShelterConstructionRuntime
                     }
                     _job = _cleanupJob;
                     _loop.Cancel(now, "the build order was withdrawn.");
+                    _witness?.Ended(false, "the build order was withdrawn");
                     if (!_materials.HasUnspent) _cleanupJob = null;
                     Release();
                 }
@@ -312,6 +330,7 @@ internal sealed class ShelterConstructionRuntime
                 if (_job != null)
                 {
                     _loop.Suspend();
+                    _witness?.Suspend("work is not allowed here now (" + why + ")");
                     Release();
                 }
 
@@ -353,6 +372,7 @@ internal sealed class ShelterConstructionRuntime
             switch (_loop.Step)
             {
                 case BuildStep.Finished:
+                    _witness?.Ended(true, "the shelter is finished");
                     if (!_materials.HasUnspent) _cleanupJob = null;
                     // Done. He is nobody's worker again, which is what lets his
                     // body rest, be moved home, or take another order - and the
@@ -362,8 +382,11 @@ internal sealed class ShelterConstructionRuntime
                     _finished = true;
                     _finishedAt = now;
                     break;
-                case BuildStep.Waiting:
                 case BuildStep.Stopped:
+                    _witness?.Ended(false, _loop.Reason);
+                    Hold(ActorMode.Paused);
+                    break;
+                case BuildStep.Waiting:
                     // Still held, and visibly not progressing: the order is the
                     // player's and a stopped one is theirs to cancel.
                     Hold(ActorMode.Paused);
@@ -378,6 +401,14 @@ internal sealed class ShelterConstructionRuntime
             Latch(exception);
         }
     }
+
+    /// <summary>#379: what the shared recovery policy is told when the building
+    /// plan starts or resumes.</summary>
+    private NpcPlanEvidence PlanEvidence() =>
+        new NpcPlanEvidence(
+            _plans?.World ?? NpcWorldEpoch.Unknown, Present() ? 1 : 0, bodyDied: false, areaIsReadable: true,
+            areaMoved: false, mayWork: _mayWork(), containersAvailable: true, routeAvailable: true, playerPaused: false,
+            at: _now());
 
     /// <summary>A world has gone away. Gives the body back and forgets the load.
     /// Nothing is written: the chest and the body belong to a world that is not

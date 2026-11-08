@@ -111,6 +111,10 @@
          source because products never reference each other and three
          independent copies is how #388 had to be fixed twice. -->
     <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
+    <!-- #379: the collection loop's fakes, so Thorstein's real plan can be run
+         under the real loop end to end (ThorsteinCollectionPlanTests). The same
+         file, not a copy, so the two suites cannot drift. -->
+    <Compile Include="..\Shared.Settlement.Tests\CollectionFakes.cs" Link="SharedFakes/CollectionFakes.cs" />
   </ItemGroup>
 
   <ItemGroup>

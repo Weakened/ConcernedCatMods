@@ -79,6 +79,10 @@ internal enum CollectionIntakeRefusal
     /// never help. Reporting it as busy sends a player looking for a job that
     /// does not exist.</summary>
     WorkerIdentityUnknown = 28,
+
+    /// <summary>#379: Thorstein's shared work plan refused the start: it is
+    /// stopped for a person, or it could not be opened or written.</summary>
+    WorkPlanBlocked = 29,
 }
 
 /// <summary>Everything acceptance needs to know, gathered at the moment of
@@ -346,6 +350,10 @@ internal static class CollectionIntake
                     "started, so nothing can take hold of him and he will take no order this session. Nothing is " +
                     "busy and waiting will not help: check the startup log for the line that says why, and check " +
                     "that Concerned NPC is installed and enabled.";
+            case CollectionIntakeRefusal.WorkPlanBlocked:
+                return "Thorstein's work plan refused the order: an earlier job was interrupted with something in " +
+                    "flight, or the plan cannot be written. cf_collect status says which; cf_collect resolve settles " +
+                    "it once you have looked at what he carries.";
             case CollectionIntakeRefusal.WorkerAbsent:
                 return "Thorstein is not here to take the order.";
             case CollectionIntakeRefusal.WorkerNotRecruited:

@@ -383,3 +383,42 @@ world reloaded, so re-plan" against entirely healthy evidence. `NpcPlanRun.Reatt
 `PlanRunTests.A_re_planned_plan_re_attached_to_this_world_stops_being_stale` is its test. It changes nothing about
 the work and resolves nothing about custody: it says the role has found its chests and its piles again, which is the
 only claim the role is in a position to make and the library is not.
+
+## 11. The third production adoption: Thorstein's collection and construction (#379)
+
+Concerned Foreman's Thorstein is the third caller, with **two** plans, one per executor: `foreman-collect` around
+the collection loop and `foreman-build` around the construction loop. Foreman owns the names - one file per
+settlement and job, `<settlement>.thorstein-<job>.plan.tsv` beside the settlement record - and the `format 1` /
+`plan` / `carried` / `end <n>` bytes (`ThorsteinPlanCodec`). Neither plan reserves anything: Thorstein's
+reservations and custody are the settlement record's.
+
+**The settlement journal is untouched, and stays the custody truth.** Foreman already had a durable, marker-backed
+record of every pickup, transfer and build commit (`CONTRACTS.md` §5.5, D8). The plans are its write-ahead
+witnesses, not a replacement: the plan's intent is written before the executor's first journal row for a movement
+and its conclusion after the executor's last, and no row, row order or voiding rule changed. What a plan says he
+carries is evidence, re-measured at every start and restated (an intent that moves nothing, concluded with the
+measurement) when it differs, rather than compared and refused: the settlement record's own reconciliation already
+decides whether a difference is a loss, and a second, disagreeing verdict here would weaken it.
+
+- **Collection.** `SoloCollectionLoop` takes a game-free `ICollectionWorkWitness` (Foreman's
+  `CollectionPlanWitness`). Accepting and resuming an order asks it to start - a plan read back after a reload is
+  revalidated there with `NpcPlanRecovery.Revalidate` - and every pick, felling hit and deposit is announced before
+  the pinned port or the custody executor is asked and concluded after its receipts. A refused announcement stops the
+  order and nothing moves; an order the plan refuses to start is refused (`WorkPlanBlocked`).
+- **Construction.** `WitnessedBuildMaterials` wraps the loop's `IBuildMaterials`: draw, commit and put-back are each
+  announced and concluded around the unchanged custody path, so `ShelterBuildLoop` and its CommitStarted /
+  CommitFinished journal (#398) are exactly what they were.
+- **Recovery.** A movement in flight when the process died reads back as one nobody can vouch for, and the shared
+  policy stops the plan for a person: it is never replayed, and nothing more moves until `cf_collect resolve`
+  (or `cf_collect resolve build`) records what he holds from a measurement. A refund of material he still carries is
+  refused the same way. A reload between movements is a re-plan: the next start re-attaches the same plan to the new
+  world load and continues it, with the same job id and the measured load. A pause continues in the session.
+- **No priority ladder**, as for Gunnar: one job holds Thorstein at a time through the arbiter, nothing preempts
+  another, and "resumes rather than restarts" is the plan kept open across whatever held him.
+
+Proved by `ThorsteinWorkPlanTests` (a kill after every write of a scripted job, recovered and carried on to exactly-
+once delivery, with an executor that trusts the plan's own load so a replayed deposit would fail the sweep),
+`ThorsteinCollectionPlanTests` (the real loop with the real plan: a pick the process died inside is never repeated),
+`ThorsteinBuildPlanTests` (a commit that died before its conclusion is never placed or paid for again) and
+`CollectionWitnessTests` (every movement announced first). No library source changed; 0.5.0's public surface was
+enough, which the product build proves. **Never observed in game.**
