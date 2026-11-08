@@ -114,6 +114,9 @@ internal enum JournalEntryKind
     /// <summary>A product's immutable approved build payload and its explicit
     /// order transition, in the existing named-field journal lane.</summary>
     BuildOrderRecorded = 22,
+
+    /// <summary>A local resident housing reservation/admission event; no worker order.</summary>
+    ResidentRecorded = 23,
 }
 
 /// <summary>Which half of the record an entry belongs to.
@@ -159,6 +162,7 @@ internal static class JournalEntryKinds
             case JournalEntryKind.WorldSaveMarker:
             case JournalEntryKind.CollectionRebound:
             case JournalEntryKind.BuildOrderRecorded:
+            case JournalEntryKind.ResidentRecorded:
                 return true;
 
             default:
@@ -354,10 +358,13 @@ internal sealed class JournalEntry
             throw new ArgumentException("A custody entry records which world load wrote it.", nameof(loadEpoch));
         }
 
-        if (payload.Kind != JournalEntryKind.WorldSaveMarker && payload.Order.IsEmpty)
+        if (payload.Kind != JournalEntryKind.WorldSaveMarker && payload.Kind != JournalEntryKind.ResidentRecorded && payload.Order.IsEmpty)
         {
             throw new ArgumentException("A custody entry needs its order.", nameof(payload));
         }
+
+        if (payload.Kind == JournalEntryKind.ResidentRecorded && !(payload is ResidentRecordedRow))
+            throw new ArgumentException("A resident event needs its own typed payload.", nameof(payload));
 
         Sequence = sequence;
         Kind = payload.Kind;
@@ -755,6 +762,7 @@ internal sealed class SettlementJournal
             case JournalEntryKind.WorldSaveMarker:
             case JournalEntryKind.CollectionRebound:
             case JournalEntryKind.BuildOrderRecorded:
+            case JournalEntryKind.ResidentRecorded:
                 return false;
         }
 
