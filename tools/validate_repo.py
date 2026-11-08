@@ -8151,7 +8151,12 @@ NPC_BODY_GRANT = re.compile(r"\bNpcBuildPermission\s*\.\s*Granted\s*\(")
 # parameter named against the `T`/`TName` convention; reflection; a constructor
 # argument nested more than one parenthesis deep; an alias declared outside a
 # `.cs` file (an MSBuild `<Using Alias=...>`); and a subclass of the view
-# declared outside the consumer trees (the library is pinned by its own audit).
+# declared outside the consumer trees (the library is pinned by its own audit);
+# and a target-typed `new(` that is not a `GameObject` declaration - an
+# assignment to an existing variable or a method argument, such as
+# `made = new("name", view.GetType())`. The `T`/`TName` pattern also refuses a
+# concrete type that happens to start that way (`AddComponent<TMP_Text>`); that
+# fails closed, and no consumer spells one today.
 NPC_BODY_NETWORK_VIEW_ADDED = (
     ("adds a network view to an object",
      re.compile(r"AddComponent\w*\s*<\s*(?:global\s*::\s*)?(?:\w+\s*\.\s*)*ZNetView\s*>")),

@@ -11,7 +11,7 @@ Nine additive changes share this version:
   2026-10-30);
 * a presentation figure can be talked to with the use key (#295 S3);
 * a presentation figure can sit on the ground (#295 S5);
-* a role can keep a camp and ask where it is, through a public facade (#461, #295 S5).
+* a role can keep a camp and ask where it is, through a public facade (#461, #295 S5);
 * a role whose worker prefab predates the factory spawns it through the factory's gated build (#372).
 
 ### A role's own worker prefab is built through the gated build (#372)
@@ -33,7 +33,7 @@ Nine additive changes share this version:
   registers its own prefab, under the same name, at the same moment.
 * `tools/validate_repo.py`'s `#372 body factory audit` refuses the engine's instantiation anywhere in a product that
   consumes this library, and pins that the factory's one instantiation follows the gate and that the gate asks the
-  lease last. Concerned Foreman and Concerned Steward adopt it in the same change. Concerned Teamster's prefab is the
+  lease last. It also refuses putting a network view on an object in any spelling it can see, because that makes a saved object without the gate. Concerned Foreman and Concerned Steward adopt it in the same change. Concerned Teamster's prefab is the
   one stated, pinned pending site until its own adoption.
 
 ### A worker may rest as a presentation figure (#295, #298)
