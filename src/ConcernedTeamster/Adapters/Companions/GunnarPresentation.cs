@@ -145,27 +145,43 @@ internal sealed class GunnarPresentation
     public bool TakeWorkerBody(out Vector3? standing, out string refusal)
     {
         standing = null;
+        if (_arrivalPending)
+        {
+            // A body was just placed and not yet counted (the arrival guard may
+            // not be held when a job already holds him): a second one now would
+            // be the duplicate the census exists to catch.
+            refusal = "a worker body was just placed and has not been counted yet; try again in a moment";
+            return false;
+        }
+
+        bool granted;
         try
         {
-            bool granted = _figure.HandOverToWorker(out standing, out refusal);
-            // The spot was probed for a figure, not a character's body: a spot
-            // with no headroom (a beam, a piece built since) is not used, and
-            // the body falls back to the spot in front of the player.
-            if (granted && standing.HasValue && !HasHeadroom(standing.Value)) standing = null;
-            if (granted)
-            {
-                _arrivalPending = true;
-                _arrivalSince = Time.unscaledTime;
-            }
-
-            _planned = false;
-            return granted;
+            granted = _figure.HandOverToWorker(out standing, out refusal);
         }
         catch (Exception exception)
         {
             refusal = "his figure could not be taken down (" + exception.GetType().Name + ")";
             return false;
         }
+
+        _planned = false;
+        if (!granted) return false;
+        _arrivalPending = true;
+        _arrivalSince = Time.unscaledTime;
+        try
+        {
+            // The spot was probed for a figure, not a character's body: a spot
+            // with no headroom (a beam, a piece built since) is not used, and
+            // the body falls back to the spot in front of the player.
+            if (standing.HasValue && !HasHeadroom(standing.Value)) standing = null;
+        }
+        catch (Exception)
+        {
+            standing = null;
+        }
+
+        return true;
     }
 
     /// <summary>The body was not placed after all: give the arrival guard back.

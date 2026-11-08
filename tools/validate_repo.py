@@ -3566,11 +3566,9 @@ TEAMSTER_FIGURE_NEVER = re.compile(r"\bNpcWorkerDresser\b")
 # a networked or saved body built from it would be the worker runtime's job
 # done in the wrong folder.
 TEAMSTER_COMPANIONS_NO_BODY = re.compile(r"\b(?:NpcWorkerPrefabFactory|NpcWorkerPrefabOptions|NpcWorldBodies|NpcBody)\b")
-# Unity's generic overloads put a type argument before the parenthesis.
-_TEAMSTER_GENERIC = r"\s*(?:<[^(){};]*>\s*)?\("
 # what, broad spelling, exact spelling, population
 TEAMSTER_FIGURE_CALLS = (
-    ("the extraction", re.compile(r"\bTryExtract" + _TEAMSTER_GENERIC),
+    ("the extraction", re.compile(r"\bTryExtract\b"),
      re.compile(r"\bNpcPresentationBody\s*\.\s*TryExtract\s*\(\s*source\s*,\s*\"Player\"\s*,"
                 r"\s*\"CT_GunnarFigure\"\s*,\s*\"CT_GunnarFigure_Source\"\s*,\s*string\s*\.\s*Empty\s*,"
                 r"\s*_log\s*\)"), 1),
@@ -3590,8 +3588,12 @@ TEAMSTER_FIGURE_CALLS = (
      re.compile(r"\b_dresser\s*\?\s*\.\s*TakeDown\s*\(\s*\)"), 1),
 )
 TEAMSTER_FIGURE_CREATION = (
-    ("an instantiation", re.compile(r"\bInstantiate" + _TEAMSTER_GENERIC)),
-    ("a new object", re.compile(r"\bCreatePrimitive\b|\bnew\s+(?:UnityEngine\s*\.\s*)?GameObject\s*\(")),
+    # `\b`, not a call: a method group `Func<Object, Object> make = Object.Instantiate`
+    # spells the token without a parenthesis.
+    ("an instantiation", re.compile(r"\bInstantiate\b")),
+    ("a new object", re.compile(r"\bCreatePrimitive\b|\bnew\s+(?:global\s*::\s*)?(?:UnityEngine\s*\.\s*)?GameObject\s*\(|"
+                                r"\bGameObject\s+\w+\s*=\s*new\s*\(|\busing\s+\w+\s*=\s*[\w.:\s]*\bGameObject\s*;")),
+    ("a physics type", re.compile(r"\btypeof\s*\(\s*[\w.:\s]*(?:Collider|Rigidbody\w*|CharacterController)\s*\)")),
     ("an object lookup", re.compile(r"\bGameObject\s*\.\s*Find\w*\b|\bFind\w*ObjectsOfType\b|\bFindObjectOfType\b|"
                                     r"\bFindFirstObjectByType\b|\bFindAnyObjectByType\b|\bFindObjectsByType\b")),
     ("a component addition", re.compile(r"\bAddComponent\b")),
@@ -3601,7 +3603,7 @@ TEAMSTER_FIGURE_CREATION = (
     ("a pose or layer write", re.compile(
         r"\.\s*(?:position|rotation|localPosition|localRotation|localScale|eulerAngles|localEulerAngles|layer)"
         r"\s*[-+*/]?=(?!=)|\b(?:SetPositionAndRotation|SetLocalPositionAndRotation|Translate|Rotate|RotateAround|"
-        r"LookAt)\s*\(")),
+        r"LookAt)\b")),
 )
 TEAMSTER_FIGURE_FILE_FORBIDDEN = TEAMSTER_FIGURE_CREATION + (
     ("a destruction", re.compile(r"\bDestroy\w*\b")),
@@ -3621,6 +3623,9 @@ TEAMSTER_FIGURE_FILE_FORBIDDEN = TEAMSTER_FIGURE_CREATION + (
     # such as "Player" is not a type), so an interpolated string - whose holes
     # are code - would be a place to hide one. The file needs none.
     ("an interpolated string", re.compile(r"\$\s*@?\s*\"|@\s*\$\s*\"")),
+    # The masker knows C# 10's literals; a raw string (C# 11) would pair its
+    # quotes wrongly. The file needs none, whatever the language version.
+    ("a raw string", re.compile(r'"""')),
 )
 
 
