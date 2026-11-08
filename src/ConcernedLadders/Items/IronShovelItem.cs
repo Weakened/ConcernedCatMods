@@ -24,25 +24,29 @@ namespace TheConcernedCat.ConcernedLadders.Items;
 /// <para><b>It has no vanilla attack.</b> Both attack animations are cleared, so the game's own attack never starts
 /// with it: no stamina or durability is taken before the excavation gate has decided, nothing is hit, and the donor's
 /// own terrain op (also cleared) is never spawned. Its damage is zero and it has one quality level (no upgrade
-/// recipe). The press is read by <c>ExcavationShovelInput</c>, and the donor's swing animation is handed to the runtime
-/// to play once a dig goes ahead. The registration verifies all of this on the clone and refuses the item rather than
-/// register one that could attack.</para>
+/// recipe). The press is read by <c>ExcavationShovelInput</c>; no animation plays (see ExcavationRuntime.Charge). The
+/// registration verifies all of this on the clone and refuses the item rather than register one that could attack.</para>
+///
+/// <para>When the shovel could not dig this session (its input patch or the excavation probe did not match the installed
+/// game), the item is still registered, so shovels already crafted survive, but its recipe is disabled, so no one spends
+/// Iron on a tool that cannot work.</para>
 ///
 /// <para><b>Not observed in game.</b> Recipe visibility, crafting, equip, repair and the look are OWNER GO-AROUND
 /// PENDING.</para></summary>
 internal sealed class IronShovelItem : IDisposable
 {
     private readonly Action<string> _log;
-    private readonly Action<string> _swing;
+    private readonly bool _craftable;
     private bool _subscribed;
     private bool _done;
 
     /// <param name="log">Startup log.</param>
-    /// <param name="swing">Receives the donor's primary swing trigger once the item is registered.</param>
-    internal IronShovelItem(Action<string> log, Action<string> swing)
+    /// <param name="craftable">The shovel can dig this session (input installed, excavation probe available). When
+    /// false the recipe is registered disabled.</param>
+    internal IronShovelItem(Action<string> log, bool craftable)
     {
         _log = log;
-        _swing = swing;
+        _craftable = craftable;
     }
 
     internal void Install()
@@ -72,6 +76,7 @@ internal sealed class IronShovelItem : IDisposable
                 CraftingStation = IronShovel.Station,
                 RepairStation = IronShovel.Station,
                 MinStationLevel = IronShovel.StationLevel,
+                Enabled = _craftable,
                 Requirements = new[]
                 {
                     new RequirementConfig(IronShovel.IronItem, IronShovel.IronAmount, 0, true),
@@ -92,7 +97,6 @@ internal sealed class IronShovelItem : IDisposable
             if (shared.m_attack == null || shared.m_secondaryAttack == null)
                 throw new InvalidOperationException("the donor has no attack data");
 
-            string swing = shared.m_attack.m_attackAnimation ?? "";
             // No vanilla attack at all (see the class summary). Cleared on the clone only; the donor is untouched.
             shared.m_attack.m_attackAnimation = "";
             shared.m_secondaryAttack.m_attackAnimation = "";
@@ -111,10 +115,9 @@ internal sealed class IronShovelItem : IDisposable
             RenderIcon(prefab, shared);
             if (!ItemManager.Instance.AddItem(custom))
                 throw new InvalidOperationException("Jötunn rejected the item registration");
-            _swing(swing);
             _log("Registered " + IronShovel.PrefabName + " (Iron Shovel, from " + IronShovel.DonorPrefab + ": " + shared.m_itemType +
                  ", durability " + F(shared.m_maxDurability) + (shared.m_useDurability ? "" : " (unused)") + ", repairable " +
-                 shared.m_canBeReparied + ", swing '" + swing + "'). Recipe: " + IronShovel.IronAmount.ToString(CultureInfo.InvariantCulture) +
+                 shared.m_canBeReparied + "). Recipe" + (_craftable ? ": " : " DISABLED (the shovel cannot dig this session): ") + IronShovel.IronAmount.ToString(CultureInfo.InvariantCulture) +
                  " " + IronShovel.IronItem + " + " + IronShovel.WoodAmount.ToString(CultureInfo.InvariantCulture) + " " + IronShovel.WoodItem +
                  " at " + IronShovel.Station + " level " + IronShovel.StationLevel.ToString(CultureInfo.InvariantCulture) + ".");
         }

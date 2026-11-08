@@ -105,8 +105,7 @@ public sealed class Plugin : BaseUnityPlugin
                 CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(_excavation));
                 _shovelInput = new ExcavationShovelInput(message => Logger.LogInfo(message));
                 if (!_shovelInput.Install(PluginGuid + ".excavation", _excavation)) _shovelInput = null;
-                ExcavationRuntime runtime = _excavation;
-                _shovel = new IronShovelItem(message => Logger.LogInfo(message), swing => runtime.SwingAnimation = swing);
+                _shovel = new IronShovelItem(message => Logger.LogInfo(message), craftable: _shovelInput != null && _excavation.Available);
                 _shovel.Install();
             }
         }

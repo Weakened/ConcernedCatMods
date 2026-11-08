@@ -52,10 +52,6 @@ internal sealed class ExcavationRuntime : IDisposable
     /// always gets it too.</summary>
     internal Action<string>? Report { get; set; }
 
-    /// <summary>The donor tool's own swing trigger, played on the player's own animator once a dig goes ahead. Set by
-    /// the item registration; empty means no animation.</summary>
-    internal string SwingAnimation { get; set; } = "";
-
     /// <summary>Registers the terrain ops on every peer (see <see cref="ExcavationTerrainOps"/>) and logs the probe.</summary>
     internal void Install()
     {
@@ -177,23 +173,19 @@ internal sealed class ExcavationRuntime : IDisposable
         return text;
     }
 
-    /// <summary>Takes the dig's cost from the shovel and the player, then plays the donor tool's swing on the player's
-    /// own animator. Durability first (a field of the player's own item), then stamina through the game's own
-    /// UseStamina (which applies the world's stamina modifier). The animation is cosmetic and best effort.</summary>
-    private void Charge(Player player, ItemDrop.ItemData shovel, float staminaCost, float durabilityCost)
+    /// <summary>Takes the dig's cost from the shovel and the player. Stamina first, through the game's own UseStamina
+    /// (which applies the world's stamina modifier), then durability (a plain field of the player's own item, which
+    /// cannot throw), so a fault charges nothing rather than half.
+    ///
+    /// <b>No animation is played.</b> The donor's swing clip raises the game's attack-trigger event, and
+    /// <c>Humanoid.OnAttackTrigger</c> runs <c>m_currentAttack.OnAttackTrigger()</c> on whatever attack is still stored,
+    /// which nothing clears when an attack finishes (only StartAttack and unequipping its weapon do): a punch thrown
+    /// before equipping the shovel would land a real melee hit outside this gate (independent review of slice 3). A
+    /// coherent tool animation that cannot reach a stored attack is an owner question for the preview slice.</summary>
+    private static void Charge(Player player, ItemDrop.ItemData shovel, float staminaCost, float durabilityCost)
     {
-        if (shovel.m_shared.m_useDurability) shovel.m_durability = IronShovel.DurabilityAfter(shovel.m_durability, durabilityCost);
         player.UseStamina(staminaCost);
-        if (string.IsNullOrEmpty(SwingAnimation)) return;
-        try
-        {
-            ZSyncAnimation animation = player.GetComponent<ZSyncAnimation>();
-            if (animation != null) animation.SetTrigger(SwingAnimation);
-        }
-        catch (Exception exception)
-        {
-            _log("Excavation: the shovel swing animation did not play (" + SafeFailure.Brief(exception) + ").");
-        }
+        if (shovel.m_shared.m_useDurability) shovel.m_durability = IronShovel.DurabilityAfter(shovel.m_durability, durabilityCost);
     }
 
     /// <summary>The shovel is this player's equipped weapon right now: the item the press came from is still the one in
@@ -202,10 +194,10 @@ internal sealed class ExcavationRuntime : IDisposable
         ReferenceEquals(player, Player.m_localPlayer) && ReferenceEquals(player.GetCurrentWeapon(), shovel) &&
         IronShovel.IsShovelName(shovel.m_shared.m_name);
 
-    /// <summary>The states in which the game itself refuses to start an attack (Humanoid.StartAttack).</summary>
+    /// <summary>The states in which the game itself refuses to start an attack (Humanoid.StartAttack), and teleporting.</summary>
     private static bool Ready(Player player) =>
         !player.InAttack() && !player.InDodge() && player.CanMove() && !player.IsStaggering() && !player.IsKnockedBack() &&
-        !player.InMinorAction();
+        !player.InMinorAction() && !player.IsTeleporting();
 
     private static void FlashStamina()
     {
@@ -225,7 +217,10 @@ internal sealed class ExcavationRuntime : IDisposable
         {
             ExcavationPlan plan = _inFlight.Plan;
             float now = Time.time;
-            if (now <= _inFlight.StartedAt) return; // The operation's rebuild runs in this frame's LateUpdate.
+            // The slot is taken in the press's FixedUpdate, where Time.time is the fixed clock, usually a little behind
+            // the same frame's Update clock; so this guard does not always skip the commit frame. That is harmless: a
+            // read before the rebuild sees a queued rebuild (Rebuilding) or the old heights (Pending), and both wait.
+            if (now <= _inFlight.StartedAt) return;
             if (Player.m_localPlayer == null || ZNetScene.instance == null)
             {
                 if (_inFlight.Abandon()) Publish(ExcavationReport.Outcome(ExcavationOutcome.Abandoned, plan));

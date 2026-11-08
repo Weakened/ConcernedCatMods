@@ -131,27 +131,53 @@ public sealed class ExcavationSourceAuditTests
         path.StartsWith("Excavation/", StringComparison.Ordinal) || path.StartsWith("Domain/Excavation/", StringComparison.Ordinal) ||
         path.StartsWith("Items/", StringComparison.Ordinal);
 
+    /// <summary>A durability write in any spelling: assignment, compound assignment, increment, or a ref.</summary>
+    internal const string DurabilityWrite = @"\.m_durability\s*(=[^=]|\+=|-=|\*=|/=|\+\+|--)|\bref\s+[\w\.]*m_durability\b";
+
+    /// <summary>A call of Charge (its definition, preceded by its return type, is not a call).</summary>
+    internal const string ChargeCall = @"(?<!\bvoid\s+)\bCharge\s*\(";
+
     /// <summary>The cost is taken in one place: one durability write in the whole product and one UseStamina in the
     /// excavation code (the ladder's own climbing charge is the other product use), both in the runtime's Charge, and
     /// Charge is called once, after the spawn and after its refusal branch has returned.</summary>
     [Fact]
     public void TheChargeIsTakenOnceAfterTheSpawnAndNowhereElse()
     {
-        foreach (string pattern in new[] { @"\bUseStamina\s*\(", @"\.m_durability\s*(=[^=]|\+=|-=|\+\+|--)", @"\bCharge\s*\(\s*player\b" })
+        foreach (string pattern in new[] { @"\bUseStamina\s*\(", DurabilityWrite, ChargeCall })
         {
             var hits = Hits(pattern).Where(h => pattern != @"\bUseStamina\s*\(" || ExcavationCode(h.Path)).ToList();
             Assert.True(hits.Count == 1 && hits[0].Path == "Excavation/ExcavationRuntime.cs" && hits[0].N == 1,
                 pattern + " must appear exactly once, in Excavation/ExcavationRuntime.cs: " + string.Join(", ", hits));
         }
+        // Stamina is never taken any other way in the excavation code.
+        foreach (string pattern in new[] { @"\bAddStamina\s*\(", @"\bm_stamina\s*(=[^=]|\+=|-=|\*=|/=|\+\+|--)", @"\bRPC_UseStamina\b" })
+        {
+            Assert.Empty(Hits(pattern).Where(h => ExcavationCode(h.Path)));
+        }
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
         int spawn = Regex.Match(runtime, @"\bSpawnOnHitTerrain\s*\(").Index;
-        int refused = runtime.IndexOf("ExcavationCommitRefusal.SpawnRefused", spawn, StringComparison.Ordinal);
-        int charge = Regex.Match(runtime, @"\bCharge\s*\(\s*player\b").Index;
+        // The end of the refusal branch: its return statement and the brace that closes it.
+        Match branch = Regex.Match(runtime, @"return\s+ExcavationReport\.Commit\s*\(\s*ExcavationCommitRefusal\.SpawnRefused[^;]*;\s*\}");
+        int charge = Regex.Match(runtime, ChargeCall).Index;
         int stamina = Regex.Match(runtime, @"\bUseStamina\s*\(").Index;
-        int durability = Regex.Match(runtime, @"\.m_durability\s*=[^=]").Index;
-        int chargeBody = Regex.Match(runtime, @"private\s+void\s+Charge\s*\(").Index;
-        Assert.True(spawn > 0 && refused > spawn && charge > refused, "Charge must follow the spawn and its refusal branch.");
-        Assert.True(chargeBody > 0 && stamina > chargeBody && durability > chargeBody, "The stamina and durability writes belong to Charge.");
+        int durability = Regex.Match(runtime, DurabilityWrite).Index;
+        int chargeBody = Regex.Match(runtime, @"private\s+static\s+void\s+Charge\s*\(").Index;
+        Assert.True(spawn > 0 && branch.Success && branch.Index > spawn && charge >= branch.Index + branch.Length,
+            "Charge must follow the spawn and the end of its refusal branch.");
+        Assert.True(chargeBody > charge && stamina > chargeBody && durability > stamina, "Stamina, then durability, inside Charge.");
+    }
+
+    /// <summary>No animation is played and no stored attack is reached: a swing clip's attack-trigger event runs whatever
+    /// attack the player last made (independent review of slice 3).</summary>
+    [Theory]
+    [InlineData(@"\bSetTrigger\s*\(")]
+    [InlineData(@"\bZSyncAnimation\b")]
+    [InlineData(@"\bOnAttackTrigger\s*\(")]
+    [InlineData(@"\bStartAttack\s*\(")]
+    [InlineData(@"\bm_currentAttack\b")]
+    public void TheShovelNeverAnimatesOrReachesAnAttack(string pattern)
+    {
+        Assert.Empty(Hits(pattern).Where(h => ExcavationCode(h.Path)));
     }
 
     /// <summary>The shovel's press is the only caller of the commit gate; the console cannot dig.</summary>
@@ -174,6 +200,9 @@ public sealed class ExcavationSourceAuditTests
     [InlineData("Excavation/ExcavationRuntime.cs", @"ReferenceEquals\s*\(\s*player\.GetCurrentWeapon\s*\(\s*\)\s*,\s*shovel\s*\)")]
     [InlineData("Excavation/ExcavationRuntime.cs", @"player\.HaveStamina\s*\(\s*IronShovel\.StaminaNeeded\s*\(\s*mode\s*,\s*Game\.m_staminaRate\s*\)\s*\)")]
     [InlineData("Excavation/ExcavationRuntime.cs", @"IronShovel\.DurabilityCost\s*\(\s*mode\s*,\s*Game\.m_durabilityRate\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"!player\.InAttack\(\)\s*&&\s*!player\.InDodge\(\)\s*&&\s*player\.CanMove\(\)\s*&&\s*!player\.IsStaggering\(\)\s*&&\s*!player\.IsKnockedBack\(\)\s*&&\s*!player\.InMinorAction\(\)\s*&&\s*!player\.IsTeleporting\(\)\s*;")]
+    [InlineData("Plugin.cs", @"new\s+IronShovelItem\s*\([^;]*craftable\s*:\s*_shovelInput\s*!=\s*null\s*&&\s*_excavation\.Available\s*\)")]
+    [InlineData("Items/IronShovelItem.cs", @"Enabled\s*=\s*_craftable\s*,")]
     [InlineData("Excavation/ExcavationShovelInput.cs", @"private\s+static\s+void\s+BeforeAttackInput\s*\(\s*Player\s+__instance\s*\)")]
     [InlineData("Excavation/ExcavationShovelInput.cs", @"IronShovel\.ModeFor\s*\(\s*attack\s*\(\s*__instance\s*\)\s*,\s*secondary\s*\(\s*__instance\s*\)")]
     [InlineData("Excavation/ExcavationShovelInput.cs", @"ReferenceEquals\s*\(\s*__instance\s*,\s*Player\.m_localPlayer\s*\)")]
@@ -188,6 +217,19 @@ public sealed class ExcavationSourceAuditTests
     public void TheShovelPropertiesAreWhereTheyMustBe(string relative, string pattern)
     {
         Assert.Equal(1, Count(SourceText(relative), pattern));
+    }
+
+    /// <summary>The attack animations are written exactly twice (both cleared), and both writes come before the check that
+    /// refuses a clone with an attack left, so nothing can restore one after it.</summary>
+    [Fact]
+    public void TheClearedAttackCannotBeRestoredAfterTheCheck()
+    {
+        string item = SourceText("Items/IronShovelItem.cs");
+        Assert.Equal(2, Count(item, @"\bm_attackAnimation\s*(=[^=]|\+=)"));
+        int check = Regex.Match(item, @"item\.HavePrimaryAttack\s*\(").Index;
+        Assert.True(check > 0);
+        Assert.All(Regex.Matches(item, @"\bm_attackAnimation\s*=[^=]").Cast<Match>(), m => Assert.True(m.Index < check));
+        Assert.Equal(0, Count(item.Substring(check), @"\bm_(secondaryA|a)ttack\b\s*(=[^=]|\.)"));
     }
 
     [Fact]
@@ -247,11 +289,15 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count("levels[index] = 0f;", @"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)"));
         Assert.Equal(0, Count("float level = levels[index];", @"\b(levels|smooths)\s*\[[^\]]*\]\s*(=[^=]|\+=|-=|\+\+|--)"));
         // Slice 3: a second durability write in any spelling is seen, a comparison is not.
-        const string durability = @"\.m_durability\s*(=[^=]|\+=|-=|\+\+|--)";
-        Assert.Equal(1, Count("item.m_durability -= 4f;", durability));
-        Assert.Equal(1, Count("item.m_durability = 0f;", durability));
-        Assert.Equal(1, Count("item.m_durability--;", durability));
-        Assert.Equal(0, Count("if (item.m_durability == 0f) return;", durability));
-        Assert.Equal(0, Count("float max = item.m_shared.m_maxDurability;", durability));
+        Assert.Equal(1, Count("item.m_durability -= 4f;", DurabilityWrite));
+        Assert.Equal(1, Count("item.m_durability = 0f;", DurabilityWrite));
+        Assert.Equal(1, Count("item.m_durability--;", DurabilityWrite));
+        Assert.Equal(1, Count("item.m_durability *= 0.5f;", DurabilityWrite));
+        Assert.Equal(1, Count("Wear(ref item.m_durability);", DurabilityWrite));
+        Assert.Equal(0, Count("if (item.m_durability == 0f) return;", DurabilityWrite));
+        Assert.Equal(0, Count("float max = item.m_shared.m_maxDurability;", DurabilityWrite));
+        // A Charge call under any argument name is seen; its definition is not.
+        Assert.Equal(1, Count("Charge(__instance, weapon, 1f, 1f);", ChargeCall));
+        Assert.Equal(0, Count("private static void Charge(Player player, ItemDrop.ItemData shovel)", ChargeCall));
     }
 }

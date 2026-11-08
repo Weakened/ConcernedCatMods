@@ -163,12 +163,12 @@ deeper-floor refusal, and a dropped shared tile edge each fail them.
 
 | ID | State |
 |---|---|
-| BSM-01 | Versions, APIs, floor, depth, border and limits are documented here from source. Runtime geometry prototype: **NOT RUN** (the `cl_excavate` harness of section 6 exists for it). Open assumption: the depth (section 1). The 1 m spacing (3.1) is now read live and refused otherwise; the op registration (3.7) no longer depends on Unity's Awake order. |
+| BSM-01 | Versions, APIs, floor, depth, border and limits are documented here from source. Runtime geometry prototype: **NOT RUN** (the Iron Shovel of section 7 digs, and `cl_excavate plan` describes a plan, for that measurement). Open assumption: the depth (section 1). The 1 m spacing (3.1) is now read live and refused otherwise; the op registration (3.7) no longer depends on Unity's Awake order. |
 | BSM-02 | Implemented in slice 3 (section 7): recipe, station, discovery, equip, durability, repair, localization. **NOT RUN** in game: **OWNER GO-AROUND PENDING**. |
 | BSM-06 (costs) | The single charge, the stamina and broken-tool refusals and the interruption policy are implemented and unit-tested (section 7.3). Joins, datum and recovery remain slice 2's. In game: **OWNER GO-AROUND PENDING**. |
 | BSM-03 to BSM-12 (rest) | **NOT RUN**. The preview, the reach rule and full input polish (BSM-05) are slice 4. In-game rows: **OWNER GO-AROUND PENDING**. Multiplayer: **MULTIPLAYER ENDPOINT BLOCKED**. Controller: **CONTROLLER HARDWARE BLOCKED**. |
 
-## 6. Slice 2 (this slice): terrain operations, terrain adapter and commit gate
+## 6. Slice 2: terrain operations, terrain adapter and commit gate
 
 Code: `src/ConcernedLadders/Excavation/` (game adapters) and `src/ConcernedLadders/Domain/Excavation/`
 (`ExcavationTerrainRules`, `ExcavationCommit`, `ExcavationReport`: game-free and tested). Everything below was
@@ -257,9 +257,11 @@ the planner (`Refused`, `NothingToDig`). Only a Ready plan that lowers something
 
 Then, after the in-flight slot is taken, exactly one `Attack.SpawnOnHitTerrain(point, op, null, 0, null, null)`
 at (centre, datum). A plain null back means the game's own check declined before instantiating anything: the
-slot is freed and nothing happened. Otherwise the floor is read back every frame, from the next one, and compared
+slot is freed and nothing happened. Otherwise the floor is read back every frame, and compared
 through `ExcavationPlanner.Check`. Complete, Overshot or Unreadable end it at once. Pending (or a `Rebuilding`
-read) waits up to 10 s, then reports `TimedOut`. A world unload reports `Abandoned`. **Nothing is ever retried or
+read) waits up to 10 s, then reports `TimedOut`. (Since slice 3 the slot is taken in the press's FixedUpdate, on the
+fixed clock, so the first read-back can run in the commit frame before its rebuild; it then reads `Rebuilding` or the
+old heights, and both wait.) A world unload reports `Abandoned`. **Nothing is ever retried or
 repaired**: the next dig is a fresh plan, from freshly read terrain, that the player asks for.
 
 `ExcavationSourceAuditTests` pins the one `SpawnOnHitTerrain` call to `Excavation/ExcavationRuntime.cs`. In the
@@ -267,14 +269,14 @@ excavation code it refuses RPCs, height or delta writes, compiler creation, owne
 `Instantiate`, reflection writes, damage and Jötunn's `PrefabManager`. It is a text audit, so a call reached
 through a delegate is invisible to it.
 
-### 6.4 The temporary console harness (`cl_excavate`)
+### 6.4 The console harness (`cl_excavate`), read-only since slice 3
 
 Registered only when `[Excavation] Enabled = true` (default **false**; restart after changing).
 `cl_excavate plan small|large` reads and describes the plan at the terrain the camera looks at, within 10 m of the
 player, including what would refuse it and how many building-piece colliders stand on ground that would change. It
-changes nothing and flashes no ward. `cl_excavate dig small|large` runs the full gate. `cl_excavate status` shows the
-switch, the probe, the registration and any unconfirmed dig. The harness exists so the owner can measure the hole
-before the shovel exists; the shovel's deliberate action replaces it as the way a player digs. It is registered
+changes nothing and flashes no ward. In slice 2, `cl_excavate dig small|large` ran the full gate; slice 3 removed it
+(7.4), so the Iron Shovel's press is the only way a dig happens. `cl_excavate status` shows the switch, the probe, the
+registration and any unconfirmed dig. It is registered
 through Jötunn, because Jötunn 2.30.2 reflects for the 13-parameter `Terminal.ConsoleCommand` constructor that
 1.0.21 has (the #307 mismatch was Jötunn 2.29.2's). The aim ray is terrain-only. The reach and targeting rule,
 including digging under a floor and from a ladder, belongs to the preview slice.
@@ -301,7 +303,7 @@ including digging under a floor and from a ladder, belongs to the preview slice.
   from outside also refuses. That is the fail-closed side.
 - One in flight is per client. Two clients committing on one tile in the same frame could still double count
   (claim 9).
-- Until the item slice bumps the version, a peer running the published 1.0.0 passes the version handshake but has
+- Until the 1.1.0 bump (on the trapdoor branch, #523) ships, a peer running the published 1.0.0 passes the version handshake but has
   not registered the ops. A dig on a tile it owns is dropped there (with an error in its log), and the digging
   client reports `TimedOut`, which says so.
 
@@ -322,7 +324,7 @@ read from the decompiled installed game (1.0.21) and Jötunn 2.30.2. **None of i
   available. No game asset ships; no live Player or BaseAI is instantiated. The clone keeps the donor's **equip slot
   and hand** (the registration refuses a donor that is not a weapon type, because `Humanoid.GetCurrentWeapon` only
   returns weapons), **weight, durability (`m_maxDurability`) and repair**. The log line at registration states the
-  donor's item type, durability, repairability and swing trigger, because none of those values is in code.
+  donor's item type, durability and repairability, because none of those values is in code.
 - **Looks:** the donor's iron pickaxe model with every material replaced by a tinted copy (cooler and darker), and an
   icon rendered from that tinted clone on graphical clients (the donor's icon on a dedicated server or on a render
   fault). This is a **placeholder**: a shovel-shaped model (for example procedural, like the metal ladders) is an
@@ -363,11 +365,17 @@ scaled amount.
 
 - **Asked** after the planner has a Ready plan and before any world check (so a tired player flashes no ward), in this
   order: the shovel is the equipped weapon (the very item the press came from); the player is free to act (not mid-swing,
-  dodging, staggered, knocked back or in a minor action: the states in which `Humanoid.StartAttack` refuses); the shovel
+  dodging, staggered, knocked back or in a minor action: the states in which `Humanoid.StartAttack` refuses; and not
+  teleporting); the shovel
   has the **whole** durability cost left and is not broken (a tool that would break part-way never digs); the player has
   the stamina (the stamina bar flashes, as for an attack). Each refusal says what to do and that nothing was charged.
 - **Charged once**, in `ExcavationRuntime.Charge`, only after `Attack.SpawnOnHitTerrain` returned a placed operation:
-  durability first, then stamina, then the donor's swing animation on the player's own animator (cosmetic, best effort).
+  stamina first (through the game's own `UseStamina`), then durability (a plain field write that cannot throw), so a
+  fault charges nothing rather than half. **No animation plays** (independent review of slice 3): the donor's swing clip
+  raises the attack-trigger event, and `Humanoid.OnAttackTrigger` runs whatever attack is still stored in
+  `m_currentAttack`, which nothing clears when an attack finishes, so a punch thrown before equipping the shovel would
+  land a real melee hit outside the gate. A tool animation that cannot reach a stored attack is an owner question for
+  slice 4.
   A refusal at any gate, `NothingToDig`, the game's own spawn refusal, or a cancelled press charges nothing.
 - **Interruption policy:** once the operation is placed it has been handed to every tile owner, so the dig is paid for
   whatever the read-back later reports (Complete, Overshot, Unreadable, TimedOut, Abandoned), and it is never paid for
@@ -386,7 +394,9 @@ attack, terrain op, quality and damage; and that `Items/` changes nothing else.
 - **`cl_excavate dig` is removed** (not kept beside the shovel): the issue forbids excavation driven by chat, menus or
   other UI, and the console is UI. `cl_excavate plan` (read-only, now with the shovel's cost) and `status` stay behind
   the switch as diagnostics.
-- The tinted pickaxe model as a placeholder look.
+- The tinted pickaxe model as a placeholder look, and no animation (7.3).
+- When the shovel cannot dig this session (its input patch or the start-up probe did not match the installed game), the
+  item is still registered, so crafted shovels survive, but its recipe is disabled, so no one spends Iron on it.
 - The item exists only while the switch is on. **Risk:** turning the switch off after crafting a shovel removes the item
   prefab, and the game discards items whose prefab it cannot find when it loads an inventory or a chest, so the shovel is
   lost. A peer with the switch off cannot show a shovel another player drops. Every player needs the same setting.
@@ -401,7 +411,7 @@ attack, terrain op, quality and damage; and that `Items/` changes nothing else.
   attack buttons do the same (**CONTROLLER HARDWARE BLOCKED**).
 - The charge: stamina and durability fall by the table once per dig; a refused or empty dig takes nothing; a nearly
   broken shovel and a tired player refuse.
-- The swing animation plays, and the player can move again after it.
+- That no animation plays, and that the press feels acceptable without one (owner question: which animation, slice 4).
 - Multiplayer: **MULTIPLAYER ENDPOINT BLOCKED**.
 
 ## 8. Next slices (each a PR of its own)
