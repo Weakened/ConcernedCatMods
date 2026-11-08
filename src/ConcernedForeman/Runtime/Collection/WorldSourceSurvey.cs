@@ -4,6 +4,7 @@ using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Worker;
+using TheConcernedCat.Workers.Felling;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
@@ -31,6 +32,7 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
 
     private readonly SourceDirectory _directory;
     private readonly IDesignationSite _site;
+    private readonly WorldFellingPort? _felling;
     private readonly List<ZNetView> _entries = new List<ZNetView>();
     private readonly Dictionary<(long X, long Z), AreaAccess> _wardByCell = new Dictionary<(long, long), AreaAccess>();
 
@@ -38,10 +40,15 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
     private int _cursor;
     private int _sceneCountAtBegin;
 
-    public WorldSourceSurvey(SourceDirectory directory, IDesignationSite site)
+    /// <param name="felling">D19 (#282): when given, and its switch is on, and
+    /// the scope is an explicit work area (never the default camp circle), the
+    /// four small trees are surveyed too. Null surveys stones and branches only.
+    /// </param>
+    public WorldSourceSurvey(SourceDirectory directory, IDesignationSite site, WorldFellingPort? felling = null)
     {
         _directory = directory ?? throw new ArgumentNullException(nameof(directory));
         _site = site ?? throw new ArgumentNullException(nameof(site));
+        _felling = felling;
     }
 
     public bool IsLoaded(SitePoint point)
@@ -78,6 +85,7 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
         int examined = 0;
         int found = 0;
         float reach = scope.RadiusMetres + 1f;
+        bool trees = _felling != null && _felling.Enabled && scope.Source != WorkScopeSource.DefaultCampCircle;
         while (_cursor < _entries.Count && examined < maxEntries && found < maxCandidates)
         {
             ZNetView view = _entries[_cursor++];
@@ -89,7 +97,9 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
                 continue;
             }
 
-            if (!NaturalSourceClassifier.IsAllowlistedHash(view.GetZDO().GetPrefab()))
+            int hash = view.GetZDO().GetPrefab();
+            bool tree = trees && WorldFellingPort.IsSmallTreeHash(hash);
+            if (!tree && !NaturalSourceClassifier.IsAllowlistedHash(hash))
             {
                 continue;
             }
@@ -105,6 +115,30 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
             // a source outside the drawn boundary is not in the area.
             if (scope.OutsideBoundary(point))
             {
+                continue;
+            }
+
+            if (tree)
+            {
+                SmallTreeFacts treeFacts = WorldFellingPort.ReadFacts(view, out _, out SmallTreeKind? kind);
+                if (kind == null)
+                {
+                    continue;
+                }
+
+                var treeKey = new SourceKey(
+                    kind.Prefab, NaturalSourceClassifier.FormatId(view.GetZDO().m_uid), scope.WorldLoadEpoch, point);
+                into.Add(new SurveyCandidate(
+                    treeKey,
+                    treeFacts,
+                    ownedHere: view.IsOwner(),
+                    inInterior: Character.InInterior(position),
+                    location: WorldLocationSense.At(position),
+                    ward: WardAt(position),
+                    builtPieceClearanceMetres: _felling!.NearestPieceMetres(position),
+                    estimatedYield: SmallTreeSources.MaxWood(kind)));
+                _directory.Remember(treeKey, view);
+                found++;
                 continue;
             }
 

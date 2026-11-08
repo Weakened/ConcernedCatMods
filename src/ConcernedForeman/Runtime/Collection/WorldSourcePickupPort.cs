@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Collection;
@@ -7,7 +8,9 @@ using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Identity;
+using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
+using TheConcernedCat.Workers.Felling;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
@@ -34,7 +37,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
 /// <c>ItemDrop.Pickup</c>/<c>Interact</c> (the non-player trap), never adds an
 /// item it did not see arrive, never destroys a source itself, and never
 /// grants an estimate.</summary>
-internal sealed class WorldSourcePickupPort : ISourcePickupPort
+internal sealed class WorldSourcePickupPort : ISourcePickupPort, ISourceFellingPort
 {
     private readonly CollectionParameters _parameters;
     private readonly ICustodyRuntime _custody;
@@ -47,6 +50,8 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
     private readonly Func<WorkAuthorityVerdict> _authority;
     private readonly Func<CollectedResource, float> _unitWeight;
     private readonly Action<string> _log;
+    private readonly WorldFellingPort? _felling;
+    private readonly List<ItemDrop> _spawned = new List<ItemDrop>();
     private readonly HashSet<ItemDrop> _before = new HashSet<ItemDrop>();
     private readonly Dictionary<string, TracedDrop> _traced = new Dictionary<string, TracedDrop>(StringComparer.Ordinal);
     private readonly HashSet<SourceKey> _poisoned = new HashSet<SourceKey>();
@@ -63,7 +68,8 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
         CollectionRequestIds requestIds,
         Func<WorkAuthorityVerdict> authority,
         Func<CollectedResource, float> unitWeight,
-        Action<string> log)
+        Action<string> log,
+        WorldFellingPort? felling = null)
     {
         _parameters = parameters;
         _custody = custody;
@@ -76,6 +82,7 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
         _authority = authority;
         _unitWeight = unitWeight;
         _log = log;
+        _felling = felling;
     }
 
     public PickupResult TryPick(SourceKey source, OrderId order)
@@ -261,6 +268,232 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
 
         return result;
     }
+
+    /// <summary>D19 inside a collection order (#282 leaf 2): one felling hit on
+    /// a reserved small tree, and on a fell the same-call trace of the Wood his
+    /// own hit dropped.
+    ///
+    /// <b>Revalidated in this call, in this order:</b> work authority, the
+    /// order, its reservation, the tree's identity and D19's classification, his
+    /// body and inventory, open ground outside a world location, then every
+    /// D19 site rule through the shared <see cref="SmallTreeFelling.CheckSite"/>
+    /// (the switch, an explicit area, inside it, owned here, the ward, 15 m from
+    /// players and built pieces, reach, his own usable axe). A player within
+    /// 15 m is the one answer that waits rather than refuses.
+    ///
+    /// <b>Journal first.</b> Every hit is a pickup in the settlement record:
+    /// started before the hit, finished after it. A hit that leaves the tree
+    /// standing finishes Refused with no drops, so nothing is credited and no
+    /// schema changes; a fell finishes Picked with exactly the drops traced.
+    ///
+    /// <b>Only his own drops, only Wood, only what the order may take.</b> The
+    /// hit lands through <see cref="WorldFellingPort.StrikeOnce"/>, the single
+    /// pinned <c>Destructible.Damage</c>. Of the item drops that appeared beside
+    /// the tree during that call, only Wood owned by this process is traced, by
+    /// instance id, and only while it fits <paramref name="takeLimit"/>; resin,
+    /// fir cones and Wood beyond the limit are never guarded, never touched and
+    /// lie on the ground as ordinary items, exactly as after a player's swing.
+    /// A traced drop is taken by <see cref="TryTakeDrop"/> in the same tick or
+    /// given back to the world.</summary>
+    public FellStrikeResult TryStrike(SourceKey source, OrderId order, int takeLimit)
+    {
+        // A trace never outlives the call that made it.
+        ReleaseUntakenDrops();
+
+        if (_felling == null)
+        {
+            return StrikeRefused("felling is not wired in this session");
+        }
+
+        if (_authority() != WorkAuthorityVerdict.Granted)
+        {
+            return StrikeRefused("work authority is not granted");
+        }
+
+        CollectionOrderDefinition? definition = _orders(order);
+        if (definition == null)
+        {
+            return StrikeRefused("no such active order");
+        }
+
+        if (!_reservations.IsHeldBy(source, order))
+        {
+            return StrikeRefused("the order does not hold this tree's reservation");
+        }
+
+        if (_poisoned.Contains(source))
+        {
+            return StrikeRefused("this tree misbehaved earlier this session and is left alone");
+        }
+
+        if (takeLimit < 1)
+        {
+            return StrikeRefused("nothing more of what it would drop is the order's to take");
+        }
+
+        if (!_directory.TryResolveTree(source, out ZNetView view, out Destructible tree, out string missing))
+        {
+            return StrikeRefused(missing);
+        }
+
+        SmallTreeFacts facts = WorldFellingPort.ReadFacts(view, out Destructible? part, out SmallTreeKind? kind);
+        SmallTreeRefusal verdict = SmallTreeFelling.Classify(facts);
+        if (verdict != SmallTreeRefusal.Eligible || kind == null || part != tree ||
+            !string.Equals(kind.Prefab, source.PrefabName, StringComparison.Ordinal))
+        {
+            return StrikeRefused(SmallTreeFelling.Describe(verdict));
+        }
+
+        ForemanWorkerAI? body = _body();
+        Humanoid? humanoid = body != null ? body.GetComponent<Humanoid>() : null;
+        if (body == null || humanoid == null || body.IsFaulted || !body.IsOwnedAndValid)
+        {
+            return StrikeRefused("Thorstein's body is not here, not owned here, or faulted");
+        }
+
+        if (!_custody.TryResolveWorker(WorkerKey.Thorstein, out IInventoryPort? workerPort, out CollectionAttentionReason workerRefusal) ||
+            workerPort == null)
+        {
+            return StrikeRefused("his inventory is not available (" + workerRefusal + ")");
+        }
+
+        Vector3 treeAt = view.transform.position;
+        Vector3 workerAt = body.transform.position;
+        SitePoint point = NaturalSourceClassifier.ToSitePoint(treeAt);
+        if (Character.InInterior(treeAt))
+        {
+            return StrikeRefused(NaturalSourcePredicate.Describe(SiteRefusal.Interior));
+        }
+
+        LocationStanding location = WorldLocationSense.At(treeAt);
+        if (location != LocationStanding.Outside)
+        {
+            return StrikeRefused(NaturalSourcePredicate.Describe(
+                location == LocationStanding.Inside ? SiteRefusal.InsideLocation : SiteRefusal.LocationUnknown));
+        }
+
+        ItemDrop.ItemData? axe = WorldFellingPort.BestAxe(humanoid);
+        var site = new FellSiteFacts(
+            featureEnabled: _felling.Enabled,
+            authorityGranted: _authority() == WorkAuthorityVerdict.Granted,
+            explicitArea: definition.Scope.Source != WorkScopeSource.DefaultCampCircle,
+            insideArea: definition.Scope.Contains(point),
+            ownedHere: view.IsOwner(),
+            wardAllows: _site.CheckAccess(point, 0f) == AreaAccess.Granted,
+            nearestPlayerMetres: WorldFellingPort.NearestPlayerMetres(treeAt),
+            nearestBuiltPieceMetres: _felling.NearestPieceMetres(treeAt),
+            workerDistanceMetres: Utils.DistanceXZ(workerAt, treeAt),
+            hasUsableAxe: axe != null,
+            axeToolTier: axe?.m_shared.m_toolTier ?? -1,
+            treeMinToolTier: kind.MinToolTier);
+        FellSiteRefusal siteRefusal = SmallTreeFelling.CheckSite(site, _parameters.PickupReachMetres);
+        if (siteRefusal == FellSiteRefusal.PlayerTooClose)
+        {
+            return new FellStrikeResult(FellStrikeOutcome.Waiting, null, SmallTreeFelling.Describe(siteRefusal));
+        }
+
+        if (siteRefusal != FellSiteRefusal.Allowed)
+        {
+            return StrikeRefused(SmallTreeFelling.Describe(siteRefusal));
+        }
+
+        // --- The intent reaches disk before the hit -------------------------------------------------
+        RequestId? pickup = _custody.BeginPickup(order, source);
+        if (pickup == null)
+        {
+            return StrikeRefused("the hit could not be written to the settlement record");
+        }
+
+        // --- One hit, through the single pinned Destructible.Damage ------------------------------------
+        _spawned.Clear();
+        FellOutcome outcome = _felling.StrikeOnce(
+            tree, view, kind, axe!, humanoid, workerAt, _spawned, out float healthBefore, out float healthAfter, out bool gone, out bool threw);
+
+        // --- On a fell, trace only the Wood his own hit dropped, up to the limit -----------------------
+        string woodPrefab = CollectedResources.ItemPrefabName(CollectedResource.Wood);
+        var drops = new List<SpawnedDrop>();
+        int room = takeLimit;
+        int leftOnGround = 0;
+        _traceFrame = Time.frameCount;
+        if (outcome == FellOutcome.Felled)
+        {
+            foreach (ItemDrop candidate in _spawned)
+            {
+                ZNetView dropView = candidate != null ? candidate.GetComponent<ZNetView>() : null!;
+                bool wood = candidate != null && dropView != null && dropView.IsValid() && dropView.IsOwner() &&
+                    string.Equals(Utils.GetPrefabName(candidate.gameObject), woodPrefab, StringComparison.Ordinal);
+                int stack = wood ? Math.Max(1, candidate!.m_itemData.m_stack) : 0;
+                if (!wood || stack > room)
+                {
+                    // Not Wood, not owned here, or more than the order may take:
+                    // never guarded and never touched, an ordinary world item.
+                    leftOnGround++;
+                    continue;
+                }
+
+                candidate!.m_autoPickup = false;
+                room -= stack;
+                string id = NaturalSourceClassifier.FormatId(dropView!.GetZDO().m_uid);
+                var dropItem = new MaterialItem(woodPrefab, candidate.m_itemData.m_quality, candidate.m_itemData.m_variant);
+                drops.Add(new SpawnedDrop(id, dropItem, stack));
+                _traced[id] = new TracedDrop(candidate, order, source, dropItem, stack);
+            }
+        }
+
+        _spawned.Clear();
+        string evidence = kind.Prefab + ": health " + healthBefore.ToString("0.#", CultureInfo.InvariantCulture) + " -> " +
+            (gone ? "down" : healthAfter.ToString("0.#", CultureInfo.InvariantCulture)) +
+            (threw ? ", the hit threw" : string.Empty);
+        PickupResult result;
+        FellStrikeOutcome strike;
+        switch (outcome)
+        {
+            case FellOutcome.Felled:
+                result = new PickupResult(
+                    PickupOutcome.Picked, drops,
+                    "felled " + evidence + "; traced " + drops.Count + " Wood drop(s), left " + leftOnGround + " on the ground");
+                strike = FellStrikeOutcome.Felled;
+                if (threw)
+                {
+                    // Real drops exist and are taken, but this tree behaved
+                    // unlike vanilla; nothing more is asked of its key.
+                    _poisoned.Add(source);
+                }
+
+                break;
+            case FellOutcome.Hit:
+                result = new PickupResult(PickupOutcome.Refused, Array.Empty<SpawnedDrop>(), "struck " + evidence + "; it still stands");
+                strike = FellStrikeOutcome.Struck;
+                break;
+            case FellOutcome.NoEffect:
+                result = new PickupResult(PickupOutcome.Refused, Array.Empty<SpawnedDrop>(), "the hit did nothing to " + evidence);
+                strike = FellStrikeOutcome.Refused;
+                break;
+            default:
+                result = new PickupResult(PickupOutcome.Uncertain, Array.Empty<SpawnedDrop>(), "an uncertain hit on " + evidence);
+                strike = FellStrikeOutcome.Uncertain;
+                _poisoned.Add(source);
+                _log("Felling: an uncertain hit on " + source + " (" + evidence + ").");
+                break;
+        }
+
+        if (leftOnGround > 0)
+        {
+            _log("Felling: " + leftOnGround + " item(s) " + kind.Prefab + " dropped were not this order's and lie on the ground.");
+        }
+
+        // --- The result reaches the record ------------------------------------------------------------
+        if (!_custody.FinishPickup(pickup.Value, result))
+        {
+            ReleaseUntakenDrops();
+            return new FellStrikeResult(FellStrikeOutcome.Uncertain, null, "the hit's result could not be written to the settlement record");
+        }
+
+        return new FellStrikeResult(strike, strike == FellStrikeOutcome.Felled ? result : null, result.Reason);
+    }
+
+    private static FellStrikeResult StrikeRefused(string why) =>
+        new FellStrikeResult(FellStrikeOutcome.Refused, null, why);
 
     public int TryTakeDrop(SpawnedDrop drop, IInventoryPort worker)
     {
