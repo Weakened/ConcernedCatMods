@@ -16,8 +16,11 @@ Not published. In progress on `main`; 1.0.0 is the latest published build.
   closed or closing one. None of it has been tried in game yet, so leave it
   off.
 - Sloped cellar doors (CL-005, #486), in progress: the shape, the paired
-  leaves' motion rule and the cost of the nine cellar doors are designed. This
-  build adds nothing to the game for them yet.
+  leaves' motion rule and the cost of the nine cellar doors are designed. The
+  nine pieces exist behind a new setting, `CellarDoors` / `Enabled`, which is
+  off by default: with it off this build adds nothing to the hammer menu. With
+  it on, the leaves do not open yet. None of it has been tried in game, so
+  leave it off.
 
 ## 1.0.0
 

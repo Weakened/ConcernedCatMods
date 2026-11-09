@@ -36,6 +36,8 @@ public sealed class Plugin : BaseUnityPlugin
     private ExcavationRuntime? _excavation;
     private ConfigEntry<bool>? _trapdoorsEnabled;
     private TrapdoorPieceRegistration? _trapdoors;
+    private ConfigEntry<bool>? _cellarDoorsEnabled;
+    private CellarDoorPieceRegistration? _cellarDoors;
     private ExcavationShovelInput? _shovelInput;
     private IronShovelItem? _shovel;
     private ExcavationPreview? _preview;
@@ -63,6 +65,23 @@ public sealed class Plugin : BaseUnityPlugin
                 Logger.LogError("Trapdoors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
                 try { _trapdoors.Dispose(); } catch { /* Unsubscribe only. */ }
                 _trapdoors = null;
+        _cellarDoors?.Dispose();
+        _cellarDoors = null;
+            }
+        }
+        // Sloped cellar doors (CL-005 #486), unfinished and off by default, their own switch: with it off nothing is
+        // cloned or localized and the hammer menu is unchanged. Their failures never touch the ladders or trapdoors.
+        _cellarDoorsEnabled = Config.Bind(CellarDoorSettings.Section, CellarDoorSettings.Key, CellarDoorSettings.EnabledByDefault,
+            CellarDoorSettings.Description);
+        if (_cellarDoorsEnabled.Value)
+        {
+            _cellarDoors = new CellarDoorPieceRegistration(message => Logger.LogInfo(message));
+            try { _cellarDoors.Install(); }
+            catch (Exception exception)
+            {
+                Logger.LogError("Cellar doors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
+                try { _cellarDoors.Dispose(); } catch { /* Unsubscribe only. */ }
+                _cellarDoors = null;
             }
         }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
@@ -175,6 +194,8 @@ public sealed class Plugin : BaseUnityPlugin
         _pieces?.Dispose();
         _trapdoors?.Dispose();
         _trapdoors = null;
+        _cellarDoors?.Dispose();
+        _cellarDoors = null;
         _snap = null;
         _runtime = null;
         _pieces = null;
