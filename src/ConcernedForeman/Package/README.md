@@ -63,7 +63,7 @@ running.
 | `ClimbSpeed` | `1.0` | Multiplier on the climb speed (0.25–3). |
 | `StaminaCost` | `0` | Stamina per second of climbing. |
 | `UseTeleport` | `false` | Give the Use key back to vanilla's teleport. |
-| `NpcClimbing` | `false` | For settlement workers later. Nothing reads it in this build. |
+| `NpcClimbing` | `false` | Lets Thorstein climb a Concerned Ladders ladder on an explicit `cf_worker climb` order (host, nobody else connected, settlement runtime on). Not yet observed in game. |
 
 None of Foreman's climb has been watched working in a real game, and it will not
 be developed further: player climbing belongs to Concerned Ladders.

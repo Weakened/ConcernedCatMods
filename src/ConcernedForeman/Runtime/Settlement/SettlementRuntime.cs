@@ -281,9 +281,17 @@ internal sealed class SettlementRuntime
             "goto" => GoTo(args),
             "stop" => Stop(),
             "despawn" => Despawn(),
-            _ => "Unknown subcommand. Try: status, spawn, goto <x> <z>, stop, despawn.",
+            "climb" => Climb != null
+                ? Climb(args!)
+                : "Worker ladder climbing is not available in this build.",
+            _ => "Unknown subcommand. Try: status, spawn, goto <x> <z>, stop, despawn, climb.",
         };
     }
+
+    /// <summary>#334: <c>cf_worker climb ...</c>, answered by the ladder-route
+    /// order (<c>WorkerClimbRuntime</c>). Unset means no order can be given.
+    /// </summary>
+    internal Func<string[], string>? Climb { get; set; }
 
     /// <summary>The bound worker body, re-found by key when its ground has
     /// been unloaded and loaded again.</summary>

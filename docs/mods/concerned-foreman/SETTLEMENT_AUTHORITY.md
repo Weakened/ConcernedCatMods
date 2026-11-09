@@ -319,6 +319,16 @@ Thorstein may fell exactly four small trees: `Beech_small1`, `Beech_small2`, `Fi
 - **Decided but unused.** `TreeBase` and `TreeLog` damage were decided, but the small trees are not `TreeBase`, so neither has a call site. The D19 felling audit refuses both names, and any other `.Damage(`, across all of Foreman and the shared trees it compiles in.
 - **The full record** is `docs/settlement/cart-and-collection/DECISIONS.md` D19.
 
+## 5c. Addendum: ladder traversal (owner decision 2026-11-01, #334, D14.6)
+
+The one exception to a worker body being moved only through the vanilla motor (CLAUDE.md, "Workers").
+- **Who.** Thorstein's own worker body, on an explicit `cf_worker climb` order, with `Ladders/NpcClimbing` on (off by default) and this record's authority granted (opted in, host, not dedicated, no other peers). His actor mode is held for the whole order.
+- **Where.** Only along a Concerned Ladders link measured against the real colliders and his real capsule, re-surveyed at admission and immediately before every entry. Vanilla ladders are not admitted.
+- **How.** `Runtime/Ladders/WorkerClimbMotor.cs` alone: his AI reports sleeping, so vanilla's walking motor is skipped and `MoveTo` is not called; his own rigidbody is kinematic for the lease and restored after; each step is one position write after a fresh capsule sweep. Walking legs stay on the vanilla motor.
+- **Exits.** Every one gives the body back where it stands, never at a guessed landing, and only then releases the identity.
+- **Not granted.** Teleport, snap, velocity, force, rotation, ownership, RPC, cart or cargo movement, any other body, the player motor.
+- **The full record** is `docs/settlement/cart-and-collection/DECISIONS.md` D14.6. Never observed in game.
+
 ## 6. What this decision does not cover
 
 Named so a successor does not assume they were considered:

@@ -113,6 +113,7 @@ server must have it at a matching version, and Jötunn checks that when a player
 | Setting | Default | Meaning |
 |---|---|---|
 | `General` / `ClimbingEnabled` | `true` | Turns climbing on or off. Placed ladders and the Climbing skill stay registered either way. |
+| `Excavation` / `Enabled` | `false` | Experimental and not yet tested in game: adds the Iron Shovel (Forge: 10 Iron, 4 Wood), which digs one measured basement hole, and a read-only `cl_excavate` console diagnostic. Turning it off again deletes crafted shovels when their inventory loads. Leave it off. |
 | `Trapdoors` / `Enabled` | `false` | Unfinished. Adds nine floor trapdoors to the hammer. Their lids open and close, but ladders do not work with them yet. Leave it off. If you turn it on and place trapdoors, turning it off again (or uninstalling) makes the game delete them, with no refund, the next time the world loads. In multiplayer every player and the host or server must use the same value: a host or server with it off deletes the trapdoors other players place, as soon as they are placed. |
 
 ## Known limitations
