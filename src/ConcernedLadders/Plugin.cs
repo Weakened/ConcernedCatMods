@@ -21,7 +21,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
     public const string PluginName = "Concerned Ladders";
-    public const string PluginVersion = "1.0.0";
+    public const string PluginVersion = "1.1.0";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
