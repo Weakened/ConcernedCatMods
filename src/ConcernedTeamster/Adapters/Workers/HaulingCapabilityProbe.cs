@@ -53,6 +53,8 @@ internal static class HaulingCapabilityProbe
             Type? locationInstance = Game("ZoneSystem+LocationInstance", missingTypes);
             Type? zoneLocation = Game("ZoneSystem+ZoneLocation", missingTypes);
             Type? vector2s = Game("Vector2s", missingTypes);
+            Type? zsyncAnimation = Game("ZSyncAnimation", missingTypes);
+            Type? attack = Game("Attack", missingTypes);
             Game("Catapult", missingTypes);
             Game("SiegeMachine", missingTypes);
             Type? gameObject = Engine("UnityEngine.GameObject, UnityEngine.CoreModule", missingTypes);
@@ -62,6 +64,7 @@ internal static class HaulingCapabilityProbe
             Type? joint = Engine("UnityEngine.Joint, UnityEngine.PhysicsModule", missingTypes);
             Type? configurableJoint = Engine("UnityEngine.ConfigurableJoint, UnityEngine.PhysicsModule", missingTypes);
             Type? constraints = Engine("UnityEngine.RigidbodyConstraints, UnityEngine.PhysicsModule", missingTypes);
+            Type? parameterType = Engine("UnityEngine.AnimatorControllerParameterType, UnityEngine.AnimationModule", missingTypes);
             if (missingTypes.Count > 0)
             {
                 return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
@@ -243,6 +246,20 @@ internal static class HaulingCapabilityProbe
                 new("ZoneSystem+LocationInstance", locationInstance, "m_location", GameMemberKind.InstanceField, zoneLocation),
                 new("ZoneSystem+LocationInstance", locationInstance, "m_position", GameMemberKind.InstanceField, vector3),
                 new("ZoneSystem+ZoneLocation", zoneLocation, "m_exteriorRadius", GameMemberKind.InstanceField, typeof(float)),
+
+                // D21 (owner decision 2026-10-31): the idle hammer swing. The one
+                // call GunnarIdleHammerPort makes, the animator check it asks
+                // first, and every member of the item-database read the trigger
+                // name comes from. A changed game turns the worker runtime off -
+                // and the hammer with it - rather than throwing out of a tick.
+                new("Character", character, "m_zanim", GameMemberKind.InstanceField, zsyncAnimation),
+                new("ZSyncAnimation", zsyncAnimation, "SetTrigger", GameMemberKind.InstanceMethod, typeof(void),
+                    new[] { typeof(string) }),
+                new("ZSyncAnimation", zsyncAnimation, "HasParameter", GameMemberKind.InstanceMethod, typeof(bool),
+                    new[] { typeof(string), parameterType! }),
+                new("ObjectDB", objectDb, "instance", GameMemberKind.StaticProperty, objectDb),
+                new("ItemDrop+ItemData+SharedData", sharedData, "m_attack", GameMemberKind.InstanceField, attack),
+                new("Attack", attack, "m_attackAnimation", GameMemberKind.InstanceField, typeof(string)),
 
                 // Engine members the joint and body checks read.
                 new("Joint", joint, "connectedBody", GameMemberKind.InstanceProperty, rigidbody),

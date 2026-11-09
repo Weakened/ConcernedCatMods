@@ -71,10 +71,10 @@ internal sealed class LadderSettings
     /// interaction patch, so it takes effect without a restart.</summary>
     public ConfigEntry<bool> UseTeleport { get; }
 
-    /// <summary>Let a settlement worker climb. Bound now so the section is the
-    /// one the spec describes; <b>nothing reads it yet</b> — the worker seam is
-    /// CF-LAD-005, and when it lands it obeys the worker rules already in force
-    /// (opted in, host, no other peers).</summary>
+    /// <summary>Let a settlement worker climb. Off by default. #334: read live by
+    /// <c>WorkerClimbRuntime</c>; an explicit <c>cf_worker climb</c> order is
+    /// refused while it is false and ends if it goes false, and the worker rules
+    /// already in force (opted in, host, no other peers) still apply.</summary>
     public ConfigEntry<bool> NpcClimbing { get; }
 
     /// <summary>The settings as values, with the climb switch already combined with its veto, already brought into range.</summary>
@@ -145,8 +145,10 @@ internal sealed class LadderSettings
             LadderSettingValues.Section,
             "NpcClimbing",
             defaults.NpcClimbing,
-            "Let a settlement worker climb a ladder. Off until NPC traversal has " +
-            "passed its own test; nothing in this build reads it.");
+            "Let Thorstein's worker body climb a Concerned Ladders ladder when you give him an " +
+            "explicit route order (cf_worker climb). Off by default. Also needs the settlement " +
+            "runtime opted in, and works only as the host with nobody else connected. Not yet " +
+            "observed in game (gate G5).");
 
         ConfigEntry<bool> legacyEnabled = config.Bind(
             LadderSettingValues.Section,

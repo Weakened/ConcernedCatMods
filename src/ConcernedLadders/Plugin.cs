@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using Jotunn.Managers;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Excavation;
+using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.ConcernedLadders.Items;
 using TheConcernedCat.ConcernedLadders.Pieces;
 using TheConcernedCat.ConcernedLadders.Runtime;
@@ -24,7 +25,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
     public const string PluginName = "Concerned Ladders";
-    public const string PluginVersion = "1.0.0";
+    public const string PluginVersion = "1.1.0";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
@@ -33,6 +34,8 @@ public sealed class Plugin : BaseUnityPlugin
     private OriginalClimbPresenter? _presenter;
     private LadderSnapAlignment? _snap;
     private ExcavationRuntime? _excavation;
+    private ConfigEntry<bool>? _trapdoorsEnabled;
+    private TrapdoorPieceRegistration? _trapdoors;
     private ExcavationShovelInput? _shovelInput;
     private IronShovelItem? _shovel;
 
@@ -46,6 +49,21 @@ public sealed class Plugin : BaseUnityPlugin
         if (!_snap.Install(PluginGuid + ".snap")) { _snap = null; }
         _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message), sideModes: _snap != null);
         _pieces.Install();
+        // Floor trapdoors (CL-004 #485), unfinished and off by default: with the setting off nothing is cloned or
+        // localized and the hammer menu is unchanged. Their failures never touch the ladders.
+        _trapdoorsEnabled = Config.Bind(TrapdoorSettings.Section, TrapdoorSettings.Key, TrapdoorSettings.EnabledByDefault,
+            TrapdoorSettings.Description);
+        if (_trapdoorsEnabled.Value)
+        {
+            _trapdoors = new TrapdoorPieceRegistration(message => Logger.LogInfo(message));
+            try { _trapdoors.Install(); }
+            catch (Exception exception)
+            {
+                Logger.LogError("Trapdoors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
+                try { _trapdoors.Dispose(); } catch { /* Unsubscribe only. */ }
+                _trapdoors = null;
+            }
+        }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
         _skill = new LadderSkill(message => Logger.LogInfo(message));
         _skill.Register();
@@ -143,6 +161,8 @@ public sealed class Plugin : BaseUnityPlugin
         }
         _snap?.Dispose();
         _pieces?.Dispose();
+        _trapdoors?.Dispose();
+        _trapdoors = null;
         _snap = null;
         _runtime = null;
         _pieces = null;

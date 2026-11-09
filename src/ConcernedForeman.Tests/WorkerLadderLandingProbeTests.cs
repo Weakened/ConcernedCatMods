@@ -107,4 +107,41 @@ public sealed class WorkerLadderLandingProbeTests : IDisposable
         probe.TryMeasure(Run(),WorkerLadderFace.Front,_shape,out _); probe.TryMeasure(Run(),WorkerLadderFace.Front,_shape,out _);
         Assert.Single(_log); Assert.Contains("no links",_log[0]);
     }
+    // #334: the scoped motor's per-write sweep and the landing re-check.
+    [Fact] public void EveryMotorStepIsSweptFreshAndANewBlockerRefusesIt()
+    {
+        var probe=Probe(); var from=new WorkPoint(0,1,.67f); var to=new WorkPoint(0,1.05f,.67f);
+        Assert.True(probe.IsMoveClear(from,to));
+        var blockerRoot=new GameObject("door-swung-into-the-lane"); var blocker=blockerRoot.Add(new Collider());
+        Physics.Sweeps=_=>new[]{Hit(blocker,new Vector3())};
+        Assert.False(probe.IsMoveClear(from,to));
+        Physics.Sweeps=_=>new[]{Hit(_own,new Vector3())};
+        Assert.True(probe.IsMoveClear(from,to));
+        Physics.Sweeps=_=>Enumerable.Repeat(Hit(_own,new Vector3()),16).ToArray();
+        Assert.False(probe.IsMoveClear(from,to));
+    }
+    [Fact] public void AMotorStepRefusesUnloadedOrDeniedSpaceAndALostBody()
+    {
+        var from=new WorkPoint(0,1,.67f); var to=new WorkPoint(0,1.05f,.67f);
+        Assert.False(Probe(_=>false).IsMoveClear(from,to));
+        ZoneSystem.instance!.Unloaded.Add(ZoneSystem.Key(new Vector3(0,1,.67f)));
+        Assert.False(Probe().IsMoveClear(from,to));
+        ZoneSystem.instance.Unloaded.Clear();
+        _worker.GetComponent<ZNetView>()!.Owner=false;
+        Assert.False(Probe().IsMoveClear(from,to));
+    }
+    [Fact] public void TheLandingIsRecheckedAsAStaticFloorAtThePathsHeight()
+    {
+        var probe=Probe(); var top=new WorkPoint(0,1.6f,1.4f);
+        Assert.True(probe.IsLandingSupported(top));
+        Physics.Rays=origin=>new[]{Hit(_floor,origin,.7f)};
+        Assert.False(probe.IsLandingSupported(top));
+        var root=new GameObject("hatch"); root.Add(new Door()); var hatch=root.Add(new Collider());
+        Physics.Rays=origin=>new[]{Hit(hatch,origin)};
+        Assert.False(probe.IsLandingSupported(top));
+        Physics.Rays=origin=>new[]{Hit(_floor,origin)};
+        var otherRoot=new GameObject("someone-standing-there"); otherRoot.Add(new Humanoid()); var other=otherRoot.Add(new Collider());
+        Physics.Overlaps=()=>new[]{other};
+        Assert.False(probe.IsLandingSupported(top));
+    }
 }

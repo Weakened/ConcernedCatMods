@@ -99,6 +99,65 @@ internal sealed class ForemanWorkerAI : BaseAI
     /// this worker like any other fault.</summary>
     internal Action<ForemanWorkerAI, float>? WorkTick { get; set; }
 
+    /// <summary>#334: set by the ladder-route order while one holds this body,
+    /// and called once per owned tick right after <see cref="WorkTick"/>, so the
+    /// route runs inside the worker's own simulation step. The callee catches
+    /// its own exceptions.</summary>
+    internal Action<ForemanWorkerAI, float>? RouteTick { get; set; }
+
+    /// <summary>#334: the one scoped ladder lease that owns this body's
+    /// position, or null. While it is set vanilla's ground motor is suspended
+    /// (see <see cref="IsSleeping"/>), this class neither plans nor calls
+    /// <c>MoveTo</c>, and no goal can be given to the body.</summary>
+    private object? _climbLease;
+
+    /// <summary>A ladder lease currently owns this body.</summary>
+    internal bool IsClimbing => _climbLease != null;
+
+    /// <summary>Whether <paramref name="lease"/> is the lease that owns this
+    /// body.</summary>
+    internal bool IsClimbingWith(object lease) => lease != null && ReferenceEquals(_climbLease, lease);
+
+    /// <summary>Hands this body to one scoped ladder lease. Refused for a
+    /// faulted, unowned or already-leased body. The walk goal is dropped and
+    /// the body stopped first, so the ground motor is idle before the lease
+    /// writes anything.</summary>
+    internal bool TryBeginClimb(object lease)
+    {
+        if (lease == null || _faulted || _climbLease != null || !IsOwnedAndValid)
+        {
+            return false;
+        }
+
+        ClearGoalNow();
+        _climbLease = lease;
+        return true;
+    }
+
+    /// <summary>Gives the body back to the ground motor. Only the lease that
+    /// took it can give it back.</summary>
+    internal bool EndClimb(object lease)
+    {
+        if (!IsClimbingWith(lease))
+        {
+            return false;
+        }
+
+        _climbLease = null;
+        return true;
+    }
+
+    /// <summary>#334: vanilla's own switch for "this creature's ground motor is
+    /// off". <c>Character.UpdateMotion</c> skips <c>UpdateWalking</c> - the
+    /// method that applies walking, ground force and the gravity flag - for a
+    /// character whose AI reports sleeping, and <c>Character.UpdateGroundTilt</c>
+    /// and the idle sound skip themselves too. True exactly while a ladder lease
+    /// owns the body, false otherwise, so outside a climb nothing changes.
+    /// Side effects while true, all of which end with the climb: a player's
+    /// crosshair does not name him, and a creature's target search skips him.
+    /// </summary>
+    public override bool IsSleeping() => _climbLease != null;
+
     internal bool IsDeferred => _planner.IsDeferred;
 
     /// <summary>The view is valid and owned by this process.</summary>
@@ -181,7 +240,7 @@ internal sealed class ForemanWorkerAI : BaseAI
     /// path budget into a spin.</summary>
     internal bool SetJobGoal(Vector3 point, float arrivalTolerance)
     {
-        if (_faulted || !(arrivalTolerance > 0f) || float.IsInfinity(arrivalTolerance))
+        if (_faulted || _climbLease != null || !(arrivalTolerance > 0f) || float.IsInfinity(arrivalTolerance))
         {
             return false;
         }
@@ -221,7 +280,9 @@ internal sealed class ForemanWorkerAI : BaseAI
         bool held;
         try
         {
-            held = IsHeldByJob != null && IsHeldByJob();
+            // #334: a ladder-route order holds the body too, whether or not a
+            // collection runtime has wired its own gate onto this body.
+            held = RouteTick != null || _climbLease != null || (IsHeldByJob != null && IsHeldByJob());
         }
         catch
         {
@@ -232,7 +293,7 @@ internal sealed class ForemanWorkerAI : BaseAI
         {
             ErrorLog?.Invoke(
                 "The worker is doing an ordered job, so \"" + what + "\" was not applied. " +
-                "Pause or cancel the job first (cf_collect pause).");
+                "Pause or cancel the job first (cf_collect pause, or cf_worker climb cancel).");
         }
 
         return held;
@@ -285,6 +346,15 @@ internal sealed class ForemanWorkerAI : BaseAI
         }
 
         WorkTick?.Invoke(this, dt);
+        RouteTick?.Invoke(this, dt);
+
+        // #334: a ladder lease owns the body. Nothing below may run: no path
+        // request, no MoveTo, not even a stop, because the ground motor is
+        // suspended and the lease alone places the body until it gives it back.
+        if (_climbLease != null)
+        {
+            return true;
+        }
 
         _planner.BeginTick();
 
