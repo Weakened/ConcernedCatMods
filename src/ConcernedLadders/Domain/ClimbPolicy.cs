@@ -34,6 +34,9 @@ internal enum ClimbRefusal
     Obstacle,
     Unchecked,
     NoLanding,
+
+    /// <summary>The route would cross a trapdoor whose lid is not a passage (CL-004 #485, slice 4).</summary>
+    HatchClosed,
 }
 
 /// <summary>The kind of collider a clearance query hit, as the engine adapter classified it.</summary>

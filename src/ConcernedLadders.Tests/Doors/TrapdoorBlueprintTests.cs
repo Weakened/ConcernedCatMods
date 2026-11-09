@@ -156,8 +156,11 @@ public sealed class TrapdoorBlueprintTests
     public void TheLocalizationNamesEveryFamilyOnceInTitleCase()
     {
         Dictionary<string, string> english = TrapdoorBlueprint.English();
-        Assert.Equal(DoorFamilies.All.Count + 1, english.Count);
+        Assert.Equal(DoorFamilies.All.Count + 2, english.Count);
         Assert.True(english.ContainsKey(TrapdoorBlueprint.DescriptionToken));
+        // Slice 4: the climber's notice is registered with the trapdoors, so it exists exactly when they do.
+        Assert.False(string.IsNullOrWhiteSpace(english[TrapdoorBlueprint.HatchClosedToken]));
+        Assert.StartsWith("cl_msg_", TrapdoorBlueprint.HatchClosedToken, StringComparison.Ordinal);
         foreach (DoorFamily family in DoorFamilies.All)
         {
             string name = english[family.TrapdoorToken];

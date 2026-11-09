@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using TheConcernedCat.ConcernedLadders.Domain;
+using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.ConcernedLadders.Runtime;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Ladders;
@@ -17,6 +18,9 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// <item>aimed at a placed ladder's rails: it extends that column at the end the mode names (Bottom stacks on top, Top
 /// hangs below, Auto takes the nearer end and never buries a section under a column that stands on the ground); the
 /// side modes refuse here (they align to floors and walls only);</item>
+/// <item>aimed at a trapdoor (CL-004 #485, slice 4) in Auto or Top: hung in the hatch's own anchor inside the opening,
+/// facing the hinge, in the hatch's rotation (<see cref="HatchLadder"/>); Auto only when there is room below, as on a
+/// floor edge. Bottom and the side modes treat a trapdoor as the 2 m floor tile it is. Only while trapdoors exist;</item>
 /// <item>aimed at a floor or a wall (<see cref="LadderEdgeSnap"/>): on the floor edge nearest the aim, hanging below it
 /// (Auto, Top, side modes; Auto and the side modes stand on it when there is no room below) or standing on it
 /// (Bottom); or on the wall face toward the player, standing on its bottom edge or hanging from its top edge (Top).
@@ -278,6 +282,26 @@ internal sealed class LadderSnapAlignment : IDisposable
             return Place(g, column.transform.rotation, LadderSegment.Vector(end), out aligned);
         }
 
+        // 3a. Aimed at a trapdoor (CL-004 #485, slice 4): Auto and Top hang the ladder in the hatch's own anchor.
+        TrapdoorLid? hatch = TrapdoorLid.Any ? aimed.GetComponent<TrapdoorLid>() : null;
+        if (hatch != null && HatchLadder.UsesAnchor(mode) && (mode == LadderSnapMode.Top || RoomBelowHatch(aimed.transform)))
+        {
+            Transform h = aimed.transform;
+            LadderEdgePlacement anchor = HatchLadder.Anchor;
+            if (!LadderSnap.WithinPlacementReach(eye, LadderSegment.Point(h.TransformPoint(LadderSegment.Vector(anchor.Joint))), reach))
+            {
+                _refused = player;
+                Decide("refused: " + aimed.name + " hatch out of reach");
+                return false;
+            }
+
+            Vector3 hatchFacing = h.TransformDirection(new Vector3(anchor.FacingX, 0f, anchor.FacingZ));
+            hatchFacing.y = 0f;
+            if (hatchFacing.sqrMagnitude < 0.0001f) { return false; }
+            Decide(mode + " in the hatch of " + aimed.name);
+            return Place(g, Quaternion.LookRotation(hatchFacing.normalized, Vector3.up), h.TransformPoint(LadderSegment.Vector(anchor.Origin)), out aligned);
+        }
+
         // 3. Aimed at a floor or a wall.
         Transform t = aimed.transform;
         TargetPoints.Clear();
@@ -408,7 +432,7 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (GameCamera.instance == null) { return false; }
         Transform camera = GameCamera.instance.transform;
         if (!Physics.Raycast(camera.position, camera.forward, out hit, 50f, _placeMask) || hit.collider == null ||
-            hit.collider.attachedRigidbody != null)
+            (hit.collider.attachedRigidbody != null && !OnTrapdoorLid(hit.collider)))
         {
             return false;
         }
@@ -417,6 +441,28 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (piece == null) { return false; }
         LadderSegment? ladder = piece.GetComponent<LadderSegment>();
         return ladder == null || ladder.IsLive; // The ghost itself never counts.
+    }
+
+    /// <summary>A trapdoor's lid carries its own kinematic body, which the general rule above skips; aimed at, it still
+    /// names its trapdoor (slice 4). Never true while no trapdoor exists.</summary>
+    private static bool OnTrapdoorLid(Collider collider) =>
+        TrapdoorLid.Any && collider.GetComponentInParent<TrapdoorLid>() != null;
+
+    /// <summary>Nothing solid but the hatch itself under the anchored ladder's footprint for most of a section's height
+    /// (<see cref="HatchLadder.RoomProbe"/>): the room test Auto applies under a floor edge, from below the frame. A
+    /// saturated buffer counts as no room.</summary>
+    private static bool RoomBelowHatch(Transform hatch)
+    {
+        Vector3 from = hatch.TransformPoint(LadderSegment.Vector(HatchLadder.RoomProbe));
+        int count = Physics.RaycastNonAlloc(from, Vector3.down, Under, HatchLadder.RoomProbeDepth, _placeMask, QueryTriggerInteraction.Ignore);
+        if (count >= Under.Length) { return false; }
+        for (int index = 0; index < count; index++)
+        {
+            Collider collider = Under[index].collider;
+            if (collider != null && !collider.transform.IsChildOf(hatch)) { return false; }
+        }
+
+        return true;
     }
 
     private static readonly RaycastHit[] Under = new RaycastHit[16];

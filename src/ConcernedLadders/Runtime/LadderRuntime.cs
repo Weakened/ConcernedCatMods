@@ -84,6 +84,11 @@ internal sealed class LadderRuntime : IDisposable
     private bool _enabled = true;
     private readonly DropTrigger _drop = new DropTrigger();
     private int _departFrame = -1;
+    /// <summary>The frame in which a Use press asked this runtime for a dismount (CL-004 #485 slice 4).</summary>
+    private int _dismountUseFrame = -1;
+    /// <summary>The last top or dismount attempt was refused by a trapdoor lid that is not a passage (slice 4), so the
+    /// climber is told the trapdoor is closed rather than that there is no landing.</summary>
+    private bool _hatchShut;
     private int _runRevision = -1;
     private Vector3 _commanded;
 
@@ -192,9 +197,13 @@ internal sealed class LadderRuntime : IDisposable
             // Drop win a press that arrives in the same frame, the press that mounted cannot also dismount, and in
             // build mode the hammer owns the shared Use binding (snap cycling), so it never dismounts there (N08).
             ClimbAction action = ClimbControls.Resolve(focus, JumpPressed(), CrouchPressed(), UsePressed(), _player.InPlaceMode());
-            if (_mode == Mode.Climbing && action == ClimbAction.Use && Time.frameCount != _mountFrame && !HoversInteractable(_player))
+            // A hovered door or trapdoor takes the press (vanilla's own Interact opens it, and its interact animation
+            // holds the climber on the rungs); the ladder never also dismounts on it (CL-004 #485 slice 4).
+            if (_mode == Mode.Climbing && action == ClimbAction.Use &&
+                ClimbControls.UseAsksDismount(Time.frameCount == _mountFrame, HoversInteractable(_player)))
             {
-                if (!TrySafeDismount()) { Notice("$cl_msg_nolanding"); }
+                _dismountUseFrame = Time.frameCount;
+                if (!TrySafeDismount()) { Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_nolanding"); }
             }
 
             // UpdateMotion no longer runs, so nothing else resets the locomotion floats: under the custom IK
@@ -298,7 +307,7 @@ internal sealed class LadderRuntime : IDisposable
     /// before the physics tick that departs, and the departure wins (Jump &gt; Drop &gt; Use).</summary>
     internal bool SuppressInteract()
     {
-        if (Time.frameCount == _departFrame) { return true; }
+        if (ClimbControls.HoldsBackInteract(Time.frameCount, _departFrame, _dismountUseFrame, TrapdoorLid.Any)) { return true; }
         if (!IsClimbing || _player == null || !GameplayFocus(_player)) { return false; }
         return JumpPressed() || (CrouchPressed() && (_drop.Armed || _drop.Pending));
     }
@@ -365,7 +374,7 @@ internal sealed class LadderRuntime : IDisposable
             if (!_motor.TakesInput(player)) { return false; }
             if (IsClimbing)
             {
-                if (Time.frameCount != _mountFrame && !JumpPressed() && !TrySafeDismount()) { Notice("$cl_msg_nolanding"); }
+                if (Time.frameCount != _mountFrame && !JumpPressed() && !TrySafeDismount()) { Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_nolanding"); }
                 return true;
             }
 
@@ -484,6 +493,16 @@ internal sealed class LadderRuntime : IDisposable
                     ? ClimbPolicy.SwimAlignmentAllowed(horizontal, target - feet.y)
                     : ClimbPolicy.AirAlignmentAllowed(horizontal, target - feet.y);
                 if (!aligned) { first = Keep(first, ClimbRefusal.OutOfReach); continue; }
+            }
+
+            // CL-004 #485 slice 4: a mount from the floor at the top goes down through the opening when the ladder hangs in
+            // a trapdoor, so that lid must be a passage. A mount from below never needs it: a climber can always get on
+            // and open the lid from the ladder.
+            if (topEntry && TrapdoorLid.Any && TrapdoorLid.RouteShut(line, clearance.Radius, Mathf.Min(entryLow, line.y),
+                    Mathf.Max(feet.y, line.y) + LadderRules.StepLift + clearance.Height + RouteTopMargin))
+            {
+                first = Keep(first, ClimbRefusal.HatchClosed);
+                continue;
             }
 
             // The hands must reach the rungs without passing through a wall or floor.
@@ -632,6 +651,7 @@ internal sealed class LadderRuntime : IDisposable
         _mountAirborne = plan.Airborne;
         _mountFromTop = plan.TopEntry;
         _endHint = ClimbEnd.None;
+        _hatchShut = false;
         BeginRoute(body.position);
         _ledger.Discard();
         if (plan.Airborne)
@@ -771,7 +791,7 @@ internal sealed class LadderRuntime : IDisposable
                 }
 
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
-                Notice("$cl_msg_notop");
+                Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_notop");
                 Present(true);
                 return true;
             }
@@ -779,7 +799,7 @@ internal sealed class LadderRuntime : IDisposable
             if (velocity > 0f && body.position.y >= _run.Top.Y - 0.03f)
             {
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
-                Notice("$cl_msg_notop");
+                Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_notop");
                 Present(true);
                 return true;
             }
@@ -825,7 +845,9 @@ internal sealed class LadderRuntime : IDisposable
                 }
 
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
-                Refuse(FromBlocker(blocker), blocker, name);
+                // A closed trapdoor overhead is a building piece in the way; say which (CL-004 #485 slice 4).
+                if (velocity > 0f && _hatchShut && body.position.y >= _run.Top.Y - TopBlockedBand) { Notice(HatchClosedNotice); }
+                else { Refuse(FromBlocker(blocker), blocker, name); }
                 Present(true);
                 return true;
             }
@@ -1082,6 +1104,17 @@ internal sealed class LadderRuntime : IDisposable
     /// climber. Each candidate needs room, support and a fully swept rise/cross/settle route.</summary>
     private bool TryExitTop()
     {
+        _hatchShut = false;
+        // CL-004 #485 slice 4: every top exit rises out of the climb lane, so a lane under a trapdoor whose lid is not a
+        // passage has no top exit at all; the closed lid's collision also stops the ascent itself.
+        if (TrapdoorLid.Any && _body != null && TrapdoorLid.RouteShut(LanePoint(_run, _laneDepth, _body.position.y), _clearance!.Radius,
+                _body.position.y, _run.Top.Y + TopSurfaceAbove + LadderRules.StepLift + _clearance.Height))
+        {
+            _hatchShut = true;
+            Landing("top", LadderSegment.Vector(_run.Top), "refused: a trapdoor over the lane is not open");
+            return false;
+        }
+
         Vector3 inward = Toward();
         Vector3 side = Vector3.Cross(Vector3.up, inward);
         Vector3 top = LadderSegment.Vector(_run.Top);
@@ -1144,6 +1177,7 @@ internal sealed class LadderRuntime : IDisposable
 
     private bool TrySafeDismount()
     {
+        _hatchShut = false;
         if (_player != null) { SettlePending(_player, _body!.position.y, Time.fixedDeltaTime); }
         Vector3 feet = _body!.position;
         if (_clearance!.Supported(feet) && _clearance.HasRoom(feet)) { Release(Departure.Controlled); return true; }
@@ -1225,6 +1259,14 @@ internal sealed class LadderRuntime : IDisposable
             Vector3[] path = back <= 0f
                 ? new[] { new Vector3(feet.x, raised, feet.z), new Vector3(floor.x, raised, floor.z), floor }
                 : new[] { clear, new Vector3(clear.x, raised, clear.z), new Vector3(floor.x, raised, floor.z), floor };
+            // CL-004 #485 slice 4: no exit route is committed through a trapdoor whose lid is not a passage.
+            if (TrapdoorLid.Any && CrossesShutHatch(feet, path, raised))
+            {
+                _hatchShut = true;
+                if (LogLandings) { Landing(kind, floor, "refused: the route crosses a trapdoor that is not open (lift " + lift.ToString("F2") + ")"); }
+                continue;
+            }
+
             if (!_clearance.CanFollow(feet, path)) { continue; }
             _route = path;
             _routeIndex = 0;
@@ -1239,6 +1281,30 @@ internal sealed class LadderRuntime : IDisposable
         Landing(kind, floor, "refused: no clear path");
         return false;
     }
+
+    /// <summary>Would this route's capsule cross the opening of a trapdoor whose lid is not a passage (CL-004 #485 slice
+    /// 4)? Every point of the route, and where it starts, is tested over the whole height the route reaches, from its
+    /// lowest point to the capsule's top at its highest (<paramref name="highest"/>), so a rise through an opening is
+    /// seen at its start and a settle onto one at its end. Only the points are tested: a straight leg between two points
+    /// outside an opening that passes over it does so above the lip, where the capsule sweep sees the lid's own pose.</summary>
+    private bool CrossesShutHatch(Vector3 start, Vector3[] path, float highest)
+    {
+        float radius = _clearance!.Radius;
+        float low = start.y;
+        foreach (Vector3 point in path) { low = Mathf.Min(low, point.y); }
+        float top = highest + _clearance.Height + RouteTopMargin;
+        if (TrapdoorLid.RouteShut(start, radius, low, top)) { return true; }
+        foreach (Vector3 point in path)
+        {
+            if (TrapdoorLid.RouteShut(point, radius, low, top)) { return true; }
+        }
+
+        return false;
+    }
+
+    /// <summary>The query capsule floats up to this far above the feet (<see cref="LadderClearance"/>'s ground
+    /// clearance), so the trapdoor test counts it on top of the capsule's height.</summary>
+    private const float RouteTopMargin = 0.05f;
 
     private void ReturnToLadder()
     {
@@ -1280,6 +1346,12 @@ internal sealed class LadderRuntime : IDisposable
     /// <summary>Climbing with no landing at the top stops with the feet this far below the run's top: the hands still
     /// hold the top rungs there (owner 2026-10-27: "stop climbing right before the hand contacts leave the rungs").</summary>
     private const float NoLandingStop = 1.3f;
+
+    /// <summary>The highest floor above the run's top the top exit looks for (<see cref="LadderClearance.TryTopSurface"/>).</summary>
+    private const float TopSurfaceAbove = 0.75f;
+
+    /// <summary>Registered with the trapdoors, so it exists only when they do (CL-004 #485 slice 4).</summary>
+    private const string HatchClosedNotice = "$" + Domain.Doors.TrapdoorBlueprint.HatchClosedToken;
 
     /// <summary>Remembers where an accepted mount/exit move started and its full length, for transition progress.</summary>
     private void BeginRoute(Vector3 start)
@@ -1625,6 +1697,7 @@ internal sealed class LadderRuntime : IDisposable
             case ClimbRefusal.Actor: Notice("$cl_msg_actor"); break;
             case ClimbRefusal.Unchecked: Notice("$cl_msg_unchecked"); break;
             case ClimbRefusal.NoLanding: Notice("$cl_msg_nolanding"); break;
+            case ClimbRefusal.HatchClosed: Notice(HatchClosedNotice); break;
             default: Notice("$cl_msg_obstacle"); break;
         }
     }

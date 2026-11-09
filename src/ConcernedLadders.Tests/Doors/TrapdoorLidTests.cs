@@ -246,9 +246,10 @@ public sealed class TrapdoorLidTests
     public void TheLidReadsTheNativeDoorStateAndWritesNothingToTheNetwork()
     {
         string lid = Code(Source("Runtime/TrapdoorLid.cs"));
-        // Two reads of the one native value: the first pose (TrySettle) and each frame (Update). Both after IsValid().
-        Assert.Equal(2, Regex.Matches(lid, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
-        Assert.Equal(2, Regex.Matches(lid, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
+        // Three reads of the one native value: the first pose (TrySettle), each frame (Update) and the ladder's
+        // passage and landing questions (TryReadOpen, slice 4). Each after IsValid().
+        Assert.Equal(3, Regex.Matches(lid, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
+        Assert.Equal(3, Regex.Matches(lid, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
         foreach (string forbidden in new[]
                  {
                      @"\bInvokeRPC\b", @"\bRoutedRPC\b", @"\.\s*Register\s*<", @"\.\s*Register\s*\(", @"\.\s*Set\s*\(",

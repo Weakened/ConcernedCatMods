@@ -223,6 +223,14 @@ internal sealed class LadderClearance
         for (int index = 0; index < found; index++)
         {
             RaycastHit hit = _hits[index];
+            // CL-004 #485 slice 4: a trapdoor lid that is not closed and staying closed is never a landing, even where
+            // its tilted face passes the slope test below; a ray that meets one finds no landing at this point at all.
+            if (TrapdoorLid.Any && Solid(hit.collider) && !TrapdoorLid.MayLandOn(hit.collider))
+            {
+                floor = default;
+                return false;
+            }
+
             if (!Solid(hit.collider) || hit.normal.y < 0.65f || hit.collider.GetComponentInParent<LadderSegment>() != null ||
                 hit.collider.GetComponentInParent<Character>() != null)
             {
