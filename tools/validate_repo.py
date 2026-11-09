@@ -8128,7 +8128,10 @@ NPC_BODY_GATE_FILE = ("Body", "NpcBodyBuildGate.cs")
 # inputs are written immediately above the call, each spelled whole, and its six
 # arguments are pinned by name and order (#372 review leftover). Without that, a
 # `true` in place of `ready` or `groundLoaded`, or a second tally, passed every
-# pin above while the gate answered a question nobody asked.
+# pin above while the gate answered a question nobody asked. A stated limit: this
+# pins the private build's own inputs, not what its two callers hand it
+# (`TrySpawnRoleBody`'s `prefabFailure == null`, its census, and where its
+# contract check stands). Those are RoleBodySpawnTests' and a reviewer's.
 NPC_BODY_GATED_BUILD = re.compile(
     r"bool\s+ready\s*=\s*prefabReady\s*&&\s*prefab\s*!=\s*null\s*&&\s*stamp\s*!=\s*null\s*;\s*"
     r"bool\s+groundLoaded\s*=\s*IsGroundLoaded\s*\(\s*position\s*\)\s*;\s*"

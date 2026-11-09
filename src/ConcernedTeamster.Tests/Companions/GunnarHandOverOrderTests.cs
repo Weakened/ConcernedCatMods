@@ -29,7 +29,7 @@ public sealed class GunnarHandOverOrderTests
         Assert.Contains("Body = Domain.Companions.GunnarBodyContract.Create();", Role);
         Assert.DoesNotContain("NpcBodyContract.ForWorker(", Role);
         // #372: the contract the body is built under is the same game-free one.
-        Assert.Contains("internal static NpcBodyContract Contract => Domain.Companions.GunnarBodyContract.Create();", Role);
+        Assert.Contains("internal static NpcBodyContract Contract { get; } = Domain.Companions.GunnarBodyContract.Create();", Role);
     }
 
     [Fact]

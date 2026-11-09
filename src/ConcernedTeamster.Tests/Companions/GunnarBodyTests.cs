@@ -212,6 +212,7 @@ public sealed class GunnarBodyTests
         Assert.True(haul.IsGranted);
         Assert.False(leases.TryTakeWorker(() => { }, out string refusal));
         Assert.Contains("a job holds him", refusal);
+        Assert.Contains("'ct_haul detach'", refusal);
         Assert.Equal(refusal, leases.LastRefusal);
         Assert.False(leases.HoldsWorker);
         Assert.Null(leases.WorkerLease);

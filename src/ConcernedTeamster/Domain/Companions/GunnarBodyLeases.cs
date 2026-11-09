@@ -116,7 +116,11 @@ internal sealed class GunnarBodyLeases
     /// job's lease is not a way round it: the build would then be under a hold
     /// whose release belongs to the job, not to the arrival guard. Refusing is
     /// the smallest choice that creates no body without permission; once the
-    /// job has ended, the next hand-over goes through.</summary>
+    /// job has ended, the next hand-over goes through. The one case a player
+    /// meets is a haul whose body was lost (N13): it stays in
+    /// <c>NeedsAttention</c> holding him, <c>ct_haul stop</c> on a stopped haul
+    /// changes nothing, and <c>ct_haul detach</c> ends it, so the refusal names
+    /// that command (<c>HaulingExecutionSignalTests.AHaulWhoseBodyWasLostHoldsHimUntilDetachEndsIt</c>).</summary>
     public bool TryTakeWorker(Action removeFigure, out string refusal)
     {
         ReleasePresentation(removeFigure);
@@ -136,7 +140,8 @@ internal sealed class GunnarBodyLeases
         if (claim.Status == BodyClaimStatus.RefusedHolderConflict && JobHolds())
         {
             refusal = "a job holds him, and only that job may be given a body (" + claim.Reason
-                + "); end that job first";
+                + "); end that job first: 'ct_haul detach' ends a haul, even one whose body was lost "
+                + "('ct_haul stop' leaves a stopped haul as it is), and 'ct_collect cancel' ends a collection";
             LastRefusal = refusal;
             return false;
         }

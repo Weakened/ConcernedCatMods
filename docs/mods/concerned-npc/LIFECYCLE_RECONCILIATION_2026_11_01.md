@@ -138,7 +138,9 @@ contract that is not exactly the one the lease's identity registered with the ar
 prefab name, key prefix and figure admission; `RoleBodySpawnTests.A_lease_never_builds_another_roles_prefab` and the
 three beside it); and the validator now pins the gate call's six arguments by name and order, and the two computed
 inputs (`ready`, `groundLoaded`) written immediately above it, with a plant for a constant, a dropped prefab check, a
-forced ground and a swapped pair. Still open, to be checked in game: a prefab created late by `cf_worker spawn`
+forced ground and a swapped pair. That pin covers the private build's own inputs, not what `TrySpawn` and
+`TrySpawnRoleBody` hand it (the `prefabFailure == null` readiness, the census, where the contract check stands); those
+are `RoleBodySpawnTests`' and a reviewer's, as the validator says beside the rule. Still open, to be checked in game: a prefab created late by `cf_worker spawn`
 (world already up) is refused if the scene does not yet know it - fail closed. Teamster builds its prefab at the main
 menu, so that case should not arise for Gunnar.
 

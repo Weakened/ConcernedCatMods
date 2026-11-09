@@ -229,4 +229,33 @@ public class HaulingExecutionSignalTests
         Assert.Null(rig.Executor.ActiveLease);
         rig.AssertNoBugs();
     }
+
+    [Fact]
+    public void AHaulWhoseBodyWasLostHoldsHimUntilDetachEndsIt()
+    {
+        // #372: while a job holds Gunnar, ct_haul spawn is refused (the hand-over
+        // has no lease to build under). This is the recovery the refusal names:
+        // `stop` on a stopped haul changes nothing, and `detach` ends it and
+        // gives his identity back, so the next spawn may go through.
+        var rig = new HaulingExecutionRig(tuneExecution: execution => execution.WorkerTickStaleSeconds = 1f);
+        rig.RunToPulling();
+        for (int frame = 0; frame < 30; frame++)
+        {
+            rig.Clock.Now += HaulingExecutionRig.Step;
+            rig.Executor.ObserveFrame();
+        }
+
+        Assert.Equal(HaulAttentionReason.WorkerBodyLost, rig.Executor.Attention);
+        string haul = rig.Executor.HaulId;
+        Assert.NotEqual(string.Empty, haul);
+        Assert.Equal(haul, rig.Identity.Holder);
+
+        Assert.Equal(HaulCommandOutcome.Accepted, rig.Executor.Cancel(haul, detachAndPark: false).Outcome);
+        Assert.Equal(haul, rig.Identity.Holder);
+
+        Assert.Equal(HaulCommandOutcome.Accepted, rig.Executor.Cancel(haul, detachAndPark: true).Outcome);
+        Assert.Equal(string.Empty, rig.Executor.HaulId);
+        Assert.Null(rig.Identity.Holder);
+        rig.AssertNoBugs();
+    }
 }

@@ -75,7 +75,7 @@ internal sealed class GunnarNpcRole : INpcRole
     /// <c>GunnarBodyContract</c> as <see cref="Body"/>, and the library refuses
     /// any contract that is not exactly the one this role registered, so the
     /// two cannot drift apart into a body.</summary>
-    internal static NpcBodyContract Contract => Domain.Companions.GunnarBodyContract.Create();
+    internal static NpcBodyContract Contract { get; } = Domain.Companions.GunnarBodyContract.Create();
 
     public INpcDataPaths Paths { get; }
 

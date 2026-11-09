@@ -18,12 +18,16 @@ use key is #459's (`GUNNAR_DIALOGUE.md`).
 `ct_haul spawn` hands him over to his worker body: the figure comes down, its
 presentation lease is released, the worker lease is claimed, and the body is
 placed **where the figure stood** (on the ground there), facing the player. With
-no figure standing, spawn behaves exactly as before. Since #372 the worker lease
+no figure standing, the body is placed in front of the player as before. Since #372 the worker lease
 the hand-over claims (the arrival guard below) is the lease the body is built
 under: Concerned NPC's gated build checks it is Gunnar's and still held
 immediately before the body is created. While a job (a haul, a collection round)
 holds him, the hand-over is refused, because the arbiter grants a body then only
-to that job; before #372 that case placed a body with no lease at all. `ct_haul retire` removes the
+to that job; before #372 that case placed a body with no lease at all. The
+refusal names the command that ends the job: `ct_haul detach` for a haul (also
+one whose body was lost, N13), `ct_collect cancel` for a collection. If the
+figure runtime itself failed to install, nothing can grant the lease and
+`ct_haul spawn` refuses. `ct_haul retire` removes the
 body as before; once the census agrees he is gone, he is shown at home again.
 `ct_haul status` gains one line about his figure and its lease.
 
