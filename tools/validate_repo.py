@@ -2103,6 +2103,22 @@ TEAMSTER_CART_LOAD_RUNTIME_METHODS = (
 )
 
 
+TEAMSTER_CART_LOAD_PUNCTUATION = re.compile(r"\s*([()\[\].,;:?<>!&=|{}+\-*/%^~])\s*")
+
+
+def _teamster_cart_load_normal(text: str) -> str:
+    """`text` with every run of whitespace collapsed to one space and the space
+    around punctuation removed, so a whole method can be compared by string
+    rather than by a pattern with an optional space between every token.
+
+    The pattern form is what the line pins use, and for a spelling hundreds of
+    tokens long it backtracks without bound on a near miss: a one-line plant
+    inside a pinned method left the validator running for over an hour instead
+    of refusing (found running this rule's own plants). A string comparison
+    cannot hang."""
+    return TEAMSTER_CART_LOAD_PUNCTUATION.sub(r"\1", re.sub(r"\s+", " ", text)).strip()
+
+
 def check_teamster_cart_load_moves_only_into_the_assigned_cart(errors: list[str]) -> list[str]:
     """D22 (owner decision 2026-10-31, #381): Gunnar's collection tour may load
     his own picked items into his explicitly assigned cart's container,
@@ -2233,6 +2249,14 @@ def check_teamster_cart_load_moves_only_into_the_assigned_cart(errors: list[str]
             continue
         sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
 
+    def whole(spelling: str, why: str, text: str, where: str) -> bool:
+        found = _teamster_cart_load_normal(text).count(_teamster_cart_load_normal(spelling))
+        if found != 1:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of the whole method `{spelling[:80]}...` and "
+                 f"exactly 1 is expected - {why} (the whole method is pinned)", errors)
+            return False
+        return True
+
     def only_in(spelling: str, rel: str, why: str) -> bool:
         pattern = _teamster_take_exact(spelling)
         where = [(name, len(pattern.findall(text))) for name, text in sources.items() if pattern.search(text)]
@@ -2263,7 +2287,7 @@ def check_teamster_cart_load_moves_only_into_the_assigned_cart(errors: list[str]
         if not exactly(spelling, 1, why, subject, TEAMSTER_CART_LOAD_SUBJECT_FILE):
             return []
     for spelling, why in TEAMSTER_CART_LOAD_SUBJECT_METHODS:
-        if not exactly(spelling, 1, why + " (the whole method is pinned)", subject, TEAMSTER_CART_LOAD_SUBJECT_FILE):
+        if not whole(spelling, why, subject, TEAMSTER_CART_LOAD_SUBJECT_FILE):
             return []
     subject_blank = CS_STRING.sub('""', subject)
     declared_types = sorted(set(re.findall(
@@ -2350,7 +2374,7 @@ def check_teamster_cart_load_moves_only_into_the_assigned_cart(errors: list[str]
         if not exactly(spelling, 1, why, runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
             return []
     for spelling, why in TEAMSTER_CART_LOAD_RUNTIME_METHODS:
-        if not exactly(spelling, 1, why + " (the whole method is pinned)", runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
+        if not whole(spelling, why, runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
             return []
     if not exactly("\"the cart assigned to him\", CollectionTourLimits.AtTheCart(_limits), refuseIfCarrying: true,", 1,
                    "the cart tour arrives at the handle with a margin inside the load's reach, and refuses a load "
