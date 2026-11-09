@@ -116,8 +116,8 @@ by `Quaternion.Euler(0, 0, angle)`; the leaf box lies inboard of and below the p
 - **One progress for both leaves.** The leaves reuse `HatchMotion` unchanged (same ease, same donor swing time, same
   5° checked sub-steps, same settle on load), which is valid because the open angle is the trapdoor's 90° (tested).
   `CellarPairOccupancy` makes the pair's pose occupied when either leaf's is, so **a leaf that meets something holds
-  both** at the last pose clear for both, and the pair resumes together once clear (tested both ways and for each
-  leaf). The leaves therefore can never be at different angles on any client: one open while the other is shut, or
+  both** at the last pose clear for both, and the pair resumes together once clear (tested opening and closing, with
+  each leaf blocked in turn). The leaves therefore can never be at different angles on any client: one open while the other is shut, or
   visuals open while collision is shut, cannot arise, because both visuals and colliders of both leaves come from the
   one progress.
 - **Obstruction policy** is the trapdoor's: the leaves never move into a character, a dynamic body or another piece;
@@ -201,7 +201,11 @@ grid, so:
    slope transform, the two hinge pivots with kinematic bodies and leaf boxes, hinge marks on the outer edges for the
    ghost; corner snaps; localization from `CellarDoors.English()`; icons; README row and changelog.
 2. **Leaf runtime**: the trapdoor lid's runtime generalised to drive two pivots from one progress through
-   `CellarPairOccupancy`, with one skinned overlap per leaf per checked pose.
+   `CellarPairOccupancy`, with one skinned overlap per leaf per checked pose (at most 64 a frame at the 32 sub-step
+   cap). Each leaf's query must ignore the piece's own frame and the other leaf by exclusion, not by clearance: a few
+   degrees open, a leaf comes within 5.7 mm of the centre line, inside the 1 cm skin of a query that counted the
+   other leaf. The adapter slice also reads native wall depths, so the 0.4 m rear-wall limit (section 2a) is checked
+   against the stone walls.
 3. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing.
 4. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
    provenance.
@@ -213,7 +217,8 @@ flooring, against a wood wall and a stone wall on the rear edge, every family; t
 ends and the hinge sides at every rotation; snaps not sinking the threshold or leaving floating edges; standing on the
 closed leaves; Use from outside, from inside the entrance and from the ladder, keyboard and controller, remapped;
 both leaves opening and closing together over the donor's swing time; a leaf held by a player, a creature, an item, a
-cart, a rail in front of the low end and a low roof, and the pair resuming; the clear passage once open; damage,
+cart, a rail in front of the low end, a low roof and a second cellar door's rear header in front of the low end, and
+the pair resuming; the clear passage once open; damage,
 repair, deconstruction refunds at the doubled cost, guard stones; host and client, late join, ownership change, zone
 reload and restart never showing one leaf open and the other shut; CL-006 small and large digs covered as in
 section 7; the setting off leaving everything as before.

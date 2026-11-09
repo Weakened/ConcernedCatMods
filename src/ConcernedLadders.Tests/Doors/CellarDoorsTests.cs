@@ -175,6 +175,7 @@ public sealed class CellarPairTests
 
         Assert.Equal(1f, cellar);
         // Both leaves were asked about every checked pose.
+        Assert.NotEmpty(script.Asked);
         Assert.Equal(script.Asked.Count(a => a.Leaf == CellarLeaf.Left), script.Asked.Count(a => a.Leaf == CellarLeaf.Right));
     }
 
@@ -201,16 +202,24 @@ public sealed class CellarPairTests
         Assert.True(HatchMotion.IsPassage(progress, true));
     }
 
-    [Fact]
-    public void ClosingOverSomeoneUnderOneLeafHoldsBothOpen()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ClosingOverSomeoneUnderOneLeafHoldsBothOpenUntilClear(int which)
     {
-        var script = new Script { Rule = (leaf, angle) => leaf == CellarLeaf.Right && angle < 60f };
+        CellarLeaf blocked = which == 0 ? CellarLeaf.Left : CellarLeaf.Right;
+        var script = new Script { Rule = (leaf, angle) => leaf == blocked && angle < 60f };
         var pair = new CellarPairOccupancy<Script>(script);
         float progress = 1f;
         for (int frame = 0; frame < 300; ++frame) { progress = HatchMotion.Step(progress, false, 1f / 60f, 1f, pair); }
         Assert.True(HatchMotion.Angle(progress) >= 60f);
         Assert.False(HatchMotion.IsLanding(progress, false));
         Assert.False(HatchMotion.IsPassage(progress, false));
+
+        // Cleared, the pair resumes to fully closed.
+        script.Rule = (_, _) => false;
+        for (int frame = 0; frame < 300; ++frame) { progress = HatchMotion.Step(progress, false, 1f / 60f, 1f, pair); }
+        Assert.True(HatchMotion.IsLanding(progress, false));
     }
 
     [Fact]

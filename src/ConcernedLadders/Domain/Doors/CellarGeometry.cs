@@ -77,8 +77,9 @@ internal sealed class CellarPrism
 /// <para>Piece-local axes are the piece's: x right, y up, z forward. The low end is the front (-z), the high end the
 /// rear (+z), which is the side that stands against a wall. The leaves lie in the <b>slope frame</b>: u along x,
 /// v up the slope from the front top edge, w along the slope's upward normal; <see cref="ToPiece"/> converts. The base
-/// takes a native 2 m wood floor tile's place in the floor grid, with the same four corner snaps and the same top and
-/// bottom, so the threshold is flush with the surrounding floor.</para>
+/// takes a native 2 m wood floor tile's place in the floor grid, with the same four corner snaps and the same bottom,
+/// so its base sits in the floor around it; above that floor's top the frame rises to the sloped cover (0.30 m at the
+/// front).</para>
 ///
 /// <para>Every number here is a design default measured against the installed game's wood_floor (Valheim 1.0.21),
 /// not an in-game observation; every placed-piece row is OWNER GO-AROUND PENDING.</para></summary>
@@ -92,7 +93,8 @@ internal static class CellarGeometry
     /// <summary>The native wood_floor's snap plane, as the trapdoor's.</summary>
     internal const float SnapPlaneY = HatchGeometry.SnapPlaneY;
 
-    /// <summary>The wood_floor collider's top: the threshold is flush with the floor around it.</summary>
+    /// <summary>The wood_floor collider's top: the floor around the piece, from which the front and rear heights are
+    /// measured.</summary>
     internal const float FloorTopY = HatchGeometry.TopY;
 
     /// <summary>Every frame part reaches down to the wood_floor collider's bottom, as the trapdoor's frame does.</summary>
@@ -117,8 +119,9 @@ internal static class CellarGeometry
     internal const float FrontPanelDepth = 0.15f;
 
     /// <summary>Depth (z) of the high rear header. Deeper than the front so that a wall standing on the floor-grid edge
-    /// behind the piece (centred on it, as a native wall on a floor edge is) intrudes only into the header, never into
-    /// the leaves' sweep.</summary>
+    /// behind the piece, centred on it as a native wall on a floor edge is, intrudes only into the header and never
+    /// into the leaves' sweep, as long as it is no more than 0.4 m thick (the sweep ends 0.01 m in front of the header).
+    /// Native wall depths are not in CL-004's census; a thicker wall holds the leaves.</summary>
     internal const float RearHeaderDepth = 0.2f;
 
     /// <summary>Half the opening between the cheeks.</summary>
