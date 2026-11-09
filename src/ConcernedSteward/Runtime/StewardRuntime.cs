@@ -8,6 +8,7 @@ using BepInEx;
 using BepInEx.Bootstrap;
 using TheConcernedCat.ConcernedSteward;
 using TheConcernedCat.ConcernedSteward.Domain;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Interruption;
 using TheConcernedCat.ConcernedSteward.Domain.Appearance;
@@ -981,20 +982,28 @@ internal sealed class StewardRuntime
         }
 
         // The figure at home goes before her worker body appears: never both.
+        // Then the worker lease is taken, BEFORE the body exists (#372): the
+        // body is created only under a lease the arbiter granted, and Concerned
+        // NPC re-asks that it is still held immediately before it builds.
         _presentation.YieldToWorker();
-        StewardWorkerAI? spawned = StewardWorkerPrefab.Spawn(at.Value, Quaternion.identity);
-        if (spawned == null)
+        BodyClaim claim = _npc.ClaimBody();
+        if (!claim.IsGranted || claim.Lease == null)
         {
-            return prefix + " She could not appear here; that ground is not loaded.";
+            return prefix + " She may not take a body right now (" +
+                (claim.Status == BodyClaimStatus.Unspecified
+                    ? "she is not registered with Concerned NPC"
+                    : claim.Status + ": " + claim.Reason) + ").";
         }
 
-        if (!StewardBody.TryStamp(spawned.gameObject, StewardRole.Worker.Value))
+        StewardWorkerAI? spawned = StewardWorkerPrefab.Spawn(
+            claim.Lease, at.Value, Quaternion.identity, StewardRole.Worker.Value, out string failure);
+        if (spawned == null)
         {
-            // Unstamped, so the census will not adopt it and will report it as
-            // an unidentified body. Destroying it would be the other option and
-            // is worse: it is a live object this process may not own.
-            return prefix + " She appeared but could not be given her identity; she will not work. " +
-                "Please report this.";
+            // No body, so no hold: the next census would release it anyway, and
+            // a hold on nothing would keep her figure from coming back.
+            _npc.ReleaseBody();
+            return prefix + " She could not appear here: " +
+                (failure.Length == 0 ? "the body could not be created" : failure) + ".";
         }
 
         RefreshCensus();

@@ -222,6 +222,69 @@ public sealed class ThorsteinBodyTests
     }
 
     [Fact]
+    public void TheWorkerLeaseIsHandedOutOnlyWhileItIsHeld()
+    {
+        // #372: the spawn shows this lease to Concerned NPC's build. A lease
+        // that has been given up is never handed out as if it were still good.
+        ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
+        var bodies = new ThorsteinBodies(registry, adoption.Identity);
+        Assert.Null(bodies.WorkerLease);
+
+        Assert.True(bodies.TryTakeWorker(out string refusal), refusal);
+        Assert.NotNull(bodies.WorkerLease);
+        Assert.True(bodies.WorkerLease!.IsActive);
+        Assert.Equal(NpcBodyKind.Worker, bodies.WorkerLease.Kind);
+
+        bodies.ReleaseWorker();
+        Assert.Null(bodies.WorkerLease);
+    }
+
+    [Fact]
+    public void WhileAJobHoldsHimNoWorkerLeaseIsHandedOut()
+    {
+        // #372: the spawn is refused in this state rather than building a body
+        // with no lease. Releasing a body held in a job's name releases that
+        // job's mode too, which is why the hand-over does not borrow the job's
+        // name for the build.
+        ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
+        var bodies = new ThorsteinBodies(registry, adoption.Identity);
+        Assert.Equal(
+            SharedWorkers.ActorModeOutcome.Entered,
+            adoption.Modes.Enter(SharedWorkers.ActorMode.Working, "collect-1"));
+
+        Assert.False(bodies.TryTakeWorker(out string refusal));
+        Assert.Contains("RefusedHolderConflict", refusal, StringComparison.Ordinal);
+        Assert.Null(bodies.WorkerLease);
+        Assert.Equal("collect-1", adoption.Modes.JobId);
+    }
+
+    [Fact]
+    public void AnOrderStoppedForAMissingBodyRefusesTheLeaseUntilItIsCancelled()
+    {
+        // #372, the WorkerBodyLost write-off (CUSTODY_AND_RECOVERY.md §10): an
+        // order the record kept is taken up Paused in its own name even with no
+        // body anywhere, so cf_worker spawn is refused until it is cancelled -
+        // and a cancel, which releases that name, is all it takes for the lease
+        // (and so the spawn) to go through. Nothing else has to be undone.
+        ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);
+        var bodies = new ThorsteinBodies(registry, adoption.Identity);
+        Assert.Equal(
+            SharedWorkers.ActorModeOutcome.Entered,
+            adoption.Modes.Enter(SharedWorkers.ActorMode.Paused, "collect-ab12cd34"));
+        Assert.False(adoption.Modes.MayRetireBody);
+        Assert.False(bodies.TryTakeWorker(out _));
+        Assert.Null(bodies.WorkerLease);
+
+        // cf_collect cancel ends the order, which releases its mode.
+        Assert.Equal(SharedWorkers.ActorModeOutcome.Released, adoption.Modes.Release("collect-ab12cd34"));
+        Assert.True(adoption.Modes.MayRetireBody);
+
+        Assert.True(bodies.TryTakeWorker(out string refusal), refusal);
+        Assert.NotNull(bodies.WorkerLease);
+        Assert.True(bodies.WorkerLease!.IsActive);
+    }
+
+    [Fact]
     public void AWorldUnloadDropsBothAndTheNextWorldStartsClean()
     {
         ForemanNpcAdoption adoption = Adopted(out NpcRoleRegistry registry);

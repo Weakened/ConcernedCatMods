@@ -694,6 +694,59 @@ public sealed class FaultInjectionTests : IDisposable
     }
 
     [Fact]
+    public void AnOrderStoppedForALostBodyCanBeCancelledAndItsMaterialStillWrittenOff()
+    {
+        // #372 changed the WorkerBodyLost recovery the player guide gives. A new
+        // body cannot be spawned while the stopped order still holds Thorstein's
+        // mode, so the order is cancelled FIRST. This proves the rest of that
+        // sequence still writes the loss off: a cancel is a transition row only,
+        // it leaves what the record holds on him in place, and the loss is
+        // recorded against the cancelled order - and survives a restart.
+        (FakeWorld world, FaultyDisk disk) = NewWorld();
+        FakeInventory lostBody = world.Inventory("worker");
+
+        CustodyProcess process = CustodyProcess.Start(world, disk);
+        Gather(process, lostBody, 10);
+        process.SaveWorld();
+
+        // The load finds no body: the order is stopped for that reason.
+        Assert.True(process.Core.RecordTransition(
+            Order, CollectionOrderState.Accepted, CollectionOrderState.NeedsAttention,
+            CollectionAttentionReason.WorkerBodyLost, out string refusal), refusal);
+
+        // 1. cf_collect cancel.
+        Assert.True(process.Core.RecordTransition(
+            Order, CollectionOrderState.NeedsAttention, CollectionOrderState.Cancelled,
+            CollectionAttentionReason.Unspecified, out refusal), refusal);
+        Assert.Equal(10, process.Ledger.HoldingAt(Order, WorkerAt(), Stone));
+
+        // 2. cf_worker spawn: his new body carries nothing.
+        FakeInventory newBody = world.Inventory("worker-new");
+
+        // 3. cf_settle reconcile: below expected, for the cancelled order.
+        ReconciliationReport report = CustodyReconciler.Reconcile(process.Ledger, new Observer(newBody), ordersWereRunning: false);
+        ReconciliationFinding shortfall = Assert.Single(report.ShortfallsFor(Order));
+        Assert.Equal(ReconciliationFindingKind.BelowExpected, shortfall.Kind);
+        Assert.Equal(10, shortfall.Expected);
+        Assert.Equal(0, shortfall.Actual);
+
+        // 4. cf_settle resolve <order> lost.
+        Assert.Equal(CustodyLedgerOutcome.Applied, process.Core.RecordLoss(Order, WorkerAt(), Stone, 10, "recorded as lost at the console", out string message));
+        Assert.Contains("10", message);
+        Assert.Equal(0, process.Ledger.HoldingAt(Order, WorkerAt(), Stone));
+        Assert.Equal(10, process.Ledger.CountAt(Order, CustodyPlace.Lost, CollectedResource.Stone));
+        Assert.Equal(10, RecordedUnits(process.Ledger));
+        Assert.True(CustodyReconciler.Reconcile(process.Ledger, new Observer(newBody), false).AllMatch);
+
+        process.SaveWorld();
+        CustodyProcess restarted = process.Restart();
+        Assert.True(restarted.Ledger.TryGetOrder(Order, out CollectionOrderRecord record));
+        Assert.Equal(CollectionOrderState.Cancelled, record.State);
+        Assert.Equal(10, restarted.Ledger.CountAt(Order, CustodyPlace.Lost, CollectedResource.Stone));
+        Assert.True(CustodyReconciler.Reconcile(restarted.Ledger, new Observer(newBody), false).AllMatch);
+    }
+
+    [Fact]
     public void MoreThanTheRecordExpectsIsNeverCredited()
     {
         (FakeWorld world, FaultyDisk disk) = NewWorld();

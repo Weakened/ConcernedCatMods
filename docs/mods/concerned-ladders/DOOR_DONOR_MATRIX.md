@@ -80,7 +80,7 @@ support from them, as with their donors.
   `Piece.m_resources` against them**: Jötunn's clone keeps donor requirements when the array is empty, so an empty array
   is never a way to clear them.
 - **Health, material, burn, roof wear, support, damage modifiers, effects, ward behaviour**: inherited from the cloned
-  donor, unchanged. The adapter checks the clone's health and material against the pinned matrix and refuses the
+  donor, unchanged. The adapter checks the installed donor's health, material, burn, station, cost and door fields against the pinned matrix before cloning, and refuses the
   family (logged, not registered) if the installed donor changed, instead of guessing.
 - **Repair, deconstruction refunds, guard stones**: native, through the cloned `Piece`, `WearNTear` and
   `Door.m_checkGuardStone`. Nothing is added: no key, no ownership lock, no automatic closing.
@@ -90,8 +90,20 @@ support from them, as with their donors.
   Darkwood and Timberwood donors' Wall tag are not copied (section 7).
 - **Uninstall**: as with the ladders (STATUS.md, uninstall row), the game deletes a placed piece whose prefab is unknown
   on load (`Destroyed invalid prefab ZDO`). Removing the mod destroys every placed trapdoor permanently, with no refund,
-  and leaves a 2 m x 2 m hole in the floor; reinstalling does not restore them. The README must say so when the pieces
-  ship (slice 2).
+  and leaves a 2 m x 2 m hole in the floor; reinstalling does not restore them. The README says so beside the
+  setting. The same happens to a placed trapdoor when `Trapdoors/Enabled` is turned off again, or when its family is
+  refused at start-up (a changed donor), because the prefab is then not registered in that session.
+- **Multiplayer: the setting must match on every machine** (found in the slice-2 review). `Trapdoors/Enabled` is a
+  local setting that nothing synchronizes, and Jötunn's version check does not compare it. A host or dedicated server
+  that cannot create an object takes ownership and destroys its ZDO (`ZNetScene.CreateObjectsSorted`, decompiled
+  1.0.21: `Destroyed invalid prefab ZDO`), during the session, not only at the next load. So a client that turns it on
+  while the host or server has it off loses every trapdoor it places, with no refund, and a client with it off sees an
+  open hole with no collision where another player's trapdoor stands. Lead default pending owner confirmation:
+  document this and keep the setting local; a server-synchronized setting is a decision for the owner, not taken here.
+- **Off by default (slice 2)**: the pieces are registered only with `Trapdoors/Enabled` on (`TrapdoorSettings`,
+  default false). With it off nothing is cloned, no token is added and the hammer menu is unchanged. Each family is
+  checked and built on its own; a refused family is logged with every difference and never registered, and the other
+  families and the ladders are unaffected. One attempt per session: a refused family is not retried.
 
 ## 4. What the native `Door` gives the clone, and what it does not
 
@@ -109,10 +121,18 @@ So the clone keeps `Piece`, `WearNTear`, `Door`, `ZNetView` and the donor's `Ani
 root. The state, its
 replication to observers and late joiners, its persistence, ward behaviour, hover text and remappable Use binding are
 all native. The **visible lid is ours**: native doors swing about a vertical axis, either way depending on the user's
-side. The trapdoor's lid has one swing direction about a horizontal hinge, so it reads the animator's `state` integer
+side. The trapdoor's lid has one swing direction about a horizontal hinge, so it reads the native door state
 (non-zero = open, either sign) and moves over the donor's own clip length (0.5 / 1.0 / 2.0 s), keeping the hidden
 animator and the lid in step so `CanInteract` still gates the next press. The animator's culling stays at
 always-animate so it advances with no renderer.
+
+**Which copy of the state the lid reads (slice 3).** The ZDO integer `ZDOVars.s_state` itself, through the piece's own
+`ZNetView`, read only, rather than the animator's `state` integer this section first named. They hold the same value:
+`Door.UpdateState` copies the ZDO into the animator, but only on its 0.2 s poll and only once `Door.Awake` has run, while
+the ZDO is readable from the lid's first frame, so a lid that loads with its zone or for a late joiner starts in the
+stored pose instead of waiting for the poll. The native door already provides everything the lid needs: **slice 3 adds
+no RPC, no ZDO field, no ownership claim and no write of any kind.** The lid's own progress is a local float on each
+client.
 
 **Strip set.** Stripping only the leaf would leave a vertical gate frame and wall snaps on the hatch. Every donor child
 other than the animated `door` transform goes, and `door` keeps only its transform (the animator writes it, nothing
@@ -131,8 +151,36 @@ reads it). From `census.json`:
 `WearNTear.m_new`, `m_worn` and `m_broken` point at those `New`/`Worn`/`Frame`/`broken`/`door` children, and
 `WearNTear` toggles them by health. The adapter reassigns all three to the hatch's own new/worn presentation roots (or
 the one root, for donors whose three are the same object), so health display keeps working and nothing points at a
-destroyed child. Destruction children are only presentation for the native break effect and are replaced by the
-hatch's own. The `LODGroup` on the root is rebuilt over the hatch renderers.
+destroyed child.
+
+**Corrected in slice 2** (a second read-only probe of the same bundles, `wearextra.py` -> `wearextra.json` beside the
+census scripts, read the `WearNTear` fields `census.py` had not dumped):
+
+- The destruction children are not only presentation: they are `WearNTear.m_fragmentRoots` on three donors
+  (`flametalgateDestruction`, `destruction` on the hexagonal gate, `Ashwood_door_destruction`). The other six have an
+  empty list, which is the native whole-object fragment path. The adapter sets the empty list on all nine, so no
+  fragment root points at a removed child.
+- `m_snow` points at the removed snow child on seven donors (`pole_top_snow`, `beam_2m_snow`, `DvergrDoor_Snow`); the
+  adapter clears it with `m_snowWorn`, `m_snowBroken` and `m_wet` (null on all nine). The hatch has no snow overlay yet
+  (wood_floor's own is `floor_2x2_snow`): an intentional difference until the art pass.
+- `m_comOffset` is (0, 2, 0) on darkwood, timberwood and flametal: the centre of mass of a 4 m leaf. The adapter sets
+  it to zero on all nine, the hatch's own centre. `m_roofCheckOffset` is 0 on all nine and on wood_floor, so it is
+  inherited unchanged.
+- The `LODGroup` is **removed**, not rebuilt, as on the ladders (observed in game for them): the hatch is a few boxes,
+  and a rebuilt single LOD would only add an invented cull height. A real LOD set belongs to the art pass.
+
+**What the adapter builds** (`Domain/Doors/TrapdoorBlueprint.cs`, walked by `Pieces/TrapdoorPieceRegistration.cs`):
+the donor's root components stay; the root gets the four frame bands as box colliders on their own children (never on
+the root: the ghost's blocked-by-player test skips root colliders), one presentation root `new` with the four bands in
+the donor's frame material and, where the donor has a separate worn root, a `worn` root in its worn material
+(`m_worn` = `m_broken` = `worn`; for iron, hexagonal and flametal all three are `new`, as the donors' are one object);
+a `lid_hinge` pivot on the hinge axis carrying a kinematic `Rigidbody`, the lid's box collider, the lid in the donor
+leaf's material and two hinge straps (a darkened copy of that material) that mark the hinge side in the ghost; the
+four corner snap points; `Door.m_name` and `Piece.m_name` = the trapdoor's token. The materials are found by name in
+the donor's own renderers before anything is stripped. The lid's collider sits on a rigidbody, so `WearNTear` leaves it
+out of support bounds, and the build ray fails when the first thing it hits is on a rigidbody: aiming at a lid places
+nothing, as aiming at a native door leaf does.
+Support comes from the frame bands.
 
 ## 5. Floor hatch geometry (`HatchGeometry`)
 
@@ -151,7 +199,7 @@ points at (±1, 0, ±1), collider top **y = 0.0968**, bottom **y = -0.0329**.
 | Snap points | the four wood_floor corners with the native `$hud_snappoint_corner` token: a hatch takes a floor tile's place beside wood floors, and sits beside stone flooring exactly as a wood floor does (stone floors snap at their own top, 0.5 m) |
 | Ladder | hung inside the opening from its **front** edge, facing the hinge: section origin (0, -2, -0.87), rails' back face 0.01 m inside the frame, top level with the snap plane as `LadderEdgeSnap` hangs one from a floor; the closed lid's underside is 1.7 cm above the ladder top. A front-lane climber (lane from `ClimbPolicy.LaneDepth`) of capsule radius r clears the front band by 0.23 m, the open lid by 1.28 - 2r and the sides by 0.8 - r: 0.48 m and 0.40 m at r = 0.4 (`ClimberMargins`). |
 | Passage lane | front lane only. The rear lane's capsule centre (z -0.85 - r) lies under the front frame band and the floor beyond it, so a climber on the back of the ladder meets the floor, as on any ladder hung from a floor edge. |
-| Ghost | the rotation decides the hinge side; the hinge is always the piece's rear edge (shown in the ghost by the frame's hinge hardware, next slice) |
+| Ghost | the rotation decides the hinge side; the hinge is always the piece's rear edge (shown in the ghost by the two hinge straps on the lid's rear edge, slice 2) |
 
 The ladder's top exit leaves forward over the front frame band onto the floor beyond it; the open lid stands behind the
 climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spawns no ladder.
@@ -169,6 +217,35 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   shut in. A small falling item could pass between two checked poses; anything resting on the lid touches it and is
   caught by the first sub-step. The native state and hover text keep saying what was asked. A frame step is capped at 0.05 s, so a hitch is
   slower, not a jump.
+- **Implemented in slice 3** (`Runtime/TrapdoorLid.cs`, on every clone; the frame step is the game-free
+  `HatchMotion.Step` and `HatchMotion.Settle`). Each checked pose is one `Physics.OverlapBoxNonAlloc` of the lid
+  collider's own box at that angle, shrunk by a 1 cm skin on every side (`HatchMotion.QuerySkinMetres`) so that
+  touching is not overlapping, into a 32-entry shared buffer, triggers ignored; a full buffer counts as occupied.
+  Because of the skin, the lid can close at most 1 cm past a surface it touches before the next checked pose sees it;
+  a body resting on a closed lid is seen by the first 5-degree sub-step everywhere beyond about 0.12 m from the hinge,
+  by the second beyond about 0.06 m, and by a later one nearer still. The guarantee is the check spacing: no two checked poses are more than 5 degrees
+  apart, so anything spanning more than that much of the sweep is always seen; something thinner (a small falling
+  item) can pass between two checked poses.
+  The hatch's own colliders never count. On the `character`, `character_net`, `character_ghost`, `character_noenv`,
+  `hitbox`, `vehicle`, `item`, `piece` and `piece_nonsolid` layers any collider blocks; on `Default` and `Default_small`
+  only a dynamic (non-kinematic) body does; terrain and `static_solid` are not queried, so an open lid may stand into a
+  slope or rock as a native door leaf may. Every name is one the installed game's own `LayerMask.GetMask` calls use; if
+  one were missing, every lid stays shut and the start-up log says so. The lid turns by setting the hinge transform,
+  never by velocity or `MoveRotation`, so it imparts no push, and it only ever stops at a pose that was checked clear (to within the 1 cm skin).
+  A fault stops that lid where it is and logs once.
+- **The first pose** (a piece placed, loaded with its zone, or seen by a late joiner) is the stored state's end of the
+  swing when that pose is clear, which is what every other client shows. Contact is not occupancy (the skin above),
+  so a closed lid with an item, a creature or a player resting on it loads closed under them (independent review of
+  d195449, blocker 1: without the skin it would have loaded open and dropped them). When the stored pose is really
+  occupied (someone stands in the opening where a loaded-closed lid would lie), the lid starts at the other end if that
+  is clear, and the checked motion carries it to the stored state once the way is clear. When both ends are occupied
+  it takes the clear pose nearest the stored end, scanning every 5 degrees, and only if no pose is clear does it take
+  the stored end anyway. It settles in `Start`, before the first physics step after the piece appears, so a lid stored
+  open is not briefly a closed collider. Lead default pending owner confirmation.
+- **What this means for the person at the hatch** (a consequence of the policy, not an observation): a player standing
+  with part of their body over the opening, for example on the 0.2 m frame band at the front, is in the lid's sweep, so
+  the lid waits until they step back. A wall or other piece built over the rear frame band, where the upright lid
+  stands, stops the lid short of upright. Both are OWNER GO-AROUND PENDING.
 - **Clients**: each client moves its own copy of the lid against the positions it sees. Remote characters are
   interpolated, so two clients can briefly disagree about when a held lid resumes; each player's own client, which is
   authoritative for that player's collision, never moves the lid into them.
@@ -176,7 +253,7 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   is committed through a lid that was just asked to close); the lid is a landing only when closed and staying closed
   (`IsLanding`). A moving or held lid is never the top exit's destination. A closed lid
   is solid collision on the piece layer, so ascent is blocked by the existing capsule sweep.
-- **Interaction from the ladder** (next slice): an attached climber whose native hover target is a door uses the door,
+- **Interaction from the ladder** (slice 4): an attached climber whose native hover target is a door uses the door,
   and the same press does not also dismount.
 
 ## 7. Intentional differences from the donors
@@ -190,12 +267,16 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
 
 ## 8. Remaining slices (each its own PR)
 
-1. Piece adapter: clone each donor under Jötunn's inactive parent after `OnVanillaPrefabsAvailable`; apply the strip
-   set and `WearNTear` reassignment of section 4; build the frame and lid procedurally from `HatchGeometry` with copied
-   donor materials;
-   explicit requirements checked against the clone; icons; localization; snap points; hinge hardware in the ghost.
-2. Lid runtime: read the animator `state`, step `HatchMotion` with one bounded non-allocating overlap per checked
-   sub-step (characters, dynamic bodies, pieces) while moving, apply the pose to transform and kinematic collider.
+1. Piece adapter: **code-complete in slice 2, behind `Trapdoors/Enabled` (off)**. Clones each donor under Jötunn's
+   inactive parent after `OnVanillaPrefabsAvailable`; checks the donor against this matrix first (`DonorMismatches`);
+   applies the strip set and `WearNTear` reassignment of section 4 with its slice-2 corrections; builds the frame and
+   lid from `TrapdoorBlueprint`; sets the requirements explicitly and reads them back from the clone
+   (`RequirementMismatches`, with Jötunn's `JVLmock_` prefix removed); icons; localization; snap points; hinge straps.
+   With it on, a placed trapdoor's native state, sounds and hover text toggle.
+2. Lid runtime: **code-complete in slice 3**, behind the same setting. `Runtime/TrapdoorLid.cs` reads the native ZDO
+   `state` (section 4), steps `HatchMotion.Step` with one bounded non-allocating overlap per checked sub-step
+   (characters, dynamic bodies, pieces; section 6) while moving, and turns the one `lid_hinge` transform (which carries
+   the kinematic body, the lid's collider and its visuals) by `Quaternion.Euler(angle, 0, 0)`. No network change.
 3. Ladder integration: hatch ladder anchor in `LadderSnapAlignment`; door Use while attached does not dismount; top exit
    refuses a non-landing lid; closed lid blocks ascent.
 4. Asset sources and export notes; CL-005 cellar doors reusing this matrix.
@@ -206,3 +287,19 @@ Placement beside wood and stone floors and ladder endpoints, every family; walk 
 open one and exit; re-enter from above; open/close from above, below and from the ladder; standing-on-lid and
 closing-over-head holds; damage, repair, deconstruction refunds, guard stone; host/client, late join, zone and save
 reload. None has been observed.
+
+Slice 3 adds these, each OWNER GO-AROUND PENDING: Use from above and from below opens the lid over the donor's swing
+time (Wood, Roundpole and Iron 0.5 s; Darkwood, Timberwood, Hexagonal and Ashwood 1.0 s; Flametal 2.0 s) and closes it
+again; open, it leaves the aperture clear with no residual collider and the closed lid is walkable again after closing;
+the lid does not rise while the player, another player, a creature, a dropped item or a cart stands on it, and opens
+once they leave; it does not close over a head in the opening; a lid held mid-swing resumes on its own; a second Use
+mid-hold reverses it; a second client sees the same lid open and close, a late joiner and a reloaded zone show an open
+lid open and a closed one closed; no physics launch, no log spam, no frame-time cost visible with many hatches.
+
+Slice 2 adds these, each OWNER GO-AROUND PENDING: with `Trapdoors/Enabled` off, the hammer menu and the startup log
+show no trapdoor; with it on, the log reports `9 of 9 registered`, the nine appear once each in the Building tab under
+their Title Case names with a rendered icon, the cost and station of their donor, and are
+discovered when the donor is; the ghost shows the hinge straps on the rear edge and snaps at the four corners
+beside wood_floor; insufficient resources or invalid placement consume nothing; a placed hatch's frame and closed lid
+can be walked on, Use toggles the hover text and plays the donor's sound (and, since slice 3, moves the lid), and hammer damage,
+repair, worn display and deconstruction refunds behave as the donor's.

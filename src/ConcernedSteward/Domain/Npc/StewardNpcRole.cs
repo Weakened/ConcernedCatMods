@@ -91,7 +91,12 @@ internal sealed class StewardNpcRole : INpcRole
     public NpcIdentity Identity => Id;
 
     /// <inheritdoc />
-    public NpcBodyContract Body { get; } =
+    public NpcBodyContract Body => Contract;
+
+    /// <summary>The body contract, as one value: the role declares it to the
+    /// registry and the Steward's prefab spawns through it (#372), so the two
+    /// can never name different prefabs or key prefixes.</summary>
+    internal static NpcBodyContract Contract { get; } =
         NpcBodyContract.ForWorkerWithPresentation(StewardRole.BodyPrefabName, StewardRole.BodyKeyPrefix);
 
     /// <inheritdoc />

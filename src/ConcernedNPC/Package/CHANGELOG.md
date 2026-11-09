@@ -2,7 +2,7 @@
 
 ## 0.5.0
 
-Eight additive changes share this version:
+Nine additive changes share this version:
 * a worker can rest as a presentation figure (#295, #298, Concerned Foreman's Thorstein);
 * a job can say that doing a target leaves the NPC carrying something (#381, Concerned Teamster's Gunnar);
 * that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and Gunnar share it;
@@ -11,7 +11,30 @@ Eight additive changes share this version:
   2026-10-30);
 * a presentation figure can be talked to with the use key (#295 S3);
 * a presentation figure can sit on the ground (#295 S5);
-* a role can keep a camp and ask where it is, through a public facade (#461, #295 S5).
+* a role can keep a camp and ask where it is, through a public facade (#461, #295 S5);
+* a role whose worker prefab predates the factory spawns it through the factory's gated build (#372).
+
+### A role's own worker prefab is built through the gated build (#372)
+
+* `NpcWorkerPrefabFactory.TrySpawnRoleBody(lease, contract, rolePrefab, position, rotation, stamp, out failure)` is
+  new. A role whose worker prefab predates this factory hands that prefab in instead of instantiating it, and gets
+  exactly the gate `TrySpawn` has: a lease is required, it is re-asked immediately before the body is created, the
+  ground must be loaded, and the identity is stamped in the same call - the body is destroyed again if that write
+  fails or throws, so an identity-less stranger is never left standing.
+* The tally is not a parameter: the library counts the role's saved bodies itself, with the contract's own key field,
+  immediately before the gate. A loaded body is a saved object too, so it is counted. A census that cannot finish
+  refuses the build.
+* The prefab must be the one the network scene knows by the contract's prefab name. A missing, misnamed or
+  unregistered prefab is a refusal, because a body built from a prefab the scene cannot name is destroyed by the next
+  load with everything it holds.
+* `TrySpawn` and `TrySpawnRoleBody` share the library's one instantiation of a saved body, written immediately after
+  the gate's refusal. Nothing that `TrySpawn` refused or allowed has changed.
+* Nothing changes on disk and nothing about how a prefab is built or registered changes: the role still builds and
+  registers its own prefab, under the same name, at the same moment.
+* `tools/validate_repo.py`'s `#372 body factory audit` refuses the engine's instantiation anywhere in a product that
+  consumes this library, and pins that the factory's one instantiation follows the gate and that the gate asks the
+  lease last. It also refuses putting a network view on an object in any spelling it can see, because that makes a saved object without the gate. Concerned Foreman and Concerned Steward adopt it in the same change. Concerned Teamster's prefab is the
+  one stated, pinned pending site until its own adoption.
 
 ### A worker may rest as a presentation figure (#295, #298)
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+* **Gunnar keeps to camp at home (#461).** His figure now stands inside your camp - the player-built pieces around
+  your bed, as Concerned NPC counts them; terrain edits and crops do not count - with room to stand, never in a
+  doorway, and never on the far side of a door or a wall from the bed. No door is used and every door counts as one
+  he may not pass. Walking away and coming back keeps the same figure on the same spot instead of rebuilding him,
+  something built on his spot moves him within about ten seconds, and talking to him turns him to face you. If the
+  pieces near home cannot be read he is shown nowhere new. `ct_haul status` adds a camp line. He stands; he does not
+  sit yet. Nothing in the world changes and nobody else sees him. **Not yet observed in game.**
 * **Gunnar can fill the cart you assigned him (#381).** A new `Workers/GunnarCartTourEnabled` setting, **off by
   default** and needing `Workers/GunnarCollectionEnabled` and `Workers/GunnarHaulingEnabled` too, lets his collection
   tour put what it picks into the cart you assigned him instead of walking each load to a chest: park the cart inside

@@ -11,6 +11,20 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Changed — Thorstein's body is created through Concerned NPC's gated build (#372)
+
+- `cf_worker spawn` no longer creates his body itself. It hands his prefab to Concerned NPC, which requires the
+  worker lease, asks again that it is still held immediately before the body is created, counts his saved bodies
+  itself and stamps his identity in the same call. The prefab, its name, its key fields and when it is registered
+  are unchanged, so saved bodies load exactly as before.
+- While an order holds him, `cf_worker spawn` now refuses and says to cancel the order first (a paused order still
+  holds him); before, that case created a body with no lease at all. A lead default pending owner confirmation. The
+  write-off for a lost body (`CUSTODY_AND_RECOVERY.md` §10) therefore runs `cf_collect cancel` before
+  `cf_worker spawn`; a cancel keeps what the record holds on him, so `cf_settle resolve <order> lost` still writes it
+  off against the cancelled order (tested).
+- A new body whose identity could not be written is now destroyed again instead of being left standing. Nothing is
+  in it: it was created a moment earlier. **Not observed in game** (OWNER GO-AROUND PENDING).
+
 ### Added — Thorstein climbs a ladder when you send him (#334, owner decision 2026-11-01, D14.6)
 
 - **`cf_worker climb here`** (or `cf_worker climb <x> <y> <z>`) sends Thorstein's

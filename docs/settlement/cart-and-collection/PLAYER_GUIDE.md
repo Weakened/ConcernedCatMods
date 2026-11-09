@@ -43,7 +43,10 @@ the host, and nobody else connected. In this order:
    you have.
 2. `cf_settle recruit thorstein` — the name matters: an order is always given to `thorstein`.
 3. `cf_worker spawn` — his body appears three metres in front of you. Refused if he already has one in this world,
-   including one standing in ground that is not loaded: go to it instead.
+   including one standing in ground that is not loaded: go to it instead. Also refused while an order still holds
+   him, even a paused one (for example an order taken up again after a load that found no body): cancel it first
+   with `cf_collect cancel`. What he carried stays in the record, so it can still be written off after the spawn
+   (`CUSTODY_AND_RECOVERY.md` §10).
 4. `cf_settle give axe`, then `cf_settle give hammer` — hold the tool in your hand and stand within four metres of
    him. He needs both, and they need to still be usable, before an order is accepted.
 5. `ct_haul spawn` — Gunnar arrives three metres in front of you and stays in the world until you retire him

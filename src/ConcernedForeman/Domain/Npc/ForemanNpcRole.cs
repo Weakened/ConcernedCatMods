@@ -95,7 +95,12 @@ internal sealed class ForemanNpcRole : INpcRole
     /// stores itself under. Only the set of kinds the arbiter will grant him
     /// widens, to a figure at home while he rests. The arbiter still grants
     /// one body at a time (<see cref="ThorsteinBodies"/>).</summary>
-    public NpcBodyContract Body { get; } =
+    public NpcBodyContract Body => Contract;
+
+    /// <summary>The body contract, as one value: the role declares it to the
+    /// registry and the worker prefab spawns through it (#372), so the two can
+    /// never name different prefabs or key prefixes.</summary>
+    internal static NpcBodyContract Contract { get; } =
         NpcBodyContract.ForWorkerWithPresentation(ForemanRole.BodyPrefabName, ForemanRole.BodyKeyPrefix);
 
     /// <inheritdoc />
