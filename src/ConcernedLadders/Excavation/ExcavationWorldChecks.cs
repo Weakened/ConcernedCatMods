@@ -59,6 +59,11 @@ internal sealed class ExcavationWorldChecks
     internal static bool WardAllows(in ExcavationPlan plan) =>
         PrivateArea.CheckAccess(Centre(plan, plan.Datum), plan.Geometry.AccessCheckRadius, flash: true, wardCheck: true);
 
+    /// <summary>The same ward question for the preview (#487 slice 4), without flashing anything: with
+    /// <c>flash: false</c> the game's CheckAccess only reads the wards (read from the installed game).</summary>
+    internal static bool WardAllowsQuietly(in ExcavationPlan plan) =>
+        PrivateArea.CheckAccess(Centre(plan, plan.Datum), plan.Geometry.AccessCheckRadius, flash: false, wardCheck: true);
+
     /// <summary>True when any no-build location reaches into the square. Fails closed: an unreadable list is a hit.</summary>
     internal bool InNoBuildArea(in ExcavationPlan plan)
     {

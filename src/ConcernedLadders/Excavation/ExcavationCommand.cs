@@ -16,12 +16,16 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// Registered through Jötunn: Jötunn 2.30.2's CommandManager reflects for the 13-parameter
 /// <c>Terminal.ConsoleCommand</c> constructor, which is the one the installed game (1.0.21) has, read from both
 /// decompiled assemblies. (The Jötunn 2.29.2 mismatch that removed other products' commands, #307, does not apply to
-/// this product's pin.) Not observed in game.</summary>
+/// this product's pin.) Not observed in game.
+///
+/// Jötunn keeps a registered command for the session, so the command never holds the runtime itself: it asks the
+/// plugin for the current one on every use, and answers "unavailable" once an install fault has disposed it (#487
+/// slice 4, the follow-up from slice 2's review).</summary>
 internal sealed class ExcavationCommand : ConsoleCommand
 {
-    private readonly ExcavationRuntime _runtime;
+    private readonly Func<ExcavationRuntime?> _current;
 
-    internal ExcavationCommand(ExcavationRuntime runtime) => _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+    internal ExcavationCommand(Func<ExcavationRuntime?> current) => _current = current ?? throw new ArgumentNullException(nameof(current));
 
     public override string Name => "cl_excavate";
 
@@ -49,15 +53,17 @@ internal sealed class ExcavationCommand : ConsoleCommand
     private string Answer(string[] args)
     {
         string verb = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
-        if (verb == "status") return _runtime.Status();
-        if (verb == "dig") return "The console cannot dig. Equip the Iron Shovel and use its attack (small) or secondary attack (large).";
+        ExcavationRuntime? runtime = _current();
+        if (runtime == null) return "Excavation is unavailable this session (it stopped during start-up; see the log). Nothing is changed.";
+        if (verb == "status") return runtime.Status();
+        if (verb == "dig") return "The console cannot dig. Equip the Iron Shovel, look at the ground until its outline shows, and use its attack; its secondary attack switches the size.";
         if (verb != "plan") return Help;
         if (args.Length < 2 || !TryMode(args[1], out ExcavationMode mode))
         {
             return "Say which size: " + verb + " small (" + ExcavationReport.ModeName(ExcavationMode.Small) + ") or " + verb +
                    " large (" + ExcavationReport.ModeName(ExcavationMode.Large) + ").";
         }
-        return _runtime.PlanAtAim(mode);
+        return runtime.PlanAtAim(mode);
     }
 
     private static bool TryMode(string word, out ExcavationMode mode)

@@ -189,8 +189,13 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal("Excavation/ExcavationShovelInput.cs", calls[0].Path);
         Assert.Equal(1, calls[0].N);
         string command = SourceText("Excavation/ExcavationCommand.cs");
-        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bDigAtAim\b|\bCommit\s*\(", command);
-        Assert.Equal(1, Count(command, @"_runtime\.PlanAtAim\s*\("));
+        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bDigAtAim\b|\bCommit\s*\(|\bSwitchMode\b|\bRefreshPreview\b", command);
+        Assert.Equal(1, Count(command, @"(?<!\w)runtime\.PlanAtAim\s*\("));
+        // Slice 4 (slice 2's follow-up): the command never keeps a runtime of its own, so one disposed by an install
+        // fault cannot be reached through it; it asks the plugin for the current one on every use.
+        Assert.DoesNotMatch(@"\breadonly\s+ExcavationRuntime\b|\bExcavationRuntime\s+_\w+\s*[;=]", command);
+        Assert.Equal(1, Count(command, @"ExcavationRuntime\?\s+runtime\s*=\s*_current\s*\(\s*\)\s*;\s*if\s*\(\s*runtime\s*==\s*null\s*\)\s*return\b"));
+        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"new\s+ExcavationCommand\s*\(\s*\(\s*\)\s*=>\s*_excavation\s*\)"));
     }
 
     /// <summary>Whether the shovel and the player can pay is asked before any world check, so a refused payment never
@@ -204,7 +209,7 @@ public sealed class ExcavationSourceAuditTests
     [InlineData("Plugin.cs", @"new\s+IronShovelItem\s*\([^;]*craftable\s*:\s*_shovelInput\s*!=\s*null\s*&&\s*_excavation\.Available\s*\)")]
     [InlineData("Items/IronShovelItem.cs", @"Enabled\s*=\s*_craftable\s*,")]
     [InlineData("Excavation/ExcavationShovelInput.cs", @"private\s+static\s+void\s+BeforeAttackInput\s*\(\s*Player\s+__instance\s*\)")]
-    [InlineData("Excavation/ExcavationShovelInput.cs", @"IronShovel\.ModeFor\s*\(\s*attack\s*\(\s*__instance\s*\)\s*,\s*secondary\s*\(\s*__instance\s*\)")]
+    [InlineData("Excavation/ExcavationShovelInput.cs", @"ExcavationPreviewRules\.PressFor\s*\(\s*attack\s*\(\s*__instance\s*\)\s*,\s*secondary\s*\(\s*__instance\s*\)\s*\)")]
     [InlineData("Excavation/ExcavationShovelInput.cs", @"ReferenceEquals\s*\(\s*__instance\s*,\s*Player\.m_localPlayer\s*\)")]
     [InlineData("Items/IronShovelItem.cs", @"shared\.m_attack\.m_attackAnimation\s*=\s*""""\s*;")]
     [InlineData("Items/IronShovelItem.cs", @"shared\.m_secondaryAttack\.m_attackAnimation\s*=\s*""""\s*;")]
@@ -247,7 +252,7 @@ public sealed class ExcavationSourceAuditTests
     [Fact]
     public void TheShovelExistsOnlyBehindTheSwitch()
     {
-        foreach (string pattern in new[] { @"new\s+IronShovelItem\s*\(", @"new\s+ExcavationShovelInput\s*\(", @"new\s+ExcavationCommand\s*\(" })
+        foreach (string pattern in new[] { @"new\s+IronShovelItem\s*\(", @"new\s+ExcavationShovelInput\s*\(", @"new\s+ExcavationCommand\s*\(", @"new\s+ExcavationPreview\s*\(" })
         {
             var hits = Hits(pattern);
             Assert.True(hits.Count == 1 && hits[0].Path == "Plugin.cs" && hits[0].N == 1, pattern + ": " + string.Join(", ", hits));
@@ -259,6 +264,7 @@ public sealed class ExcavationSourceAuditTests
         Assert.Matches(@"new\s+IronShovelItem\s*\(", body);
         Assert.Matches(@"new\s+ExcavationShovelInput\s*\(", body);
         Assert.Matches(@"new\s+ExcavationCommand\s*\(", body);
+        Assert.Matches(@"new\s+ExcavationPreview\s*\(", body);
         Assert.Matches(@"Config\.Bind\s*\(\s*""Excavation""\s*,\s*""Enabled""\s*,\s*false\s*,", plugin);
     }
 
@@ -277,6 +283,209 @@ public sealed class ExcavationSourceAuditTests
         {
             Assert.True(Count(text, pattern) == 0, path + " uses " + pattern + ".");
         }
+    }
+
+    // ---- #487 slice 4: the preview, the confirmation, and slice 3's follow-ups ----
+
+    /// <summary>The body of the first method whose signature matches, braces counted (comments are already stripped).</summary>
+    internal static string MethodBody(string text, string signature)
+    {
+        Match head = Regex.Match(text, signature);
+        Assert.True(head.Success, "Signature not found: " + signature);
+        int open = text.IndexOf('{', head.Index + head.Length);
+        Assert.True(open > 0, "No body after " + signature);
+        int depth = 0;
+        for (int i = open; i < text.Length; i++)
+        {
+            if (text[i] == '{') depth++;
+            else if (text[i] == '}' && --depth == 0) return text.Substring(open, i - open + 1);
+        }
+        throw new InvalidOperationException("Unbalanced body after " + signature);
+    }
+
+    internal const string RefreshSignature = @"internal\s+bool\s+RefreshPreview\s*\(";
+    internal const string EvaluateSignature = @"private\s+ExcavationCommitRefusal\s+Evaluate\s*\(";
+    internal const string DigSignature = @"internal\s+string\s+DigWithShovel\s*\(";
+
+    /// <summary>Aiming, switching size or moving never changes the world: the preview's refresh and the shared evaluation it
+    /// uses contain no commit, charge, spawn or durability write, and the preview adapter none either.</summary>
+    [Theory]
+    [InlineData(@"\bCommit\s*\(")]
+    [InlineData(ChargeCall)]
+    [InlineData(@"\bSpawnOnHitTerrain\b")]
+    [InlineData(@"\bUseStamina\s*\(")]
+    [InlineData(@"\bTryStart\s*\(")]
+    [InlineData(@"\bDigWithShovel\b")]
+    [InlineData(DurabilityWrite)]
+    public void ThePreviewPathNeverCommits(string pattern)
+    {
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        Assert.Equal(0, Count(MethodBody(runtime, RefreshSignature), pattern));
+        Assert.Equal(0, Count(MethodBody(runtime, EvaluateSignature), pattern));
+        Assert.Equal(0, Count(SourceText("Excavation/ExcavationPreview.cs"), pattern));
+    }
+
+    [Fact]
+    public void ThePreviewAsksQuietlyAndOnlyThePressFlashes()
+    {
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        string refresh = MethodBody(runtime, RefreshSignature);
+        string evaluate = MethodBody(runtime, EvaluateSignature);
+        string dig = MethodBody(runtime, DigSignature);
+        Assert.Equal(1, Count(refresh, @"\bEvaluate\s*\([^;]*committing\s*:\s*false\b"));
+        Assert.Equal(1, Count(refresh, @"\bEvaluate\s*\("));
+        Assert.Equal(1, Count(dig, @"\bEvaluate\s*\([^;]*committing\s*:\s*true\b"));
+        Assert.Equal(1, Count(dig, @"\bEvaluate\s*\("));
+        Assert.Equal(2, Count(runtime, @"\bEvaluate\s*\(\s*mode\b"));
+        // The flashing ward check and the stamina flash happen only when committing.
+        Assert.Equal(1, Count(evaluate, @"committing\s*\?\s*ExcavationWorldChecks\.WardAllows\s*\(\s*plan\s*\)\s*:\s*ExcavationWorldChecks\.WardAllowsQuietly\s*\(\s*plan\s*\)"));
+        Assert.Equal(1, Count(runtime, @"ExcavationWorldChecks\.WardAllows\s*\("));
+        Assert.Equal(1, Count(runtime, @"\bFlashStamina\s*\(\s*\)\s*;"));
+        Assert.Equal(1, Count(evaluate, @"if\s*\(\s*committing\s*&&\s*refusal\s*==\s*ExcavationCommitRefusal\.NotEnoughStamina\s*\)\s*FlashStamina\s*\(\s*\)\s*;"));
+        string checks = SourceText("Excavation/ExcavationWorldChecks.cs");
+        Assert.Equal(1, Count(checks, @"WardAllowsQuietly\s*\([^)]*\)\s*=>\s*PrivateArea\.CheckAccess\s*\([^;]*AccessCheckRadius\s*,\s*flash\s*:\s*false\s*,\s*wardCheck\s*:\s*true\s*\)"));
+        Assert.Equal(2, Hits(@"\bCheckAccess\s*\(").Where(h => ExcavationCode(h.Path)).Sum(h => h.N));
+        Assert.Empty(Hits(@"\bFlashShield\s*\(").Where(h => ExcavationCode(h.Path)));
+    }
+
+    /// <summary>A press digs only what the preview shows: the confirmation comes before any terrain read, the fresh plan is
+    /// compared with the shown one before the commit, and the commit is reached once, from the press.</summary>
+    [Fact]
+    public void ThePressConfirmsThePreviewBeforeItCommits()
+    {
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        string dig = MethodBody(runtime, DigSignature);
+        int ladder = Regex.Match(dig, @"if\s*\(\s*OnLadder\s*\(\s*\)\s*\)\s*return").Index;
+        int confirm = Regex.Match(dig, @"refusal\s*=\s*_shown\.Confirm\s*\(\s*mode\s*,").Index;
+        int confirmed = Regex.Match(dig, @"if\s*\(\s*refusal\s*!=\s*ExcavationCommitRefusal\.None\s*\)\s*return").Index;
+        int evaluate = Regex.Match(dig, @"\bEvaluate\s*\(").Index;
+        int matches = Regex.Match(dig, @"if\s*\(\s*!_shown\.Matches\s*\(\s*plan\s*\)\s*\)").Index;
+        int commit = Regex.Match(dig, @"return\s+Commit\s*\(\s*plan\b").Index;
+        Assert.True(ladder > 0 && confirm > ladder && confirmed > confirm && evaluate > confirmed && matches > evaluate && commit > matches,
+            "DigWithShovel must refuse on a ladder, then confirm the preview, then evaluate, then match, then commit.");
+        // The square comes from the preview, never from a fresh aim.
+        Assert.Matches(@"Evaluate\s*\(\s*mode\s*,\s*_shown\.CentreX\s*,\s*_shown\.CentreZ\s*,", dig);
+        Assert.DoesNotMatch(@"(?<![.\w])Aim\s*\(", dig);
+        Assert.Equal(1, Count(runtime, @"\bCommit\s*\(\s*plan\b"));
+        // The size switch only switches.
+        Assert.Equal(1, Count(runtime, @"internal\s+void\s+SwitchMode\s*\(\s*\)\s*=>\s*_selection\.Switch\s*\(\s*\)\s*;"));
+        var switches = Hits(@"\.SwitchMode\s*\(");
+        Assert.True(switches.Count == 1 && switches[0].Path == "Excavation/ExcavationShovelInput.cs" && switches[0].N == 1, string.Join(", ", switches));
+        string input = SourceText("Excavation/ExcavationShovelInput.cs");
+        Assert.Matches(@"if\s*\(\s*press\s*==\s*ExcavationPress\.None\s*\|\|\s*ExcavationPreview\.UiOpen\s*\(\s*\)\s*\)\s*return\s*;", input);
+        Assert.Matches(@"if\s*\(\s*press\s*==\s*ExcavationPress\.SwitchSize\s*\)\s*\{\s*runtime\.SwitchMode\s*\(\s*\)\s*;\s*return\s*;\s*\}", input);
+        // Only the preview's own refresh (driven by the plugin's frame) reads for the preview.
+        var refreshes = Hits(@"\.RefreshPreview\s*\(");
+        Assert.True(refreshes.Count == 1 && refreshes[0].Path == "Excavation/ExcavationPreview.cs" && refreshes[0].N == 1, string.Join(", ", refreshes));
+    }
+
+    /// <summary>The targeting rule is the game's build-placement ray: the first thing hit must be terrain, within the reach
+    /// of the player's eyes, triggers ignored; and the shovel does nothing from a ladder.</summary>
+    [Theory]
+    [InlineData(@"_aimMask\s*=\s*LayerMask\.GetMask\s*\(\s*""Default""\s*,\s*""static_solid""\s*,\s*""Default_small""\s*,\s*""piece""\s*,\s*""piece_nonsolid""\s*,\s*""terrain""\s*,\s*""vehicle""\s*\)\s*;")]
+    [InlineData(@"Physics\.Raycast\s*\(\s*eye\.position\s*,\s*eye\.forward\s*,\s*out\s+RaycastHit\s+hit\s*,\s*ExcavationLimits\.AimRayLength\s*,\s*_aimMask\s*,\s*QueryTriggerInteraction\.Ignore\s*\)")]
+    [InlineData(@"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\.GetComponent<Heightmap>\s*\(\s*\)\s*==\s*null\s*\)")]
+    [InlineData(@"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*ExcavationLimits\.Reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;")]
+    [InlineData(@"private\s+static\s+bool\s+OnLadder\s*\(\s*\)\s*=>\s*LadderRuntime\.Current\?\.IsClimbing\s*==\s*true\s*;")]
+    public void TheTargetingRuleIsWhereItMustBe(string pattern)
+    {
+        Assert.Equal(1, Count(SourceText("Excavation/ExcavationRuntime.cs"), pattern));
+    }
+
+    /// <summary>The preview is a bounded, pooled, local visual: one root, a fixed number of line renderers created only
+    /// when there is no root yet, one material, one HUD text; no network view, no ZDO, nothing instantiated from a prefab,
+    /// nothing destroyed, no collider.</summary>
+    [Fact]
+    public void ThePreviewIsABoundedLocalVisual()
+    {
+        string preview = SourceText("Excavation/ExcavationPreview.cs");
+        foreach (string forbidden in new[]
+                 {
+                     @"\bZNetView\b", @"\bZDO\b", @"\bZNetScene\b", @"\bZRoutedRpc\b", @"\bInstantiate\s*\(", @"\bDontDestroyOnLoad\s*\(",
+                     @"\bDestroy(Immediate)?\s*\(", @"\bHideFlags\b", @"\bAddComponent<(?!LineRenderer>|TextMeshProUGUI>)", @"\bAddComponent\s*\(",
+                     @"\bEvaluate\s*\(", @"\bSwitchMode\s*\(", @"\bShowMessage\s*\(", @"\bPhysics\.", @"\bCollider\b",
+                 })
+        {
+            Assert.True(Count(preview, forbidden) == 0, "ExcavationPreview.cs uses " + forbidden + ".");
+        }
+        Assert.Equal(3, Count(preview, @"\bnew\s+GameObject\s*\("));
+        Assert.Equal(1, Count(preview, @"\bAddComponent<LineRenderer>\s*\("));
+        Assert.Equal(1, Count(preview, @"\bAddComponent<TextMeshProUGUI>\s*\("));
+        Assert.Equal(1, Count(preview, @"\bnew\s+Material\s*\("));
+        Assert.Equal(1, Count(preview, @"new\s+LineRenderer\?\[\s*ExcavationPreviewShape\.LineCount\s*\]"));
+        string ensure = MethodBody(preview, @"private\s+bool\s+EnsureLines\s*\(");
+        Assert.Matches(@"^\{\s*if\s*\(\s*_root\s*!=\s*null\s*\)\s*return\s+false\s*;", ensure);
+        Assert.Matches(@"for\s*\(\s*int\s+i\s*=\s*0\s*;\s*i\s*<\s*_lines\.Length\s*;\s*i\+\+\s*\)", ensure);
+        Assert.Equal(2, Count(ensure, @"\bnew\s+GameObject\s*\("));
+        string label = MethodBody(preview, @"private\s+TextMeshProUGUI\?\s+Label\s*\(");
+        Assert.Matches(@"^\{\s*if\s*\(\s*_label\s*!=\s*null\s*\)\s*return\s+_label\s*;", label);
+        string material = MethodBody(preview, @"private\s+Material\?\s+Material\s*\(");
+        Assert.Matches(@"^\{\s*if\s*\(\s*_material\s*!=\s*null\s*\)\s*return\s+_material\s*;\s*if\s*\(\s*_shaderMissing\s*\)\s*return\s+null\s*;", material);
+        Assert.Equal(1, Count(material, @"\bnew\s+Material\s*\("));
+    }
+
+    /// <summary>Any write to a recipe's enabled flag other than turning it off: a member write or an object initialiser.</summary>
+    internal const string EnableWrite = @"\bm_enabled\s*=(?!=)(?!\s*false\s*;)";
+
+    /// <summary>Slice 3's follow-up: a fault later in the session turns the recipe off, and nothing in the product turns a
+    /// recipe on.</summary>
+    [Fact]
+    public void ALaterFaultDisablesTheRecipe()
+    {
+        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"_excavation\.Faulted\s*=\s*\(\s*\)\s*=>\s*_shovel\?\.DisableRecipe\s*\(\s*\)\s*;"));
+        string item = SourceText("Items/IronShovelItem.cs");
+        Assert.Equal(1, Count(item, @"internal\s+void\s+DisableRecipe\s*\(\s*\)"));
+        Assert.Equal(1, Count(item, @"\brecipe\.m_enabled\s*=\s*false\s*;"));
+        Assert.Empty(Hits(EnableWrite).Where(h => ExcavationCode(h.Path)));
+        Assert.Equal(1, Count("recipe.m_enabled = true;", EnableWrite));
+        Assert.Equal(1, Count("recipe.m_enabled = _craftable;", EnableWrite));
+        Assert.Equal(1, Count("var r = new Recipe { m_enabled = true };", EnableWrite));
+        Assert.Equal(0, Count("if (recipe.m_enabled == false) return;", EnableWrite));
+        Assert.Equal(0, Count("recipe.m_enabled = false;", EnableWrite));
+        // The item config's one Enabled is the start-up decision, and nothing else in the item folder sets one.
+        Assert.Equal(1, Hits(@"\bEnabled\s*=(?!=)").Where(h => h.Path.StartsWith("Items/", StringComparison.Ordinal)).Sum(h => h.N));
+        Assert.Equal(1, Count(item, @"\bEnabled\s*=\s*_craftable\s*,"));
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        string fault = MethodBody(runtime, @"private\s+string\s+Fault\s*\(");
+        Assert.Matches(@"_faulted\s*=\s*true\s*;", fault);
+        Assert.Matches(@"if\s*\(\s*first\s*\)\s*\{\s*try\s*\{\s*Faulted\?\.Invoke\s*\(\s*\)\s*;", fault);
+        // A preview fault stops excavation too, because a press needs the preview.
+        Assert.Matches(@"_runtime\.StopAfterFault\s*\(\s*exception\s*\)", SourceText("Excavation/ExcavationPreview.cs"));
+        // A disposed runtime is unavailable.
+        Assert.Matches(@"internal\s+bool\s+Available\s*=>[^;]*!_faulted\s*&&\s*!_disposed\s*;", runtime);
+    }
+
+    /// <summary>Independent review of slice 4, S2: what makes the edge after a closed inventory harmless lives in the
+    /// adapter, so it is pinned there. The preview hides (and tells the runtime, which restarts the dwell) whenever any UI
+    /// is open; a free cursor counts as UI; the refresh and the confirmation use the same two clocks.</summary>
+    [Fact]
+    public void ThePreviewHidesWhileAnyUiIsOpenAndBothSidesUseOneClock()
+    {
+        string preview = SourceText("Excavation/ExcavationPreview.cs");
+        string update = MethodBody(preview, @"internal\s+void\s+Update\s*\(");
+        Assert.Matches(@"bool\s+visible\s*=[^;]*IronShovel\.IsShovelName\s*\(\s*shovel\.m_shared\.m_name\s*\)\s*&&\s*!UiOpen\s*\(\s*\)\s*;", update);
+        Assert.Matches(@"if\s*\(\s*!visible\s*\)\s*\{\s*_runtime\.HidePreview\s*\(\s*\)\s*;", update);
+        Assert.Matches(@"_runtime\.RefreshPreview\s*\(\s*player!\s*,\s*shovel!\s*,\s*Time\.frameCount\s*,\s*Time\.realtimeSinceStartup\s*\)", update);
+        string ui = MethodBody(preview, @"internal\s+static\s+bool\s+UiOpen\s*\(");
+        foreach (string screen in new[]
+                 {
+                     @"InventoryGui\.IsVisible\s*\(\s*\)", @"Menu\.IsVisible\s*\(\s*\)", @"Minimap\.IsOpen\s*\(\s*\)", @"Console\.IsVisible\s*\(\s*\)",
+                     @"TextInput\.IsVisible\s*\(\s*\)", @"StoreGui\.IsVisible\s*\(\s*\)", @"Hud\.IsPieceSelectionVisible\s*\(\s*\)", @"Hud\.InRadial\s*\(\s*\)",
+                     @"GameCamera\.InFreeFly\s*\(\s*\)", @"chat\.HasFocus\s*\(\s*\)", @"ZCursor\.LockState\s*!=\s*CursorLockMode\.Locked",
+                 })
+        {
+            Assert.Matches(screen, ui);
+        }
+        // A pure "any of these" test: no condition can narrow another away.
+        Assert.DoesNotContain("&&", ui.Replace("(chat != null && chat.HasFocus())", ""));
+        string dig = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), DigSignature);
+        Assert.Matches(@"_shown\.Confirm\s*\(\s*mode\s*,\s*Time\.frameCount\s*,\s*Time\.realtimeSinceStartup\s*\)", dig);
+        // A stopped session says so before it asks for the outline (review N5).
+        int available = Regex.Match(dig, @"if\s*\(\s*!Available\s*\)\s*return\s+ExcavationReport\.Commit\s*\(\s*ExcavationCommitRefusal\.Unavailable").Index;
+        int confirm = Regex.Match(dig, @"_shown\.Confirm\s*\(").Index;
+        Assert.True(available > 0 && confirm > available, "DigWithShovel must refuse Unavailable before the confirmation.");
+        // No preview, and so no promise of a dig, when the press could not be installed (review N2).
+        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"_preview\s*=\s*_shovelInput\s*!=\s*null\s*\?\s*new\s+ExcavationPreview\s*\("));
     }
 
     [Fact]
