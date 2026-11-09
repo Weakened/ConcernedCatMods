@@ -4,7 +4,8 @@ Status: **accepted for the first cart and collection proof** (contract revision 
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
 death door named in `GUNNAR_COLLECTION.md` §6c) and **C6** (2026-10-28, D17 - the collection tour's walking and
 load size) and **C7** (2026-10-31, D21 - Gunnar's cosmetic idle hammer swing). D16's fail-closed reading was confirmed
-by the owner on 2026-10-28.
+by the owner on 2026-10-28. D20 (the chest take) and D22 (the cart-assisted tour's load into his assigned cart) are
+owner decisions of 2026-10-31 recorded without a contract revision of their own.
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -484,7 +485,7 @@ under exactly D14.2's terms - his own body only, through the vanilla motor, neve
 authority per D3 (opted in, the host, not dedicated, nobody else connected), and off by default behind the
 collection runtime's own switch (`Workers/GunnarCollectionEnabled`), not hauling's. It is **on foot**: nothing here
 lets a tour use a cart, and a cart-assisted round, which would put items into a cart's container, still needs its own
-grant.
+grant. (Granted on 2026-10-31 as **D22**, for the cart the player assigned him, and nothing wider.)
 
 **Load size.** A load is sized like a vanilla player wearing Megingjord - **225 units** - whatever Gunnar wears, as
 #381 states. Vanilla does not weigh a non-player down, so this remains the product's own discipline; the slot limit is
@@ -709,8 +710,8 @@ smallest and most fail-closed reading the brief allows:
 **What is not granted:** no nearest-chest inference; no take from an unmarked chest, one marked `Deposit` only, or one
 marked and then unmarked; no ownership takeover; no synthetic or replacement resources; no extra copies; no teleporting
 of cargo; no mod data in a vanilla object; no bypass of ward, privacy, ownership or in-use checks; no take as part of a
-tour or into a cart's container (the cart-assisted round is its own decision, recorded in the 2026-10-31 paragraph of
-`CLAUDE.md`); no widening of any other Teamster capability.
+tour or into a cart's container (the cart-assisted round is its own decision, **D22**, which loads into his assigned
+cart and takes nothing out of one); no widening of any other Teamster capability.
 
 **Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 49-55 are OWNER GO-AROUND PENDING.
 
@@ -780,6 +781,93 @@ once, and he walks to his cart, faces it and stands there. The swing would then 
 further decision; it is never replaced by a name the product invents.
 
 **Never observed in game.** OWNER GO-AROUND PENDING (`GUNNAR_COLLECTION.md` §10).
+
+## D22. Gunnar's collection tour may load what it picks into the cart the player assigned him, measured
+
+Status: **accepted** (owner decision 2026-10-31, #381, asked directly by the completion lead and recorded in the
+lead's status log as "CART TOURS: yes - moving his own picked items into his explicitly assigned cart's container,
+measured, then unloading at the chosen chest"; the 2026-10-31 paragraph of `CLAUDE.md` carried it as decided but
+unbuilt). **Its first half is implemented** in the same change as this entry: the load into the cart. The unload at
+the chosen chest is not built (lead default 3 below). D17's "a cart-assisted round still needs its own grant" and
+D20's exclusion of "a cart's container" are answered by this entry and by nothing wider.
+
+**What is granted.** Gunnar's opted-in collection **tour** may move items **out of his own inventory** into the
+container of **the cart the player explicitly assigned him** - the one cart the hauling runtime's lease names after
+`ct_haul assign` and `ct_haul confirm` - measured on both sides, with the remainder left in him.
+
+**The calls.** D15's three, with the assigned cart's container as the destination: `Inventory.MoveItemToThis` for a
+whole stack, and for part of a stack `Inventory.AddItem` of a clone of that stack's own data into the cart followed by
+`Inventory.RemoveItem` of exactly what arrived, off his own stack. D15's reasoning for why the clone is not "spawning
+item instances" applies unchanged.
+
+**The gates, all re-asked in the frame of the move:** Teamster's master switch, the collection switch, hauling's
+switch (the assignment is the hauling runtime's) and the new `Workers/GunnarCartTourEnabled` (**off by default**); the
+start-up probe; the work-authority rule of D3; a body whose inventory record is trusted; nothing else in flight; the
+cart still being the one the tour began with - the same lease key and epoch, resolved, the hauling executor doing
+nothing with it (phase `Ready`, no haul, no leg, no joint, no hold, no pending stop), unhitched, and within 1 m of
+where it stood; then, through the shared permit mint, the cart's own network id matching the lease's, the container
+being that cart's own `m_container` riding that cart, this client owning the cart and the container, nobody having it
+open and nobody holding it hitched (vanilla's `Vagon.InUse` and `IsAttached`), the ward and the privacy setting, and
+Gunnar standing within reach of the cart's handle.
+
+**Measurement.** Both sides counted before and after; only what arrived in the cart is removed from him and moved, in
+`CollectionAccount`, from his back to `InCart`; what does not fit stays in him and stops the tour; a fault halfway is
+uncertain and never retried blind, compensated or minted; a spent permit cannot record a second transfer. Vanilla
+recomputes the cart's mass from what it holds, as it does for a player's load; nothing here writes a mass.
+
+**Where it is enforced.** `Adapters/Workers/GunnarCartLoadPort.cs`, pinned by the scope audit (each call verbatim and
+once: `cart.MoveItemToThis(gunnar, stack)`, `cart.AddItem(part)`, `gunnar.RemoveItem(stack, arrived)`; refused
+everywhere else in the product) and by `#381 cart-load audit`; the cart's subject is
+`Adapters/Workers/AssignedCartContainer.cs`, and the allowance that answers `Deposit` - only for the very cart the
+lease names, only while the executor is idle, never `Take` - is `GunnarHaulingRuntime.CartLoadAllowance`. Planted
+escapes in `tools/tests/test_teamster_cart_load_audit.py`, each refused by those rules and passing a validator without
+them. The game-free gates and the reading of the cart off a real haul executor are `CartTourGateTests`; the ledger is
+`CartLoadAccountTests`.
+
+**How the decision was read where it leaves a choice** - each a **lead default pending owner confirmation**, the
+smallest and most fail-closed reading the grant allows:
+
+1. *The assignment is the player's mark.* The cart's container needs no container mark of its own: `ct_haul assign`
+   and `confirm` are the explicit act the owner's words name. The assignment allows loading into that cart and
+   nothing out of it; D15's deposit into a chest the player marked is unchanged.
+2. *The cart stands still.* He loads only into a cart parked and unhitched inside the area, with the hauling runtime
+   doing nothing with it, and he never hitches it during a tour. A hitched cart is "in use" by vanilla's own rule and
+   D15's gate 7 refuses a cart in use, so loading on the move is not available at all; re-parking the cart nearer the
+   work (pulling it along the tour) is not built. Hauling the full cart is the player's existing `ct_haul go`, through
+   D4 and the hauling executor exactly as before.
+3. *The unload at the chosen chest is not built.* The grant's "then unloading at the chosen chest" does not say how -
+   cart to chest directly, or cart to Gunnar to chest - and nothing here takes anything out of a cart. Until a leaf
+   builds it and the owner confirms the mechanism, what a tour loaded stays in the cart for the player.
+4. *The cart must stand inside the area* the player set (`ct_collect area`). A cart elsewhere is a chest tour with a
+   worse chest.
+5. *He stands at the handle* to load - the point a puller stands at, the same one D21 walks him to - within
+   `CollectionLimits.PickupReachMetres` (2.2 m), measured from the live handle point. He never walks into the cart's
+   body, which would shove an unbraked cart.
+6. *Only what this tour picked.* A cart tour refuses to start while he carries any collected yield, and each load
+   offers, per material, at most what this tour has measured picking and not yet loaded. Nothing he brought with him -
+   a stone from an earlier session, what a D20 take gave him - goes into the cart.
+7. *A cart that moved fails closed.* More than 1 m from where it stood when the tour began, horizontally or
+   vertically, stops the tour with what he holds still in him. So does the lease ending, naming another cart, the cart
+   not resolving, the executor starting anything, or anybody hitching it.
+8. *A full cart stops the tour* with the rest in him, as a full chest does (D17); an open, warded or refusing cart
+   stops it as a refusal.
+9. *Four switches.* The master switch, collection, hauling and the cart tour's own; any one off refuses the start and
+   ends a running cart tour on the next frame.
+10. *The plan (#379).* A cart tour writes down every trip before it, like a chest tour, under the destination key
+    `cart:<the lease's cart key>`. A reload ends the lease (D6), so an interrupted cart tour is never continued as a
+    cart tour: what he holds afterwards goes to a chest through `ct_collect deposit` or a chest tour.
+11. *A known edge in the ledger, left as it was.* `CollectionAccount.RecordDeposit` takes a chest deposit off his back
+    first and then out of `InCart`; a later D15 deposit that measured more than this session's ledger had on his back
+    would move the difference out of `InCart` on paper. The totals stay conserved; it is a misattribution in the
+    session's record, not a material movement.
+
+**What is not granted:** no hitching, pulling or detaching by the tour; no unload, and no take, out of any cart; no
+nearest-cart inference and no cart the player did not assign; no load into a cart that is hitched, open, moving or
+busy; no ownership takeover; no synthetic or replacement resources; no extra copies; no teleporting of cargo; no mass,
+force or physics write; no mod data in a vanilla object; no bypass of ward, privacy, ownership or in-use checks; no
+change to D15, D16, D20 or D21; no widening of any other Teamster capability.
+
+**Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 56-63 are OWNER GO-AROUND PENDING.
 
 ## Lead default pending owner confirmation (2026-11-08): a resting figure and doors (#295 S5, #461)
 
