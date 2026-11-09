@@ -38,6 +38,7 @@ SETTINGS = os.path.join(TEAMSTER, "TeamsterSettings.cs")
 COMMAND = os.path.join(WORKERS, "CollectConsoleCommand.cs")
 
 RULE = "check_teamster_take_moves_only_out_of_the_marked_chest"
+NPC_BODY_RULE = "check_npc_consumer_bodies_come_from_the_gated_build"
 TABLE = "TEAMSTER_AUTHORIZED_PORTS = {"
 # The take port's three calls, relaxed from their exact spelling to the bare
 # token - any receiver, any arguments - and still counted once each by the
@@ -77,15 +78,19 @@ class ChestTakeIsNarrow(unittest.TestCase):
         with open(path, "wb") as handle:
             handle.write(text.replace(old, new, 1).encode("utf-8"))
 
-    def without_the_take_rules(self):
+    def without_the_take_rules(self, also=()):
         """The validator with the chest-take audit unregistered and the take
-        port's pinned calls relaxed to their bare tokens."""
+        port's pinned calls relaxed to their bare tokens. `also` names further
+        rules to unregister, for a plant that a later, wider rule refuses as well:
+        the plant must still prove the take rules on their own."""
         with open(VALIDATOR, encoding="utf-8") as handle:
             source = handle.read()
-        registration = "    report.extend(" + RULE + "(errors))\n"
-        self.assertEqual(1, source.count(registration), "the rule is not registered exactly once")
+        for rule in (RULE,) + tuple(also):
+            registration = "    report.extend(" + rule + "(errors))\n"
+            self.assertEqual(1, source.count(registration), rule + " is not registered exactly once")
+            source = source.replace(registration, "")
         self.assertEqual(1, source.count(TABLE), "the pinned-call table moved")
-        source = source.replace(registration, "").replace(TABLE, RELAX + TABLE)
+        source = source.replace(TABLE, RELAX + TABLE)
         path = os.path.join(ROOT, "tools", "_zz_without_take_rules.py")
         self.assertFalse(os.path.exists(path), "a previous copy was left behind")
         self._planted.append(path)
@@ -93,22 +98,22 @@ class ChestTakeIsNarrow(unittest.TestCase):
             handle.write(source)
         return path
 
-    def assert_refused(self, why, phrase):
+    def assert_refused(self, why, phrase, also=()):
         # The success line carries each audit's label too, so the phrase is
         # looked for only on a line the validator printed as an ERROR.
         code, out = run(VALIDATOR)
         self.assertNotEqual(0, code, why + "\n" + out[-3000:])
         refusals = [line for line in out.splitlines() if line.startswith("ERROR: ") and phrase in line]
         self.assertTrue(refusals, why + ": refused, but not by the take rules\n" + out[-3000:])
-        code, out = run(self.without_the_take_rules())
+        code, out = run(self.without_the_take_rules(also))
         self.assertEqual(0, code, why + ": without the take rules something else still refuses it, so the "
                          "plant does not prove them\n" + out[-3000:])
 
     def assert_pin_refused(self, why):
         self.assert_refused(why, "Adapters/Workers/GunnarTakePort.cs")
 
-    def assert_audit_refused(self, why):
-        self.assert_refused(why, "#381 chest-take audit")
+    def assert_audit_refused(self, why, also=()):
+        self.assert_refused(why, "#381 chest-take audit", also)
 
     # --- the three pinned calls -----------------------------------------------------------------
 
@@ -277,7 +282,9 @@ class ChestTakeIsNarrow(unittest.TestCase):
     def test_an_instantiate_is_refused(self):
         self.swap_in(PORT, "        int remaining = units;\n",
                      "        int remaining = units;\n        var made = UnityEngine.Object.Instantiate(_matching[0].m_dropPrefab);\n")
-        self.assert_audit_refused("an Instantiate in the take port passed")
+        # #372's body factory audit refuses every Instantiate in a Concerned NPC
+        # consumer too, so it is set aside here: the take rules must refuse this alone.
+        self.assert_audit_refused("an Instantiate in the take port passed", also=(NPC_BODY_RULE,))
 
     # --- the mint asks for Take ---------------------------------------------------------------------
 

@@ -29,6 +29,7 @@ internal sealed class GunnarFigurePresenter
     private readonly Action<string> _log;
     private NpcFigureDresser? _dresser;
     private Vector3 _standing;
+    private Quaternion _facing = Quaternion.identity;
 
     public GunnarFigurePresenter(GunnarBodyLeases leases, Action<string> log)
     {
@@ -50,8 +51,11 @@ internal sealed class GunnarFigurePresenter
 
     public string Describe() => _dresser != null ? _dresser.Describe() : string.Empty;
 
-    /// <summary>Shows him at <paramref name="spot"/>. The caller has already
-    /// decided, from <see cref="GunnarBodyPlan"/>, that the figure is wanted.
+    /// <summary>Shows him at <paramref name="spot"/>, turned to
+    /// <paramref name="facing"/>. A figure already standing there is turned
+    /// only (#461: he faces the player who talks to him), never rebuilt. The
+    /// caller has already decided, from <see cref="GunnarBodyPlan"/>, that the
+    /// figure is wanted.
     /// <paramref name="talk"/> is optional: with none, the figure is not
     /// interactive; <paramref name="verb"/> is the hover prompt's word.</summary>
     public void Show(GameObject? source, Vector3 spot, Quaternion facing, NpcLookSpec look,
@@ -68,10 +72,11 @@ internal sealed class GunnarFigurePresenter
 
         if (_dresser != null)
         {
-            if ((_standing - spot).sqrMagnitude > 0.0001f)
+            if ((_standing - spot).sqrMagnitude > 0.0001f || Quaternion.Angle(_facing, facing) > 1f)
             {
                 _dresser.StandAt(spot, facing);
                 _standing = spot;
+                _facing = facing;
             }
 
             return;
@@ -93,6 +98,7 @@ internal sealed class GunnarFigurePresenter
         _dresser = new NpcFigureDresser(figure, look, "CT_GunnarFigure_Look", _log);
         _dresser.StandAt(spot, facing);
         _standing = spot;
+        _facing = facing;
         _dresser.Apply();
         if (talk != null) _dresser.EnableTalk(displayName, verb, talk, _log);
     }

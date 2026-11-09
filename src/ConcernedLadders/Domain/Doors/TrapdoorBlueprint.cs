@@ -5,8 +5,8 @@ using TheConcernedCat.Ladders;
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
 /// <summary>The trapdoor setting (CL-004 #485, slice 2). Off by default: with it off no trapdoor is cloned, no token
-/// is added and the hammer menu is exactly as before. The lid runtime (slice 3) and the ladder integration (slice 4)
-/// are not built yet, so a placed trapdoor's lid stays shut while its native door state still toggles.</summary>
+/// is added and the hammer menu is exactly as before. The lid follows the native door state (slice 3); the ladder
+/// integration (slice 4) is not built yet, so a ladder does not hang in a hatch or climb through it.</summary>
 internal static class TrapdoorSettings
 {
     internal const string Section = "Trapdoors";
@@ -16,7 +16,8 @@ internal static class TrapdoorSettings
     internal const bool EnabledByDefault = false;
 
     internal const string Description =
-        "UNFINISHED (CL-004): adds the nine floor trapdoors to the hammer's Building tab. Their lids do not open yet. " +
+        "UNFINISHED (CL-004): adds the nine floor trapdoors to the hammer's Building tab. Their lids open and close, " +
+        "but ladders do not work with them yet. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed trapdoor the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
         "value: a host or server with it off deletes the trapdoors other players place, during the session. " +
@@ -157,7 +158,7 @@ internal static class TrapdoorBlueprint
     internal const string WornRoot = "worn";
 
     /// <summary>The lid's pivot: on the hinge axis, carrying the kinematic body, the lid's collider and its visuals.
-    /// The lid runtime (slice 3) turns this one transform about local x.</summary>
+    /// The lid runtime (<c>Runtime/TrapdoorLid</c>, slice 3) turns this one transform about local x.</summary>
     internal const string Hinge = "lid_hinge";
 
     /// <summary>Jötunn's prefix for a mocked prefab reference (<c>MockManager.JVLMockPrefix</c> in Jötunn 2.30.2).</summary>

@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.Companions.Placement;
 using TheConcernedCat.Companions.Quest;
+using TheConcernedCat.ConcernedNPC.Camp;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Domain.Companions;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
@@ -33,18 +33,34 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Companions;
 /// him: the gate is the host (single player, or the host of a game, never a
 /// dedicated server or a client), <c>Companions/Gunnar</c>, his registration
 /// and a world; then this character's story must be at the visitor stage
-/// (<c>IntroPending</c>) or recruited. Only then is the respawn anchor looked up
-/// and a spot probed, with the keepsake runtime's bounded read-only queries,
-/// twice a second. The census is the hauling runtime's existing one; no second
-/// scan of the world is added here.
+/// (<c>IntroPending</c>) or recruited. Only then is the respawn anchor looked up,
+/// twice a second, and a spot probed with the keepsake runtime's bounded
+/// read-only queries when the plan is out of date. The census is the hauling
+/// runtime's existing one. The one added read (#461) is the game's own list of
+/// loaded pieces within 32 m of home, at most every ten seconds while you are
+/// near home; it is not a scan of the world.
 ///
-/// It changes nothing in the world: no bed is claimed, nothing is placed, and
-/// nobody else sees him.</summary>
+/// <b>Where he stands (#461).</b> <see cref="GunnarCampRoutine"/> picks the spot
+/// and keeps it: inside Concerned NPC's camp (<see cref="NpcCamp"/>, fed by
+/// <see cref="GunnarCampSight"/> from the player-built pieces loaded around
+/// home), never across a doorway or a wall from home, with room to stand. The
+/// look at the pieces is made when home moves and otherwise every
+/// <see cref="LookSeconds"/> while you are near home; a look that fails shows
+/// him nowhere new. Leaving range and coming back keeps the same figure on the
+/// same spot rather than rebuilding it, and talking to him turns him to face
+/// you.
+///
+/// It changes nothing in the world: no bed is claimed, nothing is placed, no
+/// door is touched, and nobody else sees him.</summary>
 internal sealed class GunnarPresentation
 {
     private const float PassSeconds = 0.5f;
     private const float ShowWithinMetres = 48f;
     private const float KeepWithinMetres = 64f;
+
+    /// <summary>How often the pieces around home are looked at again while you
+    /// are near home and home has not moved.</summary>
+    private const float LookSeconds = 10f;
 
 
     // Built once: the pass runs twice a second and the look never changes.
@@ -62,16 +78,19 @@ internal sealed class GunnarPresentation
     private readonly GunnarBodyLeases _leases;
     private readonly GunnarFigurePresenter _figure;
     private readonly GunnarKeepsakeEnvironment _environment = new();
+    private readonly GunnarCampSight _sight;
+    private readonly GunnarCampRoutine _routine = new();
 
     private float _sincePass = PassSeconds;
     private bool _faulted;
     private bool _arrivalPending;
     private float _arrivalSince;
-    private bool _planned;
-    private CompanionAnchor _plannedFor;
-    private PlacementResult _placement;
+    private NpcCampView? _camp;
+    private bool _campRead;
+    private bool _looked;
+    private CompanionAnchor _lookedFrom;
+    private float _sinceLook;
     private string _last = "not asked yet";
-    private int _solidMask;
 
     private GunnarPresentation(GunnarCompanionAdapter companion, Func<WorkerBodyStatus> census,
         Func<bool> liveBody, Func<bool> resting, Func<GunnarHaulService?> service, NpcIdentity identity,
@@ -86,6 +105,7 @@ internal sealed class GunnarPresentation
         _log = log;
         _leases = new GunnarBodyLeases(NpcRoleRegistry.Shared, identity);
         _figure = new GunnarFigurePresenter(_leases, log);
+        _sight = new GunnarCampSight(_environment, log);
     }
 
     /// <summary>Null, with one warning, when the companion layer is missing or
@@ -167,7 +187,7 @@ internal sealed class GunnarPresentation
             return false;
         }
 
-        _planned = false;
+        _routine.Forget();
         if (!granted) return false;
         _arrivalPending = true;
         _arrivalSince = Time.unscaledTime;
@@ -207,10 +227,12 @@ internal sealed class GunnarPresentation
         _leases.ReleaseWorker();
         _leases.Forget();
         _environment.Forget();
+        _sight.Forget();
+        _routine.Forget();
+        ForgetLook();
         _figure.ResetForWorld();
         _talkScope = null;
         _arrivalPending = false;
-        _planned = false;
         _faulted = false;
         _sincePass = PassSeconds;
         _last = "the world unloaded";
@@ -234,6 +256,10 @@ internal sealed class GunnarPresentation
         if (_figure.LastRefusal.Length != 0) text += " The figure could not be built: " + _figure.LastRefusal + ".";
         string look = _figure.Describe();
         if (look.Length != 0) text += " Look: " + look + ".";
+        if (_looked)
+            text += " Camp: " + (_camp != null && _camp.IsEstablished ? "established" : "not established") + ", from " +
+                _sight.Known + " pieces; " + _sight.Doors.Count + " doorways near home" +
+                (_campRead ? string.Empty : "; the last look failed, so he is shown nowhere new") + ".";
         return text;
     }
 
@@ -259,7 +285,7 @@ internal sealed class GunnarPresentation
         bool worldLoaded = net != null && !NpcRoleRegistry.Shared.CurrentWorld.IsUnknown && Player.m_localPlayer != null;
         if (!GunnarBodyPlan.MaySurvey(registered, worldLoaded, host, enabled))
         {
-            Down("not shown here: needs the host, Companions/Gunnar, his Concerned NPC registration and a world");
+            Forget("not shown here: needs the host, Companions/Gunnar, his Concerned NPC registration and a world");
             return;
         }
 
@@ -269,7 +295,7 @@ internal sealed class GunnarPresentation
         QuestState? stage = record != null && record.ShouldPresentFigure(true) ? record.State : (QuestState?)null;
         if (stage == null)
         {
-            Down("this character has not met him yet, or skipped the story");
+            Forget("this character has not met him yet, or skipped the story");
             return;
         }
 
@@ -278,22 +304,29 @@ internal sealed class GunnarPresentation
         if (saved != 0)
         {
             // Settled before any physics: a body, or not knowing, means no figure.
-            Down(saved > 0 ? "his worker body is in this world" : "his saved bodies are not accounted for yet");
+            Forget(saved > 0 ? "his worker body is in this world" : "his saved bodies are not accounted for yet");
             return;
         }
 
         bool resting = _resting();
         bool anchorKnown = _environment.TryAnchor(out CompanionAnchor anchor);
         Player? player = Player.m_localPlayer;
-        float limit = _figure.IsShown ? KeepWithinMetres : ShowWithinMetres;
+        bool shown = _figure.IsShown;
+        // The routine is told the truth first: a lease the arbiter ended takes
+        // the figure with it, and a retained spot is then shown again.
+        _routine.NoteFigureShown(shown);
+        float limit = shown ? KeepWithinMetres : ShowWithinMetres;
         bool near = anchorKnown && player != null &&
             (player.transform.position - ToVector(anchor.Position)).sqrMagnitude <= limit * limit;
 
-        var facts = new GunnarBodyFacts(registered, worldLoaded, host, enabled, stage, saved, resting, anchorKnown, near);
+        // Out of range is no reason to take a shown figure down (#461): coming
+        // back must not rebuild him. Everything else is.
+        var facts = new GunnarBodyFacts(registered, worldLoaded, host, enabled, stage, saved, resting, anchorKnown,
+            near || shown);
         GunnarBodyKind kind = GunnarBodyPlan.Decide(facts);
         if (kind != GunnarBodyKind.Presentation)
         {
-            Down(kind == GunnarBodyKind.Worker ? "his worker body is in this world"
+            Forget(kind == GunnarBodyKind.Worker ? "his worker body is in this world"
                 : saved < 0 ? "his saved bodies are not accounted for yet"
                 : !resting ? "a job holds him"
                 : !anchorKnown ? "neither a claimed bed nor the world start could be found"
@@ -301,28 +334,62 @@ internal sealed class GunnarPresentation
             return;
         }
 
-        if (!_planned || anchor.DiffersFrom(_plannedFor, PlacementRules.DefaultAnchorMoveTolerance))
+        if (near) LookIfDue(anchor);
+        var asked = new GunnarBodyFacts(registered, worldLoaded, host, enabled, stage, saved, resting, anchorKnown, near);
+        GunnarCampStep step = _routine.Step(asked, anchor, _camp, _campRead, NpcRoleRegistry.Shared.CurrentWorld,
+            _environment, _sight);
+        switch (step.Action)
         {
-            IReadOnlyList<WorldPoint>? others = _environment.OtherMementos(anchor);
-            _placement = GunnarFigurePlacement.Plan(anchor, _environment, others);
-            _plannedFor = anchor;
-            // A deferral is retried on the next pass rather than remembered.
-            _planned = _placement.Found;
+            case GunnarCampAction.Show:
+            case GunnarCampAction.Reposition:
+                Vector3 spot = ToVector(step.Placement.Position);
+                Quaternion facing = FacingFrom(spot, player!.transform.position);
+                _figure.Show(Game.instance != null ? Game.instance.m_playerPrefab : null, spot, facing,
+                    Look, DisplayName(), TeamsterStrings.Get("gunnar.talk.verb"), _onTalk);
+                _routine.NoteFigureShown(_figure.IsShown);
+                _last = _figure.IsShown ? "at home, resting" : "wanted at home, not shown";
+                break;
+            case GunnarCampAction.Retain:
+                _last = near ? "at home, resting" : "at home, resting (you are out of range; he stays where he is)";
+                break;
+            default:
+                Down(!near ? "you are not near home"
+                    : !_campRead ? "the pieces and doors near home could not be read, so he is shown nowhere new"
+                    : "no clear spot beside home yet");
+                break;
         }
+    }
 
-        if (!_placement.Found)
-        {
-            Down("no clear spot beside home yet");
-            return;
-        }
+    /// <summary>Looks at the pieces and doors around home when home moved, in a
+    /// new world, or every <see cref="LookSeconds"/>; between looks the last
+    /// answer stands, so a pass with nothing due reads nothing.</summary>
+    private void LookIfDue(CompanionAnchor anchor)
+    {
+        _sinceLook += PassSeconds;
+        if (_looked && _sinceLook < LookSeconds && _camp != null &&
+            !anchor.DiffersFrom(_lookedFrom, PlacementRules.DefaultAnchorMoveTolerance) &&
+            _camp.Epoch.Matches(NpcRoleRegistry.Shared.CurrentWorld)) return;
+        _campRead = _sight.TryLook(anchor, NpcRoleRegistry.Shared.CurrentWorld, out NpcCampView camp);
+        _camp = camp;
+        _looked = true;
+        _lookedFrom = anchor;
+        _sinceLook = 0f;
+    }
 
-        Vector3 spot = ToVector(_placement.Position);
-        Vector3 look = player!.transform.position - spot;
+    private void ForgetLook()
+    {
+        _camp = null;
+        _campRead = false;
+        _looked = false;
+        _lookedFrom = default;
+        _sinceLook = 0f;
+    }
+
+    private static Quaternion FacingFrom(Vector3 spot, Vector3 toward)
+    {
+        Vector3 look = toward - spot;
         look.y = 0f;
-        Quaternion facing = look.sqrMagnitude > 0.01f ? Quaternion.LookRotation(look.normalized, Vector3.up) : Quaternion.identity;
-        _figure.Show(Game.instance != null ? Game.instance.m_playerPrefab : null, spot, facing,
-            Look, DisplayName(), TeamsterStrings.Get("gunnar.talk.verb"), _onTalk);
-        _last = _figure.IsShown ? "at home, resting" : "wanted at home, not shown";
+        return look.sqrMagnitude > 0.01f ? Quaternion.LookRotation(look.normalized, Vector3.up) : Quaternion.identity;
     }
 
     /// <summary>#459: a press of the use key on his figure, and the only way he
@@ -337,6 +404,7 @@ internal sealed class GunnarPresentation
         {
             GunnarCompanionRecord? record = _companion.Current();
             if (record == null) return;
+            FaceTheTalker();
             if (!ReferenceEquals(record, _talkScope)) { _talkScope = record; _talk = new GunnarTalk(GunnarTalk.StartFor(record.Scope.World.Value, record.Scope.Character.Value)); }
             HaulSnapshot? snapshot = _service()?.Snapshot;
             string? line = _talk.Reply(record.State,
@@ -356,21 +424,39 @@ internal sealed class GunnarPresentation
         }
     }
 
+    /// <summary>#461: he turns to the player who spoke to him. The same figure,
+    /// on the same spot; only its facing changes, through the presenter.</summary>
+    private void FaceTheTalker()
+    {
+        Player? player = Player.m_localPlayer;
+        Vector3? standing = _figure.Standing;
+        if (player == null || !standing.HasValue || !_figure.IsShown) return;
+        Quaternion facing = FacingFrom(standing.Value, player.transform.position);
+        _figure.Show(Game.instance != null ? Game.instance.m_playerPrefab : null, standing.Value, facing,
+            Look, DisplayName(), TeamsterStrings.Get("gunnar.talk.verb"), _onTalk);
+    }
+
     private string DisplayName() =>
         GunnarCompanionRecord.ResolveDisplayName(_companion.DisplayName.Value,
             key => TeamsterStrings.HasKey(key) ? TeamsterStrings.Get(key) : null);
 
-    private bool HasHeadroom(Vector3 spot)
-    {
-        if (_solidMask == 0) _solidMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece");
-        return _solidMask != 0 && !Physics.CheckCapsule(spot + Vector3.up * 0.6f, spot + Vector3.up * 1.7f, 0.3f,
-            _solidMask, QueryTriggerInteraction.Ignore);
-    }
+    private bool HasHeadroom(Vector3 spot) => _sight.HasRoomToStand(new WorldPoint(spot.x, spot.y, spot.z));
 
+    /// <summary>The figure down, and the routine told so; its plan is kept, so
+    /// a spot nothing changed is not probed again.</summary>
     private void Down(string why)
     {
         _figure.Hide();
+        _routine.NoteFigureShown(false);
         _last = why;
+    }
+
+    /// <summary>The figure down and its plan forgotten: he is not wanted at home
+    /// at all (a worker body, a job, no home).</summary>
+    private void Forget(string why)
+    {
+        Down(why);
+        _routine.Forget();
     }
 
     private static Vector3 ToVector(WorldPoint p) => new(p.X, p.Y, p.Z);

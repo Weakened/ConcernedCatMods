@@ -255,6 +255,29 @@ public sealed class SunnivaFigureTests
     }
 
     [Fact]
+    public void Her_worker_body_is_created_only_under_the_lease_claimed_for_it()
+    {
+        // #372: the lease is claimed after the figure has gone and before the
+        // body exists, and it is that lease - not nothing - that Concerned NPC
+        // is shown when it builds her. A body that could not be built gives the
+        // hold back, so a hold on nothing cannot keep her figure away.
+        string ensure = Between(Runtime("StewardRuntime.cs"), "private string EnsureBody(", "internal string Status()");
+        int yields = ensure.IndexOf("_presentation.YieldToWorker();", StringComparison.Ordinal);
+        int claims = ensure.IndexOf("BodyClaim claim = _npc.ClaimBody();", StringComparison.Ordinal);
+        int refuses = ensure.IndexOf("if (!claim.IsGranted || claim.Lease == null)", StringComparison.Ordinal);
+        int spawns = ensure.IndexOf("StewardWorkerPrefab.Spawn(", StringComparison.Ordinal);
+        int shown = ensure.IndexOf("claim.Lease, at.Value", StringComparison.Ordinal);
+        Assert.True(spawns >= 0 && shown > spawns, "her body is not created under the lease that was claimed for it");
+        int releases = ensure.IndexOf("_npc.ReleaseBody();", spawns < 0 ? 0 : spawns, StringComparison.Ordinal);
+
+        Assert.True(yields >= 0 && claims > yields, "the worker lease is asked for while the figure still stands");
+        Assert.True(refuses > claims, "a refused claim no longer refuses the spawn");
+        Assert.True(spawns > refuses, "her body is not created under the lease that was claimed for it");
+        Assert.True(releases > spawns, "a body that was not created keeps its hold");
+        Assert.DoesNotContain("StewardBody.TryStamp(", ensure, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_figure_goes_before_the_world_does_and_while_the_runtime_is_off()
     {
         string runtime = Runtime("StewardRuntime.cs");

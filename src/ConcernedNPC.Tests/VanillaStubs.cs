@@ -258,6 +258,14 @@ public class ZNetScene
     public static ZNetScene instance = null!;
 
     public Dictionary<ZDO, ZNetView> m_instances { get; } = new Dictionary<ZDO, ZNetView>();
+
+    /// <summary>The prefabs the scene knows by name: what a registration put
+    /// there, and the only prefabs a saved object can be rebuilt from.</summary>
+    public Dictionary<string, GameObject> Named { get; } =
+        new Dictionary<string, GameObject>(StringComparer.Ordinal);
+
+    public GameObject? GetPrefab(string name) =>
+        Named.TryGetValue(name, out GameObject? prefab) ? prefab : null;
 }
 
 public class ZDOMan

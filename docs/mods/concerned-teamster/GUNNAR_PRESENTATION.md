@@ -11,7 +11,8 @@ bed, else the world start) as a visitor, before he has a cart. He stays there
 once recruited. He is shown only while he has **no worker body** anywhere in the
 world, only on the host (single player, or the host of a game; never a dedicated
 server or a client), only with `Companions/Gunnar` on, and only within 48 m of
-home (kept until 64 m). A skipped story shows nobody. Talking to him with the
+home. Once shown he is kept beyond 64 m too (#461), until home's zone is no
+longer loaded (`GUNNAR_CAMP.md`). A skipped story shows nobody. Talking to him with the
 use key is #459's (`GUNNAR_DIALOGUE.md`).
 
 `ct_haul spawn` hands him over to his worker body: the figure comes down, its
@@ -59,12 +60,14 @@ down before the hauling runtime is removed.
 
 Nothing for a player who has not met him: the gate (host, opt-in, registration,
 world) is checked first, then the story, and only then is the anchor looked up
-and a spot probed, through the buckle's bounded read-only queries, twice a
-second. The census is the hauling runtime's existing one; the figure adds no
+(twice a second) and a spot probed through the buckle's bounded read-only
+queries (only when the plan is out of date, since #461). The census is the hauling runtime's existing one; the figure adds no
 scan of the world (#443's lesson). The spot is a deterministic ring sweep of the
-shared placement planner, 1.5-4 m from the anchor, on bare ground only (seats,
-beds and fires are #461's camp poses), and 1.25 m clear of another product's
-keepsake.
+shared placement planner, 1.5-4 m from the anchor, on bare ground only, and
+1.25 m clear of another product's keepsake. Since #461 the spot is also kept
+inside camp, never across a doorway or a wall from home, and with room to stand,
+and the one added read is the game's list of loaded pieces near home, at most
+every ten seconds (`GUNNAR_CAMP.md`).
 
 ## What it is
 

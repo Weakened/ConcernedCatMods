@@ -14,7 +14,7 @@ row by row below. No package was built and nothing was published.
 | #458 | His presentation figure at home and the hand-over to his worker body | `GUNNAR_PRESENTATION.md` |
 | #459 | Catalogued lines and talking to his figure | `GUNNAR_DIALOGUE.md` |
 | #460 | Recruitment against an explicitly chosen real cart | `GUNNAR_RECRUITMENT.md` |
-| #461 | Camp idle and poses: the public `NpcCamp` facade and the figure's ground-sitting pose are in Concerned NPC (PR #515); Teamster lifecycle wiring remains | `GUNNAR_CAMP.md` |
+| #461 | Camp idle: his standing figure placed inside Concerned NPC's camp (the public `NpcCamp` facade, PR #515), never across a doorway or a wall from home, kept across range and turned to face you when you talk to him | `GUNNAR_CAMP.md` |
 | #313/#314/#317, #381 | The haul, collection tour, deposit and death drop (not redone here) | `GUNNAR_HAULING.md`, `GUNNAR_COLLECTION.md` |
 
 ## The #297 matrix
@@ -45,7 +45,7 @@ one job per class (`repo-checks.yml`), and were run locally before each push.
 | G16 | One body at a time; ordered hand-over | `GunnarBodyTests` (real arbiter, arrival guard, removal failure, second hand-over); `GunnarHandOverOrderTests`; validator `[teamster] #458 figure audit` + `tools/tests/test_teamster_figure_audit.py` | OWNER GO-AROUND PENDING (E2) |
 | G17 | Appearance | `GunnarLookTests` (label, token and id read from the installed game, renumbering, language, fallback, palette, clothes, overrides) | OWNER GO-AROUND PENDING (E2) |
 | G18 | Dialogue is talk-only and catalogued | `GunnarTalkTests`; `GunnarDialogueCatalogTests`; `HardcodedStringAuditTests` | OWNER GO-AROUND PENDING (E1) |
-| G19 | Camp idle and range retention (#461) | `GunnarCampTests` (the domain routine, on main); the public camp facade and the sitting pose are PR #515's and pending until it merges | OWNER GO-AROUND PENDING once #515 is in |
+| G19 | Camp idle and range retention (#461) | `GunnarCampTests` (the routine against the real `NpcCamp` facade: allocation and probe budget, range retention, bed re-plan, camp bound, the door rule for every door, wall and room checks, a failed look showing him nowhere new); validator `[teamster] #458 figure audit` (unchanged pins; the new camp-sight adapter builds and poses nothing) | OWNER GO-AROUND PENDING (`GUNNAR_CAMP.md` go-around) |
 | G20 | World/character/logout cleanup | `GunnarCompanionRecordTests` scope; `GunnarBodyTests` world unload; `GunnarHandOverOrderTests.AWorldUnloadTakesTheFigureDownBeforeTheSharedRuntimeEndsTheWorld` | OWNER GO-AROUND PENDING (E1) |
 | G21 | The buckle is picked up once; a refused write never strands the story | `GunnarKeepsakeTests` (real sidecar, reopen, retry, second-write failure) | OWNER GO-AROUND PENDING (E1) |
 | G22 | No memento collision with another product's keepsake | `GunnarKeepsakeTests`, `GunnarNativeEnvironmentTests` (other keepsakes reserved, own spot excluded, full buffers defer); `GunnarBodyTests.HeKeepsClearOfAnotherProductsKeepsake` | OWNER GO-AROUND PENDING (E1) |
