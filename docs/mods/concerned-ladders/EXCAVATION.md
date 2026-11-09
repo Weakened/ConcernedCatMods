@@ -586,6 +586,13 @@ planned from:
   inventory with the button held does not dig; that Secondary Attack never digs.
 - BSM-12: no stall or frame-time regression with the preview held over rough ground, and no log traffic from it.
 - The targeting rule under a raised floor, through a trapdoor opening, against a wall, and the ladder refusal.
+- **A cursor left free makes the shovel do nothing**, silently: while the Ctrl+F1 free cursor is on, or another mod keeps
+  the cursor unlocked, no outline or HUD text shows and a press gives no message (8.4 counts a free cursor as UI). Whether
+  that needs a one-line hint, and what the cursor reads while the game window has no focus (Unity's own behaviour, not
+  readable from the game's code; if it is not Locked, the preview hides and the dwell restarts on refocus), are in-game
+  checks.
+- An aim resting on a half-metre line flips the snapped square between two neighbours, and each flip restarts the dwell
+  (fail closed, and the outline visibly jumps). Whether that feels acceptable is an in-game check.
 - Multiplayer: **MULTIPLAYER ENDPOINT BLOCKED**.
 
 ## 9. Next slices (each a PR of its own)

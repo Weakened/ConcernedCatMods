@@ -99,7 +99,8 @@ internal sealed class ExcavationPreviewState
     /// <summary>The preview is showing (the shovel is held, no menu or inventory is open).</summary>
     internal bool Visible { get; private set; }
 
-    /// <summary>Real time at which the preview last became visible.</summary>
+    /// <summary>Real time at which the preview last became visible. Informational only: the press's dwell counts from
+    /// <see cref="SteadySince"/>.</summary>
     internal float VisibleSince { get; private set; } = float.NaN;
 
     /// <summary>Real time since which what is shown has not changed: the same size, the same aim result, the same square,
