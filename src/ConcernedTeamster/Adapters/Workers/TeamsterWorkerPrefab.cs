@@ -3,7 +3,6 @@ using Jotunn.Managers;
 using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
-using TheConcernedCat.ConcernedTeamster.Domain.Companions;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
 using UnityEngine;
@@ -215,7 +214,7 @@ internal static class TeamsterWorkerPrefab
         }
 
         GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(
-            lease, GunnarBodyContract.Create(), Prefab, position, rotation, Stamp, out failure);
+            lease, GunnarNpcRole.Contract, Prefab, position, rotation, Stamp, out failure);
         return instance == null ? null : instance.GetComponent<TeamsterWorkerAI>();
     }
 

@@ -190,7 +190,11 @@ public sealed class RoleBodySpawnTests : IDisposable
         BodyClaim claim = registry.TryClaimBody(BodyFixtures.Thorstein, NpcBodyKind.Presentation, "figure");
         Assert.True(claim.IsGranted, claim.Reason);
 
-        Assert.Null(Spawn(claim.Lease, prefab, out string failure));
+        // The role's own contract, so the refusal is the gate's kind check and
+        // not the contract-vs-lease check in front of it.
+        Assert.Null(SpawnUnder(claim.Lease,
+            NpcBodyContract.ForWorkerWithPresentation(BodyFixtures.ForemanPrefab, BodyFixtures.WorkerKeyPrefix), prefab,
+            out string failure));
         Assert.Contains("permits a Presentation body", failure, StringComparison.Ordinal);
         Assert.Empty(_stamped);
     }

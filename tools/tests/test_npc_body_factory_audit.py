@@ -46,7 +46,7 @@ STEWARD_SPAWN = ("        GameObject? instance = NpcWorkerPrefabFactory.TrySpawn
                  "            body => StewardBody.TryStamp(body, key), out failure);\n")
 STEWARD_MARKER = "        // The figure at home goes before her worker body appears: never both.\n"
 TEAMSTER_SPAWN = ("        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(\n"
-                  "            lease, GunnarBodyContract.Create(), Prefab, position, rotation, Stamp, out failure);\n")
+                  "            lease, GunnarNpcRole.Contract, Prefab, position, rotation, Stamp, out failure);\n")
 # The spelling #372's one pinned pending site had before Teamster adopted (F2c).
 TEAMSTER_OLD_PENDING = "        GameObject instance = UnityEngine.Object.Instantiate(Prefab, position, rotation);\n"
 GATE_LEASE_CHECK = ("        if (!lease.IsActive)\n"

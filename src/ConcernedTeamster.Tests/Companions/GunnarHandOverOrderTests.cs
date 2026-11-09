@@ -19,6 +19,7 @@ public sealed class GunnarHandOverOrderTests
     private static readonly string Hauling = Read("src", "ConcernedTeamster", "Adapters", "Workers", "GunnarHaulingRuntime.cs");
     private static readonly string Role = Read("src", "ConcernedTeamster", "Adapters", "Workers", "GunnarNpcRole.cs");
     private static readonly string Plugin = Read("src", "ConcernedTeamster", "Plugin.cs");
+    private static readonly string Prefab = Read("src", "ConcernedTeamster", "Adapters", "Workers", "TeamsterWorkerPrefab.cs");
 
     [Fact]
     public void TheRegisteredRoleIsTheGameFreeContract()
@@ -27,6 +28,20 @@ public sealed class GunnarHandOverOrderTests
         // role the plugin registers is built from it and from nothing else.
         Assert.Contains("Body = Domain.Companions.GunnarBodyContract.Create();", Role);
         Assert.DoesNotContain("NpcBodyContract.ForWorker(", Role);
+        // #372: the contract the body is built under is the same game-free one.
+        Assert.Contains("internal static NpcBodyContract Contract => Domain.Companions.GunnarBodyContract.Create();", Role);
+    }
+
+    [Fact]
+    public void TheBodyIsBuiltByTheGatedBuildUnderTheRolesContractAndTheHandOversLease()
+    {
+        // #372: the prefab goes in with the lease Spawn was handed and the role's
+        // own contract; the validator refuses any instantiation in this product.
+        string spawn = Method(Prefab, "internal static TeamsterWorkerAI? Spawn(");
+        Assert.Contains("internal static TeamsterWorkerAI? Spawn(BodyLease? lease,", spawn);
+        Assert.Contains("NpcWorkerPrefabFactory.TrySpawnRoleBody(\n            lease, GunnarNpcRole.Contract, Prefab, position, rotation, Stamp, out failure);", spawn);
+        string stamp = Method(Prefab, "private static bool Stamp(");
+        AssertBefore(stamp, "if (view == null || ai == null)", "view.GetZDO().Set(\"tcc.worker.key\", WorkerKey.Gunnar.Value);");
     }
 
     [Fact]
