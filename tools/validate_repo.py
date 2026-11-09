@@ -5915,10 +5915,10 @@ def _destruction_receiver(text: str, start: int) -> str:
 #   and the pointed-at body in the guarded retire verb.
 # - Adapters/Workers/TeamsterWorkerBody.cs: the bound body, reachable only through
 #   HaulExecutor.RetireBody() and so only from the guarded retire verb.
-# - Adapters/Workers/TeamsterWorkerPrefab.cs: the prefab's own teardown, the
-#   factory's component surgery on the inactive clone (three sites), and the two
-#   ways a body that has JUST been created and came up invalid is cleaned up. That
-#   body has held nothing for any length of time.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: the prefab's own teardown and the
+#   factory's component surgery on the inactive clone (three sites). Since #372 a
+#   body that has just been created and came up invalid is cleaned up by Concerned
+#   NPC's gated build, which created it, so this file no longer destroys a body.
 # - Plugin.cs: the plugin's own container facade component in OnDestroy. Unity's
 #   static, on a component this plugin created; no body and no network object.
 # - Ui/Companions/GunnarRecruitmentPanel.cs: the panel and button GameObjects the
@@ -5928,7 +5928,7 @@ TEAMSTER_DESTRUCTION_SITES = {
     "Adapters/Workers/GunnarCollectionRuntime.cs": 1,
     "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
     "Adapters/Workers/TeamsterWorkerBody.cs": 1,
-    "Adapters/Workers/TeamsterWorkerPrefab.cs": 6,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 4,
     "Plugin.cs": 1,
     "Ui/Companions/GunnarRecruitmentPanel.cs": 2,
 }
@@ -5947,9 +5947,10 @@ TEAMSTER_DESTRUCTION_SITES = {
 #   body in the guarded retire verb.
 # - Adapters/Workers/TeamsterWorkerBody.cs: `view.Destroy()`, the bound body,
 #   reachable only through the guarded retire verb.
-# - Adapters/Workers/TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came
-#   up invalid, and Jotunn's `PrefabManager.Instance.DestroyPrefab`, which
-#   unregisters the mod's own prefab and touches no body in a world.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: Jotunn's
+#   `PrefabManager.Instance.DestroyPrefab`, which unregisters the mod's own prefab
+#   and touches no body in a world. (Its `view.Destroy()` on a body that came up
+#   invalid moved into Concerned NPC's gated build with #372.)
 #
 # Adapters/Workers/GunnarCollectionRuntime.cs is absent on purpose: it destroys
 # only its own plugin component, through Unity's static. It is also the file the
@@ -5973,7 +5974,7 @@ TEAMSTER_DESTRUCTION_SITES = {
 TEAMSTER_ROUTED_DESTRUCTION_SITES = {
     "Adapters/Workers/GunnarHaulingRuntime.cs": 1,
     "Adapters/Workers/TeamsterWorkerBody.cs": 1,
-    "Adapters/Workers/TeamsterWorkerPrefab.cs": 2,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 1,
 }
 
 # A guard that is CONSULTED AND IGNORED passes a source-order check: a bare
@@ -5994,9 +5995,9 @@ TEAMSTER_RETIRE_ALLOWS_GUARD = re.compile(
 # - Adapters/Workers/TeamsterWorkerBody.cs: the bound body's actual destruction,
 #   reachable only through HaulExecutor.RetireBody(), which is reachable only from
 #   the guarded retire verb.
-# - Adapters/Workers/TeamsterWorkerPrefab.cs: a body that has just been created
-#   and came up invalid. It has held nothing for any length of time, and refusing
-#   to clean it up would leave a broken object in the world.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs is absent since #372: a body that has
+#   just been created and came up invalid is destroyed again by Concerned NPC's
+#   gated build, which created it, so no Teamster file removes a new body.
 # - Domain/Hauling/Execution/HaulExecutor.cs: the DECLARATION of the game-free
 #   `RetireBody()` decision, which `\bRetireBody\s*\(` cannot tell from a call and
 #   is pinned rather than excepted. It removes nothing itself — it returns an
@@ -6005,7 +6006,6 @@ TEAMSTER_RETIRE_ALLOWS_GUARD = re.compile(
 TEAMSTER_BODY_REMOVAL_SITES = {
     "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
     "Adapters/Workers/TeamsterWorkerBody.cs": 1,
-    "Adapters/Workers/TeamsterWorkerPrefab.cs": 1,
     "Domain/Hauling/Execution/HaulExecutor.cs": 1,
 }
 
@@ -8087,15 +8087,18 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
 #   whole - every folder less obj/ and bin/, and every shared tree its project
 #   file compiles in (#401's lesson: a folder is not a boundary). `Instantiate`
 #   as a word, so a method group or a generic spelling is caught as well as a
-#   call, may appear nowhere in them except one stated, pinned pending site;
-#   nor may `CreateNewZDO` or `SpawnObject`, which make a saved object the
-#   scene builds into a body on its own.
+#   call, may appear nowhere in them - no pending site is left since Teamster
+#   adopted the gated build (#372, F2c); nor may `CreateNewZDO` or
+#   `SpawnObject`, which make a saved object the scene builds into a body on
+#   its own.
 #   Each adopted product's call into the gated build is pinned by path and
 #   population, so a product that stops calling it - a helper with no
 #   production caller - fails too.
 # - The library. The factory has exactly one instantiation, and the statement
-#   before it is the gate's refusal; the gate's last refusal is the lease check
-#   and nothing follows it but the grant.
+#   before it is the gate's refusal; the gate is asked with exactly the build's
+#   own facts - its two computed inputs written immediately above it and its six
+#   arguments pinned by name (#372 review leftover, F2c) - and the gate's last
+#   refusal is the lease check and nothing follows it but the grant.
 #
 # A source-text audit with a text audit's limits, stated rather than left to be
 # found: comments and string literals are blanked first; a creation reached
@@ -8115,21 +8118,22 @@ NPC_BODY_ROLE_SPAWN = re.compile(r"\bNpcWorkerPrefabFactory\s*\.\s*TrySpawnRoleB
 NPC_BODY_ROLE_SPAWN_SITES = {
     ("foreman", "Runtime/Settlement/ForemanWorkerPrefab.cs"): 1,
     ("steward", "Runtime/StewardWorkerPrefab.cs"): 1,
-}
-# Not adopted yet, stated rather than hidden. Gunnar's prefab is in the folder
-# Lane J's #512/#513 changed (#513 is on main; #512 reached this branch through
-# the lead's 9d8603f merge chain), and its move onto the gated build is #372's
-# named follow-up, kept out of this PR by the lead. Pinned by exact spelling and population so it cannot grow, and
-# keyed by product AND path so no other file inherits it by name.
-NPC_BODY_PENDING_INSTANTIATIONS = {
-    ("teamster", "Adapters/Workers/TeamsterWorkerPrefab.cs"): (
-        re.compile(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*Prefab\s*,\s*position\s*,\s*rotation\s*\)"),
-        1),
+    # F2c: Gunnar's body, the last consumer to adopt. Its one pinned pending
+    # instantiation went with this entry, so no consumer has an exception left.
+    ("teamster", "Adapters/Workers/TeamsterWorkerPrefab.cs"): 1,
 }
 NPC_BODY_FACTORY_FILE = ("Body", "NpcWorkerPrefabFactory.cs")
 NPC_BODY_GATE_FILE = ("Body", "NpcBodyBuildGate.cs")
+# The gate is asked with the build's own facts, and only those: its two computed
+# inputs are written immediately above the call, each spelled whole, and its six
+# arguments are pinned by name and order (#372 review leftover). Without that, a
+# `true` in place of `ready` or `groundLoaded`, or a second tally, passed every
+# pin above while the gate answered a question nobody asked.
 NPC_BODY_GATED_BUILD = re.compile(
-    r"NpcBuildPermission\s+permission\s*=\s*NpcBodyBuildGate\s*\.\s*May\s*\([^;{}]*\)\s*;\s*"
+    r"bool\s+ready\s*=\s*prefabReady\s*&&\s*prefab\s*!=\s*null\s*&&\s*stamp\s*!=\s*null\s*;\s*"
+    r"bool\s+groundLoaded\s*=\s*IsGroundLoaded\s*\(\s*position\s*\)\s*;\s*"
+    r"NpcBuildPermission\s+permission\s*=\s*NpcBodyBuildGate\s*\.\s*May\s*\(\s*lease\s*,\s*contract\s*,\s*"
+    r"tally\s*,\s*ready\s*,\s*prefabFailure\s*,\s*groundLoaded\s*\)\s*;\s*"
     r"if\s*\(\s*!\s*permission\s*\.\s*IsGranted\s*\)\s*\{\s*failure\s*=\s*permission\s*\.\s*Refusal\s*;\s*"
     r"return\s+null\s*;\s*\}\s*"
     r"GameObject\s+instance\s*=\s*UnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*prefab\s*!\s*,\s*position\s*,"
@@ -8229,21 +8233,8 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
     before = len(errors)
     sources, consumers = _npc_body_consumer_sources(errors)
 
-    pending = 0
     for (product, rel), code in sources.items():
-        allowed: list[tuple[int, int]] = []
-        exact = NPC_BODY_PENDING_INSTANTIATIONS.get((product, rel))
-        if exact is not None:
-            pattern, expected = exact
-            found = list(pattern.finditer(code))
-            if len(found) != expected:
-                fail(f"{NPC_BODY_LABEL}: [{product}] {rel} has {len(found)} exact pending instantiation(s); the "
-                     f"pinned population is {expected}", errors)
-            pending += len(found)
-            allowed = [(match.start(), match.end()) for match in found]
         for match in NPC_BODY_INSTANTIATION.finditer(code):
-            if any(start <= match.start() < end for start, end in allowed):
-                continue
             fail(f"{NPC_BODY_LABEL}: [{product}] {rel}:{code.count(chr(10), 0, match.start()) + 1} instantiates "
                  "or creates a saved object itself. A product that consumes Concerned NPC creates a body only through "
                  "NpcWorkerPrefabFactory, which requires a BodyLease and re-checks it immediately before the "
@@ -8253,11 +8244,6 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
                 fail(f"{NPC_BODY_LABEL}: [{product}] {rel}:{code.count(chr(10), 0, match.start()) + 1} {what}. "
                      "A network view makes a saved object the scene rebuilds, so it is a body created without "
                      "NpcWorkerPrefabFactory's lease check", errors)
-    for key in NPC_BODY_PENDING_INSTANTIATIONS:
-        if key not in sources:
-            fail(f"{NPC_BODY_LABEL}: pinned pending site [{key[0]}] {key[1]} is missing; remove the pin with the "
-                 "change that adopted it rather than leaving an allowance that covers nothing", errors)
-
     calls = 0
     for (product, rel), code in sources.items():
         found = len(NPC_BODY_ROLE_SPAWN.findall(code))
@@ -8282,8 +8268,9 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
         asks = len(NPC_BODY_GATE_CALL.findall(factory_code))
         if builds != 1 or gated != 1 or asks != 1:
             fail(f"{NPC_BODY_LABEL}: NpcWorkerPrefabFactory.cs has {builds} instantiation(s), {asks} gate call(s) "
-                 f"and {gated} gated build(s); exactly one of each is allowed, the instantiation written "
-                 "immediately after the gate's refusal, so nothing can stand between the lease check and the "
+                 f"and {gated} gated build(s); exactly one of each is allowed, the gate asked with `lease, contract, "
+                 "tally, ready, prefabFailure, groundLoaded` computed immediately above it and the instantiation "
+                 "written immediately after its refusal, so nothing can stand between the lease check and the "
                  "body", errors)
         gate_code = _cs_code_without_strings(gate)
         grants = len(NPC_BODY_GRANT.findall(gate_code))
@@ -8296,10 +8283,11 @@ def check_npc_consumer_bodies_come_from_the_gated_build(errors: list[str]) -> li
     hits = len(errors) - before
     return [
         f"{NPC_BODY_LABEL}: {len(sources)} source file(s) across {len(consumers)} consumer(s) "
-        f"({', '.join(consumers)}) and the shared trees they compile in - no engine instantiation outside "
-        f"{pending} stated pending site(s), and no network view added, renamed or derived; "
-        f"{calls} call(s) into the gated build at their pinned sites; the "
-        "factory's one instantiation follows the gate's refusal and the gate asks the lease last. A text audit: "
+        f"({', '.join(consumers)}) and the shared trees they compile in - no engine instantiation and no pending "
+        "site, and no network view added, renamed or derived; "
+        f"{calls} call(s) into the gated build at their pinned sites; the factory asks the gate with the build's "
+        "own pinned arguments, its one instantiation follows the gate's refusal, and the gate asks the lease last. "
+        "A text audit: "
         f"it does not follow reflection or delegates, or prove control flow ({hits} violations)",
     ]
 

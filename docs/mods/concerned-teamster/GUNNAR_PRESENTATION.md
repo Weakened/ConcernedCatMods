@@ -18,7 +18,12 @@ use key is #459's (`GUNNAR_DIALOGUE.md`).
 `ct_haul spawn` hands him over to his worker body: the figure comes down, its
 presentation lease is released, the worker lease is claimed, and the body is
 placed **where the figure stood** (on the ground there), facing the player. With
-no figure standing, spawn behaves exactly as before. `ct_haul retire` removes the
+no figure standing, spawn behaves exactly as before. Since #372 the worker lease
+the hand-over claims (the arrival guard below) is the lease the body is built
+under: Concerned NPC's gated build checks it is Gunnar's and still held
+immediately before the body is created. While a job (a haul, a collection round)
+holds him, the hand-over is refused, because the arbiter grants a body then only
+to that job; before #372 that case placed a body with no lease at all. `ct_haul retire` removes the
 body as before; once the census agrees he is gone, he is shown at home again.
 `ct_haul status` gains one line about his figure and its lease.
 
@@ -134,7 +139,8 @@ does not prove control flow.
 - `GunnarBodyTests`: the contract's durable facts; a worker-only role is not
   registered for a figure; every missing fact; saved-worker priority;
   visitor/recruited eligibility; hand-over order against the real arbiter; the
-  arrival guard refusing a figure to every holder; a job holding him; removal
+  arrival guard refusing a figure to every holder; a job holding him refusing
+  the hand-over and keeping its lease; the arrival guard as the build's lease; removal
   failure; world unload; placement band, keepsake clearance and every deferral.
 - `GunnarLookTests`: label, token and id; renumbered build; another language;
   honest fallback; palette; clothes; player overrides.

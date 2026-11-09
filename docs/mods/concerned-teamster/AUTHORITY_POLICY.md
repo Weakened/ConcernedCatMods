@@ -178,6 +178,19 @@ material.
   U+0085/U+2028/U+2029, which end a `//` comment for the compiler only. Each
   was reproduced at exit 0 before the rule and is planted in
   `LexicalEscapesAreRefused`.
+- `tools/validate_repo.py`'s `[interop] #372 body factory audit` refuses the
+  engine's instantiation (`Instantiate…`, `CreateNewZDO`, `SpawnObject`) and
+  any network view put on an object anywhere in Teamster and the shared trees
+  it compiles in, with **no exception** since Teamster adopted (#372, F2c).
+  Gunnar's body is created only by Concerned NPC's gated build, through the one
+  pinned call in `Adapters/Workers/TeamsterWorkerPrefab.cs`, under the worker
+  lease the presentation hand-over holds (the arrival guard). The library checks
+  the lease is for the role registered with that contract and re-asks that it
+  is still held immediately before the body exists; while a job holds him the
+  hand-over refuses, so no body is built without a lease. The prefab, its
+  registration moment and the `tcc.worker.*` keys are unchanged, and the two
+  identity writes stay in that file (a static `Stamp` method) for this
+  section's network-object rule and the IL audit alike.
 
 - `ConcernedTeamster.Tests` proves matrix completeness, the mutation truth
   table, fail-closed resolution, and that the brake's authority gate equals

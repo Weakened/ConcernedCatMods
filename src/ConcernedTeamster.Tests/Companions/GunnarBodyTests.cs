@@ -202,16 +202,50 @@ public sealed class GunnarBodyTests
     }
 
     [Fact]
-    public void AJobAlreadyHoldingHimIsNotARefusal()
+    public void AJobAlreadyHoldingHimRefusesTheHandOverAndKeepsItsLease()
     {
+        // #372: before, this went ahead with no lease at all. A body is now
+        // built only under a lease the arbiter granted, and while a job holds
+        // him the arbiter grants one only to that job, so the hand-over refuses.
         var (registry, leases, id) = Setup();
         BodyClaim haul = registry.TryClaimBody(id, NpcBodyKind.Worker, "haul-1");
         Assert.True(haul.IsGranted);
-        Assert.True(leases.TryTakeWorker(() => { }, out string refusal), refusal);
+        Assert.False(leases.TryTakeWorker(() => { }, out string refusal));
+        Assert.Contains("a job holds him", refusal);
+        Assert.Equal(refusal, leases.LastRefusal);
         Assert.False(leases.HoldsWorker);
-        // The job's lease is untouched.
+        Assert.Null(leases.WorkerLease);
+        // The job's lease is untouched...
         Assert.Equal(NpcBodyKind.Worker, registry.CurrentBodyKind(id));
         Assert.True(haul.Lease!.IsActive);
+        // ...and once the job ends, the next hand-over goes through.
+        haul.Lease.Dispose();
+        Assert.True(leases.TryTakeWorker(() => { }, out string after), after);
+        Assert.NotNull(leases.WorkerLease);
+    }
+
+    [Fact]
+    public void TheWorkerLeaseIsTheArrivalGuardAndOnlyWhileItIsHeld()
+    {
+        // #372: the lease handed to the gated build is the guard itself, so a
+        // release or a world unload between hand-over and build refuses it.
+        var (registry, leases, id) = Setup();
+        Assert.Null(leases.WorkerLease);
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
+        BodyLease? lease = leases.WorkerLease;
+        Assert.NotNull(lease);
+        Assert.True(lease!.IsActive);
+        Assert.Equal(id, lease.Identity);
+        Assert.Equal(NpcBodyKind.Worker, lease.Kind);
+        Assert.Equal(GunnarBodyLeases.ArrivalHolder, lease.Holder);
+        leases.ReleaseWorker();
+        Assert.Null(leases.WorkerLease);
+        Assert.False(lease.IsActive);
+        Assert.True(leases.TryTakeWorker(() => { }, out _));
+        BodyLease? second = leases.WorkerLease;
+        registry.EndWorldLoad();
+        Assert.Null(leases.WorkerLease);
+        Assert.False(second!.IsActive);
     }
 
     [Fact]

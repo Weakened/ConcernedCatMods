@@ -13,6 +13,8 @@ escape this rule is the one to catch rather than one another audit already
 refuses. That is why no instantiation plant here is in Foreman: #400 already
 refuses an unpinned instantiation anywhere in Foreman and every shared tree it
 compiles in, which covers every shared tree Steward and Teamster compile in too.
+Teamster's plants (F2c) prove its old pending allowance went with its adoption:
+its old instantiation is refused in place of the gated call and beside it.
 #400 does not refuse a network view put on a new object, so that plant is in
 Foreman as well as Steward. Setting
 NPC_BODY_PLANT_VALIDATOR to another validator's path re-runs that check,
@@ -43,7 +45,10 @@ STEWARD_SPAWN = ("        GameObject? instance = NpcWorkerPrefabFactory.TrySpawn
                  "            lease, StewardNpcRole.Contract, _prefab, position, rotation,\n"
                  "            body => StewardBody.TryStamp(body, key), out failure);\n")
 STEWARD_MARKER = "        // The figure at home goes before her worker body appears: never both.\n"
-TEAMSTER_INSTANTIATION = "        GameObject instance = UnityEngine.Object.Instantiate(Prefab, position, rotation);\n"
+TEAMSTER_SPAWN = ("        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(\n"
+                  "            lease, GunnarBodyContract.Create(), Prefab, position, rotation, Stamp, out failure);\n")
+# The spelling #372's one pinned pending site had before Teamster adopted (F2c).
+TEAMSTER_OLD_PENDING = "        GameObject instance = UnityEngine.Object.Instantiate(Prefab, position, rotation);\n"
 GATE_LEASE_CHECK = ("        if (!lease.IsActive)\n"
                     "        {\n"
                     "            return NpcBuildPermission.Refused(\n"
@@ -56,6 +61,8 @@ FACTORY_REFUSAL = "        if (!permission.IsGranted)\n"
 FACTORY_BUILD = "        GameObject instance = UnityEngine.Object.Instantiate(prefab!, position, rotation);\n"
 FACTORY_GATE = ("        NpcBuildPermission permission = NpcBodyBuildGate.May(\n"
                 "            lease, contract, tally, ready, prefabFailure, groundLoaded);\n")
+FACTORY_READY = "        bool ready = prefabReady && prefab != null && stamp != null;\n"
+FACTORY_GROUND = "        bool groundLoaded = IsGroundLoaded(position);\n"
 FACTORY_DISCARD = "    private static void Discard(GameObject instance, ZNetView? view)\n"
 
 
@@ -150,19 +157,26 @@ class BodiesComeOnlyFromTheGatedBuild(unittest.TestCase):
                      STEWARD_MARKER + "        ZDOMan.instance.CreateNewZDO(at.Value, 0);\n")
         self.assert_refused("a CS_Steward saved object was created without the gate")
 
-    def test_the_pending_teamster_site_cannot_grow(self):
-        self.swap_in(TEAMSTER_PREFAB, TEAMSTER_INSTANTIATION,
-                     TEAMSTER_INSTANTIATION + "        UnityEngine.Object.Instantiate(Prefab, position, rotation);\n")
-        self.assert_refused("Teamster's one pending instantiation became two")
+    # ---- Teamster, the last consumer to adopt (F2c) --------------------------
+    # Teamster used to hold the audit's one pinned pending site. These prove the
+    # pin went with the adoption rather than staying behind as an allowance.
 
-    def test_the_pending_allowance_does_not_follow_its_path_into_another_product(self):
-        self.plant_file(
-            os.path.join(STEWARD, "Adapters", "Workers", "TeamsterWorkerPrefab.cs"),
-            "namespace Planted;\n\ninternal static class Planted\n{\n"
-            "    internal static UnityEngine.GameObject Make(UnityEngine.GameObject Prefab, UnityEngine.Vector3 "
-            "position, UnityEngine.Quaternion rotation)\n    {\n"
-            "        return UnityEngine.Object.Instantiate(Prefab, position, rotation);\n    }\n}\n")
-        self.assert_refused("Teamster's pending allowance was inherited by a Steward file of the same path")
+    def test_teamster_instantiating_its_own_prefab_again_is_refused(self):
+        # The exact line Teamster had before it adopted, put back in place of
+        # the gated call.
+        self.swap_in(TEAMSTER_PREFAB, TEAMSTER_SPAWN, TEAMSTER_OLD_PENDING)
+        self.assert_refused("Gunnar's prefab was instantiated without a lease")
+
+    def test_the_old_pending_spelling_has_no_allowance_left(self):
+        # Beside the gated call, so the spawn site's population is unchanged and
+        # the only thing wrong is the instantiation the pin used to excuse.
+        self.swap_in(TEAMSTER_PREFAB, TEAMSTER_SPAWN, TEAMSTER_SPAWN + TEAMSTER_OLD_PENDING)
+        self.assert_refused("Teamster's old pending instantiation was excused")
+
+    def test_teamster_that_stops_calling_the_gated_build_is_refused(self):
+        self.swap_in(TEAMSTER_PREFAB, TEAMSTER_SPAWN,
+                     "        GameObject? instance = null;\n        failure = \"not built\";\n")
+        self.assert_refused("Teamster no longer spawns through the gated build")
 
     def test_a_consumer_that_stops_calling_the_gated_build_is_refused(self):
         # A spawn path with no caller is not an adoption.
@@ -284,6 +298,28 @@ class BodiesComeOnlyFromTheGatedBuild(unittest.TestCase):
         self.swap_in(FACTORY, FACTORY_BUILD, "")
         self.swap_in(FACTORY, FACTORY_GATE, FACTORY_BUILD + FACTORY_GATE)
         self.assert_refused("the body is created before the lease is asked about")
+
+    # ---- the gate asked with somebody else's facts (#372 review leftover) ----
+
+    def test_a_gate_asked_with_a_constant_in_place_of_ready_is_refused(self):
+        self.swap_in(FACTORY, FACTORY_GATE,
+                     "        NpcBuildPermission permission = NpcBodyBuildGate.May(\n"
+                     "            lease, contract, tally, true, prefabFailure, groundLoaded);\n")
+        self.assert_refused("the gate was told the prefab is ready whatever it is")
+
+    def test_ground_that_is_always_loaded_is_refused(self):
+        self.swap_in(FACTORY, FACTORY_GROUND, "        bool groundLoaded = true;\n")
+        self.assert_refused("the gate was told the ground is loaded without asking")
+
+    def test_a_readiness_that_forgets_the_prefab_is_refused(self):
+        self.swap_in(FACTORY, FACTORY_READY, "        bool ready = prefabReady && stamp != null;\n")
+        self.assert_refused("readiness no longer asks whether a prefab was handed in")
+
+    def test_arguments_given_in_another_order_are_refused(self):
+        self.swap_in(FACTORY, FACTORY_GATE,
+                     "        NpcBuildPermission permission = NpcBodyBuildGate.May(\n"
+                     "            lease, contract, tally, groundLoaded, prefabFailure, ready);\n")
+        self.assert_refused("the gate's two facts were swapped")
 
     def test_a_second_gate_call_that_skips_the_lease_is_refused(self):
         # Asking the gate twice lets the second answer, not the one in front of

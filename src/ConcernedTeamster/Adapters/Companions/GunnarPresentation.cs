@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using TheConcernedCat.Companions.Placement;
 using TheConcernedCat.Companions.Quest;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Camp;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Domain.Companions;
@@ -162,16 +163,19 @@ internal sealed class GunnarPresentation
     /// <summary><c>ct_haul spawn</c>'s hand-over, called before his worker body
     /// is created: figure down, presentation lease released, worker lease
     /// claimed. <paramref name="standing"/> is where the figure stood, so the
-    /// body appears where he was. False with a reason means no body may be
-    /// placed.</summary>
-    public bool TakeWorkerBody(out Vector3? standing, out string refusal)
+    /// body appears where he was. <paramref name="lease"/> is the arrival guard
+    /// the body is created under (#372), and is null exactly when this returns
+    /// false. False with a reason means no body may be placed.</summary>
+    public bool TakeWorkerBody(out Vector3? standing, out BodyLease? lease, out string refusal)
     {
         standing = null;
+        lease = null;
         if (_arrivalPending)
         {
-            // A body was just placed and not yet counted (the arrival guard may
-            // not be held when a job already holds him): a second one now would
-            // be the duplicate the census exists to catch.
+            // A body was just placed and not yet counted: a second one now would
+            // be the duplicate the census exists to catch. Since #372 Concerned NPC
+            // also counts his saved bodies before it builds one, and would refuse
+            // that second body; this says why in the player's words first.
             refusal = "a worker body was just placed and has not been counted yet; try again in a moment";
             return false;
         }
@@ -189,6 +193,15 @@ internal sealed class GunnarPresentation
 
         _routine.Forget();
         if (!granted) return false;
+        lease = _leases.WorkerLease;
+        if (lease == null)
+        {
+            // Granted with no guard held cannot happen since #372 refuses a
+            // job-held hand-over; checked anyway, because no lease is no body.
+            refusal = "no worker lease is held";
+            return false;
+        }
+
         _arrivalPending = true;
         _arrivalSince = Time.unscaledTime;
         try

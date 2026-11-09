@@ -827,3 +827,8 @@ every consumer body built by Concerned NPC's gated build under a worker lease, s
   recovery, the alternative is a spawn granted under that order's own lease without ending its mode. It was not
   built, because cancelling already reaches the same write-off and loses nothing the record holds.
 - Not observed in game: OWNER GO-AROUND PENDING (L12).
+- **Teamster, the same default (F2c, 2026-11-09).** Gunnar's body is built under the hand-over's arrival guard. While
+  a job holds him (a haul, a collection round), `ct_haul spawn` is refused and says to end that job first; before
+  #372 the hand-over let that case through with no lease. Teamster has no write-off that spawns while a job holds him,
+  so nothing else changes order. The same open question applies: a spawn under the job's own lease was not built.
+  OWNER GO-AROUND PENDING.

@@ -64,6 +64,13 @@ internal sealed class GunnarBodyLeases
     public NpcIdentity Identity => _identity;
     public bool HoldsPresentation => _presentation != null && _presentation.IsActive;
     public bool HoldsWorker => _arrival != null && _arrival.IsActive;
+
+    /// <summary>The arrival guard itself, while it is held, for the one call
+    /// that needs to show it: creating his body (#372). Null otherwise.
+    /// Concerned NPC re-asks whether it is still held immediately before the
+    /// body is created, so handing it over grants nothing a release cannot take
+    /// back.</summary>
+    public BodyLease? WorkerLease => HoldsWorker ? _arrival : null;
     public string LastRefusal { get; private set; } = string.Empty;
 
     /// <summary>Whether the arbiter accepted a role for him that admits a
@@ -101,9 +108,15 @@ internal sealed class GunnarBodyLeases
     /// with the arbiter's reason, when the worker lease is refused - and then
     /// nothing may be placed.
     ///
-    /// One refusal is not a reason to stop: a job already holds him. The
-    /// arbiter refuses a figure to everybody for as long as that lasts, so
-    /// there is no figure to hand over from and none can appear.</summary>
+    /// <b>While a job holds him, this refuses (#372).</b> The arbiter grants a
+    /// body then only to the holding job, and the hand-over is not that job.
+    /// Before #372 that case went ahead with no lease at all, because there is
+    /// no figure to hand over from; now a body is built only under a lease the
+    /// arbiter granted, so there is nothing to build it under. Borrowing the
+    /// job's lease is not a way round it: the build would then be under a hold
+    /// whose release belongs to the job, not to the arrival guard. Refusing is
+    /// the smallest choice that creates no body without permission; once the
+    /// job has ended, the next hand-over goes through.</summary>
     public bool TryTakeWorker(Action removeFigure, out string refusal)
     {
         ReleasePresentation(removeFigure);
@@ -121,7 +134,12 @@ internal sealed class GunnarBodyLeases
         if (claim.IsGranted && claim.Lease != null)
         { _arrival = claim.Lease; refusal = string.Empty; LastRefusal = string.Empty; return true; }
         if (claim.Status == BodyClaimStatus.RefusedHolderConflict && JobHolds())
-        { refusal = string.Empty; LastRefusal = string.Empty; return true; }
+        {
+            refusal = "a job holds him, and only that job may be given a body (" + claim.Reason
+                + "); end that job first";
+            LastRefusal = refusal;
+            return false;
+        }
         refusal = claim.Status + ": " + claim.Reason;
         LastRefusal = refusal;
         return false;
