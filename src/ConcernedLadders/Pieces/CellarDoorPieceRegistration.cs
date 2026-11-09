@@ -19,8 +19,8 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// wards, damage, repair and refunds stay native. The frame is four convex prisms, each one mesh used by its renderer and
 /// its convex mesh collider; the leaves are boxes on two hinge pivots in the slope transform, each pivot on a kinematic
 /// body (<see cref="CellarBlueprint"/>). Only inactive CLONES are edited; no native prefab is changed. Installed only
-/// when <see cref="CellarDoorSettings"/> is on (off by default). No leaf runtime yet: the leaves stay shut. No RPC, ZDO
-/// field or ownership claim is added.</summary>
+/// when <see cref="CellarDoorSettings"/> is on (off by default). Each clone carries a <see cref="CellarLeaves"/> (slice 3)
+/// that turns both pivots from the native door state. No RPC, ZDO field or ownership claim is added.</summary>
 internal sealed class CellarDoorPieceRegistration : IDisposable
 {
     private readonly Action<string> _log;
@@ -49,6 +49,9 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
         if (_attempted) return;
         _attempted = true;
         Dispose();
+        CellarLeaves.Log = _log;
+        if (!TrapdoorLid.ResolveLayers())
+            _log("Concerned Ladders cellar doors: a collision layer the leaves check is missing, so every cover stays shut.");
         foreach (CellarDoorFamily cellar in CellarDoors.All) { Add(cellar); }
         _log("Concerned Ladders cellar doors: " + _registered.Count + " of " + CellarDoors.All.Count + " registered" +
              (_refused.Count == 0 ? "." : "; refused " + string.Join(", ", _refused) + "."));
@@ -129,7 +132,7 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
                 var hinge = new GameObject(CellarBlueprint.Hinge(leaf)) { layer = layer };
                 hinge.transform.SetParent(slope.transform, false);
                 hinge.transform.localPosition = Vector(CellarBlueprint.HingePosition(leaf));
-                // Closed. Nothing turns it in this slice: the leaf runtime is the next one.
+                // Closed. The leaf runtime turns it from the native door state.
                 hinge.transform.localRotation = Quaternion.identity;
                 KinematicBody(hinge);
                 CellarPart box = CellarBlueprint.LeafCollider(leaf);
@@ -138,6 +141,9 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
                 VisualBox(hinge.transform, visual.Name, visual.Centre, visual.Size, leafMaterial, layer);
                 foreach (CellarPart mark in CellarBlueprint.HingeMarks(leaf)) VisualBox(hinge.transform, mark.Name, mark.Centre, mark.Size, markMaterial, layer);
             }
+
+            // The leaf runtime (slice 3): reads the native door state, never writes it. The swing time is the donor's.
+            prefab.AddComponent<CellarLeaves>().SwingSeconds = family.SwingSeconds;
 
             foreach (ClimbPoint corner in CellarGeometry.CornerSnaps) Snap(prefab.transform, CellarGeometry.CornerSnapToken, Vector(corner), layer);
             Verify(prefab, wear);
@@ -195,8 +201,9 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
 
     /// <summary>Refuses the clone if anything of the donor's survived (<see cref="DoorPieceKit.VerifyStripped"/>), a
     /// frame collider is not a convex mesh collider with its mesh, a leaf pivot is missing, is not on a kinematic body
-    /// or lacks its box collider, or a trapdoor lid runtime is on it (a cellar door is not a trapdoor: the ladder
-    /// integration must not treat it as one).</summary>
+    /// or lacks its box collider, the leaf runtime is not on the root exactly once with an accepted swing time, a
+    /// collider its queries ignore (<see cref="CellarBlueprint.QueryIgnores"/>) is missing, or a trapdoor lid runtime is
+    /// on it (a cellar door is not a trapdoor: the ladder code must not treat it as one).</summary>
     private static void Verify(GameObject prefab, WearNTear wear)
     {
         VerifyStripped(prefab, wear, part => IsBlueprintPart(prefab.transform, part));
@@ -218,6 +225,20 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
             Transform? box = hinge != null ? hinge.Find(CellarBlueprint.LeafCollider(leaf).Name) : null;
             if (body == null || !body.isKinematic || body.useGravity || box == null || box.GetComponent<BoxCollider>() == null)
                 throw new InvalidOperationException("The " + leaf + " leaf's pivot, body or collider is missing or misconfigured.");
+        }
+
+        CellarLeaves[] runtimes = prefab.GetComponentsInChildren<CellarLeaves>(true);
+        if (runtimes.Length != 1 || runtimes[0].gameObject != prefab ||
+            !(runtimes[0].SwingSeconds >= HatchMotion.MinimumSwingSeconds && runtimes[0].SwingSeconds <= HatchMotion.MaximumSwingSeconds))
+            throw new InvalidOperationException("The leaf runtime is missing, duplicated or misconfigured.");
+        // The ignored set is every collider on the clone: VerifyStripped has refused any the adapter did not build.
+        if (prefab.GetComponentsInChildren<Collider>(true).Length != CellarBlueprint.QueryIgnores.Count)
+            throw new InvalidOperationException("The cellar door's colliders are not exactly the ones its leaves ignore.");
+        foreach (string path in CellarBlueprint.QueryIgnores)
+        {
+            Transform? part = prefab.transform.Find(path);
+            if (part == null || part.GetComponent<Collider>() == null)
+                throw new InvalidOperationException("The leaf runtime's own collider " + path + " is missing.");
         }
 
         if (prefab.GetComponentsInChildren<TrapdoorLid>(true).Length != 0)

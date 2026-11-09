@@ -1,13 +1,14 @@
 # Concerned Ladders: sloped cellar doors (CL-005 #486): design record and game-free model
 
-**Status: slices 1 and 2 of #486, the game-free model and the piece adapter.** Slice 1 is the model,
-`src/ConcernedLadders/Domain/Doors/CellarGeometry.cs` and `CellarDoors.cs`. Slice 2 adds the build plan
+**Status: slices 1, 2 and 3 of #486, the game-free model, the piece adapter and the leaf runtime.** Slice 1 is the
+model, `src/ConcernedLadders/Domain/Doors/CellarGeometry.cs` and `CellarDoors.cs`. Slice 2 adds the build plan
 (`Domain/Doors/CellarBlueprint.cs`) and the piece adapter (`Pieces/CellarDoorPieceRegistration.cs`, through the door
 helper `Pieces/DoorPieceKit.cs` it shares with the trapdoors). It registers the nine pieces behind `[CellarDoors]
-Enabled`, **off by default**: with it off the adapter is never constructed and the game is unchanged. **The leaves do
-not move yet.** The leaf runtime is the next slice; until it lands the cover stays shut whatever the door state says
-(section 4). The tests are `src/ConcernedLadders.Tests/Doors/CellarGeometryTests.cs`, `CellarDoorsTests.cs` and
-`CellarBlueprintTests.cs`. Every number below is a design default measured against the installed game's `wood_floor`
+Enabled`, **off by default**: with it off the adapter is never constructed and the game is unchanged. Slice 3 adds the
+leaf runtime (`Runtime/CellarLeaves.cs`): both leaves now open and close together from the native door state, and hold
+instead of moving into anything (section 4). **The ladders do not know cellar doors yet**: that is the next slice. The
+tests are `src/ConcernedLadders.Tests/Doors/CellarGeometryTests.cs`, `CellarDoorsTests.cs`, `CellarBlueprintTests.cs`
+and `CellarLeavesTests.cs`. Every number below is a design default measured against the installed game's `wood_floor`
 and walls (Valheim 1.0.21, CL-004's census and section 2a's wall read), **not an in-game observation**. Every
 placed-piece, interaction, ladder and multiplayer row is `OWNER GO-AROUND PENDING` (owner playtest checklist #470).
 
@@ -100,9 +101,27 @@ of its two facings:
 | `piece_stakewall_blackwood`: bottom snaps at z -0.085 and 0.38, colliders to z -2.97 | up to 2.97 m | not a wall that stands on a floor edge; in or clear by its facing |
 
 A wall that reaches in front of z 0.79 overlaps the closed leaves' rear edge. Their bottom rear edge is the rear-most
-point of the sweep, at about y 1.33. Section 4's leaf runtime will therefore find the leaves' first open pose occupied,
-and the cover will stay shut. Nothing is pushed and nothing moves into the wall. This is not changed in slice 2: the
-header stays 0.20 m (lead default 3), and the thicker walls are an owner question (section 8). Owner go-around pending.
+point of the sweep, at about y 1.33. Nothing is pushed and nothing moves into the wall. The header stays 0.20 m (lead
+default 3), and the thicker walls are an owner question (section 8). Owner go-around pending.
+
+**What the leaf runtime does with each wall (slice 3).** These results come from the game-free model of the runtime's
+query: each leaf's box at the angle, shrunk by the 1 cm skin, through `HatchMotion`, `CellarPairOccupancy` and the
+first-pose rule `CellarSettle` (`CellarLeavesTests`). The rear end of a leaf turns in a plane square to the slope, so the
+leaf reaches furthest back when closed (z 0.79) and least far back when fully open (z 0.763, at the slope plane). The
+skinned closed pose first meets a wall reaching about 0.223 m toward the door. So:
+
+- **Reach about 0.22 m or less** (every wall in the first two rows of the table, including the 0.205-0.209 m roof-top
+  and beam walls): the wall is never in a pose. The cover opens and closes freely (tested at 0.05, 0.20 and 0.209 m).
+- **Reach more than that** (`wood_wall_roof_top_67`, `ashwood_wall_cross_67`, the log walls, and the stave, stake and
+  dvergr walls): the wall is in the closed pose, and for the deeper ones in every pose. **The cover is held shut.** Asked
+  to open in session, it never moves, because its first checked pose is in the wall. On load it settles shut whatever the
+  stored state, because `CellarSettle` puts the closed leaves over a fixed obstruction rather than taking the open end
+  (lead default 15). So a Use that stored the door open while the wall held it, followed by a save and a reload, still
+  shows it shut. Tested at 0.235, 0.24, 0.25, 0.275 and 0.4 m, stored closed and stored open. The trapdoor's rule alone,
+  `HatchMotion.Settle`, would load the shallower of these open and leave them part open; a test shows that too.
+- **One case is not a settle.** If the cover is already open and a wall is then built into its closed pose, a close asked
+  for in session closes the leaves only until they meet the wall. That is the trapdoor's obstruction policy: hold and
+  retry, as for an item in the way. It is shut again from the next load. Owner go-around pending.
 
 ### 2b. Usable clearance
 
@@ -156,7 +175,9 @@ trapdoor's strip (`DoorPieceKit.Strip`, the same code, not a copy). Under the ro
 outside the piece's own roots, or if the donor leaf is more than a transform (`DoorPieceKit.VerifyStripped`, shared). It
 also refuses a frame collider that is not a static convex mesh with its mesh, a pivot without its kinematic body or leaf
 collider, and a clone that carries the trapdoor's lid runtime. The ladders recognise a trapdoor by that runtime, so a
-cellar door is an ordinary piece to the ladder code until the ladder slice.
+cellar door is an ordinary piece to the ladder code until the ladder slice. Since slice 3 it also refuses a clone
+without exactly one `CellarLeaves` on its root with an accepted swing time. It refuses one where a collider the leaves'
+queries ignore (`CellarBlueprint.QueryIgnores`) is missing, or whose collider count is not exactly those six.
 
 ## 4. State, motion and the pair rule
 
@@ -164,12 +185,31 @@ cellar door is an ordinary piece to the ladder code until the ladder slice.
   `Door`, `ZNetView`, `Piece`, `WearNTear` and animator: one ZDO `state`, written by the native `UseDoor` RPC and read
   by every client. Both leaves are driven from that one state. **No RPC, no ZDO field, no ownership claim and no write
   is added**; each client's leaf progress is a local float, as the lid's is.
-- **Slice 2: the leaves stay shut.** No leaf runtime exists yet, so nothing turns the pivots. Use runs the native
-  door's own interaction: it writes the native state through the native `UseDoor` RPC and plays the donor's sound, but
-  both leaves stay at their closed pose. This is fail-closed: the cover never opens without the occupancy checks below,
-  and the hover text can say *Close* over a shut cover. The setting says so.
+- **The leaf runtime (slice 3, `Runtime/CellarLeaves.cs`).** It is the trapdoor lid's runtime (`Runtime/TrapdoorLid.cs`)
+  generalised to two pivots. It reads the native state through the piece's own `ZNetView`: once for the first pose and
+  then once a frame, each after `IsValid()`. It writes nothing. It turns `slope/leaf_left_hinge` by
+  `Quaternion.Euler(0, 0, angle)` and `slope/leaf_right_hinge` by `Quaternion.Euler(0, 0, -angle)` from one progress, by
+  setting their transforms (never a velocity, force or `MoveRotation`). The swing time is the donor's
+  (`DoorFamily.SwingSeconds`, as the family's trapdoor). A ghost or icon render has no ZDO, so it never reads or moves.
+  A missing part or collision layer leaves the cover shut. A fault stops it where it is, both leaves at one angle,
+  logged once per session.
+- **One skinned overlap per leaf.** Each checked pose asks the left leaf, then the right only if the left was clear:
+  one `Physics.OverlapBoxNonAlloc` of that leaf's own collider box at that angle, shrunk by the lid's 1 cm skin, into a
+  shared 32-entry buffer (a full buffer is occupied). So there are at most two queries a pose, 64 a frame at the 32
+  sub-step cap. The query layers and blocking rule are the lid's own (`TrapdoorLid.QueryMask`,
+  `TrapdoorLid.BlocksByKind`, shared, not copied). Characters, carts and ships, dropped items and every building piece
+  block by their layer alone. On the general layers only a dynamic body blocks. Terrain and static rock are not
+  queried, so a leaf may stand into them, as a native door leaf does.
+- **Exclusion by collider identity.** Each leaf's query ignores exactly the piece's six own colliders, resolved once
+  from `CellarBlueprint.QueryIgnores`: the four frame prisms, the other leaf and itself. They are compared as objects,
+  never by name, layer or parent. The model keeps every leaf 1 cm or more from the frame and 5.7 mm or more from the
+  other leaf, and the skin shrinks each query by a further 1 cm, so none of the six should ever be inside a query.
+  Ignoring them by identity means the cover does not rest on margins that thin. Unlike the lid's `IsChildOf(transform)`
+  test, nothing else is ignored: anything parented under the piece by anyone else is checked.
 - **One progress for both leaves.** The leaves reuse `HatchMotion` unchanged (same ease, same donor swing time, same
-  5° checked sub-steps, same settle on load), which is valid because the open angle is the trapdoor's 90° (tested).
+  5° checked sub-steps), which is valid because the open angle is the trapdoor's 90° (tested). `HatchMotion.cs` is
+  not changed by slice 3. The first pose on load is `CellarSettle.First` (lead default 15): fail-closed against a fixed
+  obstruction in the closed pose, and otherwise the trapdoor's `HatchMotion.Settle`.
   `CellarPairOccupancy` makes the pair's pose occupied when either leaf's is, so **a leaf that meets something holds
   both** at the last pose clear for both, and the pair resumes together once clear (tested opening and
   closing, with each leaf blocked in turn). The leaves therefore can never be at different angles on any client: one open while the other is shut, or
@@ -179,7 +219,10 @@ cellar door is an ordinary piece to the ladder code until the ladder slice.
   they hold and retry. A 5° turn moves a leaf's free edge at most 0.073 m (the lid's 0.14 m), so the trapdoor's
   check-spacing guarantee holds with room to spare. Nothing is launched, pushed through a wall or shut in.
 - **Passage and landing** are the trapdoor's rules on the one progress: a passage only fully open and staying open
-  (`HatchMotion.IsPassage`), a landing only closed and staying closed (`IsLanding`).
+  (`HatchMotion.IsPassage`), a landing only closed and staying closed (`IsLanding`). **Nothing asks them yet.**
+  `CellarLeaves` is not in the trapdoor lid's registry, so the ladder code (`TrapdoorLid.Any`, `RouteShut`,
+  `MayLandOn`, the hatch anchor) is unchanged and still sees each leaf as an ordinary piece collider at its current
+  pose (lead default 18). The ladder slice wires these rules.
 
 ## 5. Families, prefab IDs, names and costs (`CellarDoors`)
 
@@ -252,7 +295,8 @@ grid, so:
 
 Added by slice 2 (L6, 2026-11-09):
 
-9. Until the leaf runtime lands, the leaves stay shut whatever the native state says (section 4). The setting's text and
+9. Superseded by slice 3, which drives the leaves (items 15-20). As recorded for slice 2: until the leaf runtime
+   lands, the leaves stay shut whatever the native state says (section 4). The setting's text and
    the README say so. This is the narrowest option that still registers the pieces: no leaf moves without the
    occupancy checks.
 10. The cellar door carries no trapdoor lid runtime, so the ladders treat it as an ordinary piece until the ladder slice.
@@ -266,25 +310,55 @@ Added by slice 2 (L6, 2026-11-09):
     so a cellar door turned 45 degrees tests support over a slightly larger box than its prisms. This is the native rule
     for every mesh-collider piece and is not changed.
 
+Added by slice 3 (L7, 2026-11-09):
+
+15. The first pose is `CellarSettle.First`, fail-closed against fixed obstructions, with `HatchMotion` unchanged:
+    - closed, whatever is stored, when something is in the closed pose but nothing that can move is: no character,
+      item, cart or ship (by layer, because a client that does not own an item, cart or ship holds its body kinematic
+      until ownership passes) and no dynamic body. What is there is a wall, a piece or another door's kinematic part, so
+      the closed leaves overlap it and nothing moves;
+    - otherwise `HatchMotion.Settle`, the trapdoor's tested policy (L3): the stored end when it is clear, and otherwise
+      a pose that keeps the leaves out of whoever is there, so they are never put into someone standing in the entrance
+      at load.
+
+    The trapdoor's rule alone would load a cover beside a wall that reaches about 0.223-0.25 m toward the door (in the
+    closed leaves but not the open ones) open. It would then hold it part open while the native state says closed. It
+    would do the same for a cover placed beside such a wall, and for one whose Use stored open while the wall held it.
+    Clients that saw the wall built and late joiners would then disagree. `CellarSettle` makes all of these shut on
+    every client (independent review of 4506336, blockers 1 and 2). Two cases remain. One is the in-session case in
+    section 2a. In the other, someone is in the closed pose at load while such a wall also stands. The trapdoor's rule
+    then applies, so the cover loads open and closes only until it meets the wall, about 50-64 degrees open, until the
+    next load without them there. Keeping the leaves out of the person comes first.
+    Owner question: whether walls deeper than about 0.22 m on the rear edge should be cleared, by a deeper rear header
+    or a rear-wall snap, rather than holding the cover shut.
+16. Each leaf's query ignores exactly the piece's own six colliders, by identity (section 4). Anything else blocks,
+    including anything another mod parents under the piece. A cover that cannot resolve all six stays shut.
+17. The query layers and the blocking rule are the trapdoor lid's (shared code). Terrain and static rock are not
+    queried, as for the lid.
+18. The ladder code does not know cellar doors in this slice. It sees each leaf as an ordinary piece collider at its
+    current pose: the snap treats the cover as a floor (corner snaps), and a ladder's landing search may stand a climber
+    on a closed leaf (normal 0.89, inside its 0.65 limit) or on an upright leaf's top edge. The leaves never move into a
+    climber, because characters block. This stays until the ladder slice wires passage and landing.
+19. One fault message per session for all cellar doors. A faulted cover stops where it is.
+20. The swing time is the donor's (`DoorFamily.SwingSeconds`), the same as the family's trapdoor.
+
 ## 9. Remaining #486 slices (each its own PR)
 
-Done: slice 1 (model, PR #534) and slice 2 (piece adapter, this record's section 3; the wall depths in section 2a).
+Done: slice 1 (model, PR #534), slice 2 (piece adapter, PR #535, this record's section 3; the wall depths in section
+2a) and slice 3 (leaf runtime, section 4; what it does with each wall in section 2a).
 
-1. **Leaf runtime**: the trapdoor lid's runtime generalised to drive the two pivots (`leaf_left_hinge`,
-   `leaf_right_hinge`) from one progress through `CellarPairOccupancy`. Each checked pose gets one skinned overlap per
-   leaf, so at most 64 a frame at the 32 sub-step cap. Each leaf's query must ignore the piece's own frame and the other
-   leaf by collider identity rather than by relying on clearance. A few degrees open, each leaf comes within 2.8 mm of
-   the centre line, so the two leaves pass within 5.7 mm of each other, and the frame gaps are 0.01 m: all at or below
-   the query's skin.
-2. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing.
-3. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
+1. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing. Recognise a cellar
+   door by its `CellarLeaves`: stop the snap treating the cover as a floor, refuse a landing on a leaf that is not
+   closed and staying closed (including an upright leaf's top edge), and route a climb through the opening only while
+   the pair is a passage (lead default 18).
+2. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
    provenance.
 
 ## 10. In-game rows (all OWNER GO-AROUND PENDING, #470)
 
-None of these has been observed. Slice 2 registers the pieces behind the setting; nothing has been placed in game. Slice 2
-adds these rows: the hammer icons; the frame meshes' faces, shading and texture scale; the hinge marks on the ghost;
-the leaves staying shut on Use with the setting on; a wall from section 2a's table on the rear edge; and a ladder
+None of these has been observed. Slices 2 and 3 register the pieces and drive their leaves behind the setting; nothing
+has been placed in game. Slice 2 added these rows: the hammer icons; the frame meshes' faces, shading and texture
+scale; the hinge marks on the ghost; a wall from section 2a's table on the rear edge; and a ladder
 aimed at a cellar door, which the ladder snap treats as an ordinary floor (its corner snaps) until the ladder slice, so
 it may hang from or stand at the frame's outer edge. Placement in a wood floor and beside stone
 flooring, against a wood wall and a stone wall on the rear edge, every family; the ghost showing the high and low
@@ -296,3 +370,15 @@ the pair resuming; the clear passage once open; damage,
 repair, deconstruction refunds at the doubled cost, guard stones; host and client, late join, ownership change, zone
 reload and restart never showing one leaf open and the other shut; CL-006 small and large digs covered as in
 section 7; the setting off leaving everything as before.
+
+Slice 3 adds these rows. The leaves open and close on Use, together and mirror images, over the donor's swing time,
+for every family. Use from inside the entrance and from below. The cover holds against someone standing on it, someone
+in the entrance under it closing, a cart, an item, a rail in front of the low end and a low roof, and resumes once
+clear. A cover placed beside each wall class of section 2a on the rear edge, saved closed and saved open (Use while held)
+and reloaded: free (about 0.22 m or less) or held shut (deeper, lead default 15). Without a wall, stored open, it loads
+open; stored closed, closed. Someone standing in the entrance under a closed cover at load: it loads open and shuts once
+they have gone (unless a wall also holds the closed pose, lead default 15). A late joiner, a second client and a zone reload see the same pose, except after a close asked for in session into a
+wall built while the cover was open (section 2a), which the clients present see part open and a late joiner sees shut. No push
+or launch of a player, creature or cart at any point. The ghost and the hammer icon stay closed. A ladder near a cellar
+door, which still treats it as an ordinary piece (lead default 18). The trapdoors unchanged with the cellar doors on,
+and the setting off leaving everything as on main.

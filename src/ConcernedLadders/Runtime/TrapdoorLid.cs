@@ -256,8 +256,20 @@ internal sealed class TrapdoorLid : MonoBehaviour, IHatchOccupancy
     private bool Blocks(Collider collider)
     {
         if (collider == null || collider.isTrigger || collider.transform.IsChildOf(transform)) { return false; }
+        return BlocksByKind(collider);
+    }
+
+    /// <summary>The blocking rule by what a collider is, once it is not the querying hatch's own: a character, cart,
+    /// ship, item or building piece by its layer alone, anything else only as a dynamic body. Shared with the cellar
+    /// door's leaves (<see cref="CellarLeaves"/>, CL-005 #486), so the two door runtimes block on the same things.</summary>
+    internal static bool BlocksByKind(Collider collider)
+    {
         if ((_blockingMask & (1 << collider.gameObject.layer)) != 0) { return true; }
         Rigidbody body = collider.attachedRigidbody;
         return body != null && !body.isKinematic;
     }
+
+    /// <summary>The layers the hatch queries (<see cref="ResolveLayers"/>), shared with the cellar door's leaves. Zero
+    /// until resolved.</summary>
+    internal static int QueryMask => _queryMask;
 }
