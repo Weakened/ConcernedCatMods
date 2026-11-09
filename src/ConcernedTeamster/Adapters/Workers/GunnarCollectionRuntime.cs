@@ -680,9 +680,15 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             case "area":
                 return SetArea(args);
             case "start":
-                return args != null && args.Length > 1 && string.Equals(args[1], "cart", StringComparison.OrdinalIgnoreCase)
+                if (args == null || args.Length < 2)
+                {
+                    return StartTour();
+                }
+
+                return string.Equals(args[1], "cart", StringComparison.OrdinalIgnoreCase)
                     ? StartCartTour()
-                    : StartTour();
+                    : "Usage: ct_collect start (a tour into the chest you chose) or ct_collect start cart (a tour " +
+                      "into the cart assigned to him). Nothing started.";
             case "stop":
                 return StopTour();
             case "resolve":

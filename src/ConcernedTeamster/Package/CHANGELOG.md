@@ -7,8 +7,8 @@
   tour put what it picks into the cart you assigned him instead of walking each load to a chest: park the cart inside
   the area, assign it (`ct_haul assign`, `ct_haul confirm`), set the area (`ct_collect area`) and run
   `ct_collect start cart`. He stands at the cart's handle, counts both sides, puts in only what that tour picked, and
-  keeps whatever does not fit. He never hitches or pulls the cart during the tour, never takes anything out of it, and
-  stops if it is hitched, opened, moved, released or given another job. Emptying the cart at a chest is not built yet.
+  keeps whatever does not fit. He never hitches or pulls the cart during the tour, never takes anything out of it,
+  stops if it is hitched, moved, released or given another job, and stops at the next load if somebody has it open. Emptying the cart at a chest is not built yet.
   Single player or a host with nobody else connected. **Not yet observed in game.**
 * **Gunnar can take from a chest you marked for taking (#381).** A new `Workers/GunnarChestTakeEnabled` setting, **off
   by default** and needing `Workers/GunnarCollectionEnabled` too, lets him take one item you name out of a chest you

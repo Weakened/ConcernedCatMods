@@ -216,7 +216,7 @@ internal sealed partial class GunnarCollectionRuntime
         WorkPoint standAt = cart.StandAt;
         string? refused = BeginTour(
             worker, world, capacity, "cart:" + cart.Cart, new Vector3(standAt.X, standAt.Y, standAt.Z),
-            "the cart assigned to him", refuseIfCarrying: true,
+            "the cart assigned to him", CollectionTourLimits.AtTheCart(_limits), refuseIfCarrying: true,
             out _, out string planSaid);
         if (refused != null)
         {

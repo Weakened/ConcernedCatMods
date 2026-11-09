@@ -1516,12 +1516,14 @@ None has been run. Disposable world, `GunnarCollectionEnabled` and `GunnarHaulin
     `ct_collect start cart`: refused with the switch sentence, nothing moves.
 57. **A cart tour.** Turn it on. Park an empty cart inside an area with loose stones and branches, assign it, set the
     area, `ct_collect start cart`. He walks each load to the cart's handle (not into its body) and loads it; the cart
-    does not move; `ct_collect status` and the cart's contents agree with what he picked.
+    does not move, including when his walk back comes from behind or beside the cart; `ct_collect status` and the
+    cart's contents agree with what he picked.
 58. **Only what he picked.** Give him some stone first: `start cart` refuses with the "put that in a chest first"
     sentence. Deposit it, start again: nothing he did not pick this tour goes in.
 59. **A full cart.** Fill the cart nearly full first: he loads what fits, the tour stops, the rest stays in him.
-60. **The cart is taken.** Mid-tour, hitch the cart yourself, open it, push it more than a metre, or `ct_haul release`:
-    each stops the tour with what he holds still on him, and nothing more goes into the cart.
+60. **The cart is taken.** Mid-tour, hitch the cart yourself, push it more than a metre, or `ct_haul release`: each
+    stops the tour at once with what he holds still on him. Open the cart and leave it open: the tour stops at his next
+    load, refused as in use. Nothing more goes into the cart either way.
 61. **The cart is elsewhere.** Park the cart outside the area: `start cart` refuses. No cart assigned: refused, and he
     never picks one himself.
 62. **A haul is refused under a tour.** Mid-tour, `ct_haul go <x> <z>`: refused, the identity is the tour's; after

@@ -30,13 +30,17 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// <b>Nothing new reaches the world.</b> Every pick is the pinned
 /// <see cref="GunnarCollectionPort"/>'s; every deposit is the pinned
 /// <see cref="GunnarDepositPort"/>'s, with all nine D15 gates re-asked in the
-/// frame of each move. Movement is his own body walking through the vanilla
-/// motor - the pathfinding of his own body the Teamster carve-out allows - and
-/// nothing else: no teleport, no portal, no cart.
+/// frame of each move; and on a cart-assisted tour (D22,
+/// <c>GunnarCollectionRuntime.CartTour.cs</c>) every load into the assigned
+/// cart is the pinned <see cref="GunnarCartLoadPort"/>'s. Movement is his own
+/// body walking through the vanilla motor - the pathfinding of his own body the
+/// Teamster carve-out allows - and nothing else: no teleport, no portal, and
+/// never a cart hitched or pulled by a tour.
 ///
 /// <b>Off by default, and bounded.</b> The same switch, master switch, probe
 /// and work-authority rule as the ordered pick, re-asked every frame while a tour
-/// runs; one tour at a time; never while a cart is assigned to him.</summary>
+/// runs; one tour at a time; a chest tour never while a cart is assigned to him,
+/// and a cart tour only beside his assigned cart standing idle.</summary>
 internal sealed partial class GunnarCollectionRuntime
 {
     private readonly GunnarCollectionSurvey _survey = new GunnarCollectionSurvey(CollectionLimits.Default.Validate());
@@ -693,8 +697,8 @@ internal sealed partial class GunnarCollectionRuntime
 
         Vector3 chest = _destination!.transform.position;
         string? refused = BeginTour(
-            worker, world, capacity, _destinationKey, chest, "the chest you chose", refuseIfCarrying: false,
-            out bool carryingAtStart, out string planSaid);
+            worker, world, capacity, _destinationKey, chest, "the chest you chose", CollectionTourLimits.Default(_limits),
+            refuseIfCarrying: false, out bool carryingAtStart, out string planSaid);
         if (refused != null)
         {
             return refused;
@@ -724,6 +728,7 @@ internal sealed partial class GunnarCollectionRuntime
         string destinationKey,
         Vector3 depositAt,
         string destinationName,
+        CollectionTourLimits tourLimits,
         bool refuseIfCarrying,
         out bool carryingAtStart,
         out string planSaid)
@@ -824,7 +829,7 @@ internal sealed partial class GunnarCollectionRuntime
             carryingAtStart = carrying.Count > 0;
             _tour = new CollectionTour(
                 _tourPump,
-                CollectionTourLimits.Default(_limits),
+                tourLimits,
                 new CollectionPoint(depositAt.x, depositAt.y, depositAt.z),
                 startWithDeposit: carryingAtStart,
                 destinationName);
@@ -852,7 +857,7 @@ internal sealed partial class GunnarCollectionRuntime
         }
 
         CancelTour("you stopped it");
-        return "Stopped. What he collected since the last trip to the chest is still on him; nothing was " +
+        return "Stopped. What he collected since his last trip to the chest or the cart is still on him; nothing was " +
             "dropped and nothing was assumed to be anywhere else.";
     }
 

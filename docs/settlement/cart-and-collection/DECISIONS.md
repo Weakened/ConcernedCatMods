@@ -841,8 +841,9 @@ smallest and most fail-closed reading the grant allows:
 4. *The cart must stand inside the area* the player set (`ct_collect area`). A cart elsewhere is a chest tour with a
    worse chest.
 5. *He stands at the handle* to load - the point a puller stands at, the same one D21 walks him to - within
-   `CollectionLimits.PickupReachMetres` (2.2 m), measured from the live handle point. He never walks into the cart's
-   body, which would shove an unbraked cart.
+   `CollectionLimits.PickupReachMetres` (2.2 m), measured from the live handle point; the tour counts him as arrived
+   only within 1.6 m of the handle as it stood at the start, so a cart that settled a little is still within reach. He
+   never walks into the cart's body, which would shove an unbraked cart; the 1 m drift watch catches it if he does.
 6. *Only what this tour picked.* A cart tour refuses to start while he carries any collected yield, and each load
    offers, per material, at most what this tour has measured picking and not yet loaded. Nothing he brought with him -
    a stone from an earlier session, what a D20 take gave him - goes into the cart.

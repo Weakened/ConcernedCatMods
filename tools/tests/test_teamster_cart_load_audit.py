@@ -291,6 +291,52 @@ class CartLoadIsNarrow(unittest.TestCase):
         self.swap_in(SUBJECT, "                    || !Parked())", "                    )")
         self.assert_audit_refused("a cart that moved since the tour began passed")
 
+    def test_the_bed_may_not_be_redirected_from_static_state(self):
+        # The review of #381 item 2 (M1): with only two lines of BedOf pinned, an
+        # early return from a static field pointed the load at any container and
+        # every pin stayed green.
+        self.swap_in(SUBJECT, "    private readonly Vagon? _cart;\n",
+                     "    private readonly Vagon? _cart;\n    internal static Container? Redirect;\n")
+        self.swap_in(SUBJECT, "        try\n        {\n            Container? bed = cart == null ? null : cart.m_container;\n",
+                     "        try\n        {\n            if (Redirect != null) { return Redirect; }\n"
+                     "            Container? bed = cart == null ? null : cart.m_container;\n")
+        self.assert_audit_refused("the bed was redirected from static state")
+
+    def test_the_bed_may_not_fall_back_to_another_container(self):
+        self.swap_in(SUBJECT, "            return bed != null && ReferenceEquals(bed.m_wagon, cart) ? bed : null;\n"
+                              "        }\n        catch (Exception)\n        {\n            return null;\n",
+                     "            return bed != null && ReferenceEquals(bed.m_wagon, cart) ? bed : null;\n"
+                     "        }\n        catch (Exception)\n        {\n            return Fallback(cart);\n")
+        self.assert_audit_refused("the bed fell back to another container")
+
+    def test_the_subject_may_not_hold_static_state(self):
+        self.swap_in(SUBJECT, "    private readonly Vagon? _cart;\n",
+                     "    private readonly Vagon? _cart;\n    private static Container? _cached;\n")
+        self.assert_audit_refused("the subject held a static container")
+
+    def test_parked_may_not_answer_yes(self):
+        self.swap_in(SUBJECT, "    private bool Parked()\n    {\n", "    private bool Parked()\n    {\n        return true;\n")
+        self.assert_audit_refused("Parked always said yes")
+
+    def test_reach_may_not_answer_yes(self):
+        self.swap_in(SUBJECT, "    private bool WithinReach()\n    {\n",
+                     "    private bool WithinReach()\n    {\n        return true;\n")
+        self.assert_audit_refused("WithinReach always said yes")
+
+    def test_the_offer_may_not_be_everything_he_carries(self):
+        self.swap_in(CART_RUNTIME, "        return _tourCartOffer;\n", "        return carried;\n")
+        self.assert_audit_refused("the offer returned everything he carries")
+
+    def test_a_pick_outside_a_cart_tour_may_not_count(self):
+        self.swap_in(CART_RUNTIME, "        if (!CartTourRunning || string.IsNullOrEmpty(material) || units <= 0)\n",
+                     "        if (string.IsNullOrEmpty(material) || units <= 0)\n")
+        self.assert_audit_refused("a pick outside a cart tour counted toward the cart")
+
+    def test_the_cart_tour_must_arrive_inside_the_reach(self):
+        self.swap_in(CART_RUNTIME, "CollectionTourLimits.AtTheCart(_limits), refuseIfCarrying: true,",
+                     "CollectionTourLimits.Default(_limits), refuseIfCarrying: true,")
+        self.assert_audit_refused("the cart tour arrived at the edge of the reach")
+
     def test_a_hitched_cart_is_in_use(self):
         self.swap_in(SUBJECT, "if (bed.IsInUse() || _cart.InUse() || _cart.IsAttached())", "if (bed.IsInUse())")
         self.assert_audit_refused("a hitched cart passed as not in use")

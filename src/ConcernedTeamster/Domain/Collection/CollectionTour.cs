@@ -243,6 +243,17 @@ internal sealed class CollectionTourLimits
 
     public static CollectionTourLimits Default(CollectionLimits limits) =>
         new CollectionTourLimits(limits.PickupReachMetres, stallSeconds: 12f, mostSteps: 512);
+
+    /// <summary>A cart-assisted tour's bounds (D22). He counts as arrived only
+    /// just outside the motor's own arrival tolerance, well inside the load's
+    /// reach of the cart's handle, so a cart that settled a little since the tour
+    /// began is still within reach when the load asks. Sources are approached
+    /// the same way, which is merely closer than they need.</summary>
+    public static CollectionTourLimits AtTheCart(CollectionLimits limits) =>
+        new CollectionTourLimits(
+            Math.Min(limits.PickupReachMetres, limits.ArrivalToleranceMetres + 0.1f),
+            stallSeconds: 12f,
+            mostSteps: 512);
 }
 
 /// <summary>Gunnar's collection tour (#381): survey, plan, walk a load, take it

@@ -306,6 +306,18 @@ public sealed class CartTourGateTests
         Assert.Equal(CartTourRefusal.None, CartTourGate.Watch(Parked(containerOpen: true), Cart, ParkedAt));
     }
 
+    [Fact]
+    public void ACartTourArrivesWellInsideTheLoadsReach()
+    {
+        // The port measures reach from the live handle; arriving at the edge of
+        // it would refuse a cart that merely settled (review of #381 item 2).
+        CollectionLimits limits = CollectionLimits.Default;
+        CollectionTourLimits atTheCart = CollectionTourLimits.AtTheCart(limits);
+        Assert.True(atTheCart.ReachMetres < limits.PickupReachMetres);
+        Assert.True(atTheCart.ReachMetres >= limits.ArrivalToleranceMetres);
+        Assert.Equal(limits.PickupReachMetres, CollectionTourLimits.Default(limits).ReachMetres);
+    }
+
     // --- one load -------------------------------------------------------------------------------
 
     [Fact]
