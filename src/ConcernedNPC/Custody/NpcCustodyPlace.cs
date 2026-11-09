@@ -10,10 +10,13 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 /// enum names one, every role inherits a concept most of them have no use for.
 /// What the library actually reasons about is three properties - can material
 /// leave here, can this place be counted, and is being here the end of the
-/// story - and the six values below are exactly the distinctions those three
-/// questions need. A role that wants to tell two stored places apart does so
-/// with the location's key, which is its own.</summary>
-internal enum NpcCustodyPlace
+/// story - and the six values ahead of <see cref="Released"/> are exactly the
+/// distinctions those three questions need. <see cref="Released"/> answers all
+/// three as <see cref="Handed"/> and <see cref="Lost"/> do; it is a seventh
+/// value for what it says to a person - the material exists and the game put
+/// it there - not for a rule of its own. A role that wants to tell two stored
+/// places apart does so with the location's key, which is its own.</summary>
+public enum NpcCustodyPlace
 {
     /// <summary>Nobody said. Never a valid location.</summary>
     Unspecified = 0,
@@ -44,4 +47,15 @@ internal enum NpcCustodyPlace
     /// material that reappears is a finding for a person, not a refund.
     /// </summary>
     Lost = 6,
+
+    /// <summary>Left the job's custody into the world by the game's own hand:
+    /// a destroyed vehicle spilling what it held, a body's own death drop.
+    /// <b>Terminal.</b> The material still exists - it is not a loss to be
+    /// made good and nothing replaces it - but it is no longer the job's, and
+    /// the job never picks it up again as its own. That is what separates it
+    /// from <see cref="Ground"/>, which is material the job put down and may
+    /// carry on with. Added for #376's first adoption, Concerned Teamster's
+    /// spilled cart and D16 death drop; a lead default pending owner
+    /// confirmation (docs/mods/concerned-npc/ARCHITECTURE.md section 10).</summary>
+    Released = 7,
 }

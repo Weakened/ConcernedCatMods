@@ -10,25 +10,33 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 /// holding recorded against a chest yesterday names a different object today -
 /// possibly a tree, possibly somebody's boat - so a location carries the load
 /// it was named in and comparisons that cross a load fail rather than
-/// coincide.</summary>
-internal readonly struct NpcCustodyLocation : IEquatable<NpcCustodyLocation>, INpcEpochScoped
+/// coincide.
+///
+/// <b>Public since #376's first adoption</b> (Concerned Teamster's collection
+/// account): a role names its own places with it. What may leave a place and
+/// what can be counted there stay this library's rules.</summary>
+public readonly struct NpcCustodyLocation : IEquatable<NpcCustodyLocation>, INpcEpochScoped
 {
-    internal NpcCustodyLocation(NpcCustodyPlace place, string? key, NpcWorldEpoch epoch)
+    private readonly string? _key;
+
+    public NpcCustodyLocation(NpcCustodyPlace place, string? key, NpcWorldEpoch epoch)
     {
         Place = place;
-        Key = key ?? string.Empty;
+        _key = key ?? string.Empty;
         Epoch = epoch;
     }
 
-    internal NpcCustodyPlace Place { get; }
+    public NpcCustodyPlace Place { get; }
 
     /// <summary>Whatever names the instance within its place: the NPC's own
-    /// key, a container's key, a traced drop's id. Opaque here.</summary>
-    internal string Key { get; }
+    /// key, a container's key, a traced drop's id. Opaque here. Never null,
+    /// including on a defaulted location.</summary>
+    public string Key => _key ?? string.Empty;
 
     public NpcWorldEpoch Epoch { get; }
 
-    internal bool IsSpecified => Place != NpcCustodyPlace.Unspecified;
+    /// <summary>False for a defaulted location, which names no place.</summary>
+    public bool IsSpecified => Place != NpcCustodyPlace.Unspecified;
 
     /// <summary><b>Whether the job may move material out of here again.</b>
     /// Delivered, handed-over and lost units stay where the record put them:

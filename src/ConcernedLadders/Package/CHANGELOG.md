@@ -10,8 +10,19 @@ Not published. In progress on `main`; 1.0.0 is the latest published build.
   with it off this build adds nothing to the hammer menu. With it on, a
   trapdoor's lid now opens and closes with the door's own Use, over the
   matching door's swing time, and waits instead of moving into anyone or
-  anything on or under it. Ladders do not work with trapdoors yet, so leave
-  it off.
+  anything on or under it. A ladder aimed at a trapdoor's frame in Auto or Top
+  hangs inside its opening; a climber can open and close the lid from the ladder
+  without letting go, climbs out through an open lid, and is held below a
+  closed or closing one. None of it has been tried in game yet, so leave it
+  off.
+- Sloped cellar doors (CL-005, #486), in progress: the shape, the paired
+  leaves' motion rule and the cost of the nine cellar doors are designed. The
+  nine pieces exist behind a new setting, `CellarDoors` / `Enabled`, which is
+  off by default: with it off this build adds nothing to the hammer menu. With
+  it on, both leaves open and close together with the door's own Use, over
+  the matching door's swing time, and wait instead of moving into a player, a
+  creature, an item, a cart or another building piece. Ladders do not work
+  with cellar doors yet. None of it has been tried in game, so leave it off.
 
 ## 1.0.0
 

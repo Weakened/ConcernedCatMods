@@ -61,6 +61,20 @@ internal enum ExcavationCommitRefusal
 
     /// <summary>The player has less stamina than this dig costs.</summary>
     NotEnoughStamina = 17,
+
+    /// <summary>The player is on a ladder (#487 slice 4). A ladder lets only the building hammer be used while attached,
+    /// so the shovel does not dig from one.</summary>
+    OnLadder = 18,
+
+    /// <summary>The aim found no square: nothing looked at, something other than terrain in the way, or too far.</summary>
+    NotAimed = 19,
+
+    /// <summary>The press came before the preview had been shown long enough, or when it was not shown at all (just
+    /// equipped, a menu or the inventory just closed, or the size just switched).</summary>
+    NoPreview = 20,
+
+    /// <summary>The terrain read at the press no longer gives the plan the preview showed as ready.</summary>
+    PreviewChanged = 21,
 }
 
 /// <summary>How a committed operation ended.</summary>

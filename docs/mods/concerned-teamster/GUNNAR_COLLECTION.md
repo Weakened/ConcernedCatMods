@@ -48,7 +48,7 @@ driver already answers.
 | Which chests to draw from, in what order | ConcernedNPC | `SourceSelector` |
 | What Gunnar may collect at all | **Teamster** | `GunnarTargetPredicate` |
 | How much he can carry | **Teamster** | `GunnarCarry`, from the game's own numbers |
-| Where every unit of material physically is | **Teamster** | `CargoLedger`, `CollectionAccount` |
+| Where every unit of material physically is | **Teamster** names the places; **ConcernedNPC** keeps the invariant (#376) | `CargoLedger`, `CollectionAccount` over `NpcCustodyLedger` |
 | Whether a manual haul may start | **Teamster** | `HaulRequestGate` |
 | The idle hammer | **Teamster** | `CartUpkeepIdle`, `CartUpkeepDriver`, `GunnarIdleHammerPort` (§8, D21) |
 
@@ -141,6 +141,12 @@ mass.
 `CargoLedger` never subtracts. A unit is acquired once and thereafter is in exactly one **place**: carried, in the
 cart, delivered, spilled from a destroyed cart, or lost. So "was anything invented" is one comparison —
 `Acquired` against `TotalEverywhere` — and the tests ask it after every single step rather than at the end.
+
+Since #376 the units are kept in Concerned NPC's `NpcCustodyLedger`, not in a copy of its rule here: `CargoLedger`
+names Gunnar's places in the library's words (his back is *carried*, the assigned cart *stored*, a spilled cart and a
+death drop *released*, lost and unresolved-at-death *lost*) and records each measured movement through
+`RecordMeasuredMove`. The library refuses to move material out of a terminal place again, so delivered, lost, spilled
+or dropped material is never moved as his. The ledger is still in-session only and writes nothing to disk.
 
 Every movement carries the name of the step that caused it, so a retry after an interruption re-states what it
 already did and is told so. **Re-using a name for something else is refused outright**, because a name that means

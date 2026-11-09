@@ -5,8 +5,8 @@ using TheConcernedCat.Ladders;
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
 /// <summary>The trapdoor setting (CL-004 #485, slice 2). Off by default: with it off no trapdoor is cloned, no token
-/// is added and the hammer menu is exactly as before. The lid follows the native door state (slice 3); the ladder
-/// integration (slice 4) is not built yet, so a ladder does not hang in a hatch or climb through it.</summary>
+/// is added and the hammer menu is exactly as before. The lid follows the native door state (slice 3); a ladder hangs
+/// in a hatch and climbs through an open one (slice 4), none of it yet observed in game.</summary>
 internal static class TrapdoorSettings
 {
     internal const string Section = "Trapdoors";
@@ -17,7 +17,7 @@ internal static class TrapdoorSettings
 
     internal const string Description =
         "UNFINISHED (CL-004): adds the nine floor trapdoors to the hammer's Building tab. Their lids open and close, " +
-        "but ladders do not work with them yet. " +
+        "and a Concerned Ladders ladder hangs in one and climbs through it when it is open, none of it yet tested in game. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed trapdoor the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
         "value: a host or server with it off deletes the trapdoors other players place, during the session. " +
@@ -206,13 +206,18 @@ internal static class TrapdoorBlueprint
 
     internal const string DescriptionToken = "cl_trapdoor_description";
 
+    /// <summary>What a climber is told when a trapdoor's lid is not open where their route would go (slice 4).</summary>
+    internal const string HatchClosedToken = "cl_msg_hatchclosed";
+
     /// <summary>The English localization the trapdoors add (tokens without <c>$</c>): one Title Case name per family
-    /// and the shared description. Open/close hover text is the game's own Door text and is not duplicated.</summary>
+    /// the shared description, and the climber's closed-trapdoor notice. Open/close hover text is the game's own Door
+    /// text and is not duplicated.</summary>
     internal static Dictionary<string, string> English()
     {
         var english = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [DescriptionToken] = "A 2 m floor hatch with a hinged lid, flush with a wood floor. Opens and closes like its door.",
+            [HatchClosedToken] = "The trapdoor is not open. Open it from the ladder, or climb down.",
         };
         foreach (DoorFamily family in DoorFamilies.All) { english[family.TrapdoorToken] = family.EnglishTrapdoor; }
         return english;
@@ -246,7 +251,12 @@ internal static class TrapdoorBlueprint
     /// the same items, amounts and order, every one recovered on deconstruction. An empty observed list never
     /// matches (Jötunn keeps the donor's requirements when <c>PieceConfig.Requirements</c> is empty, so emptiness is
     /// not a way to clear them).</summary>
-    internal static IReadOnlyList<string> RequirementMismatches(DoorFamily family, IReadOnlyList<ObservedRequirement>? observed)
+    internal static IReadOnlyList<string> RequirementMismatches(DoorFamily family, IReadOnlyList<ObservedRequirement>? observed) =>
+        RequirementMismatches(family.Costs, observed);
+
+    /// <summary>The same comparison against any pinned cost list: the donor's own (above), or a cellar door's
+    /// (<see cref="CellarDoorFamily.Costs"/>, CL-005), so both pieces read their clones back with one rule.</summary>
+    internal static IReadOnlyList<string> RequirementMismatches(IReadOnlyList<DoorCost> costs, IReadOnlyList<ObservedRequirement>? observed)
     {
         var problems = new List<string>();
         if (observed == null)
@@ -255,16 +265,16 @@ internal static class TrapdoorBlueprint
             return problems;
         }
 
-        if (observed.Count != family.Costs.Count)
+        if (observed.Count != costs.Count)
         {
-            problems.Add("requirement count " + observed.Count + ", pinned " + family.Costs.Count);
+            problems.Add("requirement count " + observed.Count + ", pinned " + costs.Count);
         }
 
-        int shared = Math.Min(observed.Count, family.Costs.Count);
+        int shared = Math.Min(observed.Count, costs.Count);
         for (int index = 0; index < shared; ++index)
         {
             ObservedRequirement seen = observed[index];
-            DoorCost pinned = family.Costs[index];
+            DoorCost pinned = costs[index];
             string? item = PrefabName(seen.Item);
             if (!string.Equals(item, pinned.Item, StringComparison.Ordinal))
             {

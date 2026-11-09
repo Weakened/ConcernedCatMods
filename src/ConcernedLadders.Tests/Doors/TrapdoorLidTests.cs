@@ -246,9 +246,10 @@ public sealed class TrapdoorLidTests
     public void TheLidReadsTheNativeDoorStateAndWritesNothingToTheNetwork()
     {
         string lid = Code(Source("Runtime/TrapdoorLid.cs"));
-        // Two reads of the one native value: the first pose (TrySettle) and each frame (Update). Both after IsValid().
-        Assert.Equal(2, Regex.Matches(lid, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
-        Assert.Equal(2, Regex.Matches(lid, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
+        // Three reads of the one native value: the first pose (TrySettle), each frame (Update) and the ladder's
+        // passage and landing questions (TryReadOpen, slice 4). Each after IsValid().
+        Assert.Equal(3, Regex.Matches(lid, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
+        Assert.Equal(3, Regex.Matches(lid, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
         foreach (string forbidden in new[]
                  {
                      @"\bInvokeRPC\b", @"\bRoutedRPC\b", @"\.\s*Register\s*<", @"\.\s*Register\s*\(", @"\.\s*Set\s*\(",
@@ -277,8 +278,12 @@ public sealed class TrapdoorLidTests
         Assert.Single(Regex.Matches(lid, @"Physics\s*\.\s*OverlapBoxNonAlloc\s*\([^;]*QueryTriggerInteraction\s*\.\s*Ignore\s*\)"));
         Assert.Matches(new Regex(@"bool\s+occupied\s*=\s*found\s*>=\s*Overlaps\s*\.\s*Length\s*;"), lid);
         Assert.DoesNotMatch(new Regex(@"Physics\s*\.\s*(OverlapBox|OverlapSphere|OverlapCapsule|BoxCastAll|RaycastAll)\s*\("), lid);
-        // Its own hatch never blocks it.
+        // Its own hatch never blocks it; then the blocking rule it shares with the cellar door's leaves, unchanged.
         Assert.Matches(new Regex(@"collider\s*\.\s*transform\s*\.\s*IsChildOf\s*\(\s*transform\s*\)"), lid);
+        Assert.Matches(new Regex(@"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\s*\.\s*isTrigger\s*\|\|\s*collider\s*\.\s*transform\s*\.\s*IsChildOf\s*\(\s*transform\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}\s*return\s+BlocksByKind\s*\(\s*collider\s*\)\s*;"), lid);
+        Assert.Matches(new Regex(@"internal\s+static\s+bool\s+BlocksByKind\s*\(\s*Collider\s+collider\s*\)\s*\{\s*if\s*\(\s*\(\s*_blockingMask\s*&\s*\(\s*1\s*<<\s*collider\s*\.\s*gameObject\s*\.\s*layer\s*\)\s*\)\s*!=\s*0\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*Rigidbody\s+body\s*=\s*collider\s*\.\s*attachedRigidbody\s*;\s*return\s+body\s*!=\s*null\s*&&\s*!\s*body\s*\.\s*isKinematic\s*;\s*\}"), lid);
+        Assert.Matches(new Regex(@"OverlapBoxNonAlloc\s*\([^;]*_queryMask\s*,"), lid);
+        Assert.Matches(new Regex(@"internal\s+static\s+int\s+QueryMask\s*=>\s*_queryMask\s*;"), lid);
     }
 
     [Fact]
@@ -311,13 +316,14 @@ public sealed class TrapdoorLidTests
         Assert.True(add < verify && verify < register, "The lid must be on the clone before it is verified and registered.");
         Assert.Matches(new Regex(@"GetComponentsInChildren\s*<\s*TrapdoorLid\s*>\s*\(\s*true\s*\)"), adapter);
 
-        // Nothing else in the product adds a lid or reads or writes the door state.
+        // Nothing else in the product adds a lid or reads or writes the door state. The cellar door's leaves
+        // (CL-005 #486 slice 3) read the same native value the same way, and are pinned in CellarLeavesTests.
         foreach (string file in ProductFiles())
         {
             string relative = Path.GetRelativePath(ProductRoot, file).Replace('\\', '/');
             string text = Code(File.ReadAllText(file));
             if (relative != "Pieces/TrapdoorPieceRegistration.cs") { Assert.DoesNotMatch(new Regex(@"AddComponent\s*<\s*TrapdoorLid\s*>"), text); }
-            if (relative != "Runtime/TrapdoorLid.cs") { Assert.DoesNotMatch(new Regex(@"ZDOVars\s*\.\s*s_state"), text); }
+            if (relative != "Runtime/TrapdoorLid.cs" && relative != "Runtime/CellarLeaves.cs") { Assert.DoesNotMatch(new Regex(@"ZDOVars\s*\.\s*s_state"), text); }
         }
     }
 
