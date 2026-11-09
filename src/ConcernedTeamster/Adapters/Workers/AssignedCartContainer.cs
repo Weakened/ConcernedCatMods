@@ -191,8 +191,14 @@ internal sealed class AssignedCartContainer : INpcContainer
             return false;
         }
 
+        // Measured the way the tour's own watch measures it (CartTourGate.Watch):
+        // flat and vertical separately, each within the same bound.
         Vector3 drift = _cart.transform.position - _parkedAt;
-        return !float.IsNaN(drift.sqrMagnitude) && drift.magnitude <= _mostDriftMetres;
+        float vertical = Mathf.Abs(drift.y);
+        drift.y = 0f;
+        float flat = drift.magnitude;
+        return !float.IsNaN(flat) && !float.IsNaN(vertical)
+            && flat <= _mostDriftMetres && vertical <= _mostDriftMetres;
     }
 
     /// <summary>He loads standing where a puller stands at the handle, the
