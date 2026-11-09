@@ -352,8 +352,9 @@ internal static class CellarGeometry
 }
 
 /// <summary>The runtime's per-leaf occupancy question (CL-005 #486): would this leaf's pose at this angle overlap
-/// anything it must not move into? The leaf runtime will answer it with the trapdoor's own bounded, skinned overlap
-/// (<c>Runtime/TrapdoorLid</c>); tests answer it with a script.</summary>
+/// anything it must not move into? The leaf runtime (<c>Runtime/CellarLeaves</c>, slice 3) answers it with the
+/// trapdoor's bounded, skinned overlap, one per leaf, ignoring the piece's own colliders by identity; tests answer it
+/// with a script.</summary>
 internal interface ICellarLeafOccupancy
 {
     bool Occupied(CellarLeaf leaf, float angleDegrees);

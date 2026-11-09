@@ -19,8 +19,10 @@ Not published. In progress on `main`; 1.0.0 is the latest published build.
   leaves' motion rule and the cost of the nine cellar doors are designed. The
   nine pieces exist behind a new setting, `CellarDoors` / `Enabled`, which is
   off by default: with it off this build adds nothing to the hammer menu. With
-  it on, the leaves do not open yet. None of it has been tried in game, so
-  leave it off.
+  it on, both leaves open and close together with the door's own Use, over
+  the matching door's swing time, and wait instead of moving into anyone or
+  anything on or under them. Ladders do not work with cellar doors yet. None
+  of it has been tried in game, so leave it off.
 
 ## 1.0.0
 
