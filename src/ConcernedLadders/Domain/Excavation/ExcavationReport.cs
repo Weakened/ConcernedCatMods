@@ -83,8 +83,64 @@ internal static class ExcavationReport
             case ExcavationCommitRefusal.NotReady: return "You cannot dig right now (mid-swing, dodging or staggered). Nothing is changed.";
             case ExcavationCommitRefusal.ShovelWorn: return "The Iron Shovel needs " + F0(ExcavationCost.For(plan.Mode).Durability) + " durability for a " + ModeName(plan.Mode) + " hole. Repair it at a forge. Nothing is changed or charged.";
             case ExcavationCommitRefusal.NotEnoughStamina: return "You need " + F0(ExcavationCost.For(plan.Mode).Stamina) + " stamina for a " + ModeName(plan.Mode) + " hole. Rest, then try again. Nothing is changed or charged.";
+            case ExcavationCommitRefusal.OnLadder: return "Step off the ladder to dig. Nothing is changed or charged.";
+            case ExcavationCommitRefusal.NotAimed: return "Look at open ground within " + F0(ExcavationLimits.Reach) + " m to dig. Nothing is changed or charged.";
+            case ExcavationCommitRefusal.NoPreview: return "Hold the shovel and look at the ground until the outline shows, then dig. Nothing is changed or charged.";
+            case ExcavationCommitRefusal.PreviewChanged: return "The ground changed since the outline was drawn. Look again, then dig. Nothing is changed or charged.";
             default: return "Refused. Nothing is changed.";
         }
+    }
+
+    /// <summary>Why the aim found no square, and what to do about it (#487 slice 4).</summary>
+    internal static string Aim(ExcavationAim aim, string? blocker)
+    {
+        switch (aim)
+        {
+            case ExcavationAim.NoPlayer: return "No local player in a world.";
+            case ExcavationAim.Blocked: return "Something is between you and the ground" + (string.IsNullOrEmpty(blocker) ? "" : " (" + blocker + ")") +
+                                               ". The shovel digs only ground you can see; look past it, or through an opening in a floor.";
+            case ExcavationAim.TooFar: return "That ground is out of reach. Come within " + F0(ExcavationLimits.Reach) + " m.";
+            default: return "Look at the ground to aim.";
+        }
+    }
+
+    /// <summary>The first line of the held shovel's HUD text: the selected size, in metres.</summary>
+    internal static string PreviewTitle(ExcavationMode mode)
+    {
+        ExcavationGeometry geometry = ExcavationGeometry.For(mode);
+        return "Iron Shovel: " + ModeName(mode) + " (usable floor " + F0(geometry.UsableFloorSize) + " x " + F0(geometry.UsableFloorSize) +
+               " m, " + F0(geometry.Depth) + " m deep)";
+    }
+
+    /// <summary>The second line: what a press would do here, with the measured numbers or the refusal and its remedy.</summary>
+    internal static string PreviewState(ExcavationPreviewState shown)
+    {
+        if (shown == null) throw new System.ArgumentNullException(nameof(shown));
+        if (!shown.HasTarget) return Aim(shown.Aim, shown.Blocker);
+        ExcavationPlan plan = shown.Plan;
+        switch (shown.Refusal)
+        {
+            case ExcavationCommitRefusal.None:
+                string text = "Ready: floor at " + F1(plan.Bottom) + " m, " + F0(plan.Geometry.Depth) + " m below the highest edge (" + F1(plan.Datum) +
+                              " m); walls " + F1(plan.MinWallHeight) + " to " + F1(plan.MaxWallHeight) + " m; ground changes inside the " +
+                              F0(plan.Geometry.BorderSize) + " x " + F0(plan.Geometry.BorderSize) + " m outline. " + Cost(plan.Mode);
+                if (plan.Floods) text += " The floor would be " + F1(plan.WaterDepth) + " m below the water surface and will flood.";
+                if (shown.Pieces > 0) text += " " + shown.Pieces.ToString(CultureInfo.InvariantCulture) + " building-piece collider(s) stand on ground that would change; the game's own support rules decide whether they hold.";
+                return text;
+            case ExcavationCommitRefusal.NothingToDig:
+                return "Already dug: the floor is level at " + F1(plan.Bottom) + " m. Nothing to dig; a press changes and charges nothing.";
+            case ExcavationCommitRefusal.PlanRefused:
+                return "Cannot dig here: " + Refusal(plan.Refusal, plan.RefusalVertices);
+            default:
+                return "Cannot dig here: " + Commit(shown.Refusal, shown.Fault, plan, shown.Obstruction);
+        }
+    }
+
+    /// <summary>The third line: the controls, from the player's current bindings (the caller reads them from the game).</summary>
+    internal static string PreviewHints(ExcavationSelection selection, string digKey, string switchKey)
+    {
+        if (selection == null) throw new System.ArgumentNullException(nameof(selection));
+        return "[" + digKey + "] Dig " + ModeName(selection.Selected) + "    [" + switchKey + "] Switch to " + ModeName(selection.Other);
     }
 
     internal static string Outcome(ExcavationOutcome outcome, in ExcavationPlan plan)

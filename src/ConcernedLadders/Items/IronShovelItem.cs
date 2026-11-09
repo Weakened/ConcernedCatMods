@@ -29,14 +29,18 @@ namespace TheConcernedCat.ConcernedLadders.Items;
 ///
 /// <para>When the shovel could not dig this session (its input patch or the excavation probe did not match the installed
 /// game), the item is still registered, so shovels already crafted survive, but its recipe is disabled, so no one spends
-/// Iron on a tool that cannot work.</para>
+/// Iron on a tool that cannot work. Since slice 4 the same happens when excavation stops later in the session after a
+/// fault (<see cref="DisableRecipe"/>): the recipe is switched off on the one Recipe object Jötunn adds to every
+/// ObjectDB, which the game's crafting list skips (<c>Player.GetAvailableRecipes</c> reads <c>m_enabled</c>; repair does
+/// not, so crafted shovels can still be repaired).</para>
 ///
 /// <para><b>Not observed in game.</b> Recipe visibility, crafting, equip, repair and the look are OWNER GO-AROUND
 /// PENDING.</para></summary>
 internal sealed class IronShovelItem : IDisposable
 {
     private readonly Action<string> _log;
-    private readonly bool _craftable;
+    private bool _craftable;
+    private Recipe? _recipe;
     private bool _subscribed;
     private bool _done;
 
@@ -56,6 +60,8 @@ internal sealed class IronShovelItem : IDisposable
         {
             [IronShovel.NameToken.TrimStart('$')] = "Iron Shovel",
             [IronShovel.DescriptionToken.TrimStart('$')] = IronShovel.Description(),
+            [IronShovel.DigHintToken.TrimStart('$')] = IronShovel.DigHintText,
+            [IronShovel.SizeHintToken.TrimStart('$')] = IronShovel.SizeHintText,
         });
         PrefabManager.OnVanillaPrefabsAvailable += Register;
         _subscribed = true;
@@ -115,6 +121,9 @@ internal sealed class IronShovelItem : IDisposable
             RenderIcon(prefab, shared);
             if (!ItemManager.Instance.AddItem(custom))
                 throw new InvalidOperationException("Jötunn rejected the item registration");
+            _recipe = custom.Recipe?.Recipe;
+            // A fault between construction and registration already turned the recipe off; keep it off.
+            if (!_craftable && _recipe != null) _recipe.m_enabled = false;
             _log("Registered " + IronShovel.PrefabName + " (Iron Shovel, from " + IronShovel.DonorPrefab + ": " + shared.m_itemType +
                  ", durability " + F(shared.m_maxDurability) + (shared.m_useDurability ? "" : " (unused)") + ", repairable " +
                  shared.m_canBeReparied + "). Recipe" + (_craftable ? ": " : " DISABLED (the shovel cannot dig this session): ") + IronShovel.IronAmount.ToString(CultureInfo.InvariantCulture) +
@@ -171,6 +180,17 @@ internal sealed class IronShovelItem : IDisposable
         {
             _log("Iron Shovel icon fallback: " + SafeFailure.Brief(exception) + ". The donor's icon is kept.");
         }
+    }
+
+    /// <summary>Excavation stopped for the rest of the session (a fault after start-up): the recipe is switched off so no one
+    /// crafts a tool that can no longer dig. Only ever turns it off; nothing turns it back on before a restart.</summary>
+    internal void DisableRecipe()
+    {
+        bool wasCraftable = _craftable;
+        _craftable = false;
+        Recipe? recipe = _recipe;
+        if (recipe != null) recipe.m_enabled = false;
+        if (wasCraftable) _log("Iron Shovel recipe disabled for this session: excavation stopped after a fault (see above). Crafted shovels can still be repaired.");
     }
 
     private static string F(float value) => value.ToString("0", CultureInfo.InvariantCulture);

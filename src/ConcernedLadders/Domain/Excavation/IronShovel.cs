@@ -57,17 +57,6 @@ internal static class IronShovel
     /// <summary>True for the shovel's own name token. The adapter identifies an equipped item by this alone.</summary>
     internal static bool IsShovelName(string? sharedName) => string.Equals(sharedName, NameToken, StringComparison.Ordinal);
 
-    /// <summary>Which hole one press asks for: the primary attack digs the small one, the secondary attack the large
-    /// one. Both pressed in the same input step is ambiguous and asks for nothing, as does neither. A press is the
-    /// game's own edge (true for one input step), so holding the button never asks twice.</summary>
-    internal static bool ModeFor(bool primaryPressed, bool secondaryPressed, out ExcavationMode mode)
-    {
-        mode = ExcavationMode.Small;
-        if (primaryPressed == secondaryPressed) return false;
-        mode = primaryPressed ? ExcavationMode.Small : ExcavationMode.Large;
-        return true;
-    }
-
     /// <summary>The durability a dig takes, after the world's durability modifier (the game multiplies every tool drain
     /// by it). A modifier that is not a finite non-negative number gives NaN, which <see cref="CanPay"/> refuses.</summary>
     internal static float DurabilityCost(ExcavationMode mode, float durabilityRate) =>
@@ -99,16 +88,25 @@ internal static class IronShovel
     internal static float DurabilityAfter(float durability, float durabilityCost) =>
         LadderRules.Finite(durability) && LadderRules.Finite(durabilityCost) ? Math.Max(0f, durability - Math.Max(0f, durabilityCost)) : 0f;
 
-    /// <summary>The English description, built from the same numbers the gate charges so it cannot drift.</summary>
+    /// <summary>The English description, built from the same numbers the gate charges so it cannot drift. Since slice 4
+    /// the primary attack digs the size the preview shows and the secondary attack switches it.</summary>
     internal static string Description()
     {
         ExcavationCost small = ExcavationCost.For(ExcavationMode.Small);
         ExcavationCost large = ExcavationCost.For(ExcavationMode.Large);
-        return "Digs a measured, level-floored basement hole where you look, within " + F0(ExcavationLimits.Reach) + " m. " +
-               "Attack: " + ExcavationReport.ModeName(ExcavationMode.Small) + " (" + F0(small.Stamina) + " stamina, " + F0(small.Durability) + " durability). " +
-               "Secondary attack: " + ExcavationReport.ModeName(ExcavationMode.Large) + " (" + F0(large.Stamina) + " stamina, " + F0(large.Durability) + " durability). " +
+        return "Digs a measured, level-floored basement hole in ground you can see, within " + F0(ExcavationLimits.Reach) + " m. " +
+               "While it is held, an outline shows the usable floor, the depth and every bit of ground that will change. " +
+               "Attack: dig the size shown. Secondary attack: switch between " + ExcavationReport.ModeName(ExcavationMode.Small) + " (" +
+               F0(small.Stamina) + " stamina, " + F0(small.Durability) + " durability) and " + ExcavationReport.ModeName(ExcavationMode.Large) + " (" +
+               F0(large.Stamina) + " stamina, " + F0(large.Durability) + " durability). " +
                "Charged once, only when a dig goes ahead. Never removes rocks, trees or anything built.";
     }
+
+    /// <summary>Key-hint labels for the game's own key-hint panel (#487 slice 4).</summary>
+    internal const string DigHintToken = "$cl_hint_shovel_dig";
+    internal const string SizeHintToken = "$cl_hint_shovel_size";
+    internal const string DigHintText = "Dig the size shown";
+    internal const string SizeHintText = "Switch size (2x2x2 m / 4x4x4 m)";
 
     private static string F0(float value) => value.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
 }
@@ -116,7 +114,11 @@ internal static class IronShovel
 /// <summary>Bounds shared by the shovel and the read-only console plan.</summary>
 internal static class ExcavationLimits
 {
-    /// <summary>How far from the player the aimed terrain may be. Slice 3 keeps slice 2's harness bound; the full
-    /// reach and targeting rule (under a floor, from a ladder) belongs to the preview slice.</summary>
-    internal const float Reach = 10f;
+    /// <summary>How far from the player's eyes the aimed ground may be (#487 slice 4): the game's own building reach
+    /// (Player.m_maxPlaceDistance, 5 m), the narrowest native rule. Slices 2 and 3 used 10 m from the feet as a harness
+    /// bound. A lead default pending owner confirmation (EXCAVATION.md section 8.6).</summary>
+    internal const float Reach = 5f;
+
+    /// <summary>The aim ray's length, as the game's own placement ray.</summary>
+    internal const float AimRayLength = 50f;
 }
