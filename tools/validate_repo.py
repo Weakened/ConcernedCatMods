@@ -3241,8 +3241,10 @@ FOREMAN_AUDITED_CAPABILITIES = (
         # name, which sets a progress number and touches no body or engine.
         ("../Shared/Ladders/ClimbTrack.cs", _foreman_exact(r"\bpublic\s+void\s+MoveTo\s*\(\s*float\s+progress\s*\)"), 1),
     )),
+    # #334: isKinematic joined this spelling with the worker ladder motor, the
+    # one place that turns a body's physics off and on again.
     ("physics position/velocity write", re.compile(
-        r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity)\s*[-+*/&|^]?=(?!=)"), (
+        r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity|isKinematic)\s*[-+*/&|^]?=(?!=)"), (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*false\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*true\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*velocity\s*;"), 1),
@@ -3253,6 +3255,13 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+        # #334 (owner decision 2026-11-01, D14.6): the worker ladder motor - the
+        # ordered worker's own rigidbody, made kinematic for the lease, restored
+        # to what it was, and one position write per checked path step. The
+        # #334 worker-climb audit pins the sweep in front of that write.
+        ("Runtime/Ladders/WorkerClimbMotor.cs", _foreman_exact(r"\blease\s*\.\s*_body\s*\.\s*isKinematic\s*=\s*true\s*;"), 1),
+        ("Runtime/Ladders/WorkerClimbMotor.cs", _foreman_exact(r"\b_body\s*\.\s*isKinematic\s*=\s*_wasKinematic\s*;"), 1),
+        ("Runtime/Ladders/WorkerClimbMotor.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*target\s*;"), 1),
     )),
 )
 
@@ -4349,7 +4358,7 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
         "src/ConcernedForeman less obj/ and bin/, and the "
         f"{len(linked)} shared tree(s) its project file compiles in ({', '.join(linked)}) - {pinned} direct engine mutation/capability site(s) "
         "pinned by full path and exact whitespace-tolerant spelling; SetTrigger, ownership "
-        "takeover, unpinned teleport/position/velocity/force writes, item spawning/drop calls, "
+        "takeover, unpinned teleport/position/velocity/kinematic/force writes, item spawning/drop calls, "
         "and arbitrary RPC are refused. This source-text audit strips comments; it does not "
         f"follow indirection or prove control flow ({hits} violations)",
     ]
@@ -4445,6 +4454,157 @@ def check_foreman_felling_scope(errors: list[str]) -> list[str]:
         "`.Damage(`, the pinned hit in Runtime/Collection/WorldFellingPort.cs; TreeBase, TreeLog, DestroyNow, "
         "ApplyDamage and RPC_Damage are refused everywhere in that scope. A text audit with comments stripped: "
         f"a call through a delegate spells none of these ({hits} violations)",
+    ]
+
+
+# #334 (owner decision 2026-11-01, DECISIONS.md D14.6): an explicitly ordered
+# Thorstein may have his OWN body moved along a checked Concerned Ladders path by
+# one scoped motor, off by default (Ladders/NpcClimbing), as the host with no
+# peers, with vanilla's ground motor suspended. The #400 audit pins the motor's
+# three physics writes by spelling. This audit pins what #400 cannot see:
+#
+# - the capsule sweep sits directly in front of the position write, and `from`
+#   is read from the body being moved;
+# - the rigidbody is the ordered worker's own, taken from the AI the lease was
+#   given - never a player's or another object's;
+# - only the motor file creates a lease, starts one on the AI and ends one, and
+#   only the climb runtime asks for one;
+# - the ground-motor suspension is exactly the lease: ForemanWorkerAI reports
+#   sleeping only while a lease is held, returns before any planning (so before
+#   its one pinned MoveTo) while one is, refuses a job goal while one is, and no
+#   other type in the scope overrides IsSleeping;
+# - only the climb runtime installs the route tick on the body.
+#
+# The scope is the #400/D19 scope: the whole product less obj/ and bin/ plus
+# every shared tree its project file compiles in. A text audit with comments
+# stripped: it does not follow delegates or prove control flow; that half is
+# WorkerClimbOrderTests' and a reviewer's.
+FOREMAN_CLIMB_MOTOR = "Runtime/Ladders/WorkerClimbMotor.cs"
+FOREMAN_CLIMB_RUNTIME = "Runtime/Ladders/WorkerClimbRuntime.cs"
+FOREMAN_CLIMB_AI = "Runtime/Settlement/ForemanWorkerAI.cs"
+
+# label, broad spelling, ((path under ConcernedForeman, exact spelling, count), ...)
+FOREMAN_CLIMB_CONFINED = (
+    ("IsSleeping override", re.compile(r"\boverride\s+bool\s+IsSleeping\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(
+            r"\bpublic\s+override\s+bool\s+IsSleeping\s*\(\s*\)\s*=>\s*_climbLease\s*!=\s*null\s*;"), 1),
+    )),
+    ("ladder-lease construction", re.compile(r"\bnew\s+WorkerClimbMotor\s*\("), (
+        (FOREMAN_CLIMB_MOTOR, re.compile(
+            r"\bnew\s+WorkerClimbMotor\s*\(\s*ai\s*,\s*body\s*,\s*worker\s*,\s*bodyEpoch\s*,\s*clear\s*\)"), 1),
+    )),
+    ("ladder-lease request", re.compile(r"\bWorkerClimbMotor\s*\.\s*TrySuspend\s*\("), (
+        (FOREMAN_CLIMB_RUNTIME, re.compile(
+            r"\bWorkerClimbMotor\s*\.\s*TrySuspend\s*\(\s*_ai\s*,\s*worker\s*,\s*bodyEpoch\s*,\s*"
+            r"_receiver\s*\.\s*IsMoveClear\s*\)"), 1),
+    )),
+    # Unqualified spellings count too (review m1): a call inside ForemanWorkerAI
+    # itself needs no receiver, so each name is matched without one and the
+    # declaration is pinned beside the one call.
+    ("ladder-lease start", re.compile(r"(?<![A-Za-z0-9_])TryBeginClimb\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(r"\binternal\s+bool\s+TryBeginClimb\s*\(\s*object\s+lease\s*\)"), 1),
+        (FOREMAN_CLIMB_MOTOR, re.compile(r"\bai\s*\.\s*TryBeginClimb\s*\(\s*lease\s*\)"), 1),
+    )),
+    ("ladder-lease end", re.compile(r"(?<![A-Za-z0-9_])EndClimb\s*\("), (
+        (FOREMAN_CLIMB_AI, re.compile(r"\binternal\s+bool\s+EndClimb\s*\(\s*object\s+lease\s*\)"), 1),
+        (FOREMAN_CLIMB_MOTOR, re.compile(r"\b_ai\s*\.\s*EndClimb\s*\(\s*this\s*\)"), 1),
+    )),
+    ("ladder-lease field write", re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*(?:\?\?)?=(?!=)"), (
+        (FOREMAN_CLIMB_AI, re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*=\s*lease\s*;"), 1),
+        (FOREMAN_CLIMB_AI, re.compile(r"(?<![A-Za-z0-9_])_climbLease\s*=\s*null\s*;"), 1),
+    )),
+    ("route-tick installation", re.compile(r"(?<![A-Za-z0-9_])RouteTick\s*[-+]?=(?!=)"), (
+        (FOREMAN_CLIMB_RUNTIME, re.compile(r"\b_ai\s*\.\s*RouteTick\s*=\s*_installed\s*;"), 1),
+        (FOREMAN_CLIMB_RUNTIME, re.compile(r"\b_ai\s*\.\s*RouteTick\s*=\s*null\s*;"), 1),
+    )),
+)
+
+# path, exact program shape, what it proves - each must appear exactly once.
+FOREMAN_CLIMB_SHAPES = (
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bpublic\s+bool\s+TryPlaceOwnBody\s*\(\s*WorkPoint\s+position\s*\)\s*\{\s*"
+        r"if\s*\(\s*!\s*GroundMotorSuspended\s*\|\|\s*!\s*position\s*\.\s*IsFinite\s*\)\s*\{\s*return\s+false\s*;\s*\}"),
+     "the refusal to write unless this lease still suspends the ground motor"),
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bRigidbody\s+body\s*=\s*ai\s*\.\s*GetComponent\s*<\s*Rigidbody\s*>\s*\(\s*\)\s*;"),
+     "the ordered worker's own rigidbody, taken from the AI the lease was given"),
+    (FOREMAN_CLIMB_MOTOR, re.compile(
+        r"\bVector3\s+at\s*=\s*_body\s*\.\s*position\s*;\s*"
+        r"var\s+from\s*=\s*new\s+WorkPoint\s*\(\s*at\s*\.\s*x\s*,\s*at\s*\.\s*y\s*,\s*at\s*\.\s*z\s*\)\s*;\s*"
+        r"var\s+target\s*=\s*new\s+Vector3\s*\(\s*position\s*\.\s*X\s*,\s*position\s*\.\s*Y\s*,\s*position\s*\.\s*Z\s*\)\s*;\s*"
+        r"if\s*\(\s*!\s*_clear\s*\(\s*from\s*,\s*position\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}\s*"
+        r"_body\s*\.\s*position\s*=\s*target\s*;"),
+     "the sweep from the body's own position directly in front of the one position write"),
+    (FOREMAN_CLIMB_AI, re.compile(
+        r"\bRouteTick\s*\?\s*\.\s*Invoke\s*\(\s*this\s*,\s*dt\s*\)\s*;\s*"
+        r"if\s*\(\s*_climbLease\s*!=\s*null\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*"
+        r"_planner\s*\.\s*BeginTick\s*\(\s*\)\s*;"),
+     "the return before any planning or MoveTo while a ladder lease holds the body"),
+    (FOREMAN_CLIMB_AI, re.compile(
+        r"\binternal\s+bool\s+SetJobGoal\s*\([^)]*\)\s*\{\s*if\s*\(\s*_faulted\s*\|\|\s*_climbLease\s*!=\s*null\s*\|\|"),
+     "the job-goal refusal while a ladder lease holds the body"),
+)
+
+
+def check_foreman_worker_climb_scope(errors: list[str]) -> list[str]:
+    """#334: the worker ladder motor's sweep, lease and ground-motor suspension are where they were decided."""
+    label = "[foreman] #334 worker climb audit"
+    before = len(errors)
+    scoped, linked = _foreman_felling_sources(errors)
+    hits = len(errors) - before
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    foreman_prefix = foreman_dir.relative_to(ROOT).as_posix() + "/"
+    sources: dict[str, str] = {}
+    for rel, code in scoped.items():
+        sources[rel[len(foreman_prefix):] if rel.startswith(foreman_prefix) else "../" + rel[len("src/"):]] = code
+
+    def shown(rel: str) -> str:
+        return "src/" + rel[3:] if rel.startswith("../") else f"src/ConcernedForeman/{rel}"
+
+    pinned = 0
+    for what, broad, allowances in FOREMAN_CLIMB_CONFINED:
+        allowed: dict[str, list[tuple[int, int]]] = {}
+        for rel, exact, expected in allowances:
+            code = sources.get(rel)
+            matches = list(exact.finditer(code)) if code is not None else []
+            if len(matches) != expected:
+                hits += 1
+                fail(f"{label}: {shown(rel)} has {len(matches)} exact {what} site(s); the pinned population is "
+                     f"{expected}", errors)
+            else:
+                pinned += expected
+            allowed.setdefault(rel, []).extend((m.start(), m.end()) for m in matches)
+        for rel, code in sources.items():
+            spans = allowed.get(rel, ())
+            for match in broad.finditer(code):
+                if any(start <= match.start() < end for start, end in spans):
+                    continue
+                hits += 1
+                fail(f"{label}: unpinned {what} in {shown(rel)}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+
+    motor = sources.get(FOREMAN_CLIMB_MOTOR, "")
+    lookups = len(re.findall(r"\bGetComponent\s*<\s*Rigidbody\s*>", motor))
+    if lookups != 1:
+        hits += 1
+        fail(f"{label}: {shown(FOREMAN_CLIMB_MOTOR)} looks up a rigidbody {lookups} time(s); the one body it may "
+             "move is the ordered worker's own, looked up once", errors)
+    for rel, shape, why in FOREMAN_CLIMB_SHAPES:
+        code = sources.get(rel)
+        found = len(shape.findall(code)) if code is not None else 0
+        if found != 1:
+            hits += 1
+            fail(f"{label}: {shown(rel)} must hold {why} exactly once; found {found}", errors)
+        else:
+            pinned += 1
+
+    return [
+        f"{label}: {len(sources)} source(s) - the whole of src/ConcernedForeman less obj/ and bin/, and the "
+        f"{len(linked)} shared tree(s) its project file compiles in - {pinned} site(s) pinned: the sweep directly "
+        "in front of the ladder motor's one position write, the ordered worker's own rigidbody, the lease created, "
+        "started and ended only in Runtime/Ladders/WorkerClimbMotor.cs and requested only by the climb runtime, and "
+        "ForemanWorkerAI's ground motor suspended (IsSleeping, no planning or MoveTo, no job goal) exactly while a "
+        "lease holds the body. A text audit with comments stripped: it does not follow delegates or prove control "
+        f"flow ({hits} violations)",
     ]
 
 
@@ -7977,6 +8137,7 @@ def main() -> int:
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_foreman_felling_scope(errors))
+    report.extend(check_foreman_worker_climb_scope(errors))
     report.extend(check_foreman_felling_strike_callers(errors))
     report.extend(check_npc_figure_parts_confined(errors))
     report.extend(check_figure_dressing_has_one_home(errors))
