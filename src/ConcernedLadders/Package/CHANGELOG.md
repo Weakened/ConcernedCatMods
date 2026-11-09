@@ -5,8 +5,10 @@
 Not published. In progress on `main`; 1.0.0 is the latest published build.
 
 - Floor trapdoors (CL-004, #485), in progress: the installed-game door census and
-  the hatch's geometry and motion rules are in place. No trapdoor piece is
-  registered yet, so this build adds nothing to the hammer menu.
+  the hatch's geometry and motion rules are in place. The nine trapdoor pieces
+  exist behind a new setting, `Trapdoors` / `Enabled`, which is off by default:
+  with it off this build adds nothing to the hammer menu. Their lids do not
+  open yet, so leave it off.
 
 ## 1.0.0
 
