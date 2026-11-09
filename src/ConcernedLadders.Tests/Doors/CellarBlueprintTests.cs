@@ -150,7 +150,10 @@ public sealed class CellarBlueprintTests
         int box = Index(adapter, @"\bColliderBox\s*\(\s*hinge\s*\.\s*transform\s*,\s*box\s*\.\s*Name\s*,");
         int verify = Index(adapter, @"\bVerify\s*\(\s*prefab\s*,\s*wear\s*\)\s*;");
         Assert.True(body < verify && box < verify, "The leaves' bodies and colliders must be on the clone before it is verified.");
-        Assert.Matches(new Regex(@"collider\s*\.\s*attachedRigidbody\s*!=\s*null"), adapter);
+        // Static means no body anywhere from the collider up to the root, read from the hierarchy itself.
+        Assert.Matches(new Regex(@"collider\s*\.\s*isTrigger\s*\|\|\s*UnderBody\s*\(\s*holder\s*!\s*,\s*prefab\s*\.\s*transform\s*\)"), adapter);
+        Assert.Matches(new Regex(@"for\s*\(\s*Transform\s*\?\s+at\s*=\s*part\s*;\s*at\s*!=\s*null\s*;\s*at\s*=\s*at\s*\.\s*parent\s*\)\s*\{\s*if\s*\(\s*at\s*\.\s*GetComponent\s*<\s*Rigidbody\s*>\s*\(\s*\)\s*!=\s*null\s*\)\s*return\s+true\s*;\s*if\s*\(\s*at\s*==\s*root\s*\)\s*return\s+false\s*;"), adapter);
+        Assert.DoesNotMatch(new Regex(@"attachedRigidbody"), adapter);
         Assert.Matches(new Regex(@"collider\s*\.\s*convex\s*=\s*true\s*;\s*collider\s*\.\s*sharedMesh\s*=\s*FrameMesh\s*\(\s*shape\s*\)\s*;"), adapter);
         Assert.Matches(new Regex(@"AddComponent\s*<\s*MeshFilter\s*>\s*\(\s*\)\s*\.\s*sharedMesh\s*=\s*FrameMesh\s*\(\s*shape\s*\)\s*;"), adapter);
         Assert.Matches(new Regex(@"!\s*collider\s*\.\s*convex"), adapter);

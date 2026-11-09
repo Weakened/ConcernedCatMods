@@ -205,7 +205,7 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
         {
             Transform? holder = prefab.transform.Find(shape.Name);
             MeshCollider? collider = holder != null ? holder.GetComponent<MeshCollider>() : null;
-            if (collider == null || !collider.convex || collider.sharedMesh == null || collider.isTrigger || collider.attachedRigidbody != null)
+            if (collider == null || !collider.convex || collider.sharedMesh == null || collider.isTrigger || UnderBody(holder!, prefab.transform))
                 throw new InvalidOperationException("The frame collider " + shape.Name + " is missing or not a static convex mesh.");
         }
 
@@ -222,6 +222,21 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
 
         if (prefab.GetComponentsInChildren<TrapdoorLid>(true).Length != 0)
             throw new InvalidOperationException("A cellar door must not carry the trapdoor lid runtime.");
+    }
+
+    /// <summary>True when <paramref name="part"/> or any parent up to and including <paramref name="root"/> carries a
+    /// Rigidbody, which would make its collider part of a body rather than the static frame. Walks the hierarchy
+    /// instead of asking <c>Collider.attachedRigidbody</c>, which is a physics-scene link an inactive clone may not
+    /// have yet.</summary>
+    private static bool UnderBody(Transform part, Transform root)
+    {
+        for (Transform? at = part; at != null; at = at.parent)
+        {
+            if (at.GetComponent<Rigidbody>() != null) return true;
+            if (at == root) return false;
+        }
+
+        return false;
     }
 
     /// <summary>True for a part this adapter built: a frame collider directly under the root, a visual under one of
