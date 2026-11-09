@@ -5,8 +5,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
 /// <summary>The cellar-door setting (CL-005 #486). Its own switch, off by default, separate from
 /// <see cref="TrapdoorSettings"/> (lead default pending owner confirmation): turning trapdoors on must not also add a
-/// second unfinished family whose placed pieces the game deletes when the switch goes off again. Not bound yet: the
-/// piece adapter (the next slice) binds it, and with it off registers nothing.</summary>
+/// second unfinished family whose placed pieces the game deletes when the switch goes off again. Bound by the plugin
+/// (slice 2); with it off the piece adapter is never constructed, so nothing is cloned, localized or registered.</summary>
 internal static class CellarDoorSettings
 {
     internal const string Section = "CellarDoors";
@@ -17,6 +17,7 @@ internal static class CellarDoorSettings
 
     internal const string Description =
         "UNFINISHED (CL-005): adds the nine sloped cellar doors to the hammer's Building tab, none of it yet tested in game. " +
+        "Their leaves do not open yet: Use only changes the door's state and plays its sound, and the cover stays shut. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed cellar door the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
         "value: a host or server with it off deletes the cellar doors other players place, during the session. " +

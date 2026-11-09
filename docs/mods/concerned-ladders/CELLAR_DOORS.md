@@ -1,12 +1,15 @@
 # Concerned Ladders: sloped cellar doors (CL-005 #486): design record and game-free model
 
-**Status: slice 1 of #486, the game-free model and contract only.** Nothing in the game changes: no piece is
-registered, no setting is bound, no token is added, and no file outside `Domain/Doors` and its tests calls the new
-code. The model is `src/ConcernedLadders/Domain/Doors/CellarGeometry.cs` and `CellarDoors.cs`; its tests are
-`src/ConcernedLadders.Tests/Doors/CellarGeometryTests.cs` and `CellarDoorsTests.cs`. Every number below is a design
-default measured against the installed game's `wood_floor` (Valheim 1.0.21, read in CL-004's census), **not an
-in-game observation**. Every placed-piece, interaction, ladder and multiplayer row is `OWNER GO-AROUND PENDING`
-(owner playtest checklist #470).
+**Status: slices 1 and 2 of #486, the game-free model and the piece adapter.** Slice 1 is the model,
+`src/ConcernedLadders/Domain/Doors/CellarGeometry.cs` and `CellarDoors.cs`. Slice 2 adds the build plan
+(`Domain/Doors/CellarBlueprint.cs`) and the piece adapter (`Pieces/CellarDoorPieceRegistration.cs`, through the door
+helper `Pieces/DoorPieceKit.cs` it shares with the trapdoors). It registers the nine pieces behind `[CellarDoors]
+Enabled`, **off by default**: with it off the adapter is never constructed and the game is unchanged. **The leaves do
+not move yet.** The leaf runtime is the next slice; until it lands the cover stays shut whatever the door state says
+(section 4). The tests are `src/ConcernedLadders.Tests/Doors/CellarGeometryTests.cs`, `CellarDoorsTests.cs` and
+`CellarBlueprintTests.cs`. Every number below is a design default measured against the installed game's `wood_floor`
+and walls (Valheim 1.0.21, CL-004's census and section 2a's wall read), **not an in-game observation**. Every
+placed-piece, interaction, ladder and multiplayer row is `OWNER GO-AROUND PENDING` (owner playtest checklist #470).
 
 The donor census, the matrix of the nine native door families and the reasons for every exclusion are CL-004's,
 in `DOOR_DONOR_MATRIX.md`. This record reuses them and adds only what the sloped geometry changes.
@@ -79,6 +82,28 @@ above it (w 0.835); up the slope, the leaf's own length. In piece space (`SweepI
 So a piece, rail or wall built **in front of** the low end, above the front panel's height, or a roof lower than
 2.03 m over the entrance, is in the sweep; the leaves stop against it (section 4). Owner go-around pending.
 
+**The rear-wall limit, checked against the installed walls (slice 2).** The sweep ends at z 0.79. A wall standing on
+the rear grid edge (z 1.0) stays out of it while it reaches less than 0.21 m toward the door, which for a wall centred
+on the edge means less than 0.42 m thick. The 0.4 m figure above keeps a 1 cm margin. A read-only probe of the game's
+bundles (`cl-ladders-devtools/doors/walls.py` -> `walls.json`, outside the repo) measured every wall piece's colliders
+in piece z and found its bottom snap points. The reach below is the larger of a wall's two sides, so it is the worst
+of its two facings:
+
+| Wall pieces (bottom snaps at z 0, so standing on a floor edge) | Reach toward the door | Against the rear edge |
+|---|---|---|
+| `woodwall`, `wood_wall_half`, `wood_wall_quarter`, `wood_wall_roof`, `_roof_a`, `_roof_45`, `_roof_67_a` and the upside-down roof walls, `Piece_grausten_wall_*`, `crystal_wall_1x1` (a CL-004 exclusion), the ashwood walls not named below, iron, darkwood deco and scale walls | 0.05-0.20 m | clear by 1 cm or more |
+| `wood_wall_roof_top`, `wood_wall_roof_top_45`, `ashwood_wall_beam_26` | 0.205-0.209 m | clear by 1-5 mm |
+| `wood_wall_roof_top_67`, `ashwood_wall_cross_67` | 0.235-0.238 m | 2.5-2.8 cm into the rear of the closed leaves |
+| `wood_wall_log`, `wood_wall_log_4x0.5` | 0.25 m | 4 cm in |
+| `stave_deco_wall_2x2`, `stave_wall_2x2` and the stave crosses, `stake_wall`, `piece_dvergr_stake_wall`, `piece_dvergr_wood_wall` | 0.275-0.647 m | in |
+| `stone_wall_1x1`, `stone_wall_2x1`, `stone_wall_4x2`: 1.0 m deep, **bottom snaps on its two faces (z ±0.5)** | 0 or 1.0 m | snapped to the rear corners it stands **wholly behind** the module (clear) or **wholly over its rear metre** (in the header and the leaves) |
+| `piece_stakewall_blackwood`: bottom snaps at z -0.085 and 0.38, colliders to z -2.97 | up to 2.97 m | not a wall that stands on a floor edge; in or clear by its facing |
+
+A wall that reaches in front of z 0.79 overlaps the closed leaves' rear edge. Their bottom rear edge is the rear-most
+point of the sweep, at about y 1.33. Section 4's leaf runtime will therefore find the leaves' first open pose occupied,
+and the cover will stay shut. Nothing is pushed and nothing moves into the wall. This is not changed in slice 2: the
+header stays 0.20 m (lead default 3), and the thicker walls are an owner question (section 8). Owner go-around pending.
+
 ### 2b. Usable clearance
 
 - **Open passage** (`PassageMargins`): a capsule of radius 0.4 m has 0.38 m to each open leaf and 0.85 m of free
@@ -97,8 +122,11 @@ So a piece, rail or wall built **in front of** the low end, above the front pane
 ## 3. Collision and frame shape
 
 The frame parts' tops are sloped, so they are **convex prisms**, not boxes: a four-point profile in the piece's (z, y)
-plane, extruded along x (`CellarPrism`). The piece adapter will build each as a mesh with a convex mesh collider from
-exactly those eight corners, so visuals and collision share one shape. The leaves are boxes on their hinge pivots,
+plane, extruded along x (`CellarPrism`). The piece adapter builds each as one mesh from exactly those eight corners
+(`CellarBlueprint.Mesh`: six flat faces, four vertices each, wound so Unity's front face points out). The same mesh
+serves the renderers and a static convex `MeshCollider`, so visuals and collision share one shape. Tested: each mesh's
+vertices are exactly its prism's corners, every triangle faces outward with its own unit normal, the mesh is closed
+and consistently wound, it is convex, and it encloses exactly the prism's volume. A face wound inward is caught. The leaves are boxes on their hinge pivots,
 each on a kinematic body as the trapdoor's lid is. Tested: the four prisms are convex, inside the module, reach the
 frame bottom, have their tops in the slope plane flush with the closed leaves, and none intrudes into the opening; a
 5 x 5 x 5 lattice through each leaf at every 0.5° never enters a prism.
@@ -107,12 +135,39 @@ frame bottom, have their tops in the slope plane flush with the closed leaves, a
 half way along the leaf, under the slope transform; the right leaf turns by `Quaternion.Euler(0, 0, -angle)`, the left
 by `Quaternion.Euler(0, 0, angle)`; the leaf box lies inboard of and below the pivot.
 
+**What the adapter builds** (slice 2, `CellarBlueprint`, walked by `Pieces/CellarDoorPieceRegistration.cs`). The
+donor's root `Piece`, `ZNetView`, `WearNTear`, `Door` and `Animator` stay. The donor's `door` leaf stays as a bare
+transform for the hidden native animator. Every other donor child, and the root's own geometry, goes through the
+trapdoor's strip (`DoorPieceKit.Strip`, the same code, not a copy). Under the root it adds:
+
+- one child per prism with its static convex mesh collider (`cheek_left`, `cheek_right`, `front_panel`, `rear_header`);
+- the presentation root `new`, with one mesh renderer per prism in the donor's frame material, and, where the donor has
+  a worn material, `worn` in it (`DoorPieceKit.AdoptPresentation`, the trapdoor's wear wiring);
+- `slope`, at the front top edge's centre and turned by `Quaternion.Euler(-26.57, 0, 0)`, holding the two pivots
+  `leaf_left_hinge` and `leaf_right_hinge`. Each pivot sits at `HingeInSlope`, closed at identity, on a kinematic,
+  gravity-free body, and carries:
+  - its leaf's box collider and a visual box in the donor's leaf material;
+  - two **hinge marks**. These are darkened plates on the leaf's top, from its outer edge 0.30 m inboard, 0.6 m either
+    side of the pivot. They show the hinge sides on the ghost. They are 8 mm thick, thinner than the 1 cm cheek gap, so
+    an open leaf's marks never reach the cheek (tested every 0.5 degrees). They have no collider;
+- the four wood_floor corner snaps.
+
+`Verify` refuses the clone if any collider or renderer survived that the adapter did not build, if a wear state points
+outside the piece's own roots, or if the donor leaf is more than a transform (`DoorPieceKit.VerifyStripped`, shared). It
+also refuses a frame collider that is not a static convex mesh with its mesh, a pivot without its kinematic body or leaf
+collider, and a clone that carries the trapdoor's lid runtime. The ladders recognise a trapdoor by that runtime, so a
+cellar door is an ordinary piece to the ladder code until the ladder slice.
+
 ## 4. State, motion and the pair rule
 
 - **State is native and single.** As on the trapdoor (`DOOR_DONOR_MATRIX.md` section 4), the clone keeps the donor's
   `Door`, `ZNetView`, `Piece`, `WearNTear` and animator: one ZDO `state`, written by the native `UseDoor` RPC and read
   by every client. Both leaves are driven from that one state. **No RPC, no ZDO field, no ownership claim and no write
   is added**; each client's leaf progress is a local float, as the lid's is.
+- **Slice 2: the leaves stay shut.** No leaf runtime exists yet, so nothing turns the pivots. Use runs the native
+  door's own interaction: it writes the native state through the native `UseDoor` RPC and plays the donor's sound, but
+  both leaves stay at their closed pose. This is fail-closed: the cover never opens without the occupancy checks below,
+  and the hover text can say *Close* over a shut cover. The setting says so.
 - **One progress for both leaves.** The leaves reuse `HatchMotion` unchanged (same ease, same donor swing time, same
   5° checked sub-steps, same settle on load), which is valid because the open angle is the trapdoor's 90° (tested).
   `CellarPairOccupancy` makes the pair's pose occupied when either leaf's is, so **a leaf that meets something holds
@@ -159,8 +214,10 @@ now with a cost-list overload, so the donor's own unchanged requirements would b
 
 ## 6. The setting
 
-`[CellarDoors] Enabled`, **off by default**, its own switch (`CellarDoorSettings`), not `Trapdoors/Enabled`. Not bound
-in this slice; the piece adapter binds it and with it off registers nothing. The same multiplayer caveat as the
+`[CellarDoors] Enabled`, **off by default**, its own switch (`CellarDoorSettings`), not `Trapdoors/Enabled`. Bound in
+`Plugin.Awake` since slice 2. Only when it is on is the adapter constructed and installed; its install is isolated, so a
+failure there logs and leaves the ladders and the trapdoors as they were. With it off nothing is cloned, localized or
+registered (a test pins the one construction inside the setting's branch). The README lists it. The same multiplayer caveat as the
 trapdoors applies (`DOOR_DONOR_MATRIX.md` section 3): the setting is local, and a host or server with it off deletes
 the cellar doors other players place.
 
@@ -193,26 +250,43 @@ grid, so:
 8. Placement snaps: the four wood_floor corners only. A snap for the rear wall, or for a foundation edge, is not added
    until the owner sees the corners in game.
 
+Added by slice 2 (L6, 2026-11-09):
+
+9. Until the leaf runtime lands, the leaves stay shut whatever the native state says (section 4). The setting's text and
+   the README say so. This is the narrowest option that still registers the pieces: no leaf moves without the
+   occupancy checks.
+10. The cellar door carries no trapdoor lid runtime, so the ladders treat it as an ordinary piece until the ladder slice.
+    The clone is refused if it carries one.
+11. The rear header stays 0.20 m after the wall census (section 2a). The 0.47 m, 0.50 m and thicker walls, and a stone
+    wall snapped over the module's rear metre, are expected to hold the leaves shut rather than be cleared.
+12. Hinge marks: two darkened 8 mm plates per leaf at its hinge edge, visual only. A texture repeats once per 2 m of
+    frame face. Both are cosmetic and not compared with the donor's own mapping.
+13. One mesh per prism, shared by all nine families and kept for the session (four small meshes, never unloaded).
+14. Frame support: WearNTear measures a non-box collider by its world bounds (`collider.bounds`, an axis-aligned box),
+    so a cellar door turned 45 degrees tests support over a slightly larger box than its prisms. This is the native rule
+    for every mesh-collider piece and is not changed.
+
 ## 9. Remaining #486 slices (each its own PR)
 
-1. **Piece adapter**, behind `[CellarDoors] Enabled` (off): bind the setting; clone each donor after
-   `OnVanillaPrefabsAvailable` with the trapdoor adapter's checks and strip set (reused, not copied: the strip and
-   verify code will move to a shared door-piece helper); build the prisms as meshes with convex mesh colliders, the
-   slope transform, the two hinge pivots with kinematic bodies and leaf boxes, hinge marks on the outer edges for the
-   ghost; corner snaps; localization from `CellarDoors.English()`; icons; README row and changelog.
-2. **Leaf runtime**: the trapdoor lid's runtime generalised to drive two pivots from one progress through
-   `CellarPairOccupancy`, with one skinned overlap per leaf per checked pose (at most 64 a frame at the 32 sub-step
-   cap). Each leaf's query must ignore the piece's own frame and the other leaf by collider identity rather than by
-   relying on clearance: a few degrees open each leaf comes within 2.8 mm of the centre line, so the two leaves pass
-   within 5.7 mm of each other, and the frame gaps are 0.01 m, all at or below the query's skin. The adapter slice also reads native wall depths, so the 0.4 m rear-wall limit (section 2a) is checked
-   against the stone walls.
-3. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing.
-4. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
+Done: slice 1 (model, PR #534) and slice 2 (piece adapter, this record's section 3; the wall depths in section 2a).
+
+1. **Leaf runtime**: the trapdoor lid's runtime generalised to drive the two pivots (`leaf_left_hinge`,
+   `leaf_right_hinge`) from one progress through `CellarPairOccupancy`. Each checked pose gets one skinned overlap per
+   leaf, so at most 64 a frame at the 32 sub-step cap. Each leaf's query must ignore the piece's own frame and the other
+   leaf by collider identity rather than by relying on clearance. A few degrees open, each leaf comes within 2.8 mm of
+   the centre line, so the two leaves pass within 5.7 mm of each other, and the frame gaps are 0.01 m: all at or below
+   the query's skin.
+2. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing.
+3. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
    provenance.
 
 ## 10. In-game rows (all OWNER GO-AROUND PENDING, #470)
 
-None of these has been observed; this slice adds nothing to the game. Placement in a wood floor and beside stone
+None of these has been observed. Slice 2 registers the pieces behind the setting; nothing has been placed in game. Slice 2
+adds these rows: the hammer icons; the frame meshes' faces, shading and texture scale; the hinge marks on the ghost;
+the leaves staying shut on Use with the setting on; a wall from section 2a's table on the rear edge; and a ladder
+aimed at a cellar door, which the ladder snap treats as an ordinary floor (its corner snaps) until the ladder slice, so
+it may hang from or stand at the frame's outer edge. Placement in a wood floor and beside stone
 flooring, against a wood wall and a stone wall on the rear edge, every family; the ghost showing the high and low
 ends and the hinge sides at every rotation; snaps not sinking the threshold or leaving floating edges; standing on the
 closed leaves; Use from outside, from inside the entrance and from the ladder, keyboard and controller, remapped;

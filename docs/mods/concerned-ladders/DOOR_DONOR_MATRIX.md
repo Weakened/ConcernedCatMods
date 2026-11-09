@@ -169,7 +169,9 @@ census scripts, read the `WearNTear` fields `census.py` had not dumped):
 - The `LODGroup` is **removed**, not rebuilt, as on the ladders (observed in game for them): the hatch is a few boxes,
   and a rebuilt single LOD would only add an invented cull height. A real LOD set belongs to the art pass.
 
-**What the adapter builds** (`Domain/Doors/TrapdoorBlueprint.cs`, walked by `Pieces/TrapdoorPieceRegistration.cs`):
+**What the adapter builds** (`Domain/Doors/TrapdoorBlueprint.cs`, walked by `Pieces/TrapdoorPieceRegistration.cs`;
+since CL-005 slice 2 the donor read, strip, wear wiring and verification are `Pieces/DoorPieceKit.cs`, shared with the
+cellar doors):
 the donor's root components stay; the root gets the four frame bands as box colliders on their own children (never on
 the root: the ghost's blocked-by-player test skips root colliders), one presentation root `new` with the four bands in
 the donor's frame material and, where the donor has a separate worn root, a `worn` root in its worn material
