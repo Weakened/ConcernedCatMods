@@ -18,8 +18,12 @@ internal static class GunnarFigurePlacement
     public static readonly PlacementRules Rules = new(1.5f, 4f, 0f, 1f);
     private static readonly PlacementPlanner Planner = new(Rules);
 
+    /// <param name="admits">Optional (#461): a spot that passed every ground
+    /// rule and the keepsake clearance is still skipped when this says no - the
+    /// camp, the door rule and the wall check. Asked lazily, best spot first,
+    /// exactly as the shared planner's own <c>accept</c>.</param>
     public static PlacementResult Plan(CompanionAnchor anchor, IPlacementProbe probe,
-        IReadOnlyList<WorldPoint>? otherKeepsakes)
+        IReadOnlyList<WorldPoint>? otherKeepsakes, Func<WorldPoint, bool>? admits = null)
     {
         if (probe == null) throw new ArgumentNullException(nameof(probe));
         if (!anchor.IsValid || !Finite(anchor.Position) || otherKeepsakes == null)
@@ -30,7 +34,7 @@ internal static class GunnarFigurePlacement
             for (int i = 0; i < otherKeepsakes.Count; i++)
                 if (!Finite(otherKeepsakes[i]) ||
                     sample.Position.HorizontalDistanceTo(otherKeepsakes[i]) < GunnarKeepsake.Clearance) return false;
-            return true;
+            return admits == null || admits(sample.Position);
         });
     }
 
