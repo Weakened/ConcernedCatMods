@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+* **Gunnar keeps to camp at home (#461).** His figure now stands inside your camp - the player-built pieces around
+  your bed, as Concerned NPC counts them; terrain edits and crops do not count - with room to stand, never in a
+  doorway, and never on the far side of a door or a wall from the bed. No door is used and every door counts as one
+  he may not pass. Walking away and coming back keeps the same figure on the same spot instead of rebuilding him,
+  something built on his spot moves him within about ten seconds, and talking to him turns him to face you. If the
+  pieces near home cannot be read he is shown nowhere new. `ct_haul status` adds a camp line. He stands; he does not
+  sit yet. Nothing in the world changes and nobody else sees him. **Not yet observed in game.**
 * **Gunnar can take from a chest you marked for taking (#381).** A new `Workers/GunnarChestTakeEnabled` setting, **off
   by default** and needing `Workers/GunnarCollectionEnabled` too, lets him take one item you name out of a chest you
   chose and marked `Take` or `Both`: look at the chest and run `ct_collect source`, then, with him standing at it,

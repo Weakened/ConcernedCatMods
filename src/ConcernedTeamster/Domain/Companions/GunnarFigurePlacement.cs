@@ -18,8 +18,16 @@ internal static class GunnarFigurePlacement
     public static readonly PlacementRules Rules = new(1.5f, 4f, 0f, 1f);
     private static readonly PlacementPlanner Planner = new(Rules);
 
+    /// <summary>How far the re-measured ground under his spot may be from the
+    /// spot itself and still be the same spot.</summary>
+    private const float SameSpotMetres = 0.02f;
+
+    /// <param name="admits">Optional (#461): a spot that passed every ground
+    /// rule and the keepsake clearance is still skipped when this says no - the
+    /// camp, the door rule and the wall check. Asked lazily, best spot first,
+    /// exactly as the shared planner's own <c>accept</c>.</param>
     public static PlacementResult Plan(CompanionAnchor anchor, IPlacementProbe probe,
-        IReadOnlyList<WorldPoint>? otherKeepsakes)
+        IReadOnlyList<WorldPoint>? otherKeepsakes, Func<WorldPoint, bool>? admits = null)
     {
         if (probe == null) throw new ArgumentNullException(nameof(probe));
         if (!anchor.IsValid || !Finite(anchor.Position) || otherKeepsakes == null)
@@ -30,8 +38,32 @@ internal static class GunnarFigurePlacement
             for (int i = 0; i < otherKeepsakes.Count; i++)
                 if (!Finite(otherKeepsakes[i]) ||
                     sample.Position.HorizontalDistanceTo(otherKeepsakes[i]) < GunnarKeepsake.Clearance) return false;
-            return true;
+            return admits == null || admits(sample.Position);
         });
+    }
+
+    /// <summary>#461: whether the spot he already stands on still passes every
+    /// rule a new plan would ask of it - the ground probed again, the keepsake
+    /// clearance and <paramref name="admits"/> - for the same anchor, so the
+    /// band is the one it was chosen in. One probe; false whenever anything is
+    /// unknown, so a doubt sends him to a fresh plan rather than keeping him.
+    /// </summary>
+    public static bool StillFits(CompanionAnchor anchor, IPlacementProbe probe,
+        IReadOnlyList<WorldPoint>? otherKeepsakes, WorldPoint spot, Func<WorldPoint, bool>? admits = null)
+    {
+        if (probe == null) throw new ArgumentNullException(nameof(probe));
+        if (!anchor.IsValid || !Finite(anchor.Position) || !Finite(spot) || otherKeepsakes == null) return false;
+        PlacementProbeSample sample = probe.Probe(spot);
+        if (!sample.IsUsable || !Finite(sample.Position)) return false;
+        // The ground under him answered somewhere else - a thin floor built on
+        // his spot, a slope re-measured: he would be kept inside it or above
+        // it, so a fresh plan decides instead.
+        if (sample.Position.HorizontalDistanceTo(spot) > SameSpotMetres ||
+            Math.Abs(sample.Position.Y - spot.Y) > SameSpotMetres) return false;
+        for (int i = 0; i < otherKeepsakes.Count; i++)
+            if (!Finite(otherKeepsakes[i]) ||
+                sample.Position.HorizontalDistanceTo(otherKeepsakes[i]) < GunnarKeepsake.Clearance) return false;
+        return admits == null || admits(sample.Position);
     }
 
     private static bool Finite(WorldPoint p) => !(float.IsNaN(p.X) || float.IsInfinity(p.X) ||

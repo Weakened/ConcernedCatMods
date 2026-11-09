@@ -791,9 +791,14 @@ presentation figure that is **set down** at a spot and never walks.
 - It is never set down on the far side of a doorway or a wall from home. A spot is refused when anything solid
   stands between it and home at chest height (a wall, a shut door; a ray cast that cannot be completed counts as
   solid), or when the straight line from home to it passes through a doorway (the shared `DoorPortal.IsCrossedBy`).
-- Concerned Foreman (and, when built, Concerned Teamster) keeps no list of doors opened to companions, so every
-  door counts as one the figure may not use. This is the rule's own default (`OnlyAllowedDoors` with nothing
-  allowed). If the doors near home cannot be read, the figure is seated nowhere new.
+- Concerned Foreman and Concerned Teamster keep no list of doors opened to companions, so every door counts as one
+  the figure may not use. This is the rule's own default (`OnlyAllowedDoors` with nothing allowed). If the doors near
+  home cannot be read, the figure is seated nowhere new.
+- **Teamster applies the same rule to Gunnar's standing figure (#461).** The doorway half is the shared
+  `RouteDoors.Inspect` on the line from home to the spot (anything but `Clear` refuses it, which is the same
+  predicate as Foreman's); a spot within 1.5 m of a doorway's opening is refused; the wall check is the same chest-
+  height ray, an unanswerable one counting as a wall; and a failed look at the pieces near home shows him nowhere
+  new. No door is touched, nothing is written, and no new authority is granted (`GUNNAR_CAMP.md`).
 - **The open question for the owner.** A bed inside a house whose door is shut still counts as home, so the figure
   may rest in that room. Hulgi, who walks, stays out of such a house, because he would have to come in through the
   door. A figure that is only set down at a spot never passes the door. If the owner wants the stricter reading,

@@ -106,6 +106,11 @@ public sealed class GunnarHandOverOrderTests
         AssertBefore(pass, "GunnarBodyPlan.MaySurvey(", "_companion.Current()");
         AssertBefore(pass, "_companion.Current()", "_environment.TryAnchor(");
         AssertBefore(pass, "if (stage == null)", "_environment.TryAnchor(");
+        // #461: the look at the pieces near home and the probing step come
+        // after the story too, and after the body decision.
+        AssertBefore(pass, "if (stage == null)", "LookIfDue(");
+        AssertBefore(pass, "if (stage == null)", "_routine.Step(");
+        AssertBefore(pass, "GunnarBodyPlan.Decide(facts)", "LookIfDue(");
         AssertBefore(pass, "GunnarBodyPlan.Decide(facts)", "_figure.Show(");
         Assert.DoesNotContain("GetAllZDOs", Runtime);
     }
