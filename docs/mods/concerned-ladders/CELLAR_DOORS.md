@@ -313,8 +313,10 @@ Added by slice 2 (L6, 2026-11-09):
 Added by slice 3 (L7, 2026-11-09):
 
 15. The first pose is `CellarSettle.First`, fail-closed against fixed obstructions, with `HatchMotion` unchanged:
-    - closed, whatever is stored, when something is in the closed pose but no character or dynamic body is (a wall, a
-      piece, a kinematic part: the closed leaves overlap it and nothing moves);
+    - closed, whatever is stored, when something is in the closed pose but nothing that can move is: no character,
+      item, cart or ship (by layer, because a client that does not own an item, cart or ship holds its body kinematic
+      until ownership passes) and no dynamic body. What is there is a wall, a piece or another door's kinematic part, so
+      the closed leaves overlap it and nothing moves;
     - otherwise `HatchMotion.Settle`, the trapdoor's tested policy (L3): the stored end when it is clear, and otherwise
       a pose that keeps the leaves out of whoever is there, so they are never put into someone standing in the entrance
       at load.
@@ -323,7 +325,10 @@ Added by slice 3 (L7, 2026-11-09):
     closed leaves but not the open ones) open. It would then hold it part open while the native state says closed. It
     would do the same for a cover placed beside such a wall, and for one whose Use stored open while the wall held it.
     Clients that saw the wall built and late joiners would then disagree. `CellarSettle` makes all of these shut on
-    every client (independent review of 4506336, blockers 1 and 2). The remaining in-session case is in section 2a.
+    every client (independent review of 4506336, blockers 1 and 2). Two cases remain. One is the in-session case in
+    section 2a. In the other, someone is in the closed pose at load while such a wall also stands. The trapdoor's rule
+    then applies, so the cover loads open and closes only until it meets the wall, about 50-64 degrees open, until the
+    next load without them there. Keeping the leaves out of the person comes first.
     Owner question: whether walls deeper than about 0.22 m on the rear edge should be cleared, by a deeper rear header
     or a rear-wall snap, rather than holding the cover shut.
 16. Each leaf's query ignores exactly the piece's own six colliders, by identity (section 4). Anything else blocks,
@@ -372,7 +377,8 @@ in the entrance under it closing, a cart, an item, a rail in front of the low en
 clear. A cover placed beside each wall class of section 2a on the rear edge, saved closed and saved open (Use while held)
 and reloaded: free (about 0.22 m or less) or held shut (deeper, lead default 15). Without a wall, stored open, it loads
 open; stored closed, closed. Someone standing in the entrance under a closed cover at load: it loads open and shuts once
-they have gone. A late joiner, a second client and a zone reload see the same pose. No push
+they have gone (unless a wall also holds the closed pose, lead default 15). A late joiner, a second client and a zone reload see the same pose, except after a close asked for in session into a
+wall built while the cover was open (section 2a), which the clients present see part open and a late joiner sees shut. No push
 or launch of a player, creature or cart at any point. The ghost and the hammer icon stay closed. A ladder near a cellar
 door, which still treats it as an ordinary piece (lead default 18). The trapdoors unchanged with the cellar doors on,
 and the setting off leaving everything as on main.

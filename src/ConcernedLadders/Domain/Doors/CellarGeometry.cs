@@ -386,8 +386,8 @@ internal readonly struct CellarPairOccupancy<TLeaves> : IHatchOccupancy
 /// to open, the wall held it) would load open for the same reason. So, in order:
 /// <list type="number">
 /// <item>closed, whatever is stored, when something is in the closed pose (<paramref name="all"/>) but nothing that
-/// could be pushed is (<paramref name="movers"/>: a character or a dynamic body). That something is fixed: a wall, a
-/// piece, a kinematic part. The closed leaves are kinematic, so where they overlap it nothing moves, and a walled cover
+/// could be pushed is (<paramref name="movers"/>: a character, an item, a cart or a ship, or any dynamic body). That
+/// something is fixed: a wall, a piece, a kinematic part. The closed leaves are kinematic, so where they overlap it nothing moves, and a walled cover
 /// is shut rather than open on any client;</item>
 /// <item>otherwise <see cref="HatchMotion.Settle{TProbe}"/> with the full probe, unchanged: the stored end when it is
 /// clear (the normal case, every client agrees), and otherwise the trapdoor's tested policy, which keeps the leaves out

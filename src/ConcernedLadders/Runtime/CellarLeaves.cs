@@ -27,9 +27,10 @@ namespace TheConcernedCat.ConcernedLadders.Runtime;
 /// hierarchy test, nothing else is ignored: anything parented under the piece by anyone else is checked. The pivots turn
 /// by setting their transforms, never by velocity or <c>MoveRotation</c>, so they push nothing.</para>
 ///
-/// <para>First pose: <see cref="CellarSettle.First{TAll, TMovers}"/>. The stored end when it is clear; otherwise closed when no
-/// character or dynamic body is in the closed pose (a fixed wall in it holds the cover shut rather than loading it
-/// open); otherwise the trapdoor's <see cref="HatchMotion.Settle{TProbe}"/>, so the leaves are never put into someone.</para>
+/// <para>First pose: <see cref="CellarSettle.First{TAll, TMovers}"/>. Closed, whatever is stored, when something is in
+/// the closed pose but no character, item, cart, ship or dynamic body is: a fixed wall there holds the cover shut rather
+/// than loading it open. Otherwise the trapdoor's <see cref="HatchMotion.Settle{TProbe}"/>: the stored end when clear,
+/// and never a pose inside someone.</para>
 ///
 /// <para>Not a trapdoor: it is not in <see cref="TrapdoorLid"/>'s registry, so the ladder code still treats a cellar door
 /// as an ordinary piece (the ladder integration is the next slice). Ghost and icon: no ZDO, so nothing is read and the
@@ -49,12 +50,15 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
 
     private static bool _faultLogged;
 
-    /// <summary>The character layers (the local player, other players, creatures, ghosts and their hitboxes), resolved
-    /// once: with dynamic bodies, the things the first pose must never put the closed leaves into
-    /// (<see cref="CellarSettle"/>). Zero, and every cover stays shut, if any is missing.</summary>
-    private static int _characterMask;
+    /// <summary>The layers of things that can always move, resolved once: characters (the local player, other players,
+    /// creatures, ghosts and their hitboxes), dropped items, and carts and ships (<c>vehicle</c>). With dynamic bodies,
+    /// these are what the first pose must never put the closed leaves into (<see cref="CellarSettle"/>). Items, carts and
+    /// ships count by layer, not only by body, because a client that does not own one holds its body kinematic until
+    /// ownership passes, when it becomes dynamic inside whatever overlaps it. Zero, and every cover stays shut, if any is
+    /// missing.</summary>
+    private static int _moverMask;
 
-    private static readonly string[] CharacterLayers = { "character", "character_net", "character_ghost", "character_noenv", "hitbox" };
+    private static readonly string[] MoverLayers = { "character", "character_net", "character_ghost", "character_noenv", "hitbox", "item", "vehicle" };
 
     private ZNetView? _view;
     private Pivot? _left;
@@ -101,7 +105,8 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
     }
 
     /// <summary>The first pose's second question (<see cref="CellarSettle"/>): would this leaf's pose overlap a
-    /// character or a dynamic body? The same query as <see cref="Occupied"/>, counting nothing else.</summary>
+    /// character, an item, a cart, a ship or a dynamic body? The same query as <see cref="Occupied"/>, counting nothing
+    /// else.</summary>
     private readonly struct Movers : ICellarLeafOccupancy
     {
         private readonly CellarLeaves _leaves;
@@ -121,7 +126,7 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         BoxCollider? rightBox = LeafBox(rightHinge, CellarLeaf.Right);
         Collider[]? own = OwnColliders();
         if (_view == null || leftHinge == null || rightHinge == null || leftBox == null || rightBox == null || own == null ||
-            !TrapdoorLid.ResolveLayers() || !ResolveCharacterLayers())
+            !TrapdoorLid.ResolveLayers() || !ResolveMoverLayers())
         {
             // A cellar door without its parts or the game's layers cannot check its sweep: the leaves stay where the
             // prefab put them, closed. (The ghost and the icon render keep their parts but never get a ZDO, so Update
@@ -143,18 +148,18 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         }
     }
 
-    private static bool ResolveCharacterLayers()
+    private static bool ResolveMoverLayers()
     {
-        if (_characterMask != 0) { return true; }
+        if (_moverMask != 0) { return true; }
         int mask = 0;
-        foreach (string name in CharacterLayers)
+        foreach (string name in MoverLayers)
         {
             int layer = LayerMask.NameToLayer(name);
             if (layer < 0) { return false; }
             mask |= 1 << layer;
         }
 
-        _characterMask = mask;
+        _moverMask = mask;
         return true;
     }
 
@@ -247,7 +252,7 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         return Query(leaf, angleDegrees, false);
     }
 
-    /// <summary>The one query. With <paramref name="moversOnly"/>, only a character or a dynamic body counts; a full
+    /// <summary>The one query. With <paramref name="moversOnly"/>, only a mover (<see cref="Moves"/>) counts; a full
     /// buffer is occupied either way.</summary>
     private bool Query(CellarLeaf leaf, float angleDegrees, bool moversOnly)
     {
@@ -268,11 +273,12 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         return TrapdoorLid.BlocksByKind(collider);
     }
 
-    /// <summary>A character, by its layer, or a dynamic body: something the closed leaves could push.</summary>
+    /// <summary>A character, an item, a cart or a ship, by its layer, or a dynamic body: something the closed leaves
+    /// could push, now or once its owner changes.</summary>
     private bool Moves(Collider collider)
     {
         if (collider == null || collider.isTrigger || IsOwn(collider)) { return false; }
-        if ((_characterMask & (1 << collider.gameObject.layer)) != 0) { return true; }
+        if ((_moverMask & (1 << collider.gameObject.layer)) != 0) { return true; }
         Rigidbody body = collider.attachedRigidbody;
         return body != null && !body.isKinematic;
     }

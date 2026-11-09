@@ -263,9 +263,9 @@ public sealed class CellarLeavesTests
         Assert.Matches(new Regex(@"public\s+bool\s+Occupied\s*\(\s*CellarLeaf\s+leaf\s*,\s*float\s+angleDegrees\s*\)\s*\{\s*return\s+Query\s*\(\s*leaf\s*,\s*angleDegrees\s*,\s*false\s*\)\s*;\s*\}"), leaves);
         Assert.Equal(2, Regex.Matches(leaves, @"\bQuery\s*\(\s*leaf\s*,").Count);
         Assert.Matches(new Regex(@"occupied\s*=\s*moversOnly\s*\?\s*Moves\s*\(\s*Overlaps\s*\[\s*index\s*\]\s*\)\s*:\s*Blocks\s*\(\s*Overlaps\s*\[\s*index\s*\]\s*\)\s*;"), leaves);
-        Assert.Matches(new Regex(@"private\s+bool\s+Moves\s*\(\s*Collider\s+collider\s*\)\s*\{\s*if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\s*\.\s*isTrigger\s*\|\|\s*IsOwn\s*\(\s*collider\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}\s*if\s*\(\s*\(\s*_characterMask\s*&\s*\(\s*1\s*<<\s*collider\s*\.\s*gameObject\s*\.\s*layer\s*\)\s*\)\s*!=\s*0\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*Rigidbody\s+body\s*=\s*collider\s*\.\s*attachedRigidbody\s*;\s*return\s+body\s*!=\s*null\s*&&\s*!\s*body\s*\.\s*isKinematic\s*;\s*\}"), leaves);
-        Assert.Matches(new Regex(@"CharacterLayers\s*=\s*\{\s*""character""\s*,\s*""character_net""\s*,\s*""character_ghost""\s*,\s*""character_noenv""\s*,\s*""hitbox""\s*\}"), leaves);
-        Assert.Matches(new Regex(@"!\s*ResolveCharacterLayers\s*\(\s*\)"), leaves);
+        Assert.Matches(new Regex(@"private\s+bool\s+Moves\s*\(\s*Collider\s+collider\s*\)\s*\{\s*if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\s*\.\s*isTrigger\s*\|\|\s*IsOwn\s*\(\s*collider\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}\s*if\s*\(\s*\(\s*_moverMask\s*&\s*\(\s*1\s*<<\s*collider\s*\.\s*gameObject\s*\.\s*layer\s*\)\s*\)\s*!=\s*0\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*Rigidbody\s+body\s*=\s*collider\s*\.\s*attachedRigidbody\s*;\s*return\s+body\s*!=\s*null\s*&&\s*!\s*body\s*\.\s*isKinematic\s*;\s*\}"), leaves);
+        Assert.Matches(new Regex(@"MoverLayers\s*=\s*\{\s*""character""\s*,\s*""character_net""\s*,\s*""character_ghost""\s*,\s*""character_noenv""\s*,\s*""hitbox""\s*,\s*""item""\s*,\s*""vehicle""\s*\}"), leaves);
+        Assert.Matches(new Regex(@"!\s*ResolveMoverLayers\s*\(\s*\)"), leaves);
         // The pose composition: the pivot's own position in the slope transform, turned about its local z, and the
         // box measured in the pivot's space at the closed pose.
         Assert.Matches(new Regex(@"Vector3\s+centre\s*=\s*part\s*\.\s*Space\s*\.\s*TransformPoint\s*\(\s*part\s*\.\s*Local\s*\+\s*turn\s*\*\s*part\s*\.\s*BoxCentre\s*\)\s*;"), leaves);
@@ -377,7 +377,7 @@ public sealed class CellarLeavesTests
     private static CellarPairOccupancy<Obstacle> Pair(Obstacle obstacle) => new CellarPairOccupancy<Obstacle>(obstacle);
 
     /// <summary>The runtime's first pose for this obstacle: the full probe, and the movers' probe, which sees the
-    /// obstacle only if it is a mover (a character or a dynamic body), as the runtime's <c>Moves</c> does.</summary>
+    /// obstacle only if it is a mover (a character, item, cart, ship or dynamic body), as the runtime's <c>Moves</c> does.</summary>
     private static float Settle(Obstacle obstacle, bool open) =>
         CellarSettle.First(open, Pair(obstacle), new CellarPairOccupancy<MoverView>(new MoverView(obstacle)));
 
