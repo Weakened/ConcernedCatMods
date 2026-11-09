@@ -91,12 +91,13 @@ of its two facings:
 
 | Wall pieces (bottom snaps at z 0, so standing on a floor edge) | Reach toward the door | Against the rear edge |
 |---|---|---|
-| `woodwall`, `wood_wall_half`, `wood_wall_quarter`, `wood_wall_roof*`, `Piece_grausten_wall_*`, the ashwood walls not named below, iron, darkwood deco and scale walls | 0.05-0.20 m | clear by 1 cm or more |
+| `woodwall`, `wood_wall_half`, `wood_wall_quarter`, `wood_wall_roof`, `_roof_a`, `_roof_45`, `_roof_67_a` and the upside-down roof walls, `Piece_grausten_wall_*`, `crystal_wall_1x1` (a CL-004 exclusion), the ashwood walls not named below, iron, darkwood deco and scale walls | 0.05-0.20 m | clear by 1 cm or more |
 | `wood_wall_roof_top`, `wood_wall_roof_top_45`, `ashwood_wall_beam_26` | 0.205-0.209 m | clear by 1-5 mm |
 | `wood_wall_roof_top_67`, `ashwood_wall_cross_67` | 0.235-0.238 m | 2.5-2.8 cm into the rear of the closed leaves |
 | `wood_wall_log`, `wood_wall_log_4x0.5` | 0.25 m | 4 cm in |
 | `stave_deco_wall_2x2`, `stave_wall_2x2` and the stave crosses, `stake_wall`, `piece_dvergr_stake_wall`, `piece_dvergr_wood_wall` | 0.275-0.647 m | in |
 | `stone_wall_1x1`, `stone_wall_2x1`, `stone_wall_4x2`: 1.0 m deep, **bottom snaps on its two faces (z ±0.5)** | 0 or 1.0 m | snapped to the rear corners it stands **wholly behind** the module (clear) or **wholly over its rear metre** (in the header and the leaves) |
+| `piece_stakewall_blackwood`: bottom snaps at z -0.085 and 0.38, colliders to z -2.97 | up to 2.97 m | not a wall that stands on a floor edge; in or clear by its facing |
 
 A wall that reaches in front of z 0.79 overlaps the closed leaves' rear edge. Their bottom rear edge is the rear-most
 point of the sweep, at about y 1.33. Section 4's leaf runtime will therefore find the leaves' first open pose occupied,
@@ -283,7 +284,9 @@ Done: slice 1 (model, PR #534) and slice 2 (piece adapter, this record's section
 
 None of these has been observed. Slice 2 registers the pieces behind the setting; nothing has been placed in game. Slice 2
 adds these rows: the hammer icons; the frame meshes' faces, shading and texture scale; the hinge marks on the ghost;
-the leaves staying shut on Use with the setting on; and a wall from section 2a's table on the rear edge. Placement in a wood floor and beside stone
+the leaves staying shut on Use with the setting on; a wall from section 2a's table on the rear edge; and a ladder
+aimed at a cellar door, which the ladder snap treats as an ordinary floor (its corner snaps) until the ladder slice, so
+it may hang from or stand at the frame's outer edge. Placement in a wood floor and beside stone
 flooring, against a wood wall and a stone wall on the rear edge, every family; the ghost showing the high and low
 ends and the hinge sides at every rotation; snaps not sinking the threshold or leaving floating edges; standing on the
 closed leaves; Use from outside, from inside the entrance and from the ladder, keyboard and controller, remapped;

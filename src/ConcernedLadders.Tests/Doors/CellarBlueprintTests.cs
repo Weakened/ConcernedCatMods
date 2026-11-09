@@ -33,7 +33,11 @@ public sealed class CellarBlueprintTests
         Assert.Single(Regex.Matches(plugin, @"new\s+CellarDoorPieceRegistration\s*\("));
         Assert.Matches(new Regex(@"if\s*\(\s*_cellarDoorsEnabled\s*\.\s*Value\s*\)\s*\{\s*_cellarDoors\s*=\s*new\s+CellarDoorPieceRegistration\s*\([^;]*\)\s*;\s*try\s*\{\s*_cellarDoors\s*\.\s*Install\s*\(\s*\)\s*;\s*\}\s*catch"), plugin);
         Assert.Single(Regex.Matches(plugin, @"_cellarDoors\s*\.\s*Install\s*\("));
-        Assert.Matches(new Regex(@"_cellarDoors\s*\?\s*\.\s*Dispose\s*\(\s*\)\s*;"), plugin);
+        // Torn down in OnDestroy, after the trapdoors; the install-failure path disposes its own instance.
+        Assert.Single(Regex.Matches(plugin, @"_cellarDoors\s*\?\s*\.\s*Dispose\s*\(\s*\)\s*;"));
+        Assert.Matches(new Regex(@"private\s+void\s+OnDestroy\s*\(\s*\)[^}]*?(\{[^{}]*\}[^{}]*?)*_trapdoors\s*=\s*null\s*;\s*_cellarDoors\s*\?\s*\.\s*Dispose\s*\(\s*\)\s*;\s*_cellarDoors\s*=\s*null\s*;", RegexOptions.Singleline), plugin);
+        // The trapdoors' install-failure path touches only the trapdoors.
+        Assert.Matches(new Regex(@"try\s*\{\s*_trapdoors\s*\.\s*Dispose\s*\(\s*\)\s*;\s*\}\s*catch\s*\{\s*\}\s*_trapdoors\s*=\s*null\s*;\s*\}\s*\}"), plugin);
         // Its own switch: the cellar-door branch never reads the trapdoor setting.
         Assert.DoesNotMatch(new Regex(@"_trapdoorsEnabled[^;]*CellarDoorPieceRegistration"), plugin);
 
@@ -141,6 +145,12 @@ public sealed class CellarBlueprintTests
     public void TheFrameCollidersAreStaticConvexMeshesOfTheVisualsOwnMesh()
     {
         string adapter = Code(Source(Adapter));
+        // Each leaf pivot gets its kinematic body and its leaf's box collider before the clone is verified.
+        int body = Index(adapter, @"\bKinematicBody\s*\(\s*hinge\s*\)\s*;");
+        int box = Index(adapter, @"\bColliderBox\s*\(\s*hinge\s*\.\s*transform\s*,\s*box\s*\.\s*Name\s*,");
+        int verify = Index(adapter, @"\bVerify\s*\(\s*prefab\s*,\s*wear\s*\)\s*;");
+        Assert.True(body < verify && box < verify, "The leaves' bodies and colliders must be on the clone before it is verified.");
+        Assert.Matches(new Regex(@"collider\s*\.\s*attachedRigidbody\s*!=\s*null"), adapter);
         Assert.Matches(new Regex(@"collider\s*\.\s*convex\s*=\s*true\s*;\s*collider\s*\.\s*sharedMesh\s*=\s*FrameMesh\s*\(\s*shape\s*\)\s*;"), adapter);
         Assert.Matches(new Regex(@"AddComponent\s*<\s*MeshFilter\s*>\s*\(\s*\)\s*\.\s*sharedMesh\s*=\s*FrameMesh\s*\(\s*shape\s*\)\s*;"), adapter);
         Assert.Matches(new Regex(@"!\s*collider\s*\.\s*convex"), adapter);

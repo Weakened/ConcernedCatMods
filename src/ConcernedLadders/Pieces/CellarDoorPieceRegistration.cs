@@ -205,7 +205,7 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
         {
             Transform? holder = prefab.transform.Find(shape.Name);
             MeshCollider? collider = holder != null ? holder.GetComponent<MeshCollider>() : null;
-            if (collider == null || !collider.convex || collider.sharedMesh == null || collider.isTrigger || holder!.GetComponent<Rigidbody>() != null)
+            if (collider == null || !collider.convex || collider.sharedMesh == null || collider.isTrigger || collider.attachedRigidbody != null)
                 throw new InvalidOperationException("The frame collider " + shape.Name + " is missing or not a static convex mesh.");
         }
 

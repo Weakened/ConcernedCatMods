@@ -65,8 +65,6 @@ public sealed class Plugin : BaseUnityPlugin
                 Logger.LogError("Trapdoors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
                 try { _trapdoors.Dispose(); } catch { /* Unsubscribe only. */ }
                 _trapdoors = null;
-        _cellarDoors?.Dispose();
-        _cellarDoors = null;
             }
         }
         // Sloped cellar doors (CL-005 #486), unfinished and off by default, their own switch: with it off nothing is
