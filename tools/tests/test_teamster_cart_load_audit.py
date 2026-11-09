@@ -49,6 +49,7 @@ SETTINGS = os.path.join(TEAMSTER, "TeamsterSettings.cs")
 COMMAND = os.path.join(WORKERS, "CollectConsoleCommand.cs")
 
 RULE = "check_teamster_cart_load_moves_only_into_the_assigned_cart"
+NPC_BODY_RULE = "check_npc_consumer_bodies_come_from_the_gated_build"
 TABLE = "TEAMSTER_AUTHORIZED_PORTS = {"
 RELAX = (r'''TEAMSTER_CART_LOAD_PORT_CALLS = tuple((token, re.compile(r"\.\s*" + re.escape(token.strip(".(")) + r"\s*\("), what)'''
          r''' for token, _pattern, what in TEAMSTER_CART_LOAD_PORT_CALLS)''' + "\n")
@@ -86,15 +87,19 @@ class CartLoadIsNarrow(unittest.TestCase):
         with open(path, "wb") as handle:
             handle.write(text.replace(old, new, 1).encode("utf-8"))
 
-    def without_the_cart_load_rules(self):
+    def without_the_cart_load_rules(self, also=()):
         """The validator with the cart-load audit unregistered and the cart-load
-        port's pinned calls relaxed to their bare tokens."""
+        port's pinned calls relaxed to their bare tokens. `also` names further
+        rules to unregister, for a plant that a later, wider rule refuses as well:
+        the plant must still prove the cart-load rules on their own."""
         with open(VALIDATOR, encoding="utf-8") as handle:
             source = handle.read()
-        registration = "    report.extend(" + RULE + "(errors))\n"
-        self.assertEqual(1, source.count(registration), "the rule is not registered exactly once")
+        for rule in (RULE,) + tuple(also):
+            registration = "    report.extend(" + rule + "(errors))\n"
+            self.assertEqual(1, source.count(registration), rule + " is not registered exactly once")
+            source = source.replace(registration, "")
         self.assertEqual(1, source.count(TABLE), "the pinned-call table moved")
-        source = source.replace(registration, "").replace(TABLE, RELAX + TABLE)
+        source = source.replace(TABLE, RELAX + TABLE)
         path = os.path.join(ROOT, "tools", "_zz_without_cart_load_rules.py")
         self.assertFalse(os.path.exists(path), "a previous copy was left behind")
         self._planted.append(path)
@@ -102,22 +107,22 @@ class CartLoadIsNarrow(unittest.TestCase):
             handle.write(source)
         return path
 
-    def assert_refused(self, why, phrase):
+    def assert_refused(self, why, phrase, also=()):
         # The success line carries each audit's label too, so the phrase is
         # looked for only on a line the validator printed as an ERROR.
         code, out = run(VALIDATOR)
         self.assertNotEqual(0, code, why + "\n" + out[-3000:])
         refusals = [line for line in out.splitlines() if line.startswith("ERROR: ") and phrase in line]
         self.assertTrue(refusals, why + ": refused, but not by the cart-load rules\n" + out[-3000:])
-        code, out = run(self.without_the_cart_load_rules())
+        code, out = run(self.without_the_cart_load_rules(also))
         self.assertEqual(0, code, why + ": without the cart-load rules something else still refuses it, so the "
                          "plant does not prove them\n" + out[-3000:])
 
     def assert_pin_refused(self, why):
         self.assert_refused(why, "Adapters/Workers/GunnarCartLoadPort.cs")
 
-    def assert_audit_refused(self, why):
-        self.assert_refused(why, "#381 cart-load audit")
+    def assert_audit_refused(self, why, also=()):
+        self.assert_refused(why, "#381 cart-load audit", also)
 
     # --- the three pinned calls -----------------------------------------------------------------
 
@@ -260,7 +265,9 @@ class CartLoadIsNarrow(unittest.TestCase):
     def test_an_instantiate_is_refused(self):
         self.swap_in(PORT, "        int remaining = units;\n",
                      "        int remaining = units;\n        var made = UnityEngine.Object.Instantiate(_matching[0].m_dropPrefab);\n")
-        self.assert_audit_refused("an Instantiate in the cart-load port passed")
+        # #372's body factory audit refuses every Instantiate in a Concerned NPC
+        # consumer too, so it is set aside here: the cart-load rules must refuse this alone.
+        self.assert_audit_refused("an Instantiate in the cart-load port passed", also=(NPC_BODY_RULE,))
 
     # --- the cart is the assigned one, and it is only loaded --------------------------------------
 
