@@ -116,8 +116,8 @@ by `Quaternion.Euler(0, 0, angle)`; the leaf box lies inboard of and below the p
 - **One progress for both leaves.** The leaves reuse `HatchMotion` unchanged (same ease, same donor swing time, same
   5° checked sub-steps, same settle on load), which is valid because the open angle is the trapdoor's 90° (tested).
   `CellarPairOccupancy` makes the pair's pose occupied when either leaf's is, so **a leaf that meets something holds
-  both** at the last pose clear for both, and the pair resumes together once clear (tested opening and closing, with
-  each leaf blocked in turn). The leaves therefore can never be at different angles on any client: one open while the other is shut, or
+  both** at the last pose clear for both, and the pair resumes together once clear (tested opening and
+  closing, with each leaf blocked in turn). The leaves therefore can never be at different angles on any client: one open while the other is shut, or
   visuals open while collision is shut, cannot arise, because both visuals and colliders of both leaves come from the
   one progress.
 - **Obstruction policy** is the trapdoor's: the leaves never move into a character, a dynamic body or another piece;
@@ -202,9 +202,9 @@ grid, so:
    ghost; corner snaps; localization from `CellarDoors.English()`; icons; README row and changelog.
 2. **Leaf runtime**: the trapdoor lid's runtime generalised to drive two pivots from one progress through
    `CellarPairOccupancy`, with one skinned overlap per leaf per checked pose (at most 64 a frame at the 32 sub-step
-   cap). Each leaf's query must ignore the piece's own frame and the other leaf by exclusion, not by clearance: a few
-   degrees open, a leaf comes within 5.7 mm of the centre line, inside the 1 cm skin of a query that counted the
-   other leaf. The adapter slice also reads native wall depths, so the 0.4 m rear-wall limit (section 2a) is checked
+   cap). Each leaf's query must ignore the piece's own frame and the other leaf by collider identity rather than by
+   relying on clearance: a few degrees open each leaf comes within 2.8 mm of the centre line, so the two leaves pass
+   within 5.7 mm of each other, and the frame gaps are 0.01 m, all at or below the query's skin. The adapter slice also reads native wall depths, so the 0.4 m rear-wall limit (section 2a) is checked
    against the stone walls.
 3. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing.
 4. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
