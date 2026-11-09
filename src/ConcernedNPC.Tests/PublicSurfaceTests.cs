@@ -143,8 +143,14 @@ public class PublicSurfaceTests
     /// write. Members too: the built prefab, the eager build, the identity
     /// stamp, the network view and the tally's own constructors, each because
     /// handing it over would let a caller reach past a rule the type exists to
-    /// keep. The custody ledger and transfer executor remain internal; only the
-    /// immutable material values carried by a durable plan cross the boundary.
+    /// keep. Of the custody area, only the immutable material values carried by
+    /// a durable plan and - since #376's first adoption, Concerned Teamster's
+    /// collection account - the conservation ledger with its places, outcomes and
+    /// holdings cross the boundary; of the ledger itself, only opening a job,
+    /// recording an acquisition, recording a movement the role measured, and the
+    /// read-only views. The transfer executor, the journal seam, the inventory
+    /// ports, the marker-rule standings, resolution, reconciliation and the
+    /// material reservation book stay internal until a role adopts them.
     /// Of <c>Storage/</c>, everything bar the desk and the four types above -
     /// the place, the gate, the sighting, the assignment and the book. And the sequencing itself - the snapshot
     /// builder, the tour planner, the tour plan, the partitioner, the source
@@ -193,6 +199,11 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess",
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal",
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcHolding",
         "TheConcernedCat.ConcernedNPC.Custody.NpcMaterial",
         "TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack",
         "TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy",

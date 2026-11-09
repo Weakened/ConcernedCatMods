@@ -2,7 +2,7 @@
 
 ## 0.5.0
 
-Nine additive changes share this version:
+Ten additive changes share this version:
 * a worker can rest as a presentation figure (#295, #298, Concerned Foreman's Thorstein);
 * a job can say that doing a target leaves the NPC carrying something (#381, Concerned Teamster's Gunnar);
 * that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and Gunnar share it;
@@ -12,7 +12,24 @@ Nine additive changes share this version:
 * a presentation figure can be talked to with the use key (#295 S3);
 * a presentation figure can sit on the ground (#295 S5);
 * a role can keep a camp and ask where it is, through a public facade (#461, #295 S5);
-* a role whose worker prefab predates the factory spawns it through the factory's gated build (#372).
+* a role whose worker prefab predates the factory spawns it through the factory's gated build (#372);
+* a role can keep its material in the library's conservation ledger and record what it measured moving (#376,
+  Concerned Teamster's Gunnar).
+
+### A role keeps its material in the library's conservation ledger (#376)
+
+* `NpcCustodyLedger` is public, with `NpcCustodyLocation`, `NpcCustodyPlace`, `NpcCustodyOutcome` and `NpcHolding`.
+  A role may open a job, record an acquisition, record a movement it carried out and measured itself
+  (`RecordMeasuredMove`, new), and read where every unit is. A measured move is not written to any journal. The executor, its journal seam, the marker-rule
+  standings, resolution, reconciliation and the material reservation book stay internal.
+* `RecordMeasuredMove` refuses rather than clamps, records nothing when it refuses, and never moves material out of a
+  terminal place, onto the ground, while the job has a transfer waiting on a person, or across two loads. A name is
+  one movement whichever path recorded it.
+* `NpcCustodyPlace.Released` is new: material the game itself put back into the world - a destroyed cart's spill, a
+  death drop. Terminal; the job never takes it up again.
+* `NpcCustodyOutcome` gains `Unspecified` as its zero, so a defaulted answer never reads as `Applied`. It was internal
+  until now and nothing persists it.
+* Nothing is read or written on disk. Concerned Teamster's collection account adopts it in the same change.
 
 ### A role's own worker prefab is built through the gated build (#372)
 
