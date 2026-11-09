@@ -144,7 +144,11 @@ and never both. The rule is CLAUDE.md's, and three things enforce it:
    is built only after its lease is granted and is taken down before anything
    that could release that lease. `cf_worker spawn` hands over in this order:
    figure down, figure lease released, worker lease claimed, body created where
-   the figure stood. `cf_worker despawn`, which still refuses while he holds
+   the figure stood, by Concerned NPC's gated build under that lease (#372). It
+   is refused while an order holds him, even a paused one: only the holding
+   order may have a body then, so the order is cancelled first (a lead default
+   pending owner confirmation; `CUSTODY_AND_RECOVERY.md` §10 gives the
+   write-off sequence this changes). `cf_worker despawn`, which still refuses while he holds
    anything, releases the worker lease, and the figure may return.
 
 **What the figure is.** It is the game's own character, extracted dark by

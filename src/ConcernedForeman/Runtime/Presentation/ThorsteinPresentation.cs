@@ -8,6 +8,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Collection;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.ConcernedForeman.Domain.Presentation;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedNPC.Body.Dressing;
 using TheConcernedCat.ConcernedNPC.Body.Keepsakes;
@@ -181,25 +182,45 @@ internal sealed class ThorsteinPresentation
     /// <summary>The hand-over an order makes before his worker body is created
     /// (<c>cf_worker spawn</c>). The figure is taken down first, then its lease
     /// is given up, then the worker lease is asked for. <paramref name="at"/> is
-    /// where the figure stood, so the worker body can appear where he was.</summary>
-    internal bool TakeWorkerBody(out Vector3? at, out string refusal)
+    /// where the figure stood, so the worker body can appear where he was.
+    /// <paramref name="lease"/> is the worker lease the body is created under
+    /// (#372), and is null exactly when this returns false.
+    ///
+    /// <b>While an order holds him, this refuses.</b> The arbiter grants a body
+    /// then only to the holding job, and this runtime is not that job. Before
+    /// #372 that case created a body with no lease at all; now a body needs one.
+    /// Borrowing the job's name for the build is not a way round it: giving that
+    /// lease back afterwards releases the job's mode with it, and keeping it
+    /// leaves a hold nothing here could release, so his figure could never come
+    /// back. Refusing is the smallest choice that creates no body without
+    /// permission: cancelling the order lets the next spawn go through. In
+    /// practice the order holding him here has no body to finish with (one
+    /// with a body is refused earlier, for that body), so cancelling is the
+    /// only advice worth giving. A cancel leaves what the record holds on him in
+    /// place, so the WorkerBodyLost write-off still works after the spawn
+    /// (CUSTODY_AND_RECOVERY.md §10).</summary>
+    internal bool TakeWorkerBody(out Vector3? at, out BodyLease? lease, out string refusal)
     {
         at = _figure != null ? _figure.transform.position : (Vector3?)null;
         TakeDown();
         bool granted = _bodies.TryTakeWorker(out refusal);
         _censusDue = true;
+        lease = granted ? _bodies.WorkerLease : null;
         if (!granted && _npc.IsRegistered && !_npc.Modes.MayRetireBody)
         {
-            // A job holds him, so only that job may claim a body - and for as
-            // long as it holds him the arbiter refuses a figure to everybody.
-            // There is no figure to hand over from and none can appear, so the
-            // body may be created without this runtime's lease. The next pass
-            // finds the body and takes the lease once he is resting again.
-            refusal = string.Empty;
-            return true;
+            refusal = "an order ('" + (_npc.Modes.JobId ?? "unnamed") + "') holds him, and only that order may "
+                + "be given a body; cancel it first (a paused order still holds him; what he carried stays in the "
+                + "record, so it can still be written off after the spawn)";
+            return false;
         }
 
-        return granted;
+        if (lease == null)
+        {
+            refusal = refusal.Length == 0 ? "no worker lease is held" : refusal;
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>The worker body was not created, or has gone: give up its lease.

@@ -1,7 +1,10 @@
 using System;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedForeman.Domain.Npc;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
+using TheConcernedCat.ConcernedNPC.Bodies;
+using TheConcernedCat.ConcernedNPC.Body;
 using UnityEngine;
 using TheConcernedCat.Diagnostics;
 
@@ -209,25 +212,26 @@ internal static class ForemanWorkerPrefab
         return true;
     }
 
-    /// <summary>Spawns one worker. The caller is responsible for having
-    /// established authority and stamping its identity; this refuses anyway if
-    /// the ground is not loaded, because a creature spawned into unloaded ground
-    /// is a creature nobody owns.</summary>
-    internal static ForemanWorkerAI? Spawn(Vector3 position, Quaternion rotation)
+    /// <summary>Spawns one worker through Concerned NPC's gated build (#372),
+    /// and is the only way this product creates a body.
+    ///
+    /// The prefab is still built here, from the same base creature, with the
+    /// same components and under the same name, and registered at the same
+    /// moment; saved bodies load exactly as before. What moved is the
+    /// instantiation: the library requires <paramref name="lease"/>, re-asks
+    /// whether it is still held immediately before the body is created, counts
+    /// Thorstein's saved bodies itself, refuses unloaded ground, and stamps
+    /// <paramref name="key"/> onto the new object in the same call - destroying
+    /// it again if that write fails, so an identity-less stranger is never left
+    /// standing. <c>tools/validate_repo.py</c> refuses the engine's own
+    /// instantiation anywhere in this product.</summary>
+    internal static ForemanWorkerAI? Spawn(
+        BodyLease? lease, Vector3 position, Quaternion rotation, string key, out string failure)
     {
-        if (_prefab == null)
-        {
-            return null;
-        }
-
-        ZoneSystem zones = ZoneSystem.instance;
-        if (zones == null || !zones.IsZoneLoaded(position))
-        {
-            return null;
-        }
-
-        GameObject instance = UnityEngine.Object.Instantiate(_prefab, position, rotation);
-        return instance.GetComponent<ForemanWorkerAI>();
+        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(
+            lease, ForemanNpcRole.Contract, _prefab, position, rotation,
+            body => WorkerBody.TryStamp(body, key), out failure);
+        return instance == null ? null : instance.GetComponent<ForemanWorkerAI>();
     }
 
     private static string? DescribeMissingComponents(GameObject clone)

@@ -58,7 +58,33 @@ public sealed class ThorsteinHandOverOrderTests
     public void SpawnAsksForTheHandOverBeforeTheBodyIsCreated()
     {
         string body = Method(Settlement, "private string Spawn(");
-        AssertBefore(body, "handOver(out Vector3? standing, out string refusal)", "ForemanWorkerPrefab.Spawn(position");
+        AssertBefore(
+            body,
+            "handOver(out Vector3? standing, out BodyLease? lease, out string refusal)",
+            "ForemanWorkerPrefab.Spawn(lease, position");
+    }
+
+    [Fact]
+    public void SpawnHasNoPathToABodyWithoutAHandOver()
+    {
+        // #372: no hand-over means no lease, and the library refuses a body
+        // without one - but the refusal is also written here, so a runtime that
+        // stopped wiring the hand-over says why rather than failing quietly.
+        string body = Method(Settlement, "private string Spawn(");
+        Assert.Matches(new Regex(@"if\s*\(\s*handOver\s*==\s*null\s*\)\s*\{\s*return\s", RegexOptions.Singleline), body);
+        AssertBefore(body, "handOver == null", "ForemanWorkerPrefab.Spawn(lease, position");
+    }
+
+    [Fact]
+    public void ThePresentationHandsBackTheLeaseItWasGranted()
+    {
+        string body = Method(Runtime, "internal bool TakeWorkerBody(");
+        AssertBefore(body, "_bodies.TryTakeWorker(", "lease = granted ? _bodies.WorkerLease : null;");
+        // While an order holds him there is no lease this runtime may show, so
+        // the hand-over refuses rather than letting a body be built without one.
+        Assert.Matches(new Regex(
+            @"if\s*\(\s*!granted\s*&&\s*_npc\.IsRegistered\s*&&\s*!_npc\.Modes\.MayRetireBody\s*\)\s*\{[^}]*return\s+false\s*;",
+            RegexOptions.Singleline), body);
     }
 
     [Fact]

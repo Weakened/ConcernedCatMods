@@ -803,3 +803,27 @@ presentation figure that is **set down** at a spot and never walks.
   may rest in that room. Hulgi, who walks, stays out of such a house, because he would have to come in through the
   door. A figure that is only set down at a spot never passes the door. If the owner wants the stricter reading,
   the bound becomes "never indoors behind a door" and the fallback is to stand outside.
+
+## Lead default pending owner confirmation (2026-11-08): no worker body while an order holds him (#372)
+
+Not numbered on purpose, for the same reason as the section above. It grants no world authority; it narrows one.
+Before #372, `cf_worker spawn` created Thorstein's worker body with **no lease at all** whenever an order held his
+mode (the arbiter grants a body then only to the holding job, and the settlement runtime is not that job). #372 has
+every consumer body built by Concerned NPC's gated build under a worker lease, so that branch now refuses instead.
+
+- **The default.** While any order holds him, including a paused one and an order taken up again after a load,
+  `cf_worker spawn` is refused and says to cancel the order first. No body is created.
+- **Why not borrow the order's name.** Building under the job's lease and giving it back afterwards releases the
+  job's mode with it; keeping it leaves a hold nothing in the settlement runtime could release, so his figure could
+  never return. Both were rejected; refusing is the smallest choice that creates no body without permission.
+- **What it changes for the player.** The `WorkerBodyLost` write-off (`docs/mods/concerned-foreman/CUSTODY_AND_RECOVERY.md`
+  §10, row L12) used to spawn first. It now runs `cf_collect cancel`, `cf_worker spawn`, `cf_settle reconcile`,
+  `cf_settle resolve <order> lost`. Established from source and tested: a cancel is a transition row only and keeps
+  what the record holds on him; `resolve <order> lost` accepts a cancelled order, and the loss survives a restart
+  (`FaultInjectionTests.AnOrderStoppedForALostBodyCanBeCancelledAndItsMaterialStillWrittenOff`,
+  `CollectionRecoveryTests.AnOrderStoppedForAMissingBodyHoldsHimUntilCancelledAndThenLetsGo`,
+  `ThorsteinBodyTests.AnOrderStoppedForAMissingBodyRefusesTheLeaseUntilItIsCancelled`).
+- **The open question for the owner.** If the owner would rather keep the order alive through a lost-body
+  recovery, the alternative is a spawn granted under that order's own lease without ending its mode. It was not
+  built, because cancelling already reaches the same write-off and loses nothing the record holds.
+- Not observed in game: OWNER GO-AROUND PENDING (L12).
