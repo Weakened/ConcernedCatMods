@@ -20,9 +20,9 @@ Not published. In progress on `main`; 1.0.0 is the latest published build.
   nine pieces exist behind a new setting, `CellarDoors` / `Enabled`, which is
   off by default: with it off this build adds nothing to the hammer menu. With
   it on, both leaves open and close together with the door's own Use, over
-  the matching door's swing time, and wait instead of moving into anyone or
-  anything on or under them. Ladders do not work with cellar doors yet. None
-  of it has been tried in game, so leave it off.
+  the matching door's swing time, and wait instead of moving into a player, a
+  creature, an item, a cart or another building piece. Ladders do not work
+  with cellar doors yet. None of it has been tried in game, so leave it off.
 
 ## 1.0.0
 

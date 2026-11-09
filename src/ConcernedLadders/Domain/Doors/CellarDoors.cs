@@ -17,7 +17,8 @@ internal static class CellarDoorSettings
 
     internal const string Description =
         "UNFINISHED (CL-005): adds the nine sloped cellar doors to the hammer's Building tab, none of it yet tested in game. " +
-        "Both leaves open and close together with the door's Use and wait instead of moving into anyone or anything. " +
+        "Both leaves open and close together with the door's Use, and wait instead of moving into a player, a creature, " +
+        "an item, a cart or another building piece. " +
         "Ladders do not work with them yet and treat them as ordinary pieces. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed cellar door the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +

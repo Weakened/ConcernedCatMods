@@ -71,45 +71,48 @@ public sealed class CellarLeavesTests
     }
 
     [Theory]
-    [InlineData(0.275f)]
-    [InlineData(0.4f)]
-    public void AWallReachingIntoEveryPoseOnTheRearEdgeHoldsTheCoverShut(float reach)
+    [InlineData(0.235f, false)]
+    [InlineData(0.235f, true)]
+    [InlineData(0.24f, false)]
+    [InlineData(0.24f, true)]
+    [InlineData(0.25f, false)]
+    [InlineData(0.25f, true)]
+    [InlineData(0.275f, false)]
+    [InlineData(0.275f, true)]
+    [InlineData(0.4f, false)]
+    [InlineData(0.4f, true)]
+    public void AWallReachingIntoTheClosedLeavesOnTheRearEdgeHoldsTheCoverShutWhateverItsStoredState(float reach, bool storedOpen)
     {
-        // A stave or stake wall centred on the rear grid edge (section 2a's table): it reaches past every pose of the
-        // leaves' rear end, so no pose is clear. The cover settles at its stored closed end and never opens.
+        // Section 2a's walls that reach past the closed leaves' rear edge (z 0.79): the roof-top 67 and ashwood cross
+        // walls, the log walls, and the stave, stake and dvergr walls. Some are in the closed pose only (the open leaves
+        // reach back only to z 0.763), some in every pose. Either way the first pose is closed (lead default 15), even
+        // after a Use stored the door open, and no later frame opens it: fail-closed, never part open while the wall
+        // stands. HatchMotion.Settle alone would load the shallower walls open, which is what CellarSettle exists for.
+        // (Stored open means a Use asked for open while the wall held the cover; the world was then saved.)
         Obstacle wall = RearWall(reach);
-        Assert.Equal(0f, HatchMotion.Settle(false, Pair(wall)));
+        Assert.Equal(0f, Settle(wall, storedOpen));
         Assert.Equal(0f, Run(wall, open: true, from: 0f));
-        Assert.DoesNotContain(wall.Asked, pose => !pose.Occupied);
+        Assert.Contains(wall.Asked, pose => pose.Angle == 0f && pose.Occupied);
     }
 
-    [Theory]
-    [InlineData(0.235f)]
-    [InlineData(0.24f)]
-    public void AWallReachingIntoTheClosedLeavesButNotTheOpenOnesLoadsAClosedCoverOpen(float reach)
+    [Fact]
+    public void WithoutTheFixedObstructionRuleTheShallowerWallsWouldLoadACoverOpen()
     {
-        // The roof-top 67 and ashwood cross walls (0.235-0.238 m): the closed leaves' rear edge reaches z 0.79, the open
-        // leaves' only z 0.763, so the wall is in the closed pose but not the open one. HatchMotion's first-pose rule,
-        // reused unchanged, then takes the clear open end (as it would for someone standing in the entrance), and the
-        // leaves close only until they meet the wall: part open on this client while the native state says closed
-        // (CELLAR_DOORS.md section 8, item 15, an owner question).
-        Obstacle wall = RearWall(reach);
-        float settled = HatchMotion.Settle(false, Pair(wall));
-        Assert.Equal(1f, settled);
-        float closing = Run(wall, open: false, from: settled);
-        Assert.InRange(HatchMotion.Angle(closing), 30f, CellarGeometry.OpenAngleDegrees);
-        Assert.False(HatchMotion.IsLanding(closing, false));
-        Assert.All(wall.Asked.Where(pose => pose.Occupied), pose => Assert.True(pose.Angle < HatchMotion.Angle(closing)));
-        // Asked to open from closed in session, it never moves.
-        Assert.Equal(0f, Run(RearWall(reach), open: true, from: 0f));
+        // Why CellarSettle is needed: the trapdoor's first-pose rule takes the clear open end for these walls.
+        Assert.Equal(1f, HatchMotion.Settle(false, Pair(RearWall(0.235f))));
+        Assert.Equal(1f, HatchMotion.Settle(true, Pair(RearWall(0.24f))));
     }
 
     [Theory]
     [InlineData(0.05f)]
     [InlineData(0.2f)]
+    [InlineData(0.209f)]
     public void AWallWithinTheHeaderOnTheRearEdgeLeavesTheCoverFreeToOpenAndClose(float reach)
     {
+        // Up to the roof-top and beam walls (0.205-0.209 m): never in a pose.
         Obstacle wall = RearWall(reach);
+        Assert.Equal(0f, Settle(wall, false));
+        Assert.Equal(1f, Settle(wall, true));
         float opened = Run(wall, open: true, from: 0f);
         Assert.True(HatchMotion.IsPassage(opened, true));
         Assert.True(HatchMotion.IsLanding(Run(wall, open: false, from: opened), false));
@@ -125,12 +128,88 @@ public sealed class CellarLeavesTests
         float v = CellarGeometry.LeafStartV + CellarGeometry.LeafLength / 2f;
         ClimbPoint centre = CellarGeometry.ToPiece(0.4f, 0f, v);
         float bottom = CellarGeometry.TopAt(centre.Z + 0.15f);
-        var feet = new Obstacle(new ClimbPoint(0.25f, bottom, centre.Z - 0.15f), new ClimbPoint(0.55f, bottom + 1.8f, centre.Z + 0.15f));
-        Assert.Equal(0f, HatchMotion.Settle(false, Pair(feet)));
+        var feet = new Obstacle(new ClimbPoint(0.25f, bottom, centre.Z - 0.15f), new ClimbPoint(0.55f, bottom + 1.8f, centre.Z + 0.15f), mover: true);
+        Assert.Equal(0f, Settle(feet, false));
         float held = Run(feet, open: true, from: 0f);
         Assert.InRange(HatchMotion.Angle(held), 0f, HatchMotion.MaximumAngleStepDegrees);
         Assert.False(HatchMotion.IsPassage(held, true));
         Assert.Contains(feet.Asked, pose => pose.Occupied);
+    }
+
+    [Fact]
+    public void SomeoneInTheEntranceUnderAClosedCoverAtLoadIsNeverPutUnderTheClosedLeaves()
+    {
+        // A climber's head and shoulders in the opening, up into where the closed right leaf lies: the closed pose is
+        // occupied by a mover, so the first pose is the trapdoor's (the clear open end), and the cover shuts once they
+        // have gone.
+        ClimbPoint under = CellarGeometry.ToPiece(0.4f, -0.03f, CellarGeometry.LeafStartV + CellarGeometry.LeafLength / 2f);
+        var head = new Obstacle(new ClimbPoint(0.2f, under.Y - 1.6f, under.Z - 0.2f), new ClimbPoint(0.6f, under.Y + 0.02f, under.Z + 0.2f), mover: true);
+        float settled = Settle(head, false);
+        Assert.Equal(1f, settled);
+        Assert.Equal(HatchMotion.Settle(false, Pair(head)), settled);
+        var gone = new Obstacle(new ClimbPoint(5f, 5f, 5f), new ClimbPoint(6f, 6f, 6f), mover: true);
+        Assert.True(HatchMotion.IsLanding(Run(gone, open: false, from: settled), false));
+    }
+
+    // ---- The first-pose rule, by script ------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AClearCoverTakesItsStoredEndAndAsksOnlyAboutTheClosedPoseAndThatEnd(bool open)
+    {
+        var all = new Scripted(_ => false);
+        var movers = new Scripted(_ => throw new InvalidOperationException("Not asked when the closed pose is clear."));
+        Assert.Equal(open ? 1f : 0f, CellarSettle.First(open, all, movers));
+        // The closed pose, then the trapdoor's own first question, the stored end.
+        Assert.Equal(new[] { 0f, open ? HatchMotion.Angle(1f) : 0f }, all.Asked);
+    }
+
+    [Fact]
+    public void AStoredOpenCoverWithAFixedThingOnlyInTheClosedPoseLoadsShut()
+    {
+        // A Use asked it to open while a wall held it shut, and the world was saved: the open pose is clear, but the
+        // cover loads shut, because it could never close again past the wall.
+        var all = new Scripted(angle => angle < 30f);
+        var movers = new Scripted(_ => false);
+        Assert.Equal(0f, CellarSettle.First(true, all, movers));
+        Assert.Equal(1f, HatchMotion.Settle(true, new Scripted(angle => angle < 30f)));
+    }
+
+    [Fact]
+    public void AStoredOpenCoverWhoseOpenPoseIsOccupiedFallsBackToTheTrapdoorsRule()
+    {
+        // The closed pose clear, something where the open leaves stand: the trapdoor's other-end rule, closed.
+        Func<float, bool> rule = angle => angle > 60f;
+        Assert.Equal(HatchMotion.Settle(true, new Scripted(rule)), CellarSettle.First(true, new Scripted(rule), new Scripted(rule)));
+        Assert.Equal(0f, CellarSettle.First(true, new Scripted(rule), new Scripted(rule)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AStoredEndHeldOnlyByFixedThingsSettlesClosed(bool open)
+    {
+        // Everything is occupied for the full probe (a wall in every pose), nothing for the movers' probe.
+        var all = new Scripted(_ => true);
+        var movers = new Scripted(_ => false);
+        Assert.Equal(0f, CellarSettle.First(open, all, movers));
+        Assert.Equal(new[] { 0f }, all.Asked);
+        Assert.Equal(new[] { 0f }, movers.Asked);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SomeoneInTheClosedPoseFallsBackToTheTrapdoorsRuleUnchanged(bool open)
+    {
+        // A mover in the closed pose only: exactly HatchMotion.Settle's answer, the open end.
+        Func<float, bool> rule = angle => angle < 30f;
+        float expected = HatchMotion.Settle(open, new Scripted(rule));
+        Assert.Equal(1f, expected);
+        Assert.Equal(expected, CellarSettle.First(open, new Scripted(rule), new Scripted(rule)));
+        // Nothing clear anywhere and a mover in the closed pose: the stored end, as the trapdoor's.
+        Assert.Equal(open ? 1f : 0f, CellarSettle.First(open, new Scripted(_ => true), new Scripted(_ => true)));
     }
 
     // ---- The Unity adapter, by source ----------------------------------------------------------------------------------
@@ -175,9 +254,29 @@ public sealed class CellarLeavesTests
         Assert.Single(Regex.Matches(leaves, @"_pair\s*=\s*new\s+CellarPairOccupancy\s*<\s*CellarLeaves\s*>\s*\(\s*this\s*\)\s*;"));
         Assert.Single(Regex.Matches(leaves, @"\b_pair\s*=(?!=)"));
         Assert.Single(Regex.Matches(leaves, @"HatchMotion\s*\.\s*Step\s*\(\s*_progress\s*,\s*open\s*,\s*Time\s*\.\s*deltaTime\s*,\s*SwingSeconds\s*,\s*_pair\s*\)"));
-        Assert.Single(Regex.Matches(leaves, @"HatchMotion\s*\.\s*Settle\s*\(\s*open\s*,\s*_pair\s*\)"));
+        Assert.Single(Regex.Matches(leaves, @"_progress\s*=\s*CellarSettle\s*\.\s*First\s*\(\s*open\s*,\s*_pair\s*,\s*_movers\s*\)\s*;"));
+        Assert.DoesNotMatch(new Regex(@"HatchMotion\s*\.\s*Settle\s*\("), leaves);
+        Assert.Single(Regex.Matches(leaves, @"_movers\s*=\s*new\s+CellarPairOccupancy\s*<\s*Movers\s*>\s*\(\s*new\s+Movers\s*\(\s*this\s*\)\s*\)\s*;"));
+        Assert.Single(Regex.Matches(leaves, @"\b_movers\s*=(?!=)"));
+        // The movers' probe is the same query counting only characters and dynamic bodies; the full one is the lid's rule.
+        Assert.Matches(new Regex(@"public\s+bool\s+Occupied\s*\(\s*CellarLeaf\s+leaf\s*,\s*float\s+angleDegrees\s*\)\s*=>\s*_leaves\s*\.\s*Query\s*\(\s*leaf\s*,\s*angleDegrees\s*,\s*true\s*\)\s*;"), leaves);
+        Assert.Matches(new Regex(@"public\s+bool\s+Occupied\s*\(\s*CellarLeaf\s+leaf\s*,\s*float\s+angleDegrees\s*\)\s*\{\s*return\s+Query\s*\(\s*leaf\s*,\s*angleDegrees\s*,\s*false\s*\)\s*;\s*\}"), leaves);
+        Assert.Equal(2, Regex.Matches(leaves, @"\bQuery\s*\(\s*leaf\s*,").Count);
+        Assert.Matches(new Regex(@"occupied\s*=\s*moversOnly\s*\?\s*Moves\s*\(\s*Overlaps\s*\[\s*index\s*\]\s*\)\s*:\s*Blocks\s*\(\s*Overlaps\s*\[\s*index\s*\]\s*\)\s*;"), leaves);
+        Assert.Matches(new Regex(@"private\s+bool\s+Moves\s*\(\s*Collider\s+collider\s*\)\s*\{\s*if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\s*\.\s*isTrigger\s*\|\|\s*IsOwn\s*\(\s*collider\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}\s*if\s*\(\s*\(\s*_characterMask\s*&\s*\(\s*1\s*<<\s*collider\s*\.\s*gameObject\s*\.\s*layer\s*\)\s*\)\s*!=\s*0\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*Rigidbody\s+body\s*=\s*collider\s*\.\s*attachedRigidbody\s*;\s*return\s+body\s*!=\s*null\s*&&\s*!\s*body\s*\.\s*isKinematic\s*;\s*\}"), leaves);
+        Assert.Matches(new Regex(@"CharacterLayers\s*=\s*\{\s*""character""\s*,\s*""character_net""\s*,\s*""character_ghost""\s*,\s*""character_noenv""\s*,\s*""hitbox""\s*\}"), leaves);
+        Assert.Matches(new Regex(@"!\s*ResolveCharacterLayers\s*\(\s*\)"), leaves);
+        // The pose composition: the pivot's own position in the slope transform, turned about its local z, and the
+        // box measured in the pivot's space at the closed pose.
+        Assert.Matches(new Regex(@"Vector3\s+centre\s*=\s*part\s*\.\s*Space\s*\.\s*TransformPoint\s*\(\s*part\s*\.\s*Local\s*\+\s*turn\s*\*\s*part\s*\.\s*BoxCentre\s*\)\s*;"), leaves);
+        Assert.Matches(new Regex(@"Quaternion\s+rotation\s*=\s*part\s*\.\s*Space\s*\.\s*rotation\s*\*\s*turn\s*\*\s*part\s*\.\s*BoxRotation\s*;"), leaves);
+        Assert.Matches(new Regex(@"Space\s*=\s*hinge\s*\.\s*parent\s*;\s*Local\s*=\s*hinge\s*\.\s*localPosition\s*;"), leaves);
+        Assert.Matches(new Regex(@"BoxCentre\s*=\s*hinge\s*\.\s*InverseTransformPoint\s*\(\s*box\s*\.\s*transform\s*\.\s*TransformPoint\s*\(\s*box\s*\.\s*center\s*\)\s*\)\s*;"), leaves);
+        Assert.Matches(new Regex(@"BoxRotation\s*=\s*Quaternion\s*\.\s*Inverse\s*\(\s*hinge\s*\.\s*rotation\s*\)\s*\*\s*box\s*\.\s*transform\s*\.\s*rotation\s*;"), leaves);
+        // Measured with the pivots closed: the identity rotations come before the pivots are measured.
+        Assert.True(Index(leaves, @"rightHinge\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity") < Index(leaves, @"_left\s*=\s*new\s+Pivot\s*\("));
         Assert.Equal(2, Regex.Matches(leaves, @"\b_progress\s*=(?!=)").Count);
-        Assert.DoesNotMatch(new Regex(@"HatchMotion\s*\.\s*(Step|Settle)\s*\([^;]*\bthis\s*\)"), leaves);
+        Assert.DoesNotMatch(new Regex(@"HatchMotion\s*\.\s*Step\s*\([^;]*\bthis\s*\)"), leaves);
 
         // One bounded, non-allocating box overlap per asked leaf, triggers ignored, a full buffer occupied, with the
         // lid's layers and blocking rule.
@@ -209,11 +308,13 @@ public sealed class CellarLeavesTests
         Assert.Matches(new Regex(@"transform\s*\.\s*Find\s*\(\s*CellarBlueprint\s*\.\s*QueryIgnores\s*\[\s*index\s*\]\s*\)"), leaves);
         Assert.Matches(new Regex(@"if\s*\(\s*collider\s*==\s*null\s*\)\s*\{\s*return\s+null\s*;\s*\}"), leaves);
         Assert.Matches(new Regex(@"\|\|\s*own\s*==\s*null\s*\|\|"), leaves);
-        // Compared by identity, before the blocking rule.
-        Assert.Matches(new Regex(@"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\s*\.\s*isTrigger\s*\|\|\s*IsOwn\s*\(\s*collider\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}"), leaves);
+        // Compared by identity, before the blocking rule, in both the full and the movers' query.
+        Assert.Equal(2, Regex.Matches(leaves, @"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\s*\.\s*isTrigger\s*\|\|\s*IsOwn\s*\(\s*collider\s*\)\s*\)\s*\{\s*return\s+false\s*;\s*\}").Count);
+        Assert.Equal(2, Regex.Matches(leaves, @"\bIsOwn\s*\(\s*collider\s*\)").Count);
         Assert.Matches(new Regex(@"if\s*\(\s*own\s*\[\s*index\s*\]\s*==\s*collider\s*\)\s*\{\s*return\s+true\s*;\s*\}"), leaves);
         // Never by hierarchy, name, tag or layer: the lid's IsChildOf test would hide anything parented under the piece.
-        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|\.\s*name\b|\.\s*tag\b|CompareTag|\.\s*layer\b|\broot\b"), Between(leaves, @"public\s+bool\s+Occupied\s*\(", null));
+        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|\.\s*name\b|\.\s*tag\b|CompareTag|\.\s*layer\b|\broot\b"), Between(leaves, @"private\s+bool\s+IsOwn\s*\(", null));
+        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|CompareTag"), leaves);
         Assert.Single(Regex.Matches(leaves, @"\b_own\s*=(?!=)"));
     }
 
@@ -275,6 +376,11 @@ public sealed class CellarLeavesTests
 
     private static CellarPairOccupancy<Obstacle> Pair(Obstacle obstacle) => new CellarPairOccupancy<Obstacle>(obstacle);
 
+    /// <summary>The runtime's first pose for this obstacle: the full probe, and the movers' probe, which sees the
+    /// obstacle only if it is a mover (a character or a dynamic body), as the runtime's <c>Moves</c> does.</summary>
+    private static float Settle(Obstacle obstacle, bool open) =>
+        CellarSettle.First(open, Pair(obstacle), new CellarPairOccupancy<MoverView>(new MoverView(obstacle)));
+
     /// <summary>A wall standing on the rear grid edge, reaching <paramref name="reach"/> toward the door, full height.</summary>
     private static Obstacle RearWall(float reach) =>
         new Obstacle(new ClimbPoint(-1.2f, 0f, CellarGeometry.HalfModule - reach), new ClimbPoint(1.2f, 3f, 1.5f));
@@ -286,20 +392,50 @@ public sealed class CellarLeavesTests
         private readonly ClimbPoint _min;
         private readonly ClimbPoint _max;
 
-        internal Obstacle(ClimbPoint min, ClimbPoint max)
+        internal Obstacle(ClimbPoint min, ClimbPoint max, bool mover = false)
         {
             _min = min;
             _max = max;
+            Mover = mover;
         }
+
+        /// <summary>A character or a dynamic body, rather than a fixed piece.</summary>
+        internal bool Mover { get; }
 
         internal List<(CellarLeaf Leaf, float Angle, bool Occupied)> Asked { get; } = new List<(CellarLeaf, float, bool)>();
 
         public bool Occupied(CellarLeaf leaf, float angleDegrees)
         {
-            bool occupied = QuerySamples(leaf, angleDegrees).Any(p =>
-                p.X > _min.X && p.X < _max.X && p.Y > _min.Y && p.Y < _max.Y && p.Z > _min.Z && p.Z < _max.Z);
+            bool occupied = Hits(leaf, angleDegrees);
             Asked.Add((leaf, angleDegrees, occupied));
             return occupied;
+        }
+
+        internal bool Hits(CellarLeaf leaf, float angleDegrees) => QuerySamples(leaf, angleDegrees).Any(p =>
+            p.X > _min.X && p.X < _max.X && p.Y > _min.Y && p.Y < _max.Y && p.Z > _min.Z && p.Z < _max.Z);
+    }
+
+    private sealed class MoverView : ICellarLeafOccupancy
+    {
+        private readonly Obstacle _obstacle;
+
+        internal MoverView(Obstacle obstacle) => _obstacle = obstacle;
+
+        public bool Occupied(CellarLeaf leaf, float angleDegrees) => _obstacle.Mover && _obstacle.Hits(leaf, angleDegrees);
+    }
+
+    private sealed class Scripted : IHatchOccupancy
+    {
+        private readonly Func<float, bool> _rule;
+
+        internal Scripted(Func<float, bool> rule) => _rule = rule;
+
+        internal List<float> Asked { get; } = new List<float>();
+
+        public bool Occupied(float angleDegrees)
+        {
+            Asked.Add(angleDegrees);
+            return _rule(angleDegrees);
         }
     }
 

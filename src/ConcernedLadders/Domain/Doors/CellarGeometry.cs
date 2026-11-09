@@ -377,3 +377,31 @@ internal readonly struct CellarPairOccupancy<TLeaves> : IHatchOccupancy
     public bool Occupied(float angleDegrees) =>
         _leaves.Occupied(CellarLeaf.Left, angleDegrees) || _leaves.Occupied(CellarLeaf.Right, angleDegrees);
 }
+
+/// <summary>The cellar door's first pose (CL-005 #486 slice 3, lead default 15): fail-closed against fixed
+/// obstructions. <see cref="HatchMotion.Settle{TProbe}"/> alone takes the open end whenever the stored end is
+/// occupied. That is right for someone standing in the entrance, whom the closed leaves must not be put into. It is
+/// wrong for a fixed wall on the rear edge that is in the closed leaves but not the open ones: the cover would load open
+/// while the native state says closed, and could never close past the wall; and a cover stored open (a Use asked it
+/// to open, the wall held it) would load open for the same reason. So, in order:
+/// <list type="number">
+/// <item>closed, whatever is stored, when something is in the closed pose (<paramref name="all"/>) but nothing that
+/// could be pushed is (<paramref name="movers"/>: a character or a dynamic body). That something is fixed: a wall, a
+/// piece, a kinematic part. The closed leaves are kinematic, so where they overlap it nothing moves, and a walled cover
+/// is shut rather than open on any client;</item>
+/// <item>otherwise <see cref="HatchMotion.Settle{TProbe}"/> with the full probe, unchanged: the stored end when it is
+/// clear (the normal case, every client agrees), and otherwise the trapdoor's tested policy, which keeps the leaves out
+/// of whoever is in the closed pose or where the open leaves stand.</item>
+/// </list>
+/// <see cref="HatchMotion"/> itself is not changed. Game-free and allocation-free; two questions before the
+/// trapdoor's own.</summary>
+internal static class CellarSettle
+{
+    internal static float First<TAll, TMovers>(bool open, TAll all, TMovers movers)
+        where TAll : IHatchOccupancy
+        where TMovers : IHatchOccupancy
+    {
+        if (all.Occupied(HatchMotion.Angle(0f)) && !movers.Occupied(HatchMotion.Angle(0f))) { return 0f; }
+        return HatchMotion.Settle(open, all);
+    }
+}

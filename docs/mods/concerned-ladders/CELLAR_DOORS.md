@@ -105,20 +105,23 @@ point of the sweep, at about y 1.33. Nothing is pushed and nothing moves into th
 default 3), and the thicker walls are an owner question (section 8). Owner go-around pending.
 
 **What the leaf runtime does with each wall (slice 3).** These results come from the game-free model of the runtime's
-query: each leaf's box at the angle, shrunk by the 1 cm skin, through `HatchMotion` and `CellarPairOccupancy`
-(`CellarLeavesTests`). The rear end of a leaf turns in a plane square to the slope, so the leaf reaches furthest back
-when closed (z 0.79) and least far back when fully open (z 0.763, at the slope plane). So there are three cases, not two:
+query: each leaf's box at the angle, shrunk by the 1 cm skin, through `HatchMotion`, `CellarPairOccupancy` and the
+first-pose rule `CellarSettle` (`CellarLeavesTests`). The rear end of a leaf turns in a plane square to the slope, so the
+leaf reaches furthest back when closed (z 0.79) and least far back when fully open (z 0.763, at the slope plane). The
+skinned closed pose first meets a wall reaching about 0.223 m toward the door. So:
 
-- **Reach 0.20 m or less**: the wall is never in a pose. The cover opens and closes freely (tested at 0.05 and 0.20 m).
-- **Reach about 0.235-0.25 m** (`wood_wall_roof_top_67`, `ashwood_wall_cross_67`, the log walls): the wall is in the
-  closed pose but not the fully open one. Asked to open in session, the cover never moves, because its first pose is in
-  the wall. But `HatchMotion.Settle`, reused unchanged, takes the clear open end when the stored closed end is occupied,
-  as it does for someone standing in a trapdoor's opening. So **a cover stored closed loads open on that client**. It
-  then closes only until it meets the wall, about 55 degrees open, while the native state says closed (tested at 0.235
-  and 0.24 m). The log walls' 0.25 m is within 0.2 mm of the open leaves' skinned query in the model, so their real
-  colliders decide which way it goes. This is lead default 15 and an owner question (section 8).
-- **Reach 0.275 m or more** (stave, stake and dvergr walls): the wall is in every pose. The cover settles at its stored
-  closed end and never opens (tested at 0.275 and 0.4 m).
+- **Reach about 0.22 m or less** (every wall in the first two rows of the table, including the 0.205-0.209 m roof-top
+  and beam walls): the wall is never in a pose. The cover opens and closes freely (tested at 0.05, 0.20 and 0.209 m).
+- **Reach more than that** (`wood_wall_roof_top_67`, `ashwood_wall_cross_67`, the log walls, and the stave, stake and
+  dvergr walls): the wall is in the closed pose, and for the deeper ones in every pose. **The cover is held shut.** Asked
+  to open in session, it never moves, because its first checked pose is in the wall. On load it settles shut whatever the
+  stored state, because `CellarSettle` puts the closed leaves over a fixed obstruction rather than taking the open end
+  (lead default 15). So a Use that stored the door open while the wall held it, followed by a save and a reload, still
+  shows it shut. Tested at 0.235, 0.24, 0.25, 0.275 and 0.4 m, stored closed and stored open. The trapdoor's rule alone,
+  `HatchMotion.Settle`, would load the shallower of these open and leave them part open; a test shows that too.
+- **One case is not a settle.** If the cover is already open and a wall is then built into its closed pose, a close asked
+  for in session closes the leaves only until they meet the wall. That is the trapdoor's obstruction policy: hold and
+  retry, as for an item in the way. It is shut again from the next load. Owner go-around pending.
 
 ### 2b. Usable clearance
 
@@ -204,8 +207,9 @@ queries ignore (`CellarBlueprint.QueryIgnores`) is missing, or whose collider co
   Ignoring them by identity means the cover does not rest on margins that thin. Unlike the lid's `IsChildOf(transform)`
   test, nothing else is ignored: anything parented under the piece by anyone else is checked.
 - **One progress for both leaves.** The leaves reuse `HatchMotion` unchanged (same ease, same donor swing time, same
-  5° checked sub-steps, same settle on load), which is valid because the open angle is the trapdoor's 90° (tested).
-  `HatchMotion.cs` is not changed by slice 3.
+  5° checked sub-steps), which is valid because the open angle is the trapdoor's 90° (tested). `HatchMotion.cs` is
+  not changed by slice 3. The first pose on load is `CellarSettle.First` (lead default 15): fail-closed against a fixed
+  obstruction in the closed pose, and otherwise the trapdoor's `HatchMotion.Settle`.
   `CellarPairOccupancy` makes the pair's pose occupied when either leaf's is, so **a leaf that meets something holds
   both** at the last pose clear for both, and the pair resumes together once clear (tested opening and
   closing, with each leaf blocked in turn). The leaves therefore can never be at different angles on any client: one open while the other is shut, or
@@ -308,14 +312,20 @@ Added by slice 2 (L6, 2026-11-09):
 
 Added by slice 3 (L7, 2026-11-09):
 
-15. The first pose is `HatchMotion.Settle`, reused unchanged for the pair: the stored end if clear, else the other end if
-    clear, else the clear pose nearest the stored end, else the stored end. This is the trapdoor's tested policy (L3), so
-    the leaves are never put into someone standing in the entrance at load. A consequence for walls: a wall reaching
-    about 0.235-0.25 m toward the door on the rear edge is in the closed leaves but not the open ones. A cover stored
-    closed beside such a wall therefore **loads open on that client and closes only until it meets the wall**, while the
-    native state says closed (section 2a). Changing this would mean changing `HatchMotion` for the trapdoors too, or
-    placing the closed leaves into whatever is there. Owner question: deepen the rear header, add a rear-wall snap, or
-    accept it.
+15. The first pose is `CellarSettle.First`, fail-closed against fixed obstructions, with `HatchMotion` unchanged:
+    - closed, whatever is stored, when something is in the closed pose but no character or dynamic body is (a wall, a
+      piece, a kinematic part: the closed leaves overlap it and nothing moves);
+    - otherwise `HatchMotion.Settle`, the trapdoor's tested policy (L3): the stored end when it is clear, and otherwise
+      a pose that keeps the leaves out of whoever is there, so they are never put into someone standing in the entrance
+      at load.
+
+    The trapdoor's rule alone would load a cover beside a wall that reaches about 0.223-0.25 m toward the door (in the
+    closed leaves but not the open ones) open. It would then hold it part open while the native state says closed. It
+    would do the same for a cover placed beside such a wall, and for one whose Use stored open while the wall held it.
+    Clients that saw the wall built and late joiners would then disagree. `CellarSettle` makes all of these shut on
+    every client (independent review of 4506336, blockers 1 and 2). The remaining in-session case is in section 2a.
+    Owner question: whether walls deeper than about 0.22 m on the rear edge should be cleared, by a deeper rear header
+    or a rear-wall snap, rather than holding the cover shut.
 16. Each leaf's query ignores exactly the piece's own six colliders, by identity (section 4). Anything else blocks,
     including anything another mod parents under the piece. A cover that cannot resolve all six stays shut.
 17. The query layers and the blocking rule are the trapdoor lid's (shared code). Terrain and static rock are not
@@ -359,9 +369,10 @@ section 7; the setting off leaving everything as before.
 Slice 3 adds these rows. The leaves open and close on Use, together and mirror images, over the donor's swing time,
 for every family. Use from inside the entrance and from below. The cover holds against someone standing on it, someone
 in the entrance under it closing, a cart, an item, a rail in front of the low end and a low roof, and resumes once
-clear. A cover placed beside each wall class of section 2a on the rear edge, saved closed and reloaded: free (0.20 m or
-less), loading open and holding part open (about 0.235-0.25 m, lead default 15), or held shut (0.275 m or more). Stored
-open, it loads open; stored closed, closed. A late joiner, a second client and a zone reload see the same pose. No push
+clear. A cover placed beside each wall class of section 2a on the rear edge, saved closed and saved open (Use while held)
+and reloaded: free (about 0.22 m or less) or held shut (deeper, lead default 15). Without a wall, stored open, it loads
+open; stored closed, closed. Someone standing in the entrance under a closed cover at load: it loads open and shuts once
+they have gone. A late joiner, a second client and a zone reload see the same pose. No push
 or launch of a player, creature or cart at any point. The ghost and the hammer icon stay closed. A ladder near a cellar
 door, which still treats it as an ordinary piece (lead default 18). The trapdoors unchanged with the cellar doors on,
 and the setting off leaving everything as on main.

@@ -27,6 +27,10 @@ namespace TheConcernedCat.ConcernedLadders.Runtime;
 /// hierarchy test, nothing else is ignored: anything parented under the piece by anyone else is checked. The pivots turn
 /// by setting their transforms, never by velocity or <c>MoveRotation</c>, so they push nothing.</para>
 ///
+/// <para>First pose: <see cref="CellarSettle.First{TAll, TMovers}"/>. The stored end when it is clear; otherwise closed when no
+/// character or dynamic body is in the closed pose (a fixed wall in it holds the cover shut rather than loading it
+/// open); otherwise the trapdoor's <see cref="HatchMotion.Settle{TProbe}"/>, so the leaves are never put into someone.</para>
+///
 /// <para>Not a trapdoor: it is not in <see cref="TrapdoorLid"/>'s registry, so the ladder code still treats a cellar door
 /// as an ordinary piece (the ladder integration is the next slice). Ghost and icon: no ZDO, so nothing is read and the
 /// leaves stay closed. Idle cost per cellar door per frame is one ZDO integer read; nothing allocates per frame.</para></summary>
@@ -45,11 +49,19 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
 
     private static bool _faultLogged;
 
+    /// <summary>The character layers (the local player, other players, creatures, ghosts and their hitboxes), resolved
+    /// once: with dynamic bodies, the things the first pose must never put the closed leaves into
+    /// (<see cref="CellarSettle"/>). Zero, and every cover stays shut, if any is missing.</summary>
+    private static int _characterMask;
+
+    private static readonly string[] CharacterLayers = { "character", "character_net", "character_ghost", "character_noenv", "hitbox" };
+
     private ZNetView? _view;
     private Pivot? _left;
     private Pivot? _right;
     private Collider[]? _own;
     private CellarPairOccupancy<CellarLeaves> _pair;
+    private CellarPairOccupancy<Movers> _movers;
     private float _progress;
     private float _appliedAngle = float.NaN;
     private bool _settled;
@@ -88,6 +100,17 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         internal Vector3 HalfExtents { get; }
     }
 
+    /// <summary>The first pose's second question (<see cref="CellarSettle"/>): would this leaf's pose overlap a
+    /// character or a dynamic body? The same query as <see cref="Occupied"/>, counting nothing else.</summary>
+    private readonly struct Movers : ICellarLeafOccupancy
+    {
+        private readonly CellarLeaves _leaves;
+
+        internal Movers(CellarLeaves leaves) => _leaves = leaves;
+
+        public bool Occupied(CellarLeaf leaf, float angleDegrees) => _leaves.Query(leaf, angleDegrees, true);
+    }
+
     private void Awake()
     {
         _view = GetComponent<ZNetView>();
@@ -98,7 +121,7 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         BoxCollider? rightBox = LeafBox(rightHinge, CellarLeaf.Right);
         Collider[]? own = OwnColliders();
         if (_view == null || leftHinge == null || rightHinge == null || leftBox == null || rightBox == null || own == null ||
-            !TrapdoorLid.ResolveLayers())
+            !TrapdoorLid.ResolveLayers() || !ResolveCharacterLayers())
         {
             // A cellar door without its parts or the game's layers cannot check its sweep: the leaves stay where the
             // prefab put them, closed. (The ghost and the icon render keep their parts but never get a ZDO, so Update
@@ -113,10 +136,26 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         _right = new Pivot(rightHinge, rightBox, CellarGeometry.HingeRotationSign(CellarLeaf.Right));
         _own = own;
         _pair = new CellarPairOccupancy<CellarLeaves>(this);
+        _movers = new CellarPairOccupancy<Movers>(new Movers(this));
         if (!(SwingSeconds >= HatchMotion.MinimumSwingSeconds && SwingSeconds <= HatchMotion.MaximumSwingSeconds))
         {
             SwingSeconds = DoorFamilies.LightSwing;
         }
+    }
+
+    private static bool ResolveCharacterLayers()
+    {
+        if (_characterMask != 0) { return true; }
+        int mask = 0;
+        foreach (string name in CharacterLayers)
+        {
+            int layer = LayerMask.NameToLayer(name);
+            if (layer < 0) { return false; }
+            mask |= 1 << layer;
+        }
+
+        _characterMask = mask;
+        return true;
     }
 
     private static BoxCollider? LeafBox(Transform? hinge, CellarLeaf leaf)
@@ -167,15 +206,15 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         }
     }
 
-    /// <summary>The first pose, once, from the stored native state (<see cref="HatchMotion.Settle{TProbe}"/>), for the
-    /// pair.</summary>
+    /// <summary>The first pose, once, from the stored native state, for the pair: <see cref="CellarSettle.First{TAll, TMovers}"/>, which
+    /// is fail-closed against fixed obstructions and otherwise <see cref="HatchMotion.Settle{TProbe}"/>.</summary>
     private void TrySettle()
     {
         ZNetView? view = _view;
         if (view == null || !view.IsValid() || _left == null) { return; }
         bool open = HatchMotion.IsOpenState(view.GetZDO().GetInt(ZDOVars.s_state));
         _settled = true;
-        _progress = HatchMotion.Settle(open, _pair);
+        _progress = CellarSettle.First(open, _pair, _movers);
         Apply();
     }
 
@@ -205,13 +244,20 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
     /// occupied.</summary>
     public bool Occupied(CellarLeaf leaf, float angleDegrees)
     {
+        return Query(leaf, angleDegrees, false);
+    }
+
+    /// <summary>The one query. With <paramref name="moversOnly"/>, only a character or a dynamic body counts; a full
+    /// buffer is occupied either way.</summary>
+    private bool Query(CellarLeaf leaf, float angleDegrees, bool moversOnly)
+    {
         Pivot part = leaf == CellarLeaf.Left ? _left! : _right!;
         Quaternion turn = Quaternion.Euler(0f, 0f, part.Sign * angleDegrees);
         Vector3 centre = part.Space.TransformPoint(part.Local + turn * part.BoxCentre);
         Quaternion rotation = part.Space.rotation * turn * part.BoxRotation;
         int found = Physics.OverlapBoxNonAlloc(centre, part.HalfExtents, Overlaps, rotation, TrapdoorLid.QueryMask, QueryTriggerInteraction.Ignore);
         bool occupied = found >= Overlaps.Length;
-        for (int index = 0; index < found && !occupied; index++) { occupied = Blocks(Overlaps[index]); }
+        for (int index = 0; index < found && !occupied; index++) { occupied = moversOnly ? Moves(Overlaps[index]) : Blocks(Overlaps[index]); }
         Array.Clear(Overlaps, 0, Math.Min(found, Overlaps.Length));
         return occupied;
     }
@@ -220,6 +266,15 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
     {
         if (collider == null || collider.isTrigger || IsOwn(collider)) { return false; }
         return TrapdoorLid.BlocksByKind(collider);
+    }
+
+    /// <summary>A character, by its layer, or a dynamic body: something the closed leaves could push.</summary>
+    private bool Moves(Collider collider)
+    {
+        if (collider == null || collider.isTrigger || IsOwn(collider)) { return false; }
+        if ((_characterMask & (1 << collider.gameObject.layer)) != 0) { return true; }
+        Rigidbody body = collider.attachedRigidbody;
+        return body != null && !body.isKinematic;
     }
 
     /// <summary>One of this piece's own six colliders, by identity (Unity's equality: the same native object), never by
