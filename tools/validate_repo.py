@@ -1597,6 +1597,19 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
                  "loosen the pattern", errors)
             return []
 
+    # Pinning the derivations is not enough if a role can be reassigned after
+    # them: `(from, to) = (to, from);` below the pinned lines reverses the deposit
+    # into a withdrawal with every pinned call byte-identical (review of #381's
+    # chest take, which found the same hole there).
+    findings = _teamster_role_findings(code, ("from", "to"), shape, TEAMSTER_DEPOSIT_PORT_CALLS, 3,
+                                       TEAMSTER_DEPOSIT_INVENTORY_OF, ("GunnarDepositPort", "MoveTally"))
+    if findings:
+        for finding in findings:
+            fail(f"{label}: {port.relative_to(ROOT)}: {finding}. Pinning the derivations means nothing if the two "
+                 "roles can be exchanged below them - the deposit becomes a withdrawal with every pinned call "
+                 "byte-identical", errors)
+        return []
+
     return [
         f"{label}: the deposit port clones exactly the stack it removes from, assigns that clone "
         f"once, looks an item prefab up once and only as `database.GetItemPrefab(itemPrefab)`, "
@@ -1604,6 +1617,408 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
         f"and its destination from the chosen chest - so the authorized `AddItem` cannot carry "
         f"material built from a name, and the move cannot be reversed into a withdrawal by renaming "
         f"two parameters",
+    ]
+
+
+TEAMSTER_TAKE_LABEL = "[interop] #381 chest-take audit"
+TEAMSTER_TAKE_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Take.cs"
+TEAMSTER_TAKE_DEFAULTS_FILE = "Domain/Collection/GunnarCollectionDefaults.cs"
+TEAMSTER_TAKE_SETTINGS_FILE = "TeamsterSettings.cs"
+TEAMSTER_TAKE_PUNCTUATION = "().,;:?<>!&=|{}"
+
+
+def _teamster_take_exact(spelling: str) -> re.Pattern:
+    """`spelling` with the whitespace C# allows wherever it has a space and
+    around its punctuation - so a space or a newline cannot hide a pinned line,
+    and nothing else about it may change."""
+    out = []
+    for piece in re.split(r"(\s+|[" + re.escape(TEAMSTER_TAKE_PUNCTUATION) + r"])", spelling):
+        if not piece:
+            continue
+        if piece.isspace():
+            out.append(SPACE)
+        elif piece in TEAMSTER_TAKE_PUNCTUATION:
+            out.append(SPACE + re.escape(piece) + SPACE)
+        else:
+            out.append(re.escape(piece))
+    return re.compile("".join(out))
+
+
+TEAMSTER_ROLE_KEYWORDS = frozenset({
+    "return", "in", "is", "as", "out", "ref", "new", "await", "throw", "case", "when", "else", "yield",
+    "not", "and", "or", "typeof", "nameof", "sizeof", "default", "goto", "using", "lock", "params", "this",
+})
+TEAMSTER_ROLE_LOCAL_FUNCTION = re.compile(
+    r"^\s+(?:static\s+)?(?!(?:if|for|foreach|while|switch|catch|using|lock|return|else|new|throw|await|fixed)\b)"
+    r"[A-Za-z_][\w<>?,\[\]. ]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(?:\{.*)?$")
+
+
+TEAMSTER_INVENTORY_OF_CONTAINER = (
+    "private static Inventory? InventoryOf(Container? container) { try { return container == null ? null : "
+    "container.GetInventory(); } catch (Exception) { return null; } }")
+TEAMSTER_TAKE_INVENTORY_OF = (
+    TEAMSTER_INVENTORY_OF_CONTAINER,
+    "private static Inventory? InventoryOf(Humanoid? worker) { try { return worker == null || worker.IsDead() ? "
+    "null : worker.GetInventory(); } catch (Exception) { return null; } }",
+)
+TEAMSTER_DEPOSIT_INVENTORY_OF = (
+    TEAMSTER_INVENTORY_OF_CONTAINER,
+    "private static Inventory? InventoryOf(Humanoid? worker) => ReadInventoryOf(worker, out _);",
+    "private static Inventory? ReadInventoryOf(Humanoid? worker, out bool accessorFailed) { accessorFailed = false; "
+    "try { return worker == null || worker.IsDead() ? null : worker.GetInventory(); } catch (Exception) { "
+    "accessorFailed = true; return null; } }",
+)
+
+
+def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: tuple,
+                            overloads_expected: int, overload_bodies: tuple,
+                            types_expected: tuple) -> list[str]:
+    """Why a port's two ROLES (which inventory is the source, which the
+    destination) could be exchanged below the pinned derivations - empty when
+    they cannot, as far as a text audit can see.
+
+    A pinned derivation fixes a name to a role on one line. It means nothing if
+    the name can be bound again, or the pinned calls can run where the name means
+    something else. Reviews of #381's chest take found each of these escapes, in
+    the take port and mirrored in the deposit port, with every pinned call
+    byte-identical:
+
+    - a reassignment, a swap by deconstruction (nested ones included), or a
+      `ref`/`out` argument after the derivations;
+    - the pinned calls moved into a helper whose parameters bind the two names
+      the other way round, called from the mover with them exchanged;
+    - the same through a local function or a lambda inside the mover, which may
+      shadow its locals in this language version.
+
+    So: every pinned call sits in the pinned mover's own body; the mover holds no
+    lambda, delegate or local function; each role is declared exactly twice (the
+    two derivations) and written exactly twice; no untyped lambda parameter takes
+    a role's name anywhere in the file; the parameters the roles come from are
+    never written; each InventoryOf overload's whole method is pinned; the port
+    has one field (`_matching`) and declares no type but its own and MoveTally.
+    String literals are blanked first, so a sentence that happens to say
+    "to = ..." is not code.
+
+    **What this does not claim.** Five rounds of independent review each found
+    a further way to exchange the roles, and each is now refused and planted. A
+    text audit cannot prove there is no sixth - reflection, a delegate stored
+    elsewhere, or a helper class in another file reached through the port's own
+    types are outside what it reads - and a reversal that also exchanged what
+    is measured would be recorded as a clean move, so the measurement is no
+    backstop for it. A reviewer remains part of this boundary."""
+    blank = CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"', code)
+    found = []
+
+    movers = [(header, block) for header, _start, block in _teamster_tour_plan_methods(blank)
+              if shape.search(header)]
+    if len(movers) != 1:
+        return [f"the pinned mover was found {len(movers)} time(s), so where its calls run cannot be checked"]
+    body = "\n".join(movers[0][1])
+    for token, pattern, _what in calls:
+        if len(pattern.findall(body)) != 1:
+            found.append(f"the pinned `{token}` call is not inside the pinned mover's own body, exactly once - "
+                         "a call in a helper runs wherever that helper's parameters say the roles are")
+    if re.search(r"=>|\bdelegate\b", body):
+        found.append("the mover holds a lambda or a delegate, whose parameters may shadow the two roles")
+    for line in movers[0][1][1:]:
+        if TEAMSTER_ROLE_LOCAL_FUNCTION.match(line):
+            found.append(f"the mover declares a local function (`{line.strip()}`), whose parameters may shadow the "
+                         "two roles")
+
+    # Every assignment whose left-hand side ends in a parenthesis is a
+    # deconstruction, wherever the statement starts - `if (x) (a, b) = ...;` and
+    # `_ = ((a, b) = ...);` included, which a "statement starts with (" rule missed.
+    groups = []
+    for match in re.finditer(r"(?<![=!<>])=(?![=>])", blank):
+        left = match.start() - 1
+        while left >= 0 and blank[left].isspace():
+            left -= 1
+        if left < 0 or blank[left] != ")":
+            continue
+        depth = 0
+        for index in range(left, -1, -1):
+            if blank[index] == ")":
+                depth += 1
+            elif blank[index] == "(":
+                depth -= 1
+                if depth == 0:
+                    groups.append(blank[index:left + 1])
+                    break
+
+    for role in roles:
+        word = r"\b" + re.escape(role) + r"\b"
+        declared = [match for match in re.finditer(
+            r"(?<![\w.])([A-Za-z_][\w.]*(?:<[^<>;]*>)?\??|\])" + SPACES + word + r"(?!" + SPACE + r"\()", blank)
+            if match.group(1) not in TEAMSTER_ROLE_KEYWORDS]
+        plain = re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
+        by_reference = re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank)
+        lambdas = re.findall(word + SPACE + r"=>|\([^()]*" + word + r"[^()]*\)" + SPACE + r"=>", blank)
+        deconstructed = sum(1 for group in groups if re.search(word, group))
+        if len(declared) != 2:
+            found.append(f"`{role}` is declared {len(declared)} time(s) (a local or a parameter); exactly two "
+                         "are authorized, the two pinned derivations. A local function whose signature spans "
+                         "lines is caught here rather than by the mover's local-function check")
+        if len(plain) != 2 or by_reference or deconstructed:
+            found.append(f"`{role}` is written {len(plain)} time(s) by assignment, {len(by_reference)} through ref "
+                         f"or out and {deconstructed} by deconstruction; exactly two assignments are authorized, "
+                         "the two pinned derivations")
+        if lambdas:
+            found.append(f"a lambda parameter is named `{role}`")
+
+    # What the derivations derive FROM. `InventoryOf(worker)` means Gunnar only
+    # while that overload returns the worker's inventory and `worker` is the
+    # worker: an overload that returned the other party's inventory (through a
+    # field set in the entry point), or a parameter reassigned, would reverse the
+    # move and the measurement together, so the reversal would be recorded as a
+    # clean transfer.
+    for parameter in ("worker", "container", "source", "destination"):
+        word = r"\b" + re.escape(parameter) + r"\b"
+        written = (re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
+                   + re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank))
+        written += [group for group in groups if re.search(word, group)]
+        if written:
+            found.append(f"`{parameter}` is written {len(written)} time(s); the parameters the two roles are "
+                         "derived from are never reassigned")
+    overloads = re.findall(r"\bInventory" + SPACE + r"\?" + SPACE + r"(?:Read)?InventoryOf" + SPACE + r"\(", blank)
+    # Each overload's WHOLE method, header to closing brace. A substring pin let
+    # `_cache ?? (pinned)` through, and a whole-try-block pin let an early
+    # `return` sit in front of the try; nothing may be added to these bodies.
+    for spelling in overload_bodies:
+        if len(_teamster_take_exact(spelling).findall(blank)) != 1:
+            found.append(f"`{spelling}` is not in the port exactly once - each InventoryOf overload returns its own "
+                         "party's inventory and does nothing else, so its whole body is pinned")
+    declared_types = sorted(set(re.findall(
+        r"\b(?:class|struct|interface|enum|record|delegate)" + SPACES + r"([A-Za-z_]\w*)", blank)))
+    if declared_types != sorted(types_expected):
+        found.append(f"the port declares the types {declared_types}; exactly {sorted(types_expected)} are "
+                     "authorized - another type is state a derivation could answer from out of sight of the field "
+                     "pin")
+    # No state an overload could answer from instead: the port's only field is
+    # the list it reuses for matching stacks, and nothing at class level holds an
+    # inventory, a character or a container.
+    fields = re.findall(r"^    (?! )(?:(?:private|internal|public|protected|static|readonly|volatile)[ \t]+)*"
+                        r"(?!return\b|break\b|continue\b|throw\b)"
+                        r"([\w<>.?,\[\]][\w<>.?,\[\] \t]*?)[ \t]+([A-Za-z_]\w*)[ \t]*(?:=[^>=]|;)", blank, re.M)
+    others = sorted(name for _type, name in fields if name != "_matching")
+    if others or len(fields) != 1:
+        found.append(f"the port's fields are {sorted(name for _t, name in fields)}; exactly one is authorized, "
+                     "`_matching` - a field is state an InventoryOf overload or a derivation could answer from "
+                     "instead of its own argument")
+    getters = len(re.findall(r"\.\s*GetInventory" + SPACE + r"\(", blank))
+    if getters != 2:
+        found.append(f"the port reads an inventory with GetInventory {getters} time(s); exactly two are authorized, "
+                     "one in each pinned InventoryOf overload")
+    if len(overloads) != overloads_expected:
+        found.append(f"the port declares {len(overloads)} InventoryOf overload(s) and {overloads_expected} are "
+                     "authorized, one per party (the deposit's worker overload delegates to ReadInventoryOf)")
+    return found
+
+
+def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) -> list[str]:
+    """D20 (owner decision 2026-10-31, #381): Gunnar may take from a chest the
+    player marked Take or Both, measured on both sides, the remainder left in the
+    chest, off by default and pinned like the D15 deposit.
+
+    The scope audit pins the take port's three vanilla calls verbatim. This rule
+    pins what a call pin cannot see, the way `#381 deposit-mint audit` does for
+    the deposit, plus the take's own properties:
+
+    1. *Nothing built from a name, and the direction cannot be renamed away.* One
+       clone of the chest's own stack, assigned once; one item lookup, in
+       SafeRoom; no instantiation; the mover takes the two ROLES and derives
+       `chest` from the source and `gunnar` from the worker, twice each.
+    2. *The mint asks for Take and nothing else.* One `NpcContainerPermit.Issue`,
+       for `NpcContainerUse.Take`; no other use is spelled in the port, so a chest
+       marked for putting things in only cannot authorize a take.
+    3. *One call site, behind its own switch and gate.* The port is constructed
+       once and `TakeOne` called once, in the runtime's take part alone; that part
+       feeds the gate the take's own opt-in, which reads the take switch; the
+       gate's refusal returns before the call; an open tour plan refuses; the
+       switch is off by default; and the source is set only from the chest the
+       player pointed at, and cleared.
+
+    A text audit, like every Teamster rule: it does not follow delegates or prove
+    control flow."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = TEAMSTER_TAKE_LABEL
+    port = teamster_dir.joinpath(*TEAMSTER_TAKE_PORT_PATH)
+    port_rel = "/".join(TEAMSTER_TAKE_PORT_PATH)
+    if not port.is_file():
+        fail(f"{label}: missing src/ConcernedTeamster/{port_rel} - the take's authorized calls have no file "
+             "to be confined to", errors)
+        return []
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8-sig"))
+
+    def exactly(spelling: str, expected: int, why: str, text: str = code, where: str = port_rel) -> bool:
+        found = len(_teamster_take_exact(spelling).findall(text))
+        if found != expected:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of `{spelling}` and exactly "
+                 f"{expected} {'is' if expected == 1 else 'are'} expected - {why}", errors)
+            return False
+        return True
+
+    if not exactly("ItemDrop.ItemData part = stack.Clone()", 1,
+                   "that initializer is what makes the authorized `gunnar.AddItem(part)` a move of part of the "
+                   "chest's own stack rather than an item built from a name"):
+        return []
+    assignments = len(re.findall(r"\bpart" + SPACE + r"=" + SPACE + r"(?!=)", code))
+    if assignments != 1:
+        fail(f"{label}: `part` is assigned {assignments} time(s) in src/ConcernedTeamster/{port_rel}; exactly one "
+             "is authorized, the pinned clone. A second assignment replaces what the authorized add adds while "
+             "leaving that call byte-identical", errors)
+        return []
+    lookups = len(re.findall(r"GetItemPrefab" + SPACE + r"\(", code))
+    if lookups != 1:
+        fail(f"{label}: src/ConcernedTeamster/{port_rel} looks an item prefab up {lookups} time(s); exactly one "
+             "is authorized, in SafeRoom. Any other is a way to build material from a name", errors)
+        return []
+    if not exactly("database.GetItemPrefab(itemPrefab)", 1,
+                   "the one lookup asks what Gunnar's inventory would merge into, and nothing else"):
+        return []
+    for token, why in (
+            ("Instantiate", "instantiating anything - the take moves items that already exist"),
+            ("ObjectDB.instance.GetItemPrefab(", "reaching the item database inline, next to the authorized add"),
+            ("m_dropPrefab.GetComponent", "templating an item off its own prefab")):
+        if _audit_token(token).search(code):
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} spells `{token}`. That is {why}; creating or "
+                 "templating an item is outside D20, which authorizes moving what the chest already holds",
+                 errors)
+            return []
+
+    if not exactly("private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)", 1,
+                   "the mover takes the two ROLES and derives the inventories itself, because two same-typed "
+                   "`Inventory` parameters can be renamed into a deposit with every pinned call byte-identical"):
+        return []
+    for spelling, role in (("Inventory? chest = InventoryOf(source);", "the source is the chosen chest"),
+                           ("Inventory? gunnar = InventoryOf(worker);", "the destination is Gunnar")):
+        if not exactly(spelling, 2, f"the line that establishes that {role}, once where the counts are taken and "
+                                    "once where the items move. Reversing a take into a deposit needs only "
+                                    "their order if these can move"):
+            return []
+
+    take_shape = _teamster_take_exact(
+        "private MoveTally Move(Container? source, Humanoid? worker, string itemPrefab, int units)")
+    findings = _teamster_role_findings(code, ("chest", "gunnar"), take_shape, TEAMSTER_TAKE_PORT_CALLS, 2,
+                                       TEAMSTER_TAKE_INVENTORY_OF, ("GunnarTakePort", "MoveTally"))
+    if findings:
+        for finding in findings:
+            fail(f"{label}: src/ConcernedTeamster/{port_rel}: {finding}. Pinning the derivations means nothing if "
+                 "the two roles can be exchanged below them - the take becomes a deposit out of Gunnar with every "
+                 "pinned call byte-identical", errors)
+        return []
+
+    mints = len(re.findall(r"\bNpcContainerPermit" + SPACE + r"\." + SPACE + r"Issue" + SPACE + r"\(", code))
+    if mints != 1:
+        fail(f"{label}: src/ConcernedTeamster/{port_rel} mints {mints} permit(s); exactly one is authorized, "
+             "for Take", errors)
+        return []
+    if not exactly("NpcContainerPermit.Issue(subject, NpcContainerUse.Take, world, out refusal)", 1,
+                   "the one mint asks the chest for Take"):
+        return []
+    for other in ("Deposit", "Both", "Off"):
+        if re.search(r"\bNpcContainerUse" + SPACE + r"\." + SPACE + other + r"\b", code):
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} spells `NpcContainerUse.{other}`. The take port asks "
+                 "for Take and nothing else, so a chest the player marked for putting things in only can never "
+                 "authorize taking from it", errors)
+            return []
+
+    sources: dict[str, str] = {}
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        rel = path.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin"):
+            continue
+        sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+
+    for spelling, why in (("new GunnarTakePort()", "the take port is constructed once, by the runtime's take part"),
+                          ("_take.TakeOne(", "the take is made in one place, behind its own gate")):
+        pattern = _teamster_take_exact(spelling)
+        where = [(rel, len(pattern.findall(text))) for rel, text in sources.items() if pattern.search(text)]
+        if where != [(TEAMSTER_TAKE_RUNTIME_FILE, 1)]:
+            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly once, in "
+                 f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, is authorized - {why}", errors)
+            return []
+    stray = [rel for rel, text in sources.items()
+             if rel not in (TEAMSTER_TAKE_RUNTIME_FILE, port_rel) and re.search(r"\bTakeOne" + SPACE + r"\(", text)]
+    if stray:
+        fail(f"{label}: TakeOne is named in {stray} - the take is made in one place, "
+             f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, behind its own gate", errors)
+        return []
+
+    runtime = sources.get(TEAMSTER_TAKE_RUNTIME_FILE, "")
+    calls_here = len(re.findall(r"\bTakeOne" + SPACE + r"\(", runtime))
+    if calls_here != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE} names TakeOne {calls_here} time(s); "
+             "exactly one call is authorized - a second, through an alias of the port, would sit outside the "
+             "gate the first is pinned behind", errors)
+        return []
+    for spelling, why in (
+            ("collectionEnabled: OptedIn()", "the gate is told the collection switches, not a literal"),
+            ("takeEnabled: TakeOptedIn()", "the gate is told the take's own opt-in, not a literal or another switch"),
+            ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+            ("authority: TakeAuthority()", "the gate is told the work-authority rule (host, not dedicated, no "
+                                          "peers), not a literal"),
+            ("WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(TakeOptedIn()))",
+             "the take's authority is the shared rule, asked about the take's own opt-in"),
+            ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+            ("workerPresent: worker != null && !worker.IsDead()", "the gate is told whether he is here and alive"),
+            ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+            ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+            ("transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering",
+             "the gate is told what else is in flight"),
+            ("return OptedIn() && _settings.GunnarChestTakeEnabled.Value;",
+             "the take's opt-in reads the master and collection switches AND the take switch"),
+            ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a take (#379)"),
+            ("TakeRefusal refusal = TakeOrderGate.Evaluate(request);", "the gate decides"),
+            ("if (refusal != TakeRefusal.None)", "the gate's refusal is acted on"),
+            ("_source = chest;", "the source is the chest the player pointed at"),
+            ("_source = null;", "the source is cleared only when its name stops meaning anything")):
+        if not exactly(spelling, 1, why, runtime, TEAMSTER_TAKE_RUNTIME_FILE):
+            return []
+    # In the SAME method as the call: a gate in a helper nobody calls, above the
+    # take, would otherwise satisfy an order read over the whole file.
+    ordered = False
+    for _header, _start, block in _teamster_tour_plan_methods(runtime):
+        body = "\n".join(block)
+        call = _teamster_take_exact("_take.TakeOne(").search(body)
+        if call is None:
+            continue
+        evaluate = _teamster_take_exact("TakeRefusal refusal = TakeOrderGate.Evaluate(request);").search(body)
+        refused = _teamster_take_exact("if (refusal != TakeRefusal.None)").search(body)
+        ordered = bool(evaluate and refused and evaluate.start() < refused.start() < call.start()
+                       and re.match(SPACE + r"\{" + SPACE + r"return\b", body[refused.end():]))
+    if not ordered:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE} does not decide, refuse with a return, "
+             "and only then call the port, in that order and in the method that makes the call - a take the gate "
+             "did not admit", errors)
+        return []
+    writes = sum(len(re.findall(r"\b_source" + SPACE + r"(?:\?\?)?=(?!=)", text))
+                 for text in sources.values()
+                 if re.search(r"\bpartial\s+class\s+GunnarCollectionRuntime\b", text))
+    if writes != 2:
+        fail(f"{label}: the collection runtime assigns _source {writes} time(s); twice is authorized, the pointed "
+             f"chest and the clear, both in src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}", errors)
+        return []
+
+    if not exactly("public const bool ChestTakeEnabled = false;", 1, "the take is off by default",
+                   sources.get(TEAMSTER_TAKE_DEFAULTS_FILE, ""), TEAMSTER_TAKE_DEFAULTS_FILE):
+        return []
+    if not exactly('config.Bind("Workers", "GunnarChestTakeEnabled", GunnarCollectionDefaults.ChestTakeEnabled,', 1,
+                   "the switch is bound to the off default", sources.get(TEAMSTER_TAKE_SETTINGS_FILE, ""),
+                   TEAMSTER_TAKE_SETTINGS_FILE):
+        return []
+
+    return [
+        f"{label}: the take port clones exactly the chest's stack it removes from, assigns that clone once, looks "
+        "an item prefab up once and only in SafeRoom, instantiates nothing, derives its source from the chosen "
+        "chest and its destination from Gunnar inside the mover, and mints one permit, for Take; it is built and "
+        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, in the method whose take gate refuses with a return above "
+        "it, every gate input pinned (the switches, the world, the work-authority rule, the probe, his body and its "
+        "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); the "
+        "three calls sit in the mover's own body, which holds no lambda or local function, and `chest` and `gunnar` "
+        "are declared and written only by their derivations; an open tour plan refuses; and the "
+        "source is set from the pointed-at chest and cleared, nowhere else. A text audit; it does not follow "
+        "delegates or prove control flow",
     ]
 
 
@@ -2492,6 +2907,29 @@ TEAMSTER_DEATH_DROP_PORT_CALLS = (
      "vanilla's own drop of one carried stack, with its own count, on Gunnar's genuine death only"),
 )
 
+# The chest take (owner decision 2026-10-31, #381; `DECISIONS.md` D20). The
+# deposit's three calls with the two roles exchanged: the source is the chest
+# the player marked Take or Both, the destination is Gunnar. Same shape as the
+# deposit's pin and for the same reasons, and the variable names are part of it:
+# `gunnar` and `chest` are derived from the worker and the source inside the
+# mover (`#381 chest-take audit` pins both derivations), so the reversal of a
+# take into a deposit - `chest.MoveItemToThis(gunnar, stack)` - and a remove of
+# anything but what arrived, or from anything but the chest, spell a different
+# call and fail. Until this grant those tokens were refused here like everywhere
+# else, which is what "the validator refuses a Teamster take" meant.
+TEAMSTER_TAKE_PORT_PATH = ("Adapters", "Workers", "GunnarTakePort.cs")
+TEAMSTER_TAKE_PORT_CALLS = (
+    (".MoveItemToThis(",
+     re.compile(r"\bgunnar\s*\.\s*MoveItemToThis\s*\(\s*chest\s*,\s*stack\s*\)"),
+     "vanilla's whole-stack move out of the marked chest into Gunnar"),
+    (".AddItem(",
+     re.compile(r"\bgunnar\s*\.\s*AddItem\s*\(\s*part\s*\)"),
+     "the clone of part of the chest's stack, added to Gunnar before anything is removed"),
+    (".RemoveItem(",
+     re.compile(r"\bchest\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*arrived\s*\)"),
+     "exactly what arrived in Gunnar, taken off the chest's own stack after the add"),
+)
+
 # The idle hammer (owner decision 2026-10-31; `DECISIONS.md` D21). One call,
 # vanilla's own `ZSyncAnimation.SetTrigger`, cosmetic only: a transient,
 # unsaved animation trigger on Gunnar's own body. The argument and receiver
@@ -2508,11 +2946,12 @@ TEAMSTER_IDLE_HAMMER_PORT_CALLS = (
 )
 
 # Which file may spell which authorized calls. A path absent from this table has
-# no allowance at all, which is every file in the product bar these four.
+# no allowance at all, which is every file in the product bar these five.
 TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
     TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
     TEAMSTER_DEATH_DROP_PORT_PATH: TEAMSTER_DEATH_DROP_PORT_CALLS,
+    TEAMSTER_TAKE_PORT_PATH: TEAMSTER_TAKE_PORT_CALLS,
     TEAMSTER_IDLE_HAMMER_PORT_PATH: TEAMSTER_IDLE_HAMMER_PORT_CALLS,
 }
 
@@ -2678,16 +3117,20 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_DEATH_DROP_PORT_CALLS)} "
         f"owner-authorized as one pinned call, verbatim and once, in "
         f"{'/'.join(TEAMSTER_DEATH_DROP_PORT_PATH)} alone (D16's death drop); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_TAKE_PORT_CALLS)} "
+        f"owner-authorized as three pinned calls, each verbatim and each once, in "
+        f"{'/'.join(TEAMSTER_TAKE_PORT_PATH)} alone (D20's chest take, the deposit's calls with the chest as the "
+        f"source); "
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_IDLE_HAMMER_PORT_CALLS)} "
         f"owner-authorized as one pinned call, verbatim and once, in "
-        f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D21's cosmetic idle hammer swing); all seven refused "
+        f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D21's cosmetic idle hammer swing); every one refused "
         f"everywhere else in the "
         f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"(scanned across the product AND the {len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) its "
         f"project file compiles in, which were outside this audit until D15) "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no direct Inventory.AddItem outside the one pinned call above, and no ZNetScene reference outside "
+        f"tuning writes, no direct Inventory.AddItem outside the two pinned calls above (the deposit's and the take's), and no ZNetScene reference outside "
         f"Adapters/Workers; no component surgery or reflection outside the prefab factory (inside "
         f"Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) "
         f"({hits} violations)",
@@ -7523,6 +7966,7 @@ def main() -> int:
     report.extend(check_container_permissions_stay_reachable(errors))
     report.extend(check_container_permit_stays_unforgeable(errors))
     report.extend(check_teamster_deposit_adds_only_what_it_is_removing(errors))
+    report.extend(check_teamster_take_moves_only_out_of_the_marked_chest(errors))
     report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_console_command_copies_agree(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))

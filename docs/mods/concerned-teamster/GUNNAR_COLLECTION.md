@@ -1033,6 +1033,74 @@ open; (5) nothing continues automatically after a reload - the chest and the are
   to pass the validator from before this rule and refused by this one.
 - **Not observed in game.** §10 rows 44-48 are OWNER GO-AROUND PENDING.
 
+## 6i. He can take from a chest you marked for taking (`DECISIONS.md` D20)
+
+The owner's decision of 2026-10-31: Gunnar may take from a chest the player explicitly marked `Take` or `Both`,
+measured on both sides, with the remainder left in the chest, off by default and pinned like the D15 deposit. This is
+the deposit (§6e) the other way round, and nothing more.
+
+### What a player does
+
+Turn on `Workers/GunnarChestTakeEnabled` (off by default; it also needs `Workers/GunnarCollectionEnabled`). Mark the
+chest `Take` or `Both` with the container key, look at it and run `ct_collect source`. Stand Gunnar next to it and run
+`ct_collect take <item> [count]` - for example `ct_collect take CopperOre 20`. The item is **one exact prefab name**;
+there is no wildcard, no list and no "everything", and a name the game does not know is refused. Without a count he
+takes as many of that one item as fit under the carry limit.
+
+What he took is not a collected yield, so `ct_collect deposit` (which deposits only what collecting yields) leaves it
+alone; `ct_collect deposit <item>` deposits that one named item into the destination chest instead.
+
+### What it never does
+
+- choose a chest: the source is the chest the player pointed at, and `#381 destination audit` still pins the one
+  lookup that reaches a container to the hovered object;
+- take from a chest that is unmarked, marked `Deposit` only, or marked and then unmarked - the mark is re-asked at the
+  moment of every move through `ContainerPermissionRuntime.Allowance`, the same derivation that wrote it;
+- take more than fits: what he already carries is weighed against a vanilla player's limit plus Megingjord's
+  (D17's load, whatever he wears), and his slots are the game's own; the rest stays in the chest;
+- move him: he has to be standing within reach of the chest, like an ordered deposit;
+- take ownership of the chest, take from a chest somebody has open or that rides a cart in use, or pass a ward or a
+  privacy setting.
+
+### Every gate is re-asked in the frame of the move
+
+`TakeOrderGate` (game-free, `TakeOrderGateTests`): Teamster's master switch and the collection switch, the take
+switch, the world, the work-authority rule (host, not dedicated, **no peers connected**), the start-up probe, a body
+whose inventory record can be written and read, nothing else in flight, no open tour plan (#379), a chosen source, one
+well-formed item name the game knows, at least one unit wanted, and room under the carry limit. Then the pinned port
+mints a permit for `Take` - the player's mark on that exact chest, this client owning it, nobody having it open, the
+ward, the privacy setting and reach - in the same call that moves anything.
+
+### Measured on both sides, and the remainder stays in the chest
+
+Exactly the deposit's discipline (§6e), with the roles exchanged. Both inventories are counted before and after;
+`ContainerMoveResult.Record` classifies from those deltas alone; only what **arrived** in him is removed from the
+chest's stack (the partial-stack case), and only what was measured arriving is acquired in his ledger
+(`CollectionAccount.RecordTake`). A fault halfway is `Uncertain`: nothing credited, nothing retried, nothing
+compensated, nothing minted. The permit is spent by the transfer that records it.
+
+### The pin, and what it refuses
+
+`Adapters/Workers/GunnarTakePort.cs` alone may spell the three calls, each verbatim and once:
+`gunnar.MoveItemToThis(chest, stack)`, `gunnar.AddItem(part)` and `chest.RemoveItem(stack, arrived)`. The
+`#381 chest-take audit` pins what a call pin cannot see: the clone of the chest's own stack, assigned once; one item
+lookup, in SafeRoom; no instantiation; the mover taking the two roles and deriving `chest` from the source and `gunnar`
+from the worker, twice each; one permit, for `Take`, with no other use spelled in the port; one port, built and called
+once, in `GunnarCollectionRuntime.Take.cs`, after the gate refuses with a return; the gate fed the take's own opt-in,
+which reads the take switch; an open tour plan refusing; the switch off by default and bound to that default; and the
+source set from the pointed-at chest and cleared, nowhere else. `tools/tests/test_teamster_take_audit.py` plants each
+escape - among them the take **reversed into a deposit**, a remove of the count **asked for**, a mint for `Deposit` or
+`Both`, a second call site, and the switch read as a literal - and requires it to be refused by the new rules and to
+pass a validator without them.
+
+The chest-designating lookup that both the destination and the source use is now one helper, `PointedChest()`, so the
+destination audit's pin on the hovered-object lookup still counts one.
+
+### Not claimed
+
+Nothing here has been observed in a running game; §10 has the rows. Taking as part of a tour, or a manifest of
+chest-to-chest trips, is not built here.
+
 ## 7. No portals
 
 He walks. There is no branch anywhere in this work that changes where he is standing other than by asking the
@@ -1328,6 +1396,23 @@ and `GunnarHaulingEnabled` on, single player, no cart assigned to Gunnar.
     other files (delete its `end` row), and load. `ct_collect status` must say the plan could not be read and was
     left as it is. `ct_collect resolve` must move it aside as a `.corrupt` copy before writing a new one, and
     record what he holds.
+
+### The chest take (§6i, D20) - OWNER GO-AROUND PENDING
+
+None has been run. Disposable world, `GunnarCollectionEnabled` on, single player.
+
+49. **Off by default.** With `GunnarChestTakeEnabled` off, mark a chest `Both`, `ct_collect source` at it and
+    `ct_collect take Stone 5`: refused with the take-switch sentence, nothing moves.
+50. **A measured take.** Turn it on. Put 30 Stone in a chest marked `Take`, stand Gunnar at it, `ct_collect take Stone
+    20`. Count the chest (10) and `ct_collect status` (the ledger records 20 taken).
+51. **The remainder stays.** Give him a near-full inventory and ask for more than fits: he takes what fits, the
+    sentence says the rest stays, and the chest holds exactly the rest.
+52. **The mark decides.** Mark the chest `Deposit` only: `source` refuses with the deposit-only sentence. Mark it
+    `Take`, `source`, then unmark it: `take` refuses and nothing moves.
+53. **Open, warded, far.** Open the chest yourself, or ward it, or walk him 5 m away: each refuses, nothing moves.
+54. **Put it down again.** `ct_collect destination` at a second chest marked `Deposit`, `ct_collect deposit Stone`:
+    the stones go in; the ledger balances.
+55. **A peer connects.** With a second player connected, `take` refuses with the authority sentence.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

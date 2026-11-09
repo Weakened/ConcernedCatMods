@@ -43,6 +43,7 @@ internal sealed class TeamsterSettings
         ConfigEntry<int> schemaVersion,
         ConfigEntry<bool> gunnarHaulingEnabled,
         ConfigEntry<bool> gunnarCollectionEnabled,
+        ConfigEntry<bool> gunnarChestTakeEnabled,
         ConfigEntry<bool> gunnarIdleHammerEnabled,
         ConfigEntry<KeyboardShortcut> containerPermissionShortcut,
         ConfigEntry<GunnarPullStrength> gunnarPullStrength,
@@ -50,6 +51,7 @@ internal sealed class TeamsterSettings
     {
         GunnarHaulingEnabled = gunnarHaulingEnabled;
         GunnarCollectionEnabled = gunnarCollectionEnabled;
+        GunnarChestTakeEnabled = gunnarChestTakeEnabled;
         GunnarIdleHammerEnabled = gunnarIdleHammerEnabled;
         ContainerPermissionShortcut = containerPermissionShortcut;
         GunnarPullStrength = gunnarPullStrength;
@@ -140,6 +142,10 @@ internal sealed class TeamsterSettings
     /// picked up.</summary>
     public ConfigEntry<bool> GunnarCollectionEnabled { get; }
 
+    /// <summary>Workers (#381, `DECISIONS.md` D20): whether Gunnar may take from a
+    /// chest the player explicitly marked Take or Both. Off by default, its own
+    /// switch, and it needs <see cref="GunnarCollectionEnabled"/> as well.</summary>
+    public ConfigEntry<bool> GunnarChestTakeEnabled { get; }
     /// <summary>Workers (#381, owner decision 2026-10-31, D21): while Gunnar is
     /// idle beside the cart assigned to him, he now and then walks over, faces it
     /// and plays the vanilla hammer swing. Cosmetic only. Effective only while
@@ -281,6 +287,12 @@ internal sealed class TeamsterSettings
                 "food, no chests, no piles somebody dropped, no trees. Works only in single player or as the " +
                 "host with nobody else connected, only on a source this session already controls - he never " +
                 "takes control of one - and only while he is standing next to it; nothing here moves him."),
+            config.Bind("Workers", "GunnarChestTakeEnabled", GunnarCollectionDefaults.ChestTakeEnabled,
+                "Let Gunnar take an item you name out of a chest you chose and marked for taking (or both), into " +
+                "his own inventory, counting both sides and leaving whatever does not fit in the chest. OFF by " +
+                "default, and it also needs GunnarCollectionEnabled. He never takes from a chest you have not " +
+                "marked, never picks a chest himself, never takes everything, and works only in single player or " +
+                "as the host with nobody else connected, standing next to the chest."),
             config.Bind("Workers", "GunnarIdleHammerEnabled", GunnarHaulingDefaults.IdleHammerEnabled,
                 "While Gunnar is idle near the cart you assigned him, he now and then walks over to it, faces it " +
                 "and plays the game's own hammer swing. Scenery only: it repairs nothing, uses nothing and changes " +

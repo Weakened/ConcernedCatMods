@@ -886,6 +886,35 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             "        Inventory? to = InventoryOf(worker);")
         self.assert_refused("the deposit was reversed into a withdrawal", marker="#381")
 
+    def test_the_roles_may_not_be_swapped_after_the_derivations(self):
+        # Found by the review of #381's chest take, which had the same hole: the
+        # two derivations are pinned, and a deconstruction one line below them
+        # reverses the deposit into a withdrawal with every pinned call
+        # byte-identical.
+        self.swap_in_deposit(
+            "        int remaining = units;\n",
+            "        (from, to) = (to, from);\n        int remaining = units;\n")
+        self.assert_refused("the roles were swapped after the pinned derivations", marker="#381",
+                            contains="`from` is written")
+
+    def test_a_guarded_deconstruction_may_not_swap_the_roles(self):
+        self.swap_in_deposit(
+            "        int remaining = units;\n",
+            "        if (units > 0) (from, to) = (to, from);\n        int remaining = units;\n")
+        self.assert_refused("a deconstruction behind an if swapped the roles", marker="#381",
+                            contains="`from` is written")
+
+    def test_an_overload_may_not_return_the_other_partys_inventory(self):
+        # Found by the review of #381's chest take: the measurement reads through
+        # the same helpers, so a swapped overload reverses the move and records
+        # it as a clean deposit. The pinned expression is kept inside the
+        # replacement on purpose: a substring pin let `_g ?? (pinned)` through.
+        self.swap_in_deposit(
+            "return container == null ? null : container.GetInventory();",
+            "return _g ?? (container == null ? null : container.GetInventory());")
+        self.assert_refused("an overload returned the other party's inventory", marker="#381",
+                            contains="each InventoryOf overload returns its own party")
+
     def test_the_move_may_not_take_two_interchangeable_inventories(self):
         # Going back to `(Inventory from, Inventory to, ...)` restores the
         # rename attack, so the shape itself is refused: the derivations have to

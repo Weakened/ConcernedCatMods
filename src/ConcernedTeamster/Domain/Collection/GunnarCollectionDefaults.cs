@@ -15,4 +15,10 @@ internal static class GunnarCollectionDefaults
     /// <summary><c>Workers/GunnarCollectionEnabled</c>. Off until a person turns
     /// it on.</summary>
     public const bool CollectionEnabled = false;
+
+    /// <summary><c>Workers/GunnarChestTakeEnabled</c> (`DECISIONS.md` D20). Off
+    /// until a person turns it on, and a switch of its own: a player who let him
+    /// put stones in a chest has not thereby let him take anything out of one.
+    /// It also needs <see cref="CollectionEnabled"/>.</summary>
+    public const bool ChestTakeEnabled = false;
 }

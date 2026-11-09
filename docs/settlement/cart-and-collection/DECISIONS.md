@@ -622,6 +622,64 @@ most fail-closed reading of the decision:
 
 **Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F11).
 
+## D20. Gunnar may take from a chest the player marked TAKE or BOTH
+
+Status: **accepted** (owner decision 2026-10-31, #381, asked directly by the completion lead; the issue comment of
+that date records it). **Implemented** in the same change as this entry.
+
+**What is granted.** Gunnar's opted-in collection runtime may move items **out of a vanilla `Container`'s
+inventory into his own**, when **that exact source container** carries the player's explicit `Take` or `Both` mark
+in `NpcContainerDesk`, measured on both sides, with the remainder left in the chest, off by default and pinned like
+D15.
+
+**The calls.** D15's three, with the roles exchanged: `Inventory.MoveItemToThis` for a whole stack, and for part of a
+stack `Inventory.AddItem` of a clone of that stack's own data into Gunnar followed by `Inventory.RemoveItem` of exactly
+what arrived, off the chest's stack. D15's reasoning for why the clone is not "spawning item instances" applies
+unchanged: the clone is of a stack in the chest that the same operation removes from, and the measurement proves the
+units are conserved.
+
+**The gates, all re-asked in the frame of the move:** D15's nine, with `Take` where D15 has `Deposit`, plus the take's
+own switch: Teamster's master switch, the collection switch and `Workers/GunnarChestTakeEnabled` (**off by
+default**); the start-up probe; the work-authority rule of D3; a body whose inventory record is trusted (an
+unwritable or unreadable record is handed nothing more, as D15 already contains it); the player's `Take` or `Both`
+mark on that exact container, resolved the way it was recorded; this client owning it; nobody having it open, and no
+cart it rides in use; the ward and privacy setting; and reach.
+
+**Measurement.** Both sides counted before and after; only what arrived in Gunnar is removed from the chest and
+credited; what does not fit stays in the chest; a fault halfway is uncertain and never retried blind, compensated or
+minted; a spent permit cannot record a second transfer.
+
+**Where it is enforced.** `Adapters/Workers/GunnarTakePort.cs`, pinned by the scope audit (each call verbatim and
+once, refused everywhere else in the product) and by `#381 chest-take audit`; planted escapes in
+`tools/tests/test_teamster_take_audit.py`, each refused by those rules and passing a validator without them.
+
+**How the decision was read where it leaves a choice** - each a **lead default pending owner confirmation**, the
+smallest and most fail-closed reading the brief allows:
+
+- *What may be taken.* One item, named exactly by the player (`ct_collect take <item> [count]`), with no wildcard, no
+  list and no "everything". A name the game does not know is refused. The owner's words name the chest, not the
+  items; the narrowing to one named item per order is this record's.
+- *How much.* At most what fits under D17's carry limit (a vanilla player's base limit plus Megingjord's bonus, less
+  everything he already carries) and his own slots. Without a count, that much of the one named item.
+- *Where he stands.* Within reach of the chest. Nothing here walks him; a manual chest-to-chest mode that walks him
+  between chests is a separate leaf of #381 and uses D14.2's own-body pathfinding when it is built.
+- *Putting it down again.* `ct_collect deposit <item>` deposits one named item through D15's unchanged port, so what
+  he took is not stranded in him. D15's grant already covers any item in his inventory; the default deposit filter
+  (what collecting yields) is unchanged. Equipped stacks are never offered. **A known edge:** if Gunnar is ever
+  issued a tool (the felling decision would), an unequipped issued tool could be named and deposited; the leaf that
+  issues one must filter issued items out of this path.
+- *The ledger.* A take is acquired in `CollectionAccount` like a pick, so the session's "taken" total counts what he
+  took from chests as well as what he collected; it is a record of where material physically is, not of what was
+  collected.
+
+**What is not granted:** no nearest-chest inference; no take from an unmarked chest, one marked `Deposit` only, or one
+marked and then unmarked; no ownership takeover; no synthetic or replacement resources; no extra copies; no teleporting
+of cargo; no mod data in a vanilla object; no bypass of ward, privacy, ownership or in-use checks; no take as part of a
+tour or into a cart's container (the cart-assisted round is its own decision, recorded in the 2026-10-31 paragraph of
+`CLAUDE.md`); no widening of any other Teamster capability.
+
+**Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 49-55 are OWNER GO-AROUND PENDING.
+
 ## D21. Gunnar's idle hammer swing is cosmetic, and is one pinned animation trigger on his own body
 
 Status: **accepted** (contract revision **C7**, owner decision 2026-10-31, given to the lead and relayed for #381).
