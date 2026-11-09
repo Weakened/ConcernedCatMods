@@ -2035,6 +2035,33 @@ TEAMSTER_CART_LOAD_LEGS_DECLARATION = re.compile(r"\bDepositTally\s+CartLoadLegs
 # the methods that decide WHICH container is loaded, whether the cart is where it
 # stood, whether he can reach it, and what this tour picked are pinned entire.
 TEAMSTER_CART_LOAD_SUBJECT_METHODS = (
+    ("public AssignedCartContainer( Vagon? cart, string expectedKey, NpcWorldEpoch epoch, Func<Vagon?, NpcContainerUse> "
+     "allowance, Func<Vector3?> workerPosition, Vector3 parkedAt, float reachMetres, float mostDriftMetres) { "
+     "_cart = cart; _expectedKey = expectedKey ?? string.Empty; _epoch = epoch; _allowance = allowance; "
+     "_workerPosition = workerPosition; _parkedAt = parkedAt; _reachMetres = reachMetres; "
+     "_mostDriftMetres = mostDriftMetres; }",
+     "the subject is told the cart, the lease's id and where it stood by its caller, and keeps them as given"),
+    ("public NpcContainerAccess Access { get { try { Container? bed = BedOf(_cart); if (_cart == null || bed == null || "
+     "bed.GetInventory() == null) { return new NpcContainerAccess(NpcContainerUse.Off, NpcContainerRefusal.Gone); } "
+     "if (_expectedKey.Length == 0 || !string.Equals(LiveKeyOf(_cart), _expectedKey, StringComparison.Ordinal) || "
+     "!Parked()) { return new NpcContainerAccess(NpcContainerUse.Off, NpcContainerRefusal.NotThisContainer); } "
+     "NpcContainerUse allowed = _allowance(_cart); ZNetView? view = _cart.m_nview; if (view == null || "
+     "!view.IsValid() || !view.IsOwner() || !bed.IsOwner()) { return new NpcContainerAccess(allowed, "
+     "NpcContainerRefusal.NotOwnedHere); } if (bed.IsInUse() || _cart.InUse() || _cart.IsAttached()) { return new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.InUse); } if (bed.m_checkGuardStone && "
+     "!PrivateArea.CheckAccess(bed.transform.position, 0f, flash: false, wardCheck: false)) { return new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.WardDenied); } if (!PrivacyAllows(bed)) { return new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.PrivacyDenied); } return WithinReach() ? new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.None) : new NpcContainerAccess(allowed, "
+     "NpcContainerRefusal.OutOfReach); } catch (Exception) { return new NpcContainerAccess(NpcContainerUse.Off, "
+     "NpcContainerRefusal.Gone); } } }",
+     "every question the cart is asked before a load - its id, where it stands, ownership, open or hitched, ward, "
+     "privacy and reach - in order, with no early yes"),
+    ("private static bool PrivacyAllows(Container container) { switch (container.m_privacy) { case "
+     "Container.PrivacySetting.Public: return true; case Container.PrivacySetting.Private: { Game game = "
+     "Game.instance; Piece? piece = container.GetComponent<Piece>(); return game != null && piece != null && "
+     "piece.GetCreator() == game.GetPlayerProfile().GetPlayerID(); } default: return false; } }",
+     "vanilla's container privacy, mirrored"),
     ("internal static Container? BedOf(Vagon? cart) { try { Container? bed = cart == null ? null : cart.m_container; "
      "return bed != null && ReferenceEquals(bed.m_wagon, cart) ? bed : null; } catch (Exception) { return null; } }",
      "the cart's bed is its own m_container riding that cart, and nothing else - not a redirect, not a fallback"),
@@ -2328,6 +2355,19 @@ def check_teamster_cart_load_moves_only_into_the_assigned_cart(errors: list[str]
     if not exactly("\"the cart assigned to him\", CollectionTourLimits.AtTheCart(_limits), refuseIfCarrying: true,", 1,
                    "the cart tour arrives at the handle with a margin inside the load's reach, and refuses a load "
                    "he brought", runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
+        return []
+    tour_domain = sources.get("Domain/Collection/CollectionTour.cs", "")
+    for spelling, why in (
+            ("depositReachMetres: Math.Min(limits.PickupReachMetres, limits.ArrivalToleranceMetres + 0.1f));",
+             "at the cart he counts as arrived just outside the motor's tolerance, well inside the load's reach"),
+            ("Walk(standingAt, now, _chest, _limits.DepositReachMetres, _toDepositing, _chestUnreachable);",
+             "the walk to where a load goes uses the deposit reach, in the one helper every trip walks through")):
+        if not exactly(spelling, 1, why, tour_domain, "Domain/Collection/CollectionTour.cs"):
+            return []
+    if len(re.findall(r"\bWalk" + SPACE + r"\(" + SPACE + r"standingAt" + SPACE + r"," + SPACE + r"now" + SPACE + r","
+                      + SPACE + r"_chest\b", tour_domain)) != 1:
+        fail(f"{label}: src/ConcernedTeamster/Domain/Collection/CollectionTour.cs walks to the chest other than through "
+             "WalkToChest, at a reach that is not the deposit reach", errors)
         return []
     writes = len(re.findall(r"\b_tourCartId" + SPACE + r"(?:\?\?)?=(?!=)", runtime))
     allowance_writes = sum(len(re.findall(r"\b_cartAllowance" + SPACE + r"(?:\?\?)?=(?!=)", text))

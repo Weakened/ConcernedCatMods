@@ -313,9 +313,23 @@ public sealed class CartTourGateTests
         // it would refuse a cart that merely settled (review of #381 item 2).
         CollectionLimits limits = CollectionLimits.Default;
         CollectionTourLimits atTheCart = CollectionTourLimits.AtTheCart(limits);
-        Assert.True(atTheCart.ReachMetres < limits.PickupReachMetres);
-        Assert.True(atTheCart.ReachMetres >= limits.ArrivalToleranceMetres);
+        Assert.True(atTheCart.DepositReachMetres < limits.PickupReachMetres);
+        Assert.True(atTheCart.DepositReachMetres >= limits.ArrivalToleranceMetres);
+
+        // Sources keep the ordinary reach (re-review of #381 item 2), and a chest
+        // tour is unchanged.
+        Assert.Equal(limits.PickupReachMetres, atTheCart.ReachMetres);
         Assert.Equal(limits.PickupReachMetres, CollectionTourLimits.Default(limits).ReachMetres);
+        Assert.Equal(limits.PickupReachMetres, CollectionTourLimits.Default(limits).DepositReachMetres);
+    }
+
+    [Fact]
+    public void ADepositReachBeyondTheReachIsRefused()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(
+            () => new CollectionTourLimits(2f, 12f, 10, depositReachMetres: 3f));
+        Assert.Throws<System.ArgumentOutOfRangeException>(
+            () => new CollectionTourLimits(2f, 12f, 10, depositReachMetres: 0f));
     }
 
     // --- one load -------------------------------------------------------------------------------

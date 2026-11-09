@@ -44,6 +44,7 @@ TOUR = os.path.join(WORKERS, "GunnarCollectionRuntime.Tour.cs")
 RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
 HAULING = os.path.join(WORKERS, "GunnarHaulingRuntime.cs")
 DEFAULTS = os.path.join(TEAMSTER, "Domain", "Collection", "GunnarCollectionDefaults.cs")
+TOUR_DOMAIN = os.path.join(TEAMSTER, "Domain", "Collection", "CollectionTour.cs")
 SETTINGS = os.path.join(TEAMSTER, "TeamsterSettings.cs")
 COMMAND = os.path.join(WORKERS, "CollectConsoleCommand.cs")
 
@@ -336,6 +337,37 @@ class CartLoadIsNarrow(unittest.TestCase):
         self.swap_in(CART_RUNTIME, "CollectionTourLimits.AtTheCart(_limits), refuseIfCarrying: true,",
                      "CollectionTourLimits.Default(_limits), refuseIfCarrying: true,")
         self.assert_audit_refused("the cart tour arrived at the edge of the reach")
+
+    def test_access_may_not_answer_yes_early(self):
+        # The re-review of #381 item 2: with Access pinned line by line, an early
+        # yes at the top of the try skipped ownership, in-use, ward, privacy and
+        # reach with every pin green.
+        self.swap_in(SUBJECT, "                Container? bed = BedOf(_cart);\n",
+                     "                Container? bed = BedOf(_cart);\n"
+                     "                if (bed != null) { return new NpcContainerAccess(_allowance(_cart), NpcContainerRefusal.None); }\n")
+        self.assert_audit_refused("Access answered yes before asking anything")
+
+    def test_privacy_may_not_answer_yes(self):
+        self.swap_in(SUBJECT, "            default:\n                return false;\n",
+                     "            default:\n                return true;\n")
+        self.assert_audit_refused("a private container's privacy answered yes")
+
+    def test_the_subject_may_not_ignore_the_leases_id(self):
+        self.swap_in(SUBJECT, "        _expectedKey = expectedKey ?? string.Empty;\n",
+                     "        _expectedKey = LiveKeyOf(cart);\n")
+        self.assert_audit_refused("the subject took its expected id from the cart it was asked about")
+
+    def test_the_tour_may_not_arrive_at_the_cart_at_the_edge_of_the_reach(self):
+        self.swap_in(TOUR_DOMAIN, "            depositReachMetres: Math.Min(limits.PickupReachMetres, limits.ArrivalToleranceMetres + 0.1f));",
+                     "            depositReachMetres: limits.PickupReachMetres);")
+        self.assert_audit_refused("the cart tour arrived at the edge of the load's reach")
+
+    def test_every_trip_walks_at_the_deposit_reach(self):
+        self.swap_in(TOUR_DOMAIN, "            _finishing = true;\n            EnterToChest();\n"
+                                  "            return WalkToChest(standingAt, now);\n",
+                     "            _finishing = true;\n            EnterToChest();\n"
+                     "            return Walk(standingAt, now, _chest, _limits.ReachMetres, _toDepositing, _chestUnreachable);\n")
+        self.assert_audit_refused("the last trip walked to the cart at the source reach")
 
     def test_a_hitched_cart_is_in_use(self):
         self.swap_in(SUBJECT, "if (bed.IsInUse() || _cart.InUse() || _cart.IsAttached())", "if (bed.IsInUse())")
