@@ -305,9 +305,48 @@ never commands: a clean carried load is given a newly validated return-only rout
 mismatch, an unreadable plan, a death, or a failed post-mutation save stops in `NeedsAttention` without replay or
 compensation. `cs_steward resolve` is the explicit human exit and quarantines an unreadable plan before replacing it.
 
-The remaining Steward gap is the larger driver cut-over: the shipped maintenance round does not yet use the
-`MaintenanceJobRole`/`NpcJobDriver` batch model. This leaf adopts durable interruption around the safe executor that
-already mutates the world; it does not claim the test-only batch driver became production.
+That paragraph once ended by saying the shipped maintenance round did not yet use the `MaintenanceJobRole` /
+`NpcJobDriver` batch model. It does now: `StewardRuntime` hands its adoption to `UpkeepLoop`, whose idle tick drives
+`NpcJobDriver` (`TickDrivenIdle`), and `UpkeepLoop` is still the only thing that moves material. (Corrected by #376,
+which read it while counting the roles below.)
+
+**Custody and reservations (#376).** Where the issue's "a surface used by at least two roles" stands, by part:
+
+| Part | Roles that use it in shipped code | How |
+|---|---|---|
+| Subject reservations with stable ids (`NpcReservationBook`, `ReservationId`) | **Two:** Steward's Sunniva and Teamster's Gunnar | Through `NpcJobDriver`, which holds every target and container of a round in the library's process-wide `NpcJobBooks` under names derived from identity, job and step; each role constructs the driver in production (`UpkeepLoop.TickDrivenIdle`, `GunnarCollectionRuntime.Tour`). Internal on purpose: a role never holds a book. |
+| The conservation ledger (`NpcCustodyLedger`) | **One:** Teamster's Gunnar | `CargoLedger` keeps every unit of his collection account in it and records each measured movement through `RecordMeasuredMove`. Steward's `FuelCustody` and Foreman's `MaterialCustodyLedger` still keep their own. |
+| The journal-first executor, its journal seam and the marker-rule standings | **None** | Foreman's shipped executor is `src/Shared/Settlement/Custody`, compiled into Foreman, `Shared.Settlement.Tests` and the interop consumer, and the last two do not reference this library; moving it is a change to three projects, not one leaf's slice. Steward's measured move is its own (`UpkeepLoop.Transfer`). |
+| The material reservation book and `INpcSourceAvailability` from it | **None** | Both roles hand in `Availability => null`, each with its cost stated. The driver's container holds already keep two rounds out of one chest. |
+
+What #376 published, and nothing more: `NpcCustodyLedger` (open and close a job, `Acquire`, `RecordMeasuredMove`, the
+read-only views), `NpcCustodyLocation`, `NpcCustodyPlace`, `NpcCustodyOutcome` and `NpcHolding`. `RecordMeasuredMove`
+records a movement the role carried out and measured itself; it is a transfer in the transfer name space, recorded
+through the same `Begin`/`Finish` calls a persisted intent and receipt make, so a name is one movement whichever path
+wrote it. It refuses rather than clamps, never moves material out of a terminal place, never onto the ground, never
+while the job has a transfer waiting on a person, and never across two loads. `NpcCustodyOutcome`'s zero is now
+`Unspecified`, because a defaulted result in a role's hands must not read as a success; nothing persists the values.
+
+**Lead defaults, pending owner confirmation** (recorded here rather than in `DECISIONS.md` because they are this
+library's words, not a world grant; none changes what any NPC does in the world):
+
+1. **`Released` is a new terminal place**: material that left a job's custody into the world by the game's own hand -
+   a destroyed cart's spill, a D16 death drop. It still exists and is not a loss to make good, but the job never takes
+   it up again as its own. The alternative was `Ground`, which a job may move material out of again; the narrower,
+   fail-closed choice is that a spill or a drop is never re-collected as the job's.
+2. **A terminal place is never left by a measured move.** Teamster's old ledger would have recorded a move out of
+   delivered, lost, spilled or dropped material; nothing called it, and it is now refused (`CargoOutcome.Malformed`).
+3. **An in-session ledger may name every place in the unknown load.** `RecordMeasuredMove` requires both places in
+   one load and refuses a mixture; Gunnar's account never outlives its session, so it uses the unknown load for every
+   place rather than a world it would have to be handed through `Adapters/Workers`. The executor's own intents, which
+   are written down and read back, still require a known load.
+4. **Gunnar's names stay one name space.** The library keeps acquisitions and movements apart; `CargoLedger` keeps a
+   name used for a take, a move or a cart spill from being used for either of the others, as it always has.
+
+**What #376 still needs:** a second role on the ledger (Steward's `FuelCustody` is the nearer; Foreman's is behind the
+`src/Shared` boundary above); an owner decision on whether Foreman's journal-first executor is absorbed by moving
+`src/Shared/Settlement/Custody` behind this library, or by recording the library copy as the absorption and leaving
+the shipped one where it is; and the executor's first role.
 
 Nothing in this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND
 PENDING. That includes the two adoptions above: the dependency wiring is proved by the validator, not by watching an

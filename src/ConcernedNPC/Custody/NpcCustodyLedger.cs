@@ -40,8 +40,17 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 /// <b>The revision counts records, not holdings.</b> It rises with every row
 /// the ledger takes, including rows later voided, so it never goes backwards
 /// across a reload and a name derived from it is unique for the life of the
-/// record. A transfer planned against an older revision is stale.</summary>
-internal sealed class NpcCustodyLedger
+/// record. A transfer planned against an older revision is stale.
+///
+/// <b>What is public, and why only that</b> (#376). A role may open a job,
+/// record what it took possession of, record a movement it carried out and
+/// measured itself, and ask where everything is. That is what Concerned
+/// Teamster's collection account needed to stop keeping a second copy of this
+/// invariant. The executor path - intent, engine add, engine remove, receipt -
+/// the marker-rule standings, resolution by a person and reconciliation stay
+/// internal until a role adopts them, because each is a rule a caller could
+/// otherwise reach past.</summary>
+public sealed class NpcCustodyLedger
 {
     private readonly Dictionary<string, NpcTransferRecord> _transfers =
         new Dictionary<string, NpcTransferRecord>(StringComparer.Ordinal);
@@ -82,7 +91,7 @@ internal sealed class NpcCustodyLedger
     // ------------------------------------------------------------------
 
     /// <summary>A job exists and may hold material. Idempotent.</summary>
-    internal void OpenJob(string? jobId)
+    public void OpenJob(string? jobId)
     {
         if (string.IsNullOrEmpty(jobId))
         {
@@ -96,7 +105,7 @@ internal sealed class NpcCustodyLedger
     /// it still holds is exactly what a person needs to see, and a job that
     /// ended holding forty units of stone is a fact rather than a rounding
     /// error. Ending it only stops new transfers.</summary>
-    internal void CloseJob(string? jobId)
+    public void CloseJob(string? jobId)
     {
         if (!string.IsNullOrEmpty(jobId))
         {
@@ -104,7 +113,7 @@ internal sealed class NpcCustodyLedger
         }
     }
 
-    internal bool IsOpen(string? jobId) => !string.IsNullOrEmpty(jobId) && _openJobs.Contains(jobId!);
+    public bool IsOpen(string? jobId) => !string.IsNullOrEmpty(jobId) && _openJobs.Contains(jobId!);
 
     // ------------------------------------------------------------------
     // Entry
@@ -130,12 +139,17 @@ internal sealed class NpcCustodyLedger
     /// next live row under it would apply units the world had already undone.
     /// The transfer half has always remembered unconditionally; these two
     /// halves of one rule now agree about replay order.</summary>
+    public NpcCustodyOutcome Acquire(ReservationId request, NpcCustodyLocation at, NpcMaterial material, int count) =>
+        Acquire(request, at, material, count, NpcRowStanding.Live);
+
+    /// <summary><see cref="Acquire(ReservationId, NpcCustodyLocation, NpcMaterial, int)"/>
+    /// for a row replayed with the standing the marker rule gave it.</summary>
     internal NpcCustodyOutcome Acquire(
         ReservationId request,
         NpcCustodyLocation at,
         NpcMaterial material,
         int count,
-        NpcRowStanding standing = NpcRowStanding.Live)
+        NpcRowStanding standing)
     {
         if (request.IsEmpty || !at.IsSpecified || !material.IsNamed || count < 1)
         {
@@ -170,7 +184,7 @@ internal sealed class NpcCustodyLedger
     /// the left-hand side of the conservation invariant, for the tests that
     /// check it and for anybody who wants to say why a number is what it is.
     /// </summary>
-    internal int Acquired(string? jobId, NpcMaterial material)
+    public int Acquired(string? jobId, NpcMaterial material)
     {
         int total = 0;
         foreach (KeyValuePair<string, Operation> pair in _acquisitions)
@@ -513,6 +527,106 @@ internal sealed class NpcCustodyLedger
         }
     }
 
+    /// <summary>Records a movement the <b>role</b> carried out and measured
+    /// itself - material it saw leave one place and arrive at another, through a
+    /// port of its own that already counted both sides.
+    ///
+    /// <b>Why this exists beside the executor.</b> The executor performs a
+    /// transfer and so has to write its intention down first. A role whose
+    /// world call is its own - a vanilla deposit it measured, a cart the game
+    /// destroyed - has nothing left to perform: the record of what was measured
+    /// is all there is, and without a way to write it here that role keeps a
+    /// second copy of this ledger's invariant. That is exactly what Concerned
+    /// Teamster did until #376. The units are the measured ones and nothing
+    /// else; this never decides that anything happened.
+    ///
+    /// <b>It is a transfer, in the transfer name space.</b> One name is one
+    /// movement whichever path recorded it, so a name the executor has used
+    /// cannot be recorded here, and the reverse. Restating the same name with
+    /// the same payload is <see cref="NpcCustodyOutcome.AlreadySatisfied"/> and
+    /// moves nothing; the same name with a different payload is
+    /// <see cref="NpcCustodyOutcome.RejectedDifferentPayload"/>; a name the
+    /// world rolled back is <see cref="NpcCustodyOutcome.Stale"/>; a name whose
+    /// executor transfer is still open, uncertain or refused is
+    /// <see cref="NpcCustodyOutcome.Rejected"/>, because answering it as done
+    /// would say units moved that the record never moved.
+    ///
+    /// <b>Refused rather than clamped</b>, with nothing changed: a job that is
+    /// not open; a source the job may not move material out of again
+    /// (delivered, handed over, lost or released); a destination on the
+    /// ground, for the reason <see cref="Check"/> gives; a job with a transfer
+    /// waiting on a person; and more units than the record holds at the
+    /// source - a move of more than is there is a disagreement about reality,
+    /// and guessing which side is right is how material is invented.
+    ///
+    /// <b>Both places must be named in one load.</b> A ledger that never
+    /// outlives its load may leave both unknown; mixing a known load with an
+    /// unknown one, or two loads, is refused. The executor's own intents still
+    /// require a known load, because they are written down and read back.
+    /// </summary>
+    public NpcCustodyOutcome RecordMeasuredMove(
+        ReservationId request,
+        NpcCustodyLocation from,
+        NpcCustodyLocation to,
+        NpcMaterial material,
+        int count)
+    {
+        if (request.IsEmpty || !from.IsSpecified || !to.IsSpecified || from.Equals(to)
+            || !material.IsNamed || count < 1 || !from.Epoch.Equals(to.Epoch))
+        {
+            return NpcCustodyOutcome.Rejected;
+        }
+
+        var intent = new NpcTransferIntent(request, from, to, material, count, Revision);
+        if (_transfers.TryGetValue(request.Value, out NpcTransferRecord? existing))
+        {
+            if (!existing!.Intent.SamePayloadAs(intent))
+            {
+                return NpcCustodyOutcome.RejectedDifferentPayload;
+            }
+
+            if (existing.Status == NpcTransferStatus.Completed && existing.Applied == count)
+            {
+                return NpcCustodyOutcome.AlreadySatisfied;
+            }
+
+            return existing.Status == NpcTransferStatus.Voided
+                ? NpcCustodyOutcome.Stale
+                : NpcCustodyOutcome.Rejected;
+        }
+
+        if (!IsOpen(request.JobId)
+            || !from.MayLeave
+            || to.Place == NpcCustodyPlace.Ground
+            || HasUnresolvedTransfer(request.JobId)
+            || HoldingAt(request.JobId, from, material) < count)
+        {
+            return NpcCustodyOutcome.Rejected;
+        }
+
+        // The same two calls a persisted intent and its receipt make, so the
+        // record a measured move leaves is the record of an executor transfer
+        // that completed - and the two cannot drift.
+        if (Begin(intent) != NpcCustodyOutcome.Applied)
+        {
+            return NpcCustodyOutcome.Rejected;
+        }
+
+        NpcCustodyOutcome finished = Finish(new NpcTransferReceipt(
+            request, NpcTransferOutcome.Completed, count, from, "measured by the role that moved it"));
+        if (finished != NpcCustodyOutcome.Applied
+            || !TryGetTransfer(request, out NpcTransferRecord record)
+            || record.Status != NpcTransferStatus.Completed)
+        {
+            // Unreachable after the checks above. If it is ever reached, the
+            // answer is a refusal rather than a claim of a move.
+            return NpcCustodyOutcome.Rejected;
+        }
+
+        CountRecord();
+        return NpcCustodyOutcome.Applied;
+    }
+
     /// <summary>In memory only: a transfer whose receipt could not be written,
     /// or whose engine step threw.</summary>
     internal NpcCustodyOutcome MarkUncertain(ReservationId request, string? evidence)
@@ -659,7 +773,7 @@ internal sealed class NpcCustodyLedger
     // Views
     // ------------------------------------------------------------------
 
-    internal int HoldingAt(string? jobId, NpcCustodyLocation location, NpcMaterial material) =>
+    public int HoldingAt(string? jobId, NpcCustodyLocation location, NpcMaterial material) =>
         _holdings.TryGetValue(new HoldingKey(jobId ?? string.Empty, location, material), out int count) ? count : 0;
 
     /// <summary>Every job's holding at one location, per material - what a
@@ -680,7 +794,7 @@ internal sealed class NpcCustodyLedger
 
     /// <summary>How many units of one material this job holds anywhere at all -
     /// the right-hand side of the conservation invariant.</summary>
-    internal int TotalEverywhere(string? jobId, NpcMaterial material)
+    public int TotalEverywhere(string? jobId, NpcMaterial material)
     {
         int total = 0;
         foreach (HoldingKey key in _holdingOrder)
@@ -696,7 +810,7 @@ internal sealed class NpcCustodyLedger
     }
 
     /// <summary>Non-zero holdings, in the order they first appeared.</summary>
-    internal IReadOnlyList<NpcHolding> Holdings => Snapshot(false);
+    public IReadOnlyList<NpcHolding> Holdings => Snapshot(false);
 
     /// <summary>Every place and material this record has ever held for a job -
     /// <b>including the ones it has emptied</b>.
@@ -740,7 +854,7 @@ internal sealed class NpcCustodyLedger
     /// conservation invariant, as a question anybody can ask at any moment -
     /// and what the tests assert at every transition rather than only at the
     /// end.</summary>
-    internal bool IsConserved(string? jobId, NpcMaterial material) =>
+    public bool IsConserved(string? jobId, NpcMaterial material) =>
         Acquired(jobId, material) == TotalEverywhere(jobId, material);
 
     // ------------------------------------------------------------------
