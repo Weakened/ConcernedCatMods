@@ -420,8 +420,12 @@ public sealed class ExcavationSourceAuditTests
         string label = MethodBody(preview, @"private\s+TextMeshProUGUI\?\s+Label\s*\(");
         Assert.Matches(@"^\{\s*if\s*\(\s*_label\s*!=\s*null\s*\)\s*return\s+_label\s*;", label);
         string material = MethodBody(preview, @"private\s+Material\?\s+Material\s*\(");
-        Assert.Matches(@"^\{\s*if\s*\(\s*_material\s*!=\s*null\s*\|\|\s*_materialTried\s*\)\s*return\s+_material\s*;\s*_materialTried\s*=\s*true\s*;", material);
+        Assert.Matches(@"^\{\s*if\s*\(\s*_material\s*!=\s*null\s*\)\s*return\s+_material\s*;\s*if\s*\(\s*_shaderMissing\s*\)\s*return\s+null\s*;", material);
+        Assert.Equal(1, Count(material, @"\bnew\s+Material\s*\("));
     }
+
+    /// <summary>Any write to a recipe's enabled flag other than turning it off: a member write or an object initialiser.</summary>
+    internal const string EnableWrite = @"\bm_enabled\s*=(?!=)(?!\s*false\s*;)";
 
     /// <summary>Slice 3's follow-up: a fault later in the session turns the recipe off, and nothing in the product turns a
     /// recipe on.</summary>
@@ -432,10 +436,15 @@ public sealed class ExcavationSourceAuditTests
         string item = SourceText("Items/IronShovelItem.cs");
         Assert.Equal(1, Count(item, @"internal\s+void\s+DisableRecipe\s*\(\s*\)"));
         Assert.Equal(1, Count(item, @"\brecipe\.m_enabled\s*=\s*false\s*;"));
-        Assert.Empty(Hits(@"\.m_enabled\s*=(?!=)(?!\s*false\s*;)"));
-        Assert.Equal(1, Count("recipe.m_enabled = true;", @"\.m_enabled\s*=(?!=)(?!\s*false\s*;)"));
-        Assert.Equal(1, Count("recipe.m_enabled = _craftable;", @"\.m_enabled\s*=(?!=)(?!\s*false\s*;)"));
-        Assert.Equal(0, Count("if (recipe.m_enabled == false) return;", @"\.m_enabled\s*=(?!=)(?!\s*false\s*;)"));
+        Assert.Empty(Hits(EnableWrite).Where(h => ExcavationCode(h.Path)));
+        Assert.Equal(1, Count("recipe.m_enabled = true;", EnableWrite));
+        Assert.Equal(1, Count("recipe.m_enabled = _craftable;", EnableWrite));
+        Assert.Equal(1, Count("var r = new Recipe { m_enabled = true };", EnableWrite));
+        Assert.Equal(0, Count("if (recipe.m_enabled == false) return;", EnableWrite));
+        Assert.Equal(0, Count("recipe.m_enabled = false;", EnableWrite));
+        // The item config's one Enabled is the start-up decision, and nothing else in the item folder sets one.
+        Assert.Equal(1, Hits(@"\bEnabled\s*=(?!=)").Where(h => h.Path.StartsWith("Items/", StringComparison.Ordinal)).Sum(h => h.N));
+        Assert.Equal(1, Count(item, @"\bEnabled\s*=\s*_craftable\s*,"));
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
         string fault = MethodBody(runtime, @"private\s+string\s+Fault\s*\(");
         Assert.Matches(@"_faulted\s*=\s*true\s*;", fault);
@@ -444,6 +453,39 @@ public sealed class ExcavationSourceAuditTests
         Assert.Matches(@"_runtime\.StopAfterFault\s*\(\s*exception\s*\)", SourceText("Excavation/ExcavationPreview.cs"));
         // A disposed runtime is unavailable.
         Assert.Matches(@"internal\s+bool\s+Available\s*=>[^;]*!_faulted\s*&&\s*!_disposed\s*;", runtime);
+    }
+
+    /// <summary>Independent review of slice 4, S2: what makes the edge after a closed inventory harmless lives in the
+    /// adapter, so it is pinned there. The preview hides (and tells the runtime, which restarts the dwell) whenever any UI
+    /// is open; a free cursor counts as UI; the refresh and the confirmation use the same two clocks.</summary>
+    [Fact]
+    public void ThePreviewHidesWhileAnyUiIsOpenAndBothSidesUseOneClock()
+    {
+        string preview = SourceText("Excavation/ExcavationPreview.cs");
+        string update = MethodBody(preview, @"internal\s+void\s+Update\s*\(");
+        Assert.Matches(@"bool\s+visible\s*=[^;]*IronShovel\.IsShovelName\s*\(\s*shovel\.m_shared\.m_name\s*\)\s*&&\s*!UiOpen\s*\(\s*\)\s*;", update);
+        Assert.Matches(@"if\s*\(\s*!visible\s*\)\s*\{\s*_runtime\.HidePreview\s*\(\s*\)\s*;", update);
+        Assert.Matches(@"_runtime\.RefreshPreview\s*\(\s*player!\s*,\s*shovel!\s*,\s*Time\.frameCount\s*,\s*Time\.realtimeSinceStartup\s*\)", update);
+        string ui = MethodBody(preview, @"internal\s+static\s+bool\s+UiOpen\s*\(");
+        foreach (string screen in new[]
+                 {
+                     @"InventoryGui\.IsVisible\s*\(\s*\)", @"Menu\.IsVisible\s*\(\s*\)", @"Minimap\.IsOpen\s*\(\s*\)", @"Console\.IsVisible\s*\(\s*\)",
+                     @"TextInput\.IsVisible\s*\(\s*\)", @"StoreGui\.IsVisible\s*\(\s*\)", @"Hud\.IsPieceSelectionVisible\s*\(\s*\)", @"Hud\.InRadial\s*\(\s*\)",
+                     @"GameCamera\.InFreeFly\s*\(\s*\)", @"chat\.HasFocus\s*\(\s*\)", @"ZCursor\.LockState\s*!=\s*CursorLockMode\.Locked",
+                 })
+        {
+            Assert.Matches(screen, ui);
+        }
+        // A pure "any of these" test: no condition can narrow another away.
+        Assert.DoesNotContain("&&", ui.Replace("(chat != null && chat.HasFocus())", ""));
+        string dig = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), DigSignature);
+        Assert.Matches(@"_shown\.Confirm\s*\(\s*mode\s*,\s*Time\.frameCount\s*,\s*Time\.realtimeSinceStartup\s*\)", dig);
+        // A stopped session says so before it asks for the outline (review N5).
+        int available = Regex.Match(dig, @"if\s*\(\s*!Available\s*\)\s*return\s+ExcavationReport\.Commit\s*\(\s*ExcavationCommitRefusal\.Unavailable").Index;
+        int confirm = Regex.Match(dig, @"_shown\.Confirm\s*\(").Index;
+        Assert.True(available > 0 && confirm > available, "DigWithShovel must refuse Unavailable before the confirmation.");
+        // No preview, and so no promise of a dig, when the press could not be installed (review N2).
+        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"_preview\s*=\s*_shovelInput\s*!=\s*null\s*\?\s*new\s+ExcavationPreview\s*\("));
     }
 
     [Fact]

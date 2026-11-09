@@ -102,6 +102,12 @@ internal sealed class ExcavationPreviewState
     /// <summary>Real time at which the preview last became visible.</summary>
     internal float VisibleSince { get; private set; } = float.NaN;
 
+    /// <summary>Real time since which what is shown has not changed: the same size, the same aim result, the same square,
+    /// the same gate answer and the same floor (independent review of slice 4, S1). The press's dwell counts from here, so
+    /// a square swept onto, a size just switched, a red outline just turned green or a floor just moved is never dug in the
+    /// step after it first appears.</summary>
+    internal float SteadySince { get; private set; } = float.NaN;
+
     /// <summary>The last frame in which the preview was drawn.</summary>
     internal int Frame { get; private set; } = int.MinValue;
 
@@ -141,15 +147,18 @@ internal sealed class ExcavationPreviewState
         if (!Visible) return;
         Visible = false;
         VisibleSince = float.NaN;
+        SteadySince = float.NaN;
         Version++;
     }
 
     /// <summary>The aim found no square.</summary>
     internal void ShowNoTarget(ExcavationMode mode, ExcavationAim aim, string? blocker, int frame, float now)
     {
-        Begin(frame, now);
+        ExcavationAim shownAim = aim == ExcavationAim.Ok ? ExcavationAim.NoGround : aim;
+        bool same = Visible && Mode == mode && Aim == shownAim && Refusal == ExcavationCommitRefusal.NotAimed;
+        Begin(frame, now, same);
         Mode = mode;
-        Aim = aim == ExcavationAim.Ok ? ExcavationAim.NoGround : aim;
+        Aim = shownAim;
         Blocker = blocker;
         Refusal = ExcavationCommitRefusal.NotAimed;
         Fault = ExcavationReadFault.None;
@@ -163,7 +172,9 @@ internal sealed class ExcavationPreviewState
     internal void ShowTarget(ExcavationMode mode, int centreX, int centreZ, ExcavationCommitRefusal refusal, ExcavationReadFault fault,
         in ExcavationPlan plan, string? obstruction, int pieces, int frame, float now)
     {
-        Begin(frame, now);
+        bool same = Visible && Mode == mode && Aim == ExcavationAim.Ok && CentreX == centreX && CentreZ == centreZ && Refusal == refusal &&
+                    plan.Status == _plan.Status && SameFloor(plan.Bottom, _plan.Bottom);
+        Begin(frame, now, same);
         Mode = mode;
         Aim = ExcavationAim.Ok;
         Blocker = null;
@@ -180,13 +191,13 @@ internal sealed class ExcavationPreviewState
     /// <summary>Drawn again this frame without a new read.</summary>
     internal void Touch(int frame) => Frame = frame;
 
-    /// <summary>Whether a press may use what is shown: visible for the whole dwell, drawn in the latest frames, and of the
-    /// size that is selected now. Returns <see cref="ExcavationCommitRefusal.NoPreview"/> otherwise.</summary>
+    /// <summary>Whether a press may use what is shown: shown unchanged for the whole dwell, drawn in the latest frames, and of
+    /// the size that is selected now. Returns <see cref="ExcavationCommitRefusal.NoPreview"/> otherwise.</summary>
     internal ExcavationCommitRefusal Confirm(ExcavationMode selected, int frame, float now)
     {
-        if (!Visible || !LadderRules.Finite(now) || !LadderRules.Finite(VisibleSince)) return ExcavationCommitRefusal.NoPreview;
+        if (!Visible || !LadderRules.Finite(now) || !LadderRules.Finite(SteadySince)) return ExcavationCommitRefusal.NoPreview;
         if (frame - Frame > ExcavationPreviewRules.MaximumFrameAge || frame < Frame) return ExcavationCommitRefusal.NoPreview;
-        if (now - VisibleSince < ExcavationPreviewRules.ConfirmDwellSeconds) return ExcavationCommitRefusal.NoPreview;
+        if (now - SteadySince < ExcavationPreviewRules.ConfirmDwellSeconds) return ExcavationCommitRefusal.NoPreview;
         if (Mode != selected) return ExcavationCommitRefusal.NoPreview;
         return ExcavationCommitRefusal.None;
     }
@@ -199,23 +210,34 @@ internal sealed class ExcavationPreviewState
         if (fresh.Status != ExcavationStatus.Ready || _plan.Status != ExcavationStatus.Ready) return false;
         if (fresh.Mode != Mode || fresh.CentreX != CentreX || fresh.CentreZ != CentreZ) return false;
         if (!LadderRules.Finite(fresh.Bottom) || !LadderRules.Finite(_plan.Bottom)) return false;
-        return Math.Abs(fresh.Bottom - _plan.Bottom) <= ExcavationPlanner.LevelTolerance;
+        return SameFloor(fresh.Bottom, _plan.Bottom);
+    }
+
+    /// <summary>Two floors within the planner's level tolerance, or both without a floor.</summary>
+    private static bool SameFloor(float a, float b)
+    {
+        bool finiteA = LadderRules.Finite(a);
+        bool finiteB = LadderRules.Finite(b);
+        if (!finiteA || !finiteB) return finiteA == finiteB;
+        return Math.Abs(a - b) <= ExcavationPlanner.LevelTolerance;
     }
 
     /// <summary>After a refused match the shown answer is no longer trusted; the next frame shows a fresh one.</summary>
     internal void Invalidate()
     {
         if (Refusal == ExcavationCommitRefusal.None) Refusal = ExcavationCommitRefusal.PreviewChanged;
+        SteadySince = float.NaN;
         Version++;
     }
 
-    private void Begin(int frame, float now)
+    private void Begin(int frame, float now, bool unchanged)
     {
         if (!Visible)
         {
             Visible = true;
             VisibleSince = now;
         }
+        if (!unchanged || !LadderRules.Finite(SteadySince)) SteadySince = now;
         Frame = frame;
     }
 }

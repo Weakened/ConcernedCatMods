@@ -94,8 +94,8 @@ internal sealed class ExcavationRuntime : IDisposable
     {
         if (!Enabled) return ExcavationReport.Commit(ExcavationCommitRefusal.Disabled, ExcavationReadFault.None, default, null);
         if (!Available) return ExcavationReport.Commit(ExcavationCommitRefusal.Unavailable, ExcavationReadFault.None, default, null);
-        ExcavationAim aim = Aim(Player.m_localPlayer, out int centreX, out int centreZ, out string? blocker);
-        if (aim != ExcavationAim.Ok) return ExcavationReport.Aim(aim, blocker);
+        ExcavationAim aim = Aim(Player.m_localPlayer, out int centreX, out int centreZ, out Collider? blocker);
+        if (aim != ExcavationAim.Ok) return ExcavationReport.Aim(aim, NameOf(blocker));
         ExcavationSamples samples = Samples(mode);
         ExcavationReadFault fault = _reader.Read(samples, centreX, centreZ);
         if (fault != ExcavationReadFault.None) return ExcavationReport.ReadFault(fault);
@@ -135,7 +135,7 @@ internal sealed class ExcavationRuntime : IDisposable
         ExcavationMode mode = _selection.Selected;
         int centreX = 0;
         int centreZ = 0;
-        string? blocker = null;
+        Collider? blocker = null;
         bool available = Available;
         ExcavationAim aim = available ? Aim(player, out centreX, out centreZ, out blocker) : ExcavationAim.Ok;
         bool changed = !_shown.Visible || _shown.Mode != mode || _shown.Aim != aim ||
@@ -160,7 +160,7 @@ internal sealed class ExcavationRuntime : IDisposable
         }
         if (aim != ExcavationAim.Ok)
         {
-            _shown.ShowNoTarget(mode, aim, blocker, frame, now);
+            _shown.ShowNoTarget(mode, aim, NameOf(blocker), frame, now);
             return true;
         }
         ExcavationSamples samples = PreviewSamples(mode);
@@ -184,6 +184,7 @@ internal sealed class ExcavationRuntime : IDisposable
         try
         {
             if (!Enabled) return ExcavationReport.Commit(ExcavationCommitRefusal.Disabled, ExcavationReadFault.None, default, null);
+            if (!Available) return ExcavationReport.Commit(ExcavationCommitRefusal.Unavailable, ExcavationReadFault.None, default, null);
             ExcavationMode mode = _selection.Selected;
             if (OnLadder()) return ExcavationReport.Commit(ExcavationCommitRefusal.OnLadder, ExcavationReadFault.None, default, null);
             ExcavationCommitRefusal refusal = _shown.Confirm(mode, Time.frameCount, Time.realtimeSinceStartup);
@@ -395,7 +396,7 @@ internal sealed class ExcavationRuntime : IDisposable
     /// through an opening in one is fair - and that point must be within <see cref="ExcavationLimits.Reach"/> of the
     /// player's eyes. The point is snapped to the vertex the engine op will centre on. The square follows the world axes
     /// only (EXCAVATION.md claim 4), so there is no rotation to choose.</summary>
-    private ExcavationAim Aim(Player? player, out int centreX, out int centreZ, out string? blocker)
+    private ExcavationAim Aim(Player? player, out int centreX, out int centreZ, out Collider? blocker)
     {
         centreX = 0;
         centreZ = 0;
@@ -415,19 +416,24 @@ internal sealed class ExcavationRuntime : IDisposable
         Collider collider = hit.collider;
         if (collider == null || collider.GetComponent<Heightmap>() == null)
         {
-            if (collider != null)
-            {
-                Transform root = collider.transform.root;
-                string name = (root != null ? root : collider.transform).name;
-                int clone = name.IndexOf('(');
-                blocker = clone > 0 ? name.Substring(0, clone).Trim() : name;
-            }
+            blocker = collider;
             return ExcavationAim.Blocked;
         }
         if (Vector3.Distance(player.m_eye.position, hit.point) > ExcavationLimits.Reach) return ExcavationAim.TooFar;
         centreX = ExcavationGeometry.SnapToVertex(hit.point.x);
         centreZ = ExcavationGeometry.SnapToVertex(hit.point.z);
         return ExcavationAim.Ok;
+    }
+
+    /// <summary>The prefab name of what blocked the aim, for the HUD. Read only when the preview refreshes (at most 20 times
+    /// a second), because reading a Unity object's name allocates (independent review of slice 4, N1).</summary>
+    private static string? NameOf(Collider? collider)
+    {
+        if (collider == null) return null;
+        Transform root = collider.transform.root;
+        string name = (root != null ? root : collider.transform).name;
+        int clone = name.IndexOf('(');
+        return clone > 0 ? name.Substring(0, clone).Trim() : name;
     }
 
     private static float? WaterLevel()

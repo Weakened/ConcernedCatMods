@@ -130,8 +130,8 @@ public sealed class Plugin : BaseUnityPlugin
                 _shovel = new IronShovelItem(message => Logger.LogInfo(message), craftable: _shovelInput != null && _excavation.Available);
                 _shovel.Install();
                 _excavation.Faulted = () => _shovel?.DisableRecipe();
-                _preview = new ExcavationPreview(message => Logger.LogInfo(message), _excavation);
-                _preview.Install();
+                _preview = _shovelInput != null ? new ExcavationPreview(message => Logger.LogInfo(message), _excavation) : null;
+                _preview?.Install();
             }
         }
         catch (Exception exception)

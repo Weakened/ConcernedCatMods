@@ -67,7 +67,7 @@ internal static class ExcavationReport
         {
             case ExcavationCommitRefusal.None: return "Digging " + ModeName(plan.Mode) + ". Checking the result.";
             case ExcavationCommitRefusal.Disabled: return "Excavation is off. Set [Excavation] Enabled = true in the Concerned Ladders config and restart.";
-            case ExcavationCommitRefusal.Unavailable: return "Excavation is unavailable on this game build (see the log). Nothing is changed.";
+            case ExcavationCommitRefusal.Unavailable: return "Excavation is unavailable this session: this game build did not match, or it stopped after a fault (see the log). Nothing is changed.";
             case ExcavationCommitRefusal.NotRegistered: return "The excavation terrain operation is not registered in this world (see the log). Nothing is changed.";
             case ExcavationCommitRefusal.TerrainOpsDisabled: return "The game has terrain edits switched off right now. Nothing is changed.";
             case ExcavationCommitRefusal.Busy: return "The last dig has not been confirmed yet. Wait for its result.";

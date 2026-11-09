@@ -276,8 +276,8 @@ through a delegate is invisible to it.
 ### 6.4 The console harness (`cl_excavate`), read-only since slice 3
 
 Registered only when `[Excavation] Enabled = true` (default **false**; restart after changing).
-`cl_excavate plan small|large` reads and describes the plan at the terrain the camera looks at, within 10 m of the
-player, including what would refuse it and how many building-piece colliders stand on ground that would change. It
+`cl_excavate plan small|large` reads and describes the plan at the terrain the camera looks at (since slice 4 by the
+shovel's targeting rule, 8.3: the first thing seen must be terrain, within 5 m of the eyes), including what would refuse it and how many building-piece colliders stand on ground that would change. It
 changes nothing and flashes no ward. In slice 2, `cl_excavate dig small|large` ran the full gate; slice 3 removed it
 (7.4), so the Iron Shovel's press is the only way a dig happens. `cl_excavate status` shows the switch, the probe, the
 registration and any unconfirmed dig. It is registered
@@ -448,7 +448,8 @@ decompiled installed game (1.0.21) and Jötunn 2.30.2. **None of it has been obs
 - The game's own key-hint panel also shows both buttons for the shovel on keyboard and mouse, through Jötunn's
   `KeyHintManager` (`ButtonConfig` names `Attack` and `SecondaryAttack`; Jötunn reads the bound key and rebuilds the
   hint after `ZInput.Save`). **Limit, read from Jötunn 2.30.2:** its gamepad branch places a glyph object but never sets
-  its text, so no gamepad panel entry is declared. On a controller the HUD line carries the controls. CONTROLLER
+  its text, so no gamepad panel entry is declared. A custom hint also replaces the game's combat hints for the item, so on
+  a controller the key-hint panel is empty while the shovel is held and the HUD line carries the controls. CONTROLLER
   HARDWARE BLOCKED.
 
 ### 8.2 What the preview shows
@@ -490,7 +491,10 @@ planned from:
   triggers ignored. **The first thing the ray meets must be terrain**, so the shovel never digs through a wall, a floor
   or a rock, and the HUD names what is in the way. Ground seen under a raised floor, beside a house, or through an opening
   in a floor (the trapdoor use) is fair, and structural pieces in the square do not refuse (6.3). Overhead building pieces
-  are therefore not blanket-rejected; remote editing through them is.
+  are therefore not blanket-rejected; remote editing through them is. **Consequence for the owner:** a floor laid on the
+  ground is always the first thing seen, so digging under it needs an opening in it (or a raised floor with room to look
+  under); the issue calls basement preparation under a player-built floor a core use, and this is the narrowest reading
+  of it. A third-person camera can also see ground over a low wall the body is behind, as vanilla building does.
 - **Reach: 5 m from the player's eyes**, the game's own building reach (`Player.m_maxPlaceDistance` = 5). Slices 2 and 3
   used 10 m from the feet as a harness bound.
 - **Ladders:** a Concerned Ladders climb permits only the building hammer while attached (`LadderRuntime.Free`), so the
@@ -503,13 +507,16 @@ planned from:
   the stamina and the ward without flashing it (`WardAllowsQuietly`, `flash: false`, which in the game only reads the
   wards). It never commits, charges, spawns or flashes.
 - **A press digs only what the preview shows** (`ExcavationPreviewState.Confirm` and `.Matches`): the selected size, at
-  the square the outline was drawn on (never a fresh aim), only once the outline has been visible for
-  **0.2 s** without a break and was drawn in the last two frames. The press then reads the terrain afresh and runs the
+  the square the outline was drawn on (never a fresh aim), only once **what is shown has not changed for 0.2 s** (the
+  same size, square, gate answer and floor height: a square swept onto, a size just switched, a red outline just turned
+  green or a floor that just moved restarts it) and was drawn in the last two frames. The press then reads the terrain afresh and runs the
   whole gate; a fresh Ready plan that is not the one shown (another square, size, or a floor more than 2 cm away) refuses
   as `PreviewChanged` and the next frame shows the plan as it is now. A shown refusal never becomes a dig.
 - **Chat, menus, inventory, map, console, store, build menu and radial menu** never dig: the game already withholds the
   attack edges then (`PlayerController.TakeInput` / `InInventoryEtc`), the preview hides while any of them is open, and
-  the press is ignored then too (`ExcavationPreview.UiOpen`). Closing one of them while the Attack button is held gives
+  the press is ignored then too (`ExcavationPreview.UiOpen`). So is any free cursor: during play the game's camera keeps
+  the cursor locked, keyboard and controller alike (`GameCamera.UpdateMouseCapture`), and frees it for the Ctrl+F1 cursor,
+  the barber and other mods' windows, so a click on one of those never digs. Closing one of them while the Attack button is held gives
   the game's attack edge in the first step after; the preview was hidden, so the dwell refuses that press
   (`NoPreview`). The same covers equipping the shovel and pressing at once. A cancelled press (a refusal at any gate)
   changes and charges nothing (7.3).
@@ -526,9 +533,12 @@ planned from:
 - **Objects:** one root and exactly seven line renderers, created the first time the preview shows in a scene and reused;
   one shared material; one HUD text. Fixed point buffers (no growth). No network view, no ZDO, nothing saved, no collider
   (neither the aim ray nor the object scan can meet the preview). They are plain scene objects, so leaving the world
-  destroys them with the scene and the next use builds them again; the plugin's teardown hides them. Nothing is created
-  per shovel stroke.
+  destroys them with the scene and the next use builds them again; the plugin's teardown hides them but does not destroy
+  them (the excavation audit allows no `Destroy` outside the op container), so a script-engine hot reload would leave one
+  hidden root, label and material behind until the scene unloads. Nothing is created per shovel stroke. The material is
+  created once and again only if something destroyed it.
 - **Text:** the HUD text is rebuilt only when what is shown changes (at most 20 times a second), never per frame. The
+  name of what blocks the aim is read only on a refresh (reading a Unity object's name allocates). The
   preview writes nothing to the log per frame; its only log lines are one-off (a missing shader, a fault).
 - `cl_excavate status` reports the number of preview terrain reads since start-up, for the owner's measurement.
 - Whether the largest action or repeated previews stall the game is **NOT RUN** (OWNER GO-AROUND PENDING).
@@ -537,8 +547,8 @@ planned from:
 
 - **Attack digs the size shown; Secondary Attack switches the size** (8.1). The size starts at 2x2x2 m each session and is
   not remembered.
-- **The press confirms the preview** (8.4): 0.2 s of continuous visibility before a press counts; a changed plan refuses
-  rather than digging what was not shown. No second confirmation step beyond the single press: the preview is the
+- **The press confirms the preview** (8.4): what is shown must have stood unchanged for 0.2 s before a press counts; a
+  changed plan refuses rather than digging what was not shown. No second confirmation step beyond the single press: the preview is the
   confirmation, and the issue asks for one deliberate shovel action.
 - **Reach 5 m from the eyes** (the game's building reach) and **the first thing seen must be terrain** (8.3).
 - **No digging from a ladder** (8.3).
@@ -546,7 +556,10 @@ planned from:
 - **Line look:** 5 cm lines through the terrain, green / amber / red / blue, and the HUD text under the crosshair.
 - **Controller:** the HUD line carries the controller glyphs; no gamepad entry in the key-hint panel (8.1).
 - **No animation still** (7.3). A tool animation that cannot reach a stored attack remains an owner question.
-- **A preview fault stops excavation for the session** and disables the recipe, because a press needs the preview.
+- **A preview fault stops excavation for the session** and disables the recipe, because a press needs the preview. When
+  the press itself could not be installed, no preview is installed either, so no outline ever promises a dig.
+- Floors on the ground must be opened (a trapdoor hole) to dig under them (8.3).
+- On a controller the key-hint panel is empty while the shovel is held; the HUD line carries the controls (8.1).
 - Not refused, and left to the owner: digging the square the player stands in (as the pickaxe does). With the 5 m reach the
   player can stand outside the 4x4x4 m border (3 m from its centre), but nothing forces it, and standing on the ground of a
   4 m hole drops the player about 4 m, where the game's fall damage begins.

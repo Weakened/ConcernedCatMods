@@ -55,7 +55,7 @@ internal sealed class ExcavationPreview : IDisposable
     private readonly Vector3[][] _buffers = new Vector3[ExcavationPreviewShape.MaximumPoints + 1][];
     private GameObject? _root;
     private Material? _material;
-    private bool _materialTried;
+    private bool _shaderMissing;
     private TextMeshProUGUI? _label;
     private KeyHintConfig? _hint;
     private int _labelVersion = int.MinValue;
@@ -98,13 +98,15 @@ internal sealed class ExcavationPreview : IDisposable
 
     /// <summary>True while any screen that takes the game's input or covers the world is open. The game already withholds
     /// the attack edges then (PlayerController.TakeInput and InInventoryEtc, read from the installed game); the preview
-    /// hides and the press ignores them as well.</summary>
+    /// hides and the press ignores them as well. A cursor that is not locked counts too: during play the game's camera keeps
+    /// it locked (GameCamera.UpdateMouseCapture, keyboard and controller alike) and frees it for any screen, the Ctrl+F1 free
+    /// cursor, the barber and other mods' windows, so a click on any of those never digs (independent review, N4).</summary>
     internal static bool UiOpen()
     {
         Chat chat = Chat.instance;
         return InventoryGui.IsVisible() || Menu.IsVisible() || Minimap.IsOpen() || Console.IsVisible() || TextInput.IsVisible() ||
                StoreGui.IsVisible() || Hud.IsPieceSelectionVisible() || Hud.InRadial() || GameCamera.InFreeFly() ||
-               (chat != null && chat.HasFocus());
+               (chat != null && chat.HasFocus()) || ZCursor.LockState != CursorLockMode.Locked;
     }
 
     /// <summary>Called every frame after the runtime's own update.</summary>
@@ -164,17 +166,18 @@ internal sealed class ExcavationPreview : IDisposable
         return true;
     }
 
-    /// <summary>The one shared material, created once. Null when neither shader is in this build; then only the HUD text
-    /// shows (reported once).</summary>
+    /// <summary>The one shared material, created once (again only if something destroyed it). Null when neither shader is
+    /// in this build; then only the HUD text shows (reported once).</summary>
     private Material? Material()
     {
-        if (_material != null || _materialTried) return _material;
-        _materialTried = true;
+        if (_material != null) return _material;
+        if (_shaderMissing) return null;
         Shader shader = Shader.Find(OverlayShader);
         bool overlay = shader != null;
         if (!overlay) shader = Shader.Find(FallbackShader);
         if (shader == null)
         {
+            _shaderMissing = true;
             _log("Iron Shovel preview outlines unavailable: neither " + OverlayShader + " nor " + FallbackShader + " is in this build. The HUD text still shows the plan.");
             return null;
         }

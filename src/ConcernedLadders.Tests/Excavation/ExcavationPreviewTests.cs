@@ -127,6 +127,60 @@ public sealed class ExcavationPreviewTests
         Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Small, 201, 20.25f));
     }
 
+    /// <summary>Independent review of slice 4, S1: the dwell counts from the last change of what is shown, not from when the
+    /// preview appeared, so nothing is dug in the step after it first appears.</summary>
+    [Fact]
+    public void ASquareSweptOntoIsNotDugBeforeItHasBeenShownForTheDwell()
+    {
+        ExcavationPlan plan = Plan(Flat(), ExcavationMode.Small, 4, -3);
+        var shown = new ExcavationPreviewState();
+        // Looking at the sky for a second: visible, but no square.
+        shown.ShowNoTarget(ExcavationMode.Small, ExcavationAim.NoGround, null, 100, 10f);
+        shown.ShowNoTarget(ExcavationMode.Small, ExcavationAim.NoGround, null, 160, 11f);
+        // Swept onto ground: the next step's press is refused, a press after the dwell is not.
+        shown.ShowTarget(ExcavationMode.Small, 4, -3, ExcavationCommitRefusal.None, ExcavationReadFault.None, plan, null, 0, 161, 11.01f);
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Small, 162, 11.03f));
+        // Re-read and unchanged: the dwell keeps running.
+        shown.ShowTarget(ExcavationMode.Small, 4, -3, ExcavationCommitRefusal.None, ExcavationReadFault.None, plan, null, 0, 170, 11.15f);
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Small, 171, 11.22f));
+        // Moved to the next vertex: a new square, a new dwell.
+        ExcavationPlan next = Plan(Flat(), ExcavationMode.Small, 5, -3);
+        shown.ShowTarget(ExcavationMode.Small, 5, -3, ExcavationCommitRefusal.None, ExcavationReadFault.None, next, null, 0, 172, 11.25f);
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Small, 173, 11.27f));
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Small, 173, 11.46f));
+    }
+
+    [Fact]
+    public void ASwitchedSizeARefusalTurnedReadyOrAMovedFloorRestartsTheDwell()
+    {
+        ExcavationPlan small = Plan(Flat(), ExcavationMode.Small, 0, 0);
+        ExcavationPlan large = Plan(Flat(), ExcavationMode.Large, 0, 0);
+        var shown = new ExcavationPreviewState();
+        shown.ShowTarget(ExcavationMode.Small, 0, 0, ExcavationCommitRefusal.None, ExcavationReadFault.None, small, null, 0, 1, 10f);
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Small, 2, 11f));
+        // Size switched and shown.
+        shown.ShowTarget(ExcavationMode.Large, 0, 0, ExcavationCommitRefusal.None, ExcavationReadFault.None, large, null, 0, 3, 11f);
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Large, 4, 11.05f));
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Large, 4, 11.21f));
+        // Red (tired) turning green.
+        shown.ShowTarget(ExcavationMode.Large, 0, 0, ExcavationCommitRefusal.NotEnoughStamina, ExcavationReadFault.None, large, null, 0, 5, 12f);
+        shown.ShowTarget(ExcavationMode.Large, 0, 0, ExcavationCommitRefusal.None, ExcavationReadFault.None, large, null, 0, 6, 12.5f);
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Large, 7, 12.55f));
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Large, 7, 12.71f));
+        // The floor moved by more than the tolerance (another edit raised the edge).
+        ExcavationPlan raised = Plan(Flat(50.1f), ExcavationMode.Large, 0, 0);
+        shown.ShowTarget(ExcavationMode.Large, 0, 0, ExcavationCommitRefusal.None, ExcavationReadFault.None, raised, null, 0, 8, 13f);
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Large, 9, 13.05f));
+        // After a refused match, a second click one step later does not dig the new plan.
+        shown.ShowTarget(ExcavationMode.Large, 0, 0, ExcavationCommitRefusal.None, ExcavationReadFault.None, raised, null, 0, 10, 14f);
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Large, 11, 14.3f));
+        shown.Invalidate();
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Large, 11, 14.3f));
+        shown.ShowTarget(ExcavationMode.Large, 0, 0, ExcavationCommitRefusal.None, ExcavationReadFault.None, large, null, 0, 12, 14.31f);
+        Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(ExcavationMode.Large, 13, 14.33f));
+        Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(ExcavationMode.Large, 13, 14.52f));
+    }
+
     [Fact]
     public void AStalePreviewIsNotConfirmed()
     {
