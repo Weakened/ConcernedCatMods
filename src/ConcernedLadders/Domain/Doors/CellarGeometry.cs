@@ -316,9 +316,9 @@ internal static class CellarGeometry
         return true;
     }
 
-    /// <summary>The planned ladder position, for the ladder slice: hung inside the opening from the front panel's
-    /// inner face, climbing side facing the rear, its top level with the snap plane, as <see cref="HatchGeometry"/>'s
-    /// ladder hangs from the trapdoor's front band. Not wired to placement yet.</summary>
+    /// <summary>The planned ladder position: hung inside the opening from the front panel's inner face, climbing side
+    /// facing the rear, its top level with the snap plane, as <see cref="HatchGeometry"/>'s ladder hangs from the
+    /// trapdoor's front band. Since slice 4 it is the placement anchor (<see cref="CellarLadder.Anchor"/>).</summary>
     internal static ClimbPoint PlannedLadderOrigin =>
         new ClimbPoint(0f, SnapPlaneY - LadderEdgeSnap.SectionHeight, ApertureFrontZ + LadderEdgeSnap.Gap - LadderEdgeSnap.RailBack);
 

@@ -180,8 +180,9 @@ after `IsValid()`, as the leaves already do; no RPC, ZDO field, ownership claim 
 - **Over the front panel.** The anchored ladder's top is the snap plane; the front panel's top is 0.40 to 0.47 m above
   it, and the floor in front is at 0.097 m. The exit search's standard lifts (6 cm, then a 0.30 m step over the higher
   end) leave the feet at about 0.42 m, below the panel's 0.47 m inner edge. The clearance query's capsule floats 5 cm
-  over the feet and is swept 2 cm thinner, so the 0.30 m step would **pass** the query while the real body's bottom met
-  the panel's inner edge about 5.5 cm deep. So a route with one end in a cover's opening and the other outside the
+  over the feet and is swept 2 cm thinner, so on the exit (from the floor's top plus the 2 cm landing skin) the 0.30 m
+  step would **pass** the query while the real body's bottom met the panel's inner edge about 5.5 cm deep; on the
+  descending entry (from the floor's top) the query would meet the panel and refuse the entry outright. So a route with one end in a cover's opening and the other outside the
   opening at the floor's level (`CellarLadder.LeavesOverFrame`) tries only lifts that carry the feet at least to
   `CellarLadder.OverPanelY`, 5 cm over the panel's inner top edge (0.52 m above the snap plane, about 0.40 m over the
   floor in front): the standard lifts, each raised to that height, duplicates dropped (`CellarLadder.Lifts`). A route
@@ -361,8 +362,8 @@ Added by slice 2 (L6, 2026-11-09):
    lands, the leaves stay shut whatever the native state says (section 4). The setting's text and
    the README say so. This is the narrowest option that still registers the pieces: no leaf moves without the
    occupancy checks.
-10. The cellar door carries no trapdoor lid runtime, so the ladders treat it as an ordinary piece until the ladder slice.
-    The clone is refused if it carries one.
+10. The cellar door carries no trapdoor lid runtime; the clone is refused if it carries one. The second half, "the
+    ladders treat it as an ordinary piece until the ladder slice", is superseded by slice 4 (items 21-30).
 11. The rear header stays 0.20 m after the wall census (section 2a). The 0.47 m, 0.50 m and thicker walls, and a stone
     wall snapped over the module's rear metre, are expected to hold the leaves shut rather than be cleared.
 12. Hinge marks: two darkened 8 mm plates per leaf at its hinge edge, visual only. A texture repeats once per 2 m of
@@ -436,6 +437,8 @@ Owner questions (slice 4):
   beside the cover?
 - Auto aimed at a cellar door with no room below is refused rather than standing the ladder on the frame. Is that right?
 - The exit and the entry rise about 0.5 m above the ladder's top to clear the panel. Does that look right in game?
+  The panel lift also needs about 2.42 m of headroom over the floor in front (the standard step about 2.30 m), so under a
+  low ceiling in front of the cover both the exit and the entry are refused.
 - Still open from slice 1: whether a player can stand on the 26.57 degree leaves (the game's ground-angle rule was not
   read). The ladders do not stand a climber there in practice (item 25 and section 2c).
 
@@ -454,8 +457,8 @@ integration, section 2c).
 None of these has been observed. Slices 2 and 3 register the pieces and drive their leaves behind the setting; nothing
 has been placed in game. Slice 2 added these rows: the hammer icons; the frame meshes' faces, shading and texture
 scale; the hinge marks on the ghost; a wall from section 2a's table on the rear edge; and a ladder
-aimed at a cellar door, which the ladder snap treats as an ordinary floor (its corner snaps) until the ladder slice, so
-it may hang from or stand at the frame's outer edge. Placement in a wood floor and beside stone
+aimed at a cellar door (superseded by slice 4's rows below: it hangs in the opening or is refused, never on the
+frame's outer edge). Placement in a wood floor and beside stone
 flooring, against a wood wall and a stone wall on the rear edge, every family; the ghost showing the high and low
 ends and the hinge sides at every rotation; snaps not sinking the threshold or leaving floating edges; standing on the
 closed leaves; Use from outside, from inside the entrance and from the ladder, keyboard and controller, remapped;
@@ -488,5 +491,5 @@ or sticking to the panel, and the rise of about 0.5 m above the ladder's top loo
 closes: no exit, the climber holds. From the floor in front: getting onto the ladder needs the pair open, the hands
 reach over the panel and the climber lowers onto the rungs; with the pair closed, the notice. No ladder exit stands a
 climber on the leaves, open or closed, nor on an open leaf's top edge. Two cellar doors side by side, and one beside a
-trapdoor. Another player opening or closing the pair while someone climbs. Trapdoors on with cellar doors off, and both
+trapdoor. A roof about 2.4 m over the floor in front: the exit and entry are refused, not squeezed. Another player opening or closing the pair while someone climbs. Trapdoors on with cellar doors off, and both
 off: ladders as on main.

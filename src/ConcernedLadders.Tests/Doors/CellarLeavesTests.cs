@@ -317,8 +317,15 @@ public sealed class CellarLeavesTests
         Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|\.\s*name\b|\.\s*tag\b|CompareTag|\.\s*layer\b|\broot\b"), Between(leaves, @"private\s+bool\s+IsOwn\s*\(", null));
         // Slice 4 adds one hierarchy lookup, the ladder's landing question (MayLandOn), which tells a leaf from the frame
         // for the landing search and is never part of an occupancy query. Everywhere else in the type, none.
-        string landing = Between(leaves, @"internal\s+static\s+bool\s+MayLandOn\s*\(", @"private\s+void\s+Stop\s*\(");
-        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|CompareTag"), leaves.Replace(landing, string.Empty));
+        // Exactly the method's own body is excluded: anything added after it is still under the ban.
+        Match header = Regex.Match(leaves, @"internal\s+static\s+bool\s+MayLandOn\s*\(\s*Collider\s+collider\s*\)\s*\{");
+        Assert.True(header.Success, "MayLandOn");
+        int depth = 1, end = header.Index + header.Length;
+        while (end < leaves.Length && depth > 0) { depth += leaves[end] == '{' ? 1 : leaves[end] == '}' ? -1 : 0; end++; }
+        Assert.Equal(0, depth);
+        string landing = leaves.Substring(header.Index, end - header.Index);
+        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|CompareTag"), leaves.Remove(header.Index, end - header.Index));
+        Assert.Matches(new Regex(@"GetComponentInParent\s*<\s*CellarLeaves\s*>"), landing);
         Assert.Single(Regex.Matches(leaves, @"\bMayLandOn\s*\("));
         foreach (string query in new[] { @"public\s+bool\s+Occupied\s*\(", @"private\s+bool\s+Query\s*\(", @"private\s+bool\s+Blocks\s*\(", @"private\s+bool\s+Moves\s*\(" })
         {
