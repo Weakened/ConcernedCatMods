@@ -316,16 +316,18 @@ which read it while counting the roles below.)
 |---|---|---|
 | Subject reservations with stable ids (`NpcReservationBook`, `ReservationId`) | **Two:** Steward's Sunniva and Teamster's Gunnar | Through `NpcJobDriver`, which holds every target and container of a round in the library's process-wide `NpcJobBooks` under names derived from identity, job and step; each role constructs the driver in production (`UpkeepLoop.TickDrivenIdle`, `GunnarCollectionRuntime.Tour`). Internal on purpose: a role never holds a book. |
 | The conservation ledger (`NpcCustodyLedger`) | **One:** Teamster's Gunnar | `CargoLedger` keeps every unit of his collection account in it and records each measured movement through `RecordMeasuredMove`. Steward's `FuelCustody` and Foreman's `MaterialCustodyLedger` still keep their own. |
-| The journal-first executor, its journal seam and the marker-rule standings | **None** | Foreman's shipped executor is `src/Shared/Settlement/Custody`, compiled into Foreman, `Shared.Settlement.Tests` and the interop consumer, and the last two do not reference this library; moving it is a change to three projects, not one leaf's slice. Steward's measured move is its own (`UpkeepLoop.Transfer`). |
+| The journal-first executor, its journal seam and the marker-rule standings | **None** | Foreman's shipped executor is `src/Shared/Settlement/Custody`, compiled into Foreman, `ConcernedForeman.Tests`, `Shared.Settlement.Tests` and the interop consumer, and the last two do not reference this library; moving it is a change to four projects, not one leaf's slice. Steward's measured move is its own (`UpkeepLoop.Transfer`). |
 | The material reservation book and `INpcSourceAvailability` from it | **None** | Both roles hand in `Availability => null`, each with its cost stated. The driver's container holds already keep two rounds out of one chest. |
 
-What #376 published, and nothing more: `NpcCustodyLedger` (open and close a job, `Acquire`, `RecordMeasuredMove`, the
+What #376 published, and nothing more: `NpcCustodyLedger` (open a job, `Acquire`, `RecordMeasuredMove`, the
 read-only views), `NpcCustodyLocation`, `NpcCustodyPlace`, `NpcCustodyOutcome` and `NpcHolding`. `RecordMeasuredMove`
 records a movement the role carried out and measured itself; it is a transfer in the transfer name space, recorded
 through the same `Begin`/`Finish` calls a persisted intent and receipt make, so a name is one movement whichever path
 wrote it. It refuses rather than clamps, never moves material out of a terminal place, never onto the ground, never
 while the job has a transfer waiting on a person, and never across two loads. `NpcCustodyOutcome`'s zero is now
-`Unspecified`, because a defaulted result in a role's hands must not read as a success; nothing persists the values.
+`Unspecified`, because a defaulted result in a role's hands must not read as a success; nothing persists the values. A measured move
+reaches no journal, so a role should not mix it with the executor's replayed rows in one ledger until the journal
+seam carries it.
 
 **Lead defaults, pending owner confirmation** (recorded here rather than in `DECISIONS.md` because they are this
 library's words, not a world grant; none changes what any NPC does in the world):
@@ -336,14 +338,18 @@ library's words, not a world grant; none changes what any NPC does in the world)
    fail-closed choice is that a spill or a drop is never re-collected as the job's.
 2. **A terminal place is never left by a measured move.** Teamster's old ledger would have recorded a move out of
    delivered, lost, spilled or dropped material; nothing called it, and it is now refused (`CargoOutcome.Malformed`).
-3. **An in-session ledger may name every place in the unknown load.** `RecordMeasuredMove` requires both places in
-   one load and refuses a mixture; Gunnar's account never outlives its session, so it uses the unknown load for every
-   place rather than a world it would have to be handed through `Adapters/Workers`. The executor's own intents, which
-   are written down and read back, still require a known load.
+3. **A ledger that is never written down may name every place in the unknown load.** `RecordMeasuredMove` requires
+   both places in one load and refuses a mixture. Gunnar's account uses the unknown load for every place, because
+   handing it a world would mean changing `Adapters/Workers`. **That account is not bounded by one world load**: the
+   runtime keeps one for the whole game session, so units recorded in one world stay recorded in the next. This was
+   equally true of Teamster's own ledger before #376 and is accounting only, but it is open: replacing the account
+   when a world goes down is listed below. The executor's own intents, which are written down and read back, still
+   require a known load.
 4. **Gunnar's names stay one name space.** The library keeps acquisitions and movements apart; `CargoLedger` keeps a
    name used for a take, a move or a cart spill from being used for either of the others, as it always has.
 
-**What #376 still needs:** a second role on the ledger (Steward's `FuelCustody` is the nearer; Foreman's is behind the
+**What #376 still needs:** Gunnar's account replaced when a world goes down (a runtime change in
+`Adapters/Workers`, left out of this slice while #530 and #533 are open there); a second role on the ledger (Steward's `FuelCustody` is the nearer; Foreman's is behind the
 `src/Shared` boundary above); an owner decision on whether Foreman's journal-first executor is absorbed by moving
 `src/Shared/Settlement/Custody` behind this library, or by recording the library copy as the absorption and leaving
 the shipped one where it is; and the executor's first role.

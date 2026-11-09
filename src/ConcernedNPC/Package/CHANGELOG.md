@@ -19,8 +19,8 @@ Ten additive changes share this version:
 ### A role keeps its material in the library's conservation ledger (#376)
 
 * `NpcCustodyLedger` is public, with `NpcCustodyLocation`, `NpcCustodyPlace`, `NpcCustodyOutcome` and `NpcHolding`.
-  A role may open and close a job, record an acquisition, record a movement it carried out and measured itself
-  (`RecordMeasuredMove`, new), and read where every unit is. The executor, its journal seam, the marker-rule
+  A role may open a job, record an acquisition, record a movement it carried out and measured itself
+  (`RecordMeasuredMove`, new), and read where every unit is. A measured move is not written to any journal. The executor, its journal seam, the marker-rule
   standings, resolution, reconciliation and the material reservation book stay internal.
 * `RecordMeasuredMove` refuses rather than clamps, records nothing when it refuses, and never moves material out of a
   terminal place, onto the ground, while the job has a transfer waiting on a person, or across two loads. A name is

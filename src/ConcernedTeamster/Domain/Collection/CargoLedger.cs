@@ -106,13 +106,21 @@ internal enum CargoOutcome
 /// <b>Stricter than before in one way, deliberately.</b> Material that has been
 /// delivered, lost, spilled or dropped is never moved again as his: the library
 /// refuses to move material out of a terminal place, and that refusal is
-/// answered <see cref="CargoOutcome.Malformed"/>. Nothing in the runtime ever
-/// asked for such a move.
+/// answered <see cref="CargoOutcome.Malformed"/> - or
+/// <see cref="CargoOutcome.NotThatMuchThere"/> when the place holds fewer units
+/// than were asked for, because that is checked first. Nothing in the runtime
+/// ever asked for such a move.
 ///
 /// <b>Nothing here is written to disk.</b> No row tag, no schema, no path, no
-/// file. This is in-session accounting for one job in one world load, which is
-/// why every place is named in the library's unknown load: the ledger never
-/// outlives the session that wrote it, and the library refuses only a mixture.
+/// file. Every place is named in the library's unknown load, because nothing in
+/// this domain type knows which world it is in. <b>That is not the same as one
+/// world load:</b> the runtime keeps one account for the life of the game
+/// session, which can span several worlds, so units recorded in one world are
+/// still recorded after the next is loaded. That was as true of this type's own
+/// copy of the invariant before #376, it is accounting only - nothing here
+/// moves or creates anything in a world - and replacing the account when a world
+/// goes down is a runtime change listed as still needed in
+/// docs/mods/concerned-npc/ARCHITECTURE.md section 10.
 /// </summary>
 internal sealed class CargoLedger
 {
@@ -393,6 +401,11 @@ internal sealed class CargoLedger
         {
             case NpcCustodyOutcome.AlreadySatisfied: return CargoOutcome.AlreadyRecorded;
             case NpcCustodyOutcome.RejectedDifferentPayload: return CargoOutcome.NameReused;
+
+            // A recorded name the library applied again would be a change
+            // reported as nothing; it is unreachable, and it is never answered
+            // as a refusal or as already done.
+            case NpcCustodyOutcome.Applied: return CargoOutcome.Unspecified;
 
             // Anything else under a name that was recorded is the library
             // refusing to treat it as done, and a refusal is never a success.

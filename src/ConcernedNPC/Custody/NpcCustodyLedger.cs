@@ -105,7 +105,7 @@ public sealed class NpcCustodyLedger
     /// it still holds is exactly what a person needs to see, and a job that
     /// ended holding forty units of stone is a fact rather than a rounding
     /// error. Ending it only stops new transfers.</summary>
-    public void CloseJob(string? jobId)
+    internal void CloseJob(string? jobId)
     {
         if (!string.IsNullOrEmpty(jobId))
         {
@@ -113,7 +113,7 @@ public sealed class NpcCustodyLedger
         }
     }
 
-    public bool IsOpen(string? jobId) => !string.IsNullOrEmpty(jobId) && _openJobs.Contains(jobId!);
+    internal bool IsOpen(string? jobId) => !string.IsNullOrEmpty(jobId) && _openJobs.Contains(jobId!);
 
     // ------------------------------------------------------------------
     // Entry
@@ -559,10 +559,21 @@ public sealed class NpcCustodyLedger
     /// source - a move of more than is there is a disagreement about reality,
     /// and guessing which side is right is how material is invented.
     ///
-    /// <b>Both places must be named in one load.</b> A ledger that never
-    /// outlives its load may leave both unknown; mixing a known load with an
-    /// unknown one, or two loads, is refused. The executor's own intents still
-    /// require a known load, because they are written down and read back.
+    /// <b>Both places must be named in one load.</b> A role that does not know
+    /// its load may leave both unknown, and then this ledger cannot tell one
+    /// load from the next - that is the role's to bound, by replacing the
+    /// ledger when its world goes. Mixing a known load with an unknown one, or
+    /// two loads, is refused. The executor's own intents still require a known
+    /// load, because they are written down and read back.
+    ///
+    /// <b>Nothing here is written down.</b> A measured move reaches no journal,
+    /// so a role that also replays the executor's rows from disk would find its
+    /// measured moves missing after a reload. Use one path per ledger until a
+    /// role needs both and the journal seam learns to carry these.
+    ///
+    /// <b>It counts one row in the revision</b>, as the executor does for each
+    /// row it writes, so a transfer planned before it is stale. An acquisition
+    /// is not counted here; whoever writes its row does that.
     /// </summary>
     public NpcCustodyOutcome RecordMeasuredMove(
         ReservationId request,

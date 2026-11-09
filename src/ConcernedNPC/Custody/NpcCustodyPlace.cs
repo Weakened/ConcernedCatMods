@@ -10,9 +10,12 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 /// enum names one, every role inherits a concept most of them have no use for.
 /// What the library actually reasons about is three properties - can material
 /// leave here, can this place be counted, and is being here the end of the
-/// story - and the six values below are exactly the distinctions those three
-/// questions need. A role that wants to tell two stored places apart does so
-/// with the location's key, which is its own.</summary>
+/// story - and the six values ahead of <see cref="Released"/> are exactly the
+/// distinctions those three questions need. <see cref="Released"/> answers all
+/// three as <see cref="Handed"/> and <see cref="Lost"/> do; it is a seventh
+/// value for what it says to a person - the material exists and the game put
+/// it there - not for a rule of its own. A role that wants to tell two stored
+/// places apart does so with the location's key, which is its own.</summary>
 public enum NpcCustodyPlace
 {
     /// <summary>Nobody said. Never a valid location.</summary>
