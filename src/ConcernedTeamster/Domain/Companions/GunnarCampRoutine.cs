@@ -32,7 +32,13 @@ internal readonly struct GunnarCampStep
 ///
 /// <b>Cheap when nothing changed.</b> The plan is kept until the anchor moves,
 /// camp's revision changes or the pieces near home change; a step with none of
-/// those allocates nothing and probes nothing.</summary>
+/// those allocates nothing and probes nothing.
+///
+/// <b>Stable.</b> When camp or the pieces near home change but home has not
+/// moved, the spot he already stands on is asked again first, and kept while it
+/// still passes every rule: something built or taken down elsewhere is no
+/// reason to move him, as Thorstein is not moved. Only a spot that no longer
+/// passes, or a moved home, gets a fresh plan.</summary>
 internal sealed class GunnarCampRoutine
 {
     private readonly Func<WorldPoint, bool> _admits;
@@ -78,6 +84,13 @@ internal sealed class GunnarCampRoutine
         bool changed=!_planned || anchor.DiffersFrom(_anchor,PlacementRules.DefaultAnchorMoveTolerance) ||
             camp.Revision!=_revision || surroundings.Revision!=_around;
         bool moved=false;
+        if (changed && _shown && _placement.Found &&
+            !anchor.DiffersFrom(_anchor,PlacementRules.DefaultAnchorMoveTolerance) &&
+            StillFits(anchor,camp,probe,surroundings))
+        {
+            _revision=camp.Revision; _around=surroundings.Revision; _planned=true;
+            return new GunnarCampStep(GunnarCampAction.Retain,_placement);
+        }
         if (changed)
         {
             PlacementResult planned=Plan(anchor,camp,probe,surroundings);
@@ -101,6 +114,13 @@ internal sealed class GunnarCampRoutine
     {
         _planningFor=anchor; _planningCamp=camp; _planningAround=surroundings;
         try { return GunnarFigurePlacement.Plan(anchor,probe,surroundings.OtherKeepsakes(anchor),_admits); }
+        finally { _planningCamp=null; _planningAround=null; _planningFor=default; }
+    }
+
+    private bool StillFits(CompanionAnchor anchor,NpcCampView camp,IPlacementProbe probe,IGunnarRestSurroundings surroundings)
+    {
+        _planningFor=anchor; _planningCamp=camp; _planningAround=surroundings;
+        try { return GunnarFigurePlacement.StillFits(anchor,probe,surroundings.OtherKeepsakes(anchor),_placement.Position,_admits); }
         finally { _planningCamp=null; _planningAround=null; _planningFor=default; }
     }
 

@@ -11,7 +11,8 @@ bed, else the world start) as a visitor, before he has a cart. He stays there
 once recruited. He is shown only while he has **no worker body** anywhere in the
 world, only on the host (single player, or the host of a game; never a dedicated
 server or a client), only with `Companions/Gunnar` on, and only within 48 m of
-home (kept until 64 m). A skipped story shows nobody. Talking to him with the
+home. Once shown he is kept beyond 64 m too (#461), until home's zone is no
+longer loaded (`GUNNAR_CAMP.md`). A skipped story shows nobody. Talking to him with the
 use key is #459's (`GUNNAR_DIALOGUE.md`).
 
 `ct_haul spawn` hands him over to his worker body: the figure comes down, its

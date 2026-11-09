@@ -47,7 +47,10 @@ the seat. No seat is offered, named or claimed.
      bounded ray; the home bed and loose physics objects do not count). An
      unanswerable check, or a full hit buffer, counts as a wall.
 3. A plan is kept until the anchor moves, camp's revision changes or the pieces
-   near home change. A step with none of those allocates nothing and probes
+   near home change. Then, if home has not moved, the spot he stands on is asked
+   again first (one probe and the same admission) and kept while it still
+   passes, so something built or removed elsewhere does not move him; only a
+   spot that no longer passes, or a moved home, gets a fresh plan. A step with none of those allocates nothing and probes
    nothing (measured: 0 bytes over 100,000 warmed steps, no probe, no wall
    check). A deferral because ground is not loaded is asked again on the next
    pass; a figure already standing keeps its spot meanwhile.
@@ -89,19 +92,26 @@ new world authority and no new validator allowance.
 
 ## Automated
 
-`GunnarCampTests` (16): steady-state allocation and probe budget; range
+`GunnarCampTests` (18): steady-state allocation and probe budget; range
 retention without re-probing; bed re-plan and worker suppression without another
 probe; the library camp's foreign-epoch and non-structure refusal and survey
 cache; the camp-piece rule; no seat offered to a standing figure; unknown camp
-and stale epoch; a spot across a doorway refused; a spot in or beside a doorway
-refused; every door - shut, open,
+and stale epoch; a spot across a doorway refused, including one clear of the
+doorway that only the crossing refuses; a spot in or beside a doorway refused; every door - shut, open,
 allowed-but-shut - refusing (the rule's helper checked directly too); a wall, no
 room, and an unanswerable wall check; an established camp bounding the spot and
 no camp leaving home to decide; a failed look showing him nowhere new and keeping
-his spot; a change near home re-planning to the same spot, and a spot built over
-moving him; unloaded ground asked again while a shown figure holds; unknown
-keepsakes deferring. Mutation-checked: disabling the door-crossing rule fails two
-tests, the doorway clearance one, and the failed-look refusal one.
+his spot; a change near home asking about his spot again and keeping it, a spot
+built over moving him, and an unrelated change not moving him off a spot that
+still passes; unloaded ground asked again while a shown figure holds; unknown
+keepsakes deferring. Mutation-checked, one rule removed at a time: dropping the
+door-crossing call from the routine fails
+`ACrossingAloneRefusesASpotClearOfTheDoorway`; dropping the doorway clearance
+fails `ASpotInOrBesideADoorwayIsNeverHis`; dropping the failed-look refusal fails
+`AFailedLookShowsHimNowhereNewAndKeepsTheSpotHeHas`; dropping the keep-if-it-
+still-passes check fails `AnUnrelatedChangeNearHomeDoesNotMoveHimOffASpotThatStillPasses`;
+dropping the wall check, the room check or the camp bound each fails its own test
+too.
 
 `GunnarHandOverOrderTests` and `GunnarDialogueCatalogTests` still pin the pass's
 order (the story before anything physical, the body decision before the figure)
@@ -109,6 +119,19 @@ and talk-only speech. The validator's `[teamster] #458 figure audit` is
 unchanged and green: the presenter's figure calls keep their pinned spelling and
 population (the facing turn reuses the one pinned re-stand), and the new adapter
 in `Adapters/Companions` builds, adds, re-parents, activates and poses nothing.
+
+## Limits, stated
+
+- Every doorway is read as 2 m wide (1 m either side of the door's origin), the
+  vanilla wooden door's opening. A wider gate is under-measured: a line through
+  its outer part may not count as crossing it, and an open gate is no wall to
+  the ray. Thorstein's figure shares this. Reading each door's own bounds would
+  close it.
+- A look allocates a short string per loaded piece within 32 m (its network id),
+  at most every 10 s while you are near home, as Thorstein's does every 30 s. The
+  routine's own step allocates nothing.
+- A look that fails after home moved keeps him at the old spot until a look
+  succeeds (the next try is within 10 s): nowhere new, by design.
 
 ## Not in this leaf
 

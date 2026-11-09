@@ -155,6 +155,20 @@ public sealed class GunnarCampTests
         Assert.False(GunnarRestBounds.AcrossADoor(default,new WorldPoint(0.5f,0,0),new[] { DoorAtX(1f) },line));
         Assert.False(GunnarRestBounds.AcrossADoor(default,new WorldPoint(3,0,0),Array.Empty<DoorPortal>(),line));
     }
+    [Fact] public void ACrossingAloneRefusesASpotClearOfTheDoorway()
+    {
+        // A door plane 1.6 m east of home, so home is clear of it, with room
+        // to stand only far east (past the doorway's clearance) or far west.
+        // Without the crossing rule the sweep's first far-east spot wins; with
+        // it, that spot is across the doorway and he stands west instead.
+        var(camp,epoch,anchor)=Camp();
+        var around=new Around { Room = s => s.X>3.2f || s.X< -3.5f };
+        around.DoorList.Add(DoorAtX(1.6f));
+        var step=new GunnarCampRoutine().Step(Facts(),anchor,Survey(camp),true,epoch,new Flat(),around);
+        Assert.True(step.Placement.Found);
+        Assert.False(GunnarRestBounds.BesideADoorway(step.Placement.Position,around.Doors));
+        Assert.True(step.Placement.Position.X< -3.5f,"he was set down across a doorway from home: "+step.Placement.Position);
+    }
     [Fact] public void ASpotInOrBesideADoorwayIsNeverHis()
     {
         // A 2 m door 3 m north of home, opening facing north: home is clear of
@@ -247,6 +261,25 @@ public sealed class GunnarCampTests
         var moved=routine.Step(Facts(),anchor,Survey(camp),true,epoch,probe,around);
         Assert.Equal(GunnarCampAction.Reposition,moved.Action);
         Assert.NotEqual(taken,moved.Placement.Position);
+    }
+    [Fact] public void AnUnrelatedChangeNearHomeDoesNotMoveHimOffASpotThatStillPasses()
+    {
+        var(camp,epoch,anchor)=Camp(); var probe=new Flat(); var routine=new GunnarCampRoutine();
+        var best=new GunnarCampRoutine().Step(Facts(),anchor,Survey(camp),true,epoch,new Flat(),new Around()).Placement.Position;
+        // The best spot is blocked at first, so he takes another.
+        var around=new Around { Room = s => !s.Equals(best) };
+        var first=routine.Step(Facts(),anchor,Survey(camp),true,epoch,probe,around); routine.NoteFigureShown(true);
+        Assert.NotEqual(best,first.Placement.Position);
+        // Whatever blocked it is taken down: the better spot is free, his own
+        // still passes, and he stays put.
+        around.Room = _ => true; around.Revision++;
+        var after=routine.Step(Facts(),anchor,Survey(camp),true,epoch,probe,around);
+        Assert.Equal(GunnarCampAction.Retain,after.Action);
+        Assert.Equal(first.Placement.Position,after.Placement.Position);
+        // A moved home is a fresh plan, whatever still fits.
+        var moved=new CompanionAnchor(AnchorKind.ClaimedBed,new WorldPoint(5f,0,0));
+        around.Revision++;
+        Assert.Equal(GunnarCampAction.Reposition,routine.Step(Facts(),moved,Survey(camp,5f,0),true,epoch,probe,around).Action);
     }
     [Fact] public void UnloadedGroundIsAskedAgainAndAShownFigureKeepsItsSpotMeanwhile()
     {

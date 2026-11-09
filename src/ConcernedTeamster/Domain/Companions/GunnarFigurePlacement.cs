@@ -38,6 +38,25 @@ internal static class GunnarFigurePlacement
         });
     }
 
+    /// <summary>#461: whether the spot he already stands on still passes every
+    /// rule a new plan would ask of it - the ground probed again, the keepsake
+    /// clearance and <paramref name="admits"/> - for the same anchor, so the
+    /// band is the one it was chosen in. One probe; false whenever anything is
+    /// unknown, so a doubt sends him to a fresh plan rather than keeping him.
+    /// </summary>
+    public static bool StillFits(CompanionAnchor anchor, IPlacementProbe probe,
+        IReadOnlyList<WorldPoint>? otherKeepsakes, WorldPoint spot, Func<WorldPoint, bool>? admits = null)
+    {
+        if (probe == null) throw new ArgumentNullException(nameof(probe));
+        if (!anchor.IsValid || !Finite(anchor.Position) || !Finite(spot) || otherKeepsakes == null) return false;
+        PlacementProbeSample sample = probe.Probe(spot);
+        if (!sample.IsUsable || !Finite(sample.Position)) return false;
+        for (int i = 0; i < otherKeepsakes.Count; i++)
+            if (!Finite(otherKeepsakes[i]) ||
+                sample.Position.HorizontalDistanceTo(otherKeepsakes[i]) < GunnarKeepsake.Clearance) return false;
+        return admits == null || admits(sample.Position);
+    }
+
     private static bool Finite(WorldPoint p) => !(float.IsNaN(p.X) || float.IsInfinity(p.X) ||
         float.IsNaN(p.Y) || float.IsInfinity(p.Y) || float.IsNaN(p.Z) || float.IsInfinity(p.Z));
 
