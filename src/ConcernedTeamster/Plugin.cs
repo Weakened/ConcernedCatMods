@@ -158,6 +158,16 @@ public sealed class Plugin : BaseUnityPlugin
             // #381: a collection tour drives Gunnar's body from the same worker
             // tick the haul executor uses, and only while no cart is his.
             _hauling.CollectionDrive = _collection.DriveWorker;
+
+            // #381, D22: the cart-assisted tour sees the cart assigned to him
+            // only through the hauling runtime's lease - its facts, the cart the
+            // lease names, and the allowance that answers Deposit only for that
+            // cart while it stands idle. No hauling runtime, no cart.
+            Adapters.Workers.GunnarHaulingRuntime hauling = _hauling;
+            _collection.ConnectCart(
+                () => hauling.AssignedCart,
+                hauling.AssignedVagon,
+                hauling.CartLoadAllowance);
         }
 
         // #317: publish Gunnar's real service through concernedcat.haul/1.

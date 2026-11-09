@@ -44,6 +44,7 @@ internal sealed class TeamsterSettings
         ConfigEntry<bool> gunnarHaulingEnabled,
         ConfigEntry<bool> gunnarCollectionEnabled,
         ConfigEntry<bool> gunnarChestTakeEnabled,
+        ConfigEntry<bool> gunnarCartTourEnabled,
         ConfigEntry<bool> gunnarIdleHammerEnabled,
         ConfigEntry<KeyboardShortcut> containerPermissionShortcut,
         ConfigEntry<GunnarPullStrength> gunnarPullStrength,
@@ -52,6 +53,7 @@ internal sealed class TeamsterSettings
         GunnarHaulingEnabled = gunnarHaulingEnabled;
         GunnarCollectionEnabled = gunnarCollectionEnabled;
         GunnarChestTakeEnabled = gunnarChestTakeEnabled;
+        GunnarCartTourEnabled = gunnarCartTourEnabled;
         GunnarIdleHammerEnabled = gunnarIdleHammerEnabled;
         ContainerPermissionShortcut = containerPermissionShortcut;
         GunnarPullStrength = gunnarPullStrength;
@@ -146,6 +148,14 @@ internal sealed class TeamsterSettings
     /// chest the player explicitly marked Take or Both. Off by default, its own
     /// switch, and it needs <see cref="GunnarCollectionEnabled"/> as well.</summary>
     public ConfigEntry<bool> GunnarChestTakeEnabled { get; }
+
+    /// <summary>Workers (#381, `DECISIONS.md` D22): whether Gunnar's collection
+    /// tour may put what it picks into the cart the player assigned him, parked
+    /// inside the area, instead of walking each load to a chest. Off by default,
+    /// its own switch, and it needs <see cref="GunnarCollectionEnabled"/> and
+    /// <see cref="GunnarHaulingEnabled"/> as well.</summary>
+    public ConfigEntry<bool> GunnarCartTourEnabled { get; }
+
     /// <summary>Workers (#381, owner decision 2026-10-31, D21): while Gunnar is
     /// idle beside the cart assigned to him, he now and then walks over, faces it
     /// and plays the vanilla hammer swing. Cosmetic only. Effective only while
@@ -293,6 +303,13 @@ internal sealed class TeamsterSettings
                 "default, and it also needs GunnarCollectionEnabled. He never takes from a chest you have not " +
                 "marked, never picks a chest himself, never takes everything, and works only in single player or " +
                 "as the host with nobody else connected, standing next to the chest."),
+            config.Bind("Workers", "GunnarCartTourEnabled", GunnarCollectionDefaults.CartTourEnabled,
+                "Let Gunnar's collection tour put what it picks into the cart you assigned him ('ct_collect start " +
+                "cart'), parked inside the area, counting both sides and keeping whatever does not fit, instead of " +
+                "walking each load to a chest. OFF by default, and it also needs GunnarCollectionEnabled and " +
+                "GunnarHaulingEnabled. He never chooses a cart, never fills one that is hitched, open, moving or " +
+                "busy, never puts in anything but what that tour picked, and never empties the cart - that is " +
+                "yours. Single player or the host with nobody else connected."),
             config.Bind("Workers", "GunnarIdleHammerEnabled", GunnarHaulingDefaults.IdleHammerEnabled,
                 "While Gunnar is idle near the cart you assigned him, he now and then walks over to it, faces it " +
                 "and plays the game's own hammer swing. Scenery only: it repairs nothing, uses nothing and changes " +

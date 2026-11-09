@@ -272,6 +272,41 @@ internal sealed class CollectionAccount
         }
     }
 
+    /// <summary>Records what a load into the cart assigned to him moved
+    /// (`DECISIONS.md` D22): off his back and into the cart, by what was
+    /// <b>measured arriving</b>. A refusal and an unmeasurable answer move
+    /// nothing. Bounded by what the ledger holds on his back, so a load that
+    /// measured more than this session saw him take moves what it can and leaves
+    /// the difference visible, never acquired on paper to make it balance.</summary>
+    /// <returns>How many units the ledger moved into the cart.</returns>
+    public int RecordCartLoad(string step, DepositResult result)
+    {
+        if (result.Outcome != DepositOutcome.Deposited && result.Outcome != DepositOutcome.PartlyDeposited)
+        {
+            return 0;
+        }
+
+        int stowed = 0;
+        for (int index = 0; index < result.Moved.Count; index++)
+        {
+            KeyValuePair<string, int> entry = result.Moved[index];
+            if (entry.Value <= 0 || string.IsNullOrEmpty(entry.Key))
+            {
+                continue;
+            }
+
+            int fromBack = Least(entry.Value, _ledger.At(entry.Key, CargoPlace.Carried));
+            if (fromBack > 0
+                && _ledger.Move(step + ":load:" + entry.Key, entry.Key, fromBack, CargoPlace.Carried, CargoPlace.InCart)
+                    == CargoOutcome.Recorded)
+            {
+                stowed += fromBack;
+            }
+        }
+
+        return stowed;
+    }
+
     /// <summary>Records what a take from a marked chest moved into him
     /// (`DECISIONS.md` D20). Only what was <b>measured arriving</b> is acquired,
     /// onto his back; a refusal and an unmeasurable answer acquire nothing - the

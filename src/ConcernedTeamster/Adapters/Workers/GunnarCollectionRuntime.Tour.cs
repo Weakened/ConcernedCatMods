@@ -140,6 +140,18 @@ internal sealed partial class GunnarCollectionRuntime
             return;
         }
 
+        // D22: a cart tour goes on only while the cart is still the one it began
+        // with, assigned, parked where it stood and with nothing happening; a
+        // chest tour never goes on with a cart assigned. Asked here as well as
+        // every frame, because this is the tick that moves him.
+        string cartStop = TourCartStop();
+        if (cartStop.Length != 0)
+        {
+            CancelTour(cartStop);
+            SafeHalt(ai);
+            return;
+        }
+
         if (_tourPicking)
         {
             SafeHalt(ai);
@@ -162,7 +174,11 @@ internal sealed partial class GunnarCollectionRuntime
                 break;
             case TourOrder.Deposit:
                 SafeHalt(ai);
-                tour.DepositEnded(DepositForTour(worker, out string detail), detail);
+                string detail;
+                TourDepositEnd end = CartTourRunning
+                    ? LoadCartForTour(worker, out detail)
+                    : DepositForTour(worker, out detail);
+                tour.DepositEnded(end, detail);
                 break;
             default:
                 SafeHalt(ai);
@@ -265,6 +281,7 @@ internal sealed partial class GunnarCollectionRuntime
                 if (progress.Taken > 0 && _tourPickYield.Length != 0)
                 {
                     _account.Record(NextStep("tour-pick"), _tourPickYield, progress.Taken, StopResult.Took());
+                    NoteCartTourPick(_tourPickYield, progress.Taken);
                 }
 
                 tour.PickEnded(progress.Taken > 0 ? TourPickEnd.Took : TourPickEnd.NothingReached, progress.Taken);
@@ -367,6 +384,88 @@ internal sealed partial class GunnarCollectionRuntime
         return tally.AnyPartial && !tally.AnyRefused ? TourDepositEnd.ChestFull : TourDepositEnd.Refused;
     }
 
+    /// <summary>One trip's load into the cart assigned to him (D22): what this
+    /// tour picked and he still carries, one material at a time, through the
+    /// pinned <see cref="GunnarCartLoadPort"/>. What decides "emptied" is a
+    /// measurement of what he still holds afterwards, never the legs' own
+    /// answers - the same rule as the trip to a chest.</summary>
+    private TourDepositEnd LoadCartForTour(Humanoid worker, out string detail)
+    {
+        IReadOnlyList<KeyValuePair<string, int>> carried = PickedByThisTour(
+            _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable));
+
+        // Every gate, in the frame of the move: the four switches, the world,
+        // the work-authority rule, the probe, his body and its record, what
+        // else is in flight, and the cart still being the parked cart the tour
+        // began with. The port then asks the cart itself.
+        var request = new CartLoadRequest(
+            cartTourEnabled: CartTourOptedIn(),
+            worldIsUp: _lifecycle.WorldIsUp,
+            authority: CartTourAuthority(),
+            seamAvailable: _seamAvailable(),
+            workerRecordUnwritable: _recordUnwritable(),
+            workerRecordUnreadable: _recordUnreadable(),
+            workerPresent: !worker.IsDead(),
+            transferInFlight: _ordered || _port.Phase == PickPhase.Gathering,
+            cartWatch: WatchTourCart(),
+            carriedIsReadable: readable,
+            somethingToLoad: carried.Count > 0);
+        CartTourRefusal refusal = CartTourGate.EvaluateLoad(request);
+        switch (refusal)
+        {
+            case CartTourRefusal.None:
+                break;
+            case CartTourRefusal.NothingToLoad:
+                detail = string.Empty;
+                return TourDepositEnd.Emptied;
+            case CartTourRefusal.CarriedUnreadable:
+                detail = CartTourGate.Describe(refusal, request.Authority);
+                return TourDepositEnd.Uncertain;
+            default:
+                detail = CartTourGate.Describe(refusal, request.Authority);
+                return TourDepositEnd.Refused;
+        }
+
+        // #379: the trip is written down before any leg of it. A refused write is
+        // a trip not made, and he keeps everything.
+        if (!_tourPlan.IntendDeposit("about to put what he carries into the cart assigned to him", out string unwritten))
+        {
+            detail = "the trip could not be written down first, so nothing was moved: " + unwritten;
+            return TourDepositEnd.Refused;
+        }
+
+        var said = new StringBuilder();
+        DepositTally tally = CartLoadLegs(worker, carried, said);
+        IReadOnlyList<KeyValuePair<string, int>> after = PickedByThisTour(
+            _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readableAfter));
+        detail = said.ToString();
+
+        if (!_tourPlan.ConcludeDeposit(!tally.Uncertain, readableAfter ? CarriedForPlan() : null,
+                "the trip to the cart moved " + tally.Moved + " unit(s)", out string unconcluded))
+        {
+            detail = detail.Length == 0 ? unconcluded : detail + " " + unconcluded;
+            return TourDepositEnd.Uncertain;
+        }
+
+        if (tally.Uncertain || !readableAfter)
+        {
+            return TourDepositEnd.Uncertain;
+        }
+
+        if (tally.Refused.Length != 0 && tally.Legs == 0)
+        {
+            detail = tally.Refused;
+            return TourDepositEnd.Refused;
+        }
+
+        if (after.Count == 0)
+        {
+            return TourDepositEnd.Emptied;
+        }
+
+        return tally.AnyPartial && !tally.AnyRefused ? TourDepositEnd.ChestFull : TourDepositEnd.Refused;
+    }
+
     private void FinishTour(CollectionTour tour)
     {
         if (!ReferenceEquals(_tour, tour))
@@ -381,6 +480,7 @@ internal sealed partial class GunnarCollectionRuntime
         _tour = null;
         _tourPump = null;
         _tourPicking = false;
+        ForgetTourCart();
         try
         {
             EndTourPlan(tour.Phase == TourPhase.Finished, tour.Reason);
@@ -460,6 +560,7 @@ internal sealed partial class GunnarCollectionRuntime
         _tour = null;
         _tourPump = null;
         _tourPicking = false;
+        ForgetTourCart();
         _lease.Release();
     }
 
@@ -590,6 +691,46 @@ internal sealed partial class GunnarCollectionRuntime
             return CollectionTourGate.Describe(refusal, request.Authority);
         }
 
+        Vector3 chest = _destination!.transform.position;
+        string? refused = BeginTour(
+            worker, world, capacity, _destinationKey, chest, "the chest you chose", refuseIfCarrying: false,
+            out bool carryingAtStart, out string planSaid);
+        if (refused != null)
+        {
+            return refused;
+        }
+
+        return "He sets off: the whole area is surveyed and planned in loads of up to " +
+            capacity.ToString(CultureInfo.InvariantCulture) + " unit(s), each walked in one round and " +
+            "taken to the chest you chose in one trip" +
+            (carryingAtStart ? ", starting with what he is already carrying" : "") +
+            ". 'ct_collect stop' ends it; what he holds stays in him." +
+            (planSaid.Length == 0 ? "" : " (" + planSaid + ".)");
+    }
+
+    /// <summary>Everything a tour's start does once its own gate has admitted
+    /// it, for a chest tour and (D22) a cart-assisted one alike: the recovered
+    /// plan's wait, his identity, the write-ahead plan, the job, what he
+    /// carries, his body's name, and the tour itself. Answers null when the tour
+    /// is running, or the sentence for why it is not - with every hold the
+    /// start took given back.</summary>
+    /// <param name="refuseIfCarrying">A cart tour loads only what it picks, so
+    /// a load he already carries refuses the start rather than becoming its
+    /// first trip.</param>
+    private string? BeginTour(
+        Humanoid? worker,
+        NpcWorldEpoch world,
+        int capacity,
+        string destinationKey,
+        Vector3 depositAt,
+        string destinationName,
+        bool refuseIfCarrying,
+        out bool carryingAtStart,
+        out string planSaid)
+    {
+        carryingAtStart = false;
+        planSaid = string.Empty;
+
         // A plan read back from the disk is checked only once everything it is
         // checked against can answer - the same wait the frame watcher keeps -
         // so a start never decides it from a census that has not finished.
@@ -615,10 +756,9 @@ internal sealed partial class GunnarCollectionRuntime
 
         // #379: the plan is begun, continued or re-planned - and written down -
         // before he moves. A plan stopped for a person refuses here, with why.
-        string planSaid;
         try
         {
-            if (!_tourPlan.TryStart(TourPlanFactsNow(), GunnarTourPlan.AreaKey(_area!), _destinationKey, out planSaid))
+            if (!_tourPlan.TryStart(TourPlanFactsNow(), GunnarTourPlan.AreaKey(_area!), destinationKey, out planSaid))
             {
                 _lease.Release();
                 return planSaid;
@@ -660,15 +800,16 @@ internal sealed partial class GunnarCollectionRuntime
 
             IReadOnlyList<KeyValuePair<string, int>> carrying =
                 _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable);
-            if (!readable)
+            if (!readable || (refuseIfCarrying && carrying.Count > 0))
             {
                 pump.Abandon();
-                EndTourPlan(false, "what he carries could not be read");
+                EndTourPlan(false, readable ? "he was already carrying what collecting yields" : "what he carries could not be read");
                 _lease.Release();
-                return "What Gunnar is carrying could not be read, so no tour starts.";
+                return readable
+                    ? CartTourGate.Describe(CartTourRefusal.AlreadyCarrying, WorkAuthorityVerdict.Granted)
+                    : "What Gunnar is carrying could not be read, so no tour starts.";
             }
 
-            Vector3 chest = _destination!.transform.position;
             _tourBody = BodyOf(worker);
             if (_tourBody == ZDOID.None)
             {
@@ -680,18 +821,15 @@ internal sealed partial class GunnarCollectionRuntime
 
             _lastDriveAt = Time.time;
             _tourPump = pump;
+            carryingAtStart = carrying.Count > 0;
             _tour = new CollectionTour(
                 _tourPump,
                 CollectionTourLimits.Default(_limits),
-                new CollectionPoint(chest.x, chest.y, chest.z),
-                startWithDeposit: carrying.Count > 0);
+                new CollectionPoint(depositAt.x, depositAt.y, depositAt.z),
+                startWithDeposit: carryingAtStart,
+                destinationName);
             _tourPicking = false;
-            return "He sets off: the whole area is surveyed and planned in loads of up to " +
-                capacity.ToString(CultureInfo.InvariantCulture) + " unit(s), each walked in one round and " +
-                "taken to the chest you chose in one trip" +
-                (carrying.Count > 0 ? ", starting with what he is already carrying" : "") +
-                ". 'ct_collect stop' ends it; what he holds stays in him." +
-                (planSaid.Length == 0 ? "" : " (" + planSaid + ".)");
+            return null;
         }
         catch
         {
@@ -721,7 +859,8 @@ internal sealed partial class GunnarCollectionRuntime
     private string TourStatus() =>
         _tour == null
             ? "no tour running (last: " + _lastTour + ")"
-            : "on a tour: " + _tour.Phase + ", " + DescribeTour(_tour) +
+            : (CartTourRunning ? "on a tour filling the cart assigned to him: " : "on a tour: ") +
+              _tour.Phase + ", " + DescribeTour(_tour) +
               (_area == null ? "" : "; " + _area);
 
     private bool CartHeld()

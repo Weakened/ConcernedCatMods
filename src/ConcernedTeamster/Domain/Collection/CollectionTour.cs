@@ -278,6 +278,7 @@ internal sealed class CollectionTour
     private readonly ITourPump _pump;
     private readonly CollectionTourLimits _limits;
     private readonly CollectionPoint _chest;
+    private readonly string _destination;
 
     private TourStep _step;
     private bool _hasStep;
@@ -298,11 +299,20 @@ internal sealed class CollectionTour
     private readonly Action _sourceUnreachable;
     private readonly Action _chestUnreachable;
 
-    public CollectionTour(ITourPump pump, CollectionTourLimits limits, CollectionPoint chest, bool startWithDeposit)
+    /// <param name="destination">What a player calls the place every load
+    /// goes to, for the reasons the tour stops with: the chest they chose, or
+    /// (D22) the cart they assigned him.</param>
+    public CollectionTour(
+        ITourPump pump,
+        CollectionTourLimits limits,
+        CollectionPoint chest,
+        bool startWithDeposit,
+        string destination = "the chest you chose")
     {
         _pump = pump ?? throw new ArgumentNullException(nameof(pump));
         _limits = limits ?? throw new ArgumentNullException(nameof(limits));
         _chest = chest;
+        _destination = string.IsNullOrEmpty(destination) ? "the chest you chose" : destination;
         Reason = string.Empty;
         _toPicking = EnterPicking;
         _toDepositing = EnterDepositing;
@@ -418,14 +428,14 @@ internal sealed class CollectionTour
                 ResetWalk();
                 return;
             case TourDepositEnd.ChestFull:
-                Stop("the chest you chose is full, so he stopped with the rest still on him" +
+                Stop(_destination + " is full, so he stopped with the rest still on him" +
                     Suffix(detail));
                 return;
             case TourDepositEnd.Refused:
-                Stop("the chest you chose refused what he brought, so he kept all of it" + Suffix(detail));
+                Stop(_destination + " refused what he brought, so he kept all of it" + Suffix(detail));
                 return;
             default:
-                Stop("whether what he brought went into the chest could not be established, so nothing " +
+                Stop("whether what he brought went into " + _destination + " could not be established, so nothing " +
                     "more is attempted and nothing is assumed" + Suffix(detail));
                 return;
         }
@@ -623,7 +633,7 @@ internal sealed class CollectionTour
 
     private void ChestUnreachable()
     {
-        Stop("he could not get to the chest you chose, so he stopped with what he collected still on him");
+        Stop("he could not get to " + _destination + ", so he stopped with what he collected still on him");
     }
 
     private void Stop(string why)
