@@ -204,6 +204,22 @@ points at (±1, 0, ±1), collider top **y = 0.0968**, bottom **y = -0.0329**.
 The ladder's top exit leaves forward over the front frame band onto the floor beyond it; the open lid stands behind the
 climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spawns no ladder.
 
+**Ladder anchor (slice 4, `HatchLadder.Anchor`, `Pieces/LadderSnapAlignment`).** Aimed at a trapdoor's **frame** with
+Cycle Snap on **Auto** or **Top**, a Concerned Ladders ladder ghost is put at the anchor above, in the hatch's own rotation
+(the hammer's rotation is ignored there, as it is for ladder-on-ladder placement: a turned ladder would not leave the
+climber in the opening). Auto does so only when nothing solid lies under the anchor for most of a section's height
+(`HatchLadder.RoomProbe`, tested from just under the frame); otherwise, and in **Bottom**, **Left side** and **Right side**,
+a trapdoor is the 2 m floor tile it is to the existing floor-edge snap. The anchor is checked against the game's
+placement reach to its joint (the middle of the front band's inner face) and refused, not moved, beyond it. More
+sections go below it by aiming at the ladder, as on any column. The anchor equals what `LadderEdgeSnap` produces for a
+floor edge on the front band's inner face (tested), so the two conventions cannot drift apart. **Aim at the frame, not
+the lid:** the game's own placement ray (`Player.PieceRayTest`, decompiled 1.0.21) skips any collider that carries a body,
+and the lid does (its kinematic body), so a ghost aimed at the lid is hidden by the game before this adapter runs
+(independent review of 5a5e2cb, blocker 1). Making the lid itself a placement target would need its own design. The room
+test does not ignore a ladder already hung in the anchor, so Auto aimed at a hatch that already has one falls back to
+the floor edge; aim at that ladder to extend it. Lead default pending owner confirmation: which modes anchor, Auto's
+fall-back, and frame-only aiming.
+
 ## 6. Motion, collision and obstruction (`HatchMotion`)
 
 - The lid's transform and its collider (a kinematic body, as native door leaves are) move together from one progress
@@ -253,8 +269,52 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
   is committed through a lid that was just asked to close); the lid is a landing only when closed and staying closed
   (`IsLanding`). A moving or held lid is never the top exit's destination. A closed lid
   is solid collision on the piece layer, so ascent is blocked by the existing capsule sweep.
-- **Interaction from the ladder** (slice 4): an attached climber whose native hover target is a door uses the door,
-  and the same press does not also dismount.
+- **Implemented in slice 4.** `Runtime/TrapdoorLid` is the production caller of `IsPassage` and `IsLanding`
+  (`Passage`, `Landing`), reading the native state at the moment of the question, so a Use in this frame already
+  counts; a lid that has not settled, stopped on a fault, lacks its parts or has no ZDO is neither. The rules are the
+  game-free `HatchLadder`:
+  - *Passage.* A route crosses a hatch when the climber's capsule, widened square by its radius around the 1.6 m
+    opening, spans the frame's depth over the route (`HatchLadder.Crosses`; anything unmeasurable crosses). Then it
+    needs a passage (`AllowsRoute`). Touching is not crossing: a capsule standing on the frame's top, or whose head
+    meets its underside, within 2 cm (`ContactSlack`, the clearance's own skin), does not cross. `LadderRuntime` asks in
+    three places, each before anything moves: the **top exit** (from the climb lane up to the highest landing it would
+    look for: a lane under a lid that is not a passage has no top exit, and the climber is told the trapdoor is not open
+    instead of "no landing"); **every exit route** it is about to commit (`PlanExitTo`: each leg of each concrete route,
+    at both its ends, over that leg's own height span, `LegSpan`, so a landing on a closed lid or beside a hatch is not
+    refused because the route started lower; review of 5a5e2cb, blocker 2); and a **descending entry** from the floor
+    above (a mount from below never needs the lid open: a climber can always get on and open it from the ladder; this
+    refusal is reported in preference to the other face's). A ghost or icon render (no ZDO) never shuts a route. Only
+    leg ends are tested, not the straight legs between them: a leg between two ends outside an opening that passes over
+    it does so above the lip, where the existing capsule sweep sees the lid's current pose. A bottom step-off under a
+    closed lid onto ground exactly 2 m down stays under the frame at the low route lift (with the measured 1.85 m
+    capsule, 7 mm to spare); onto a floor built 2 m down (its top about 0.1 m higher) it crosses and is refused, and the
+    climber is then released standing at the foot, as on any ladder whose step-off has no route, never held. A lid that
+    something holds short of upright (a piece over the rear band, section 6) is never a passage, so its hatch cannot be
+    climbed through; that fails closed. The "not open" notice names the last reason seen; when a top exit is refused for
+    several reasons it may name the trapdoor although another reason also applied (message only).
+  - *Landing.* The landing search (`LadderClearance.TrySurface`, which every top, side and bottom landing and every
+    footprint point uses) treats a ray that meets a lid that is not a landing as finding no landing at that point, before
+    its slope test: a lid half way through its swing (normal y 0.71 at 45 degrees) would otherwise pass that test. The
+    frame is always a floor; a trapdoor whose hinge is missing, so that lid and frame cannot be told apart, never is.
+  - **Lid closing on a climber (lead default pending owner confirmation, the narrowest fail-closed choice).** The lid
+    never moves into the climber (slice 3: it holds against characters). A route already under way through it finishes;
+    no new route starts through a lid asked to close, even while it still stands fully open. A climber under a closed
+    or closing lid holds on the rungs, is told the trapdoor is not open, and can still climb down, jump or drop. Nothing
+    opens or closes the lid for them, and nothing detaches them.
+- **Interaction from the ladder (slice 4).** An attached climber whose native hover target is a door, a trapdoor
+  included, uses the door through the game's own `Interact` (from above or below, within the game's reach, with the
+  donor's own permissions, key and ward checks); the same press does not also ask the ladder for a dismount
+  (`ClimbControls.UseAsksDismount`), and the game's interact animation holds the climber on the rungs (an existing
+  rule: a minor action holds, it does not release). A press the ladder did take as a dismount is not also delivered to
+  a door in that frame once trapdoors exist (`ClimbControls.HoldsBackInteract`): the runtime reads the hover target in
+  its own update, which can run before the game's, and a lid swinging under the crosshair can change it in between.
+  Remapped keyboard and controller Use bindings are the game's own (`Use`, `JoyUse`). A Use while the native door is
+  mid-swing does nothing, as on the donor (its `CanInteract` gate). Unverified: the game's interact animation turns the
+  player to face the door's origin (the hatch centre, behind a front-lane climber), and the ladder's hold then turns
+  them back; this may look like a half-second spin (in-game row below).
+- **With `Trapdoors/Enabled` off** no trapdoor prefab exists, so `TrapdoorLid.Any` is false for the whole session, and
+  every ladder path asks nothing of a trapdoor and behaves exactly as before (pinned by source: every consult is behind
+  `TrapdoorLid.Any`).
 
 ## 7. Intentional differences from the donors
 
@@ -277,8 +337,9 @@ climber. Placing a hatch removes no floor, digs nothing, adds no stairs and spaw
    `state` (section 4), steps `HatchMotion.Step` with one bounded non-allocating overlap per checked sub-step
    (characters, dynamic bodies, pieces; section 6) while moving, and turns the one `lid_hinge` transform (which carries
    the kinematic body, the lid's collider and its visuals) by `Quaternion.Euler(angle, 0, 0)`. No network change.
-3. Ladder integration: hatch ladder anchor in `LadderSnapAlignment`; door Use while attached does not dismount; top exit
-   refuses a non-landing lid; closed lid blocks ascent.
+3. Ladder integration: **code-complete in slice 4**, behind the same setting. Hatch anchor in `LadderSnapAlignment`;
+   door Use while attached does not dismount; top exit, exit routes and descending entries need a passage; the landing
+   search refuses a lid that is not a landing; the closed lid's collision blocks ascent (section 6).
 4. Asset sources and export notes; CL-005 cellar doors reusing this matrix.
 
 ## 9. In-game rows (all OWNER GO-AROUND PENDING, #470)
@@ -287,6 +348,21 @@ Placement beside wood and stone floors and ladder endpoints, every family; walk 
 open one and exit; re-enter from above; open/close from above, below and from the ladder; standing-on-lid and
 closing-over-head holds; damage, repair, deconstruction refunds, guard stone; host/client, late join, zone and save
 reload. None has been observed.
+
+Slice 4 adds these, each OWNER GO-AROUND PENDING: a ladder ghost aimed at a trapdoor's frame in Auto and Top hangs
+inside the opening against the front band facing the hinge, at every build rotation of the hatch, and Bottom and the side modes
+behave as on a wood floor; Auto over a hatch on the ground falls back to the floor edge; further sections extend the
+column below; climbing up under a closed lid stops below it with the "not open" notice; Use on the lid from the ladder
+opens it without letting go, and once it is fully open the climber climbs through and steps onto the floor in front of
+it; Use on it again from the ladder or from above closes it, and a lid asked to close while the climber's head is in the
+opening waits; a climber below a lid that is asked to close holds and can climb down, jump or drop; from the floor above,
+an open hatch's ladder can be mounted and descended, and a closed or closing one is refused with the notice; Use while
+looking away from both the ladder and the lid still asks for a safe dismount; keyboard and controller, remapped Use;
+the 0.5 s, 1.0 s and 2.0 s families; whether opening the lid from the ladder turns the climber round for a moment
+(the interact animation faces the hatch centre); which notice a closed hatch's descending entry shows; a ghost aimed at
+the lid is hidden (the game's own ray), aimed at the frame it anchors; a lid held short of upright by a piece over the
+rear band is never climbed through; two hatches side by side, exiting from an open one onto a closed one; with the
+setting off, every existing ladder row behaves as on 1.0.0.
 
 Slice 3 adds these, each OWNER GO-AROUND PENDING: Use from above and from below opens the lid over the donor's swing
 time (Wood, Roundpole and Iron 0.5 s; Darkwood, Timberwood, Hexagonal and Ashwood 1.0 s; Flametal 2.0 s) and closes it
