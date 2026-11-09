@@ -141,8 +141,8 @@ internal sealed class FuelCustody
     internal NpcCustodyLedger Ledger => _ledger;
 
     /// <summary>True when the invariant holds, asked of the library and in the
-    /// Steward's own words both. The tests read this after every operation; the
-    /// loop reads it before recording a receipt.</summary>
+    /// Steward's own words both. The tests read this after every operation.
+    /// </summary>
     public bool Balances =>
         _ledger.IsConserved(Job, Fuel)
         && Withdrawn == Carried + Burned + Returned + Unaccounted;
@@ -269,13 +269,22 @@ internal sealed class FuelCustody
     /// ledger that still held it, the next save wrote the doubled number, and
     /// every reload doubled it again. A loss already recorded here is never
     /// lowered by a smaller number on disk either: a record that could not be
-    /// written after a loss is behind this ledger, not ahead of it.
+    /// written after a loss is behind this ledger, not ahead of it. Across two
+    /// worlds in one session the restored loss is now the larger of the two
+    /// rather than their sum; either way a world's own recorded loss is never
+    /// under-reported, and the attribution across worlds is the pre-existing
+    /// limit the type summary states.
     ///
     /// What is restored is acquired straight into the library's lost place, so
     /// the invariant still holds: those units really did leave the depot, and
     /// saying so is the honest shape of the record.</summary>
     internal void RestoreLoss(int units)
     {
+        if (units < 1)
+        {
+            return;
+        }
+
         int missing = units - Unaccounted;
         if (missing < 1)
         {
@@ -387,6 +396,9 @@ internal sealed class FuelCustody
             // place, every destination is named in the same load, and no
             // transfer of this run ever waits on a person. If it is reached,
             // nothing moved, and saying so loudly is the only honest answer.
+            // Should the library ever refuse after opening the transfer, that
+            // open record would refuse every later move of this run too, so
+            // she stops with it rather than carrying on half recorded.
             throw new InvalidOperationException(
                 "The conservation ledger refused to record " +
                 units.ToString(CultureInfo.InvariantCulture) + " units leaving the Steward's hands (" +

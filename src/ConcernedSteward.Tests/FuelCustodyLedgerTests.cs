@@ -104,16 +104,28 @@ public sealed class FuelCustodyLedgerTests
         // Lead default: the depot is a terminal place for this job, so units
         // put back cannot be moved out again under the job's name - a later
         // withdrawal is a fresh, measured acquisition. Lost is terminal as it
-        // always was.
-        NpcCustodyLocation depot = LocationOf(custody, NpcCustodyPlace.Handed);
-        NpcCustodyLocation lost = LocationOf(custody, NpcCustodyPlace.Lost);
-        NpcCustodyLocation pack = LocationOf(custody, NpcCustodyPlace.Carried);
+        // always was. Asked under the run's own open job, of places that hold
+        // units, so the only refusal left is the place's own: the control
+        // below proves the same move out of her pack is applied.
+        NpcCustodyLocation depot = LocationKeyed(custody, "depot");
+        NpcCustodyLocation lost = LocationKeyed(custody, "unaccounted");
+        NpcCustodyLocation pack = LocationKeyed(custody, "pack");
+        Assert.True(custody.Ledger.HoldingAt(FuelCustody.Job, depot, FuelCustody.Fuel) >= 1);
+        Assert.True(custody.Ledger.HoldingAt(FuelCustody.Job, lost, FuelCustody.Fuel) >= 1);
 
         Assert.Equal(NpcCustodyOutcome.Rejected, custody.Ledger.RecordMeasuredMove(
-            ReservationId.For("fuel-test", 1), depot, pack, FuelCustody.Fuel, 1));
+            ReservationId.For(FuelCustody.Job, 100001), depot, pack, FuelCustody.Fuel, 1));
         Assert.Equal(NpcCustodyOutcome.Rejected, custody.Ledger.RecordMeasuredMove(
-            ReservationId.For("fuel-test", 2), lost, pack, FuelCustody.Fuel, 1));
+            ReservationId.For(FuelCustody.Job, 100002), lost, pack, FuelCustody.Fuel, 1));
         Assert.Equal(1, custody.Carried);
+        Assert.Equal(2, custody.Returned);
+        Assert.Equal(1, custody.Unaccounted);
+        AssertBothBalance(custody);
+
+        // The control: the same call, out of a place the job may leave.
+        Assert.Equal(NpcCustodyOutcome.Applied, custody.Ledger.RecordMeasuredMove(
+            ReservationId.For(FuelCustody.Job, 100003), pack, depot, FuelCustody.Fuel, 1));
+        Assert.Equal(3, custody.Returned);
         AssertBothBalance(custody);
     }
 
@@ -278,6 +290,16 @@ public sealed class FuelCustodyLedgerTests
 
         Assert.Equal(revision, custody.Revision);
         Assert.Empty(custody.Ledger.Holdings);
+
+        // Not even with a loss already recorded, where a subtraction from the
+        // most negative number would wrap round to a very large one.
+        custody.RecordWithdrawn(1);
+        custody.RecordLost(1);
+        revision = custody.Revision;
+        custody.RestoreLoss(int.MinValue);
+        Assert.Equal(revision, custody.Revision);
+        Assert.Equal(1, custody.Unaccounted);
+
         AssertBothBalance(custody);
     }
 
@@ -306,6 +328,6 @@ public sealed class FuelCustodyLedgerTests
             .Where(holding => holding.Location.Place == place)
             .Sum(holding => holding.Count);
 
-    private static NpcCustodyLocation LocationOf(FuelCustody custody, NpcCustodyPlace place) =>
-        custody.Ledger.Holdings.Single(holding => holding.Location.Place == place).Location;
+    private static NpcCustodyLocation LocationKeyed(FuelCustody custody, string key) =>
+        custody.Ledger.Holdings.Single(holding => holding.Location.Key == key).Location;
 }

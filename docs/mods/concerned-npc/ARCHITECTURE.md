@@ -315,7 +315,7 @@ which read it while counting the roles below.)
 | Part | Roles that use it in shipped code | How |
 |---|---|---|
 | Subject reservations with stable ids (`NpcReservationBook`, `ReservationId`) | **Two:** Steward's Sunniva and Teamster's Gunnar | Through `NpcJobDriver`, which holds every target and container of a round in the library's process-wide `NpcJobBooks` under names derived from identity, job and step; each role constructs the driver in production (`UpkeepLoop.TickDrivenIdle`, `GunnarCollectionRuntime.Tour`). Internal on purpose: a role never holds a book. |
-| The conservation ledger (`NpcCustodyLedger`) | **Two:** Teamster's Gunnar and Steward's Sunniva | Gunnar's `CargoLedger` keeps every unit of his collection account in it and records each measured movement through `RecordMeasuredMove`. Sunniva's `FuelCustody` (#376, second slice) does the same for every unit of fuel she withdraws: a withdrawal is an `Acquire` into her pack, and a burn, a return and a loss are measured moves out of it; her four numbers are read from the library and nothing else. Foreman's `MaterialCustodyLedger` still keeps its own. |
+| The conservation ledger (`NpcCustodyLedger`) | **Two:** Teamster's Gunnar and Steward's Sunniva | Gunnar's `CargoLedger` keeps every unit of his collection account in it and records each measured movement through `RecordMeasuredMove`. Sunniva's `FuelCustody` (#376, second slice) does the same for every unit of fuel she withdraws: a withdrawal is an `Acquire` into her pack, and a burn, a return and a loss are measured moves out of it; what she carries, burned and put back are the library's holdings, and what she withdrew and could not account for are the library's less the losses a person has acknowledged (below). Foreman's `MaterialCustodyLedger` still keeps its own. |
 | The journal-first executor, its journal seam and the marker-rule standings | **None** | Foreman's shipped executor is `src/Shared/Settlement/Custody`, compiled into Foreman, `ConcernedForeman.Tests`, `Shared.Settlement.Tests` and the interop consumer, and the last two do not reference this library; moving it is a change to four projects, not one leaf's slice. Steward's measured move is its own (`UpkeepLoop.Transfer`). |
 | The material reservation book and `INpcSourceAvailability` from it | **None** | Both roles hand in `Availability => null`, each with its cost stated. The driver's container holds already keep two rounds out of one chest. |
 
@@ -361,7 +361,9 @@ library's words, not a world grant; none changes what any NPC does in the world)
    ledger knows, and every world load hands it back. Restoring used to add it, so leaving a world and loading it again
    in one session doubled the loss, the next save wrote the doubled number, and each reload doubled it again. Restoring
    now raises the loss *to* the recorded number and never lowers it: a record that could not be written after a loss
-   is behind the ledger, not ahead of it. A loss acknowledged in memory whose acknowledgement did not reach the record
+   is behind the ledger, not ahead of it. Across two worlds in one session the restored loss is now the larger of the
+   two rather than their sum; a world's own recorded loss is never under-reported, and the attribution across worlds is
+   lead default 6's limit, unchanged. A loss acknowledged in memory whose acknowledgement did not reach the record
    comes back once on the next load, which is the safe direction. Proved by `FuelCustodyLedgerTests`; nothing about it
    has been observed in game.
 
