@@ -19,7 +19,8 @@ internal static class CellarDoorSettings
         "UNFINISHED (CL-005): adds the nine sloped cellar doors to the hammer's Building tab, none of it yet tested in game. " +
         "Both leaves open and close together with the door's Use, and wait instead of moving into a player, a creature, " +
         "an item, a cart or another building piece. " +
-        "Ladders do not work with them yet and treat them as ordinary pieces. " +
+        "A Concerned Ladders ladder aimed at one in Auto or Top hangs inside its opening and climbs through it only " +
+        "while both leaves are open; ladders never treat one as a floor. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed cellar door the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
         "value: a host or server with it off deletes the cellar doors other players place, during the session. " +
@@ -72,6 +73,9 @@ internal static class CellarDoors
 
     internal const string DescriptionToken = "cl_cellardoor_description";
 
+    /// <summary>What a climber is told when a cellar door's leaves are not open where their route would go (slice 4).</summary>
+    internal const string CellarClosedToken = "cl_msg_cellarclosed";
+
     private static readonly KeyValuePair<string, string>[] Names =
     {
         new KeyValuePair<string, string>("wood", "Wood Cellar Door"),
@@ -99,13 +103,15 @@ internal static class CellarDoors
         return null;
     }
 
-    /// <summary>The English localization the cellar doors will add (tokens without <c>$</c>): one name per family and
-    /// the shared description. Open/close hover text is the game's own Door text and is not duplicated.</summary>
+    /// <summary>The English localization the cellar doors add (tokens without <c>$</c>): one name per family, the shared
+    /// description, and the climber's closed-cellar-door notice. Open/close hover text is the game's own Door text and is
+    /// not duplicated.</summary>
     internal static Dictionary<string, string> English()
     {
         var english = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [DescriptionToken] = "A sloped 2 m cellar entrance with two hinged leaves. Opens and closes like its door. Digs nothing.",
+            [CellarClosedToken] = "The cellar door is not open. Open it from the ladder, or climb down.",
         };
         foreach (CellarDoorFamily cellar in All) { english[cellar.Token] = cellar.English; }
         return english;

@@ -282,11 +282,17 @@ public sealed class HatchLadderTests
         // A ghost or icon render (no ZDO) never shuts a route.
         Assert.Matches(new Regex(@"!\s*lid\s*\.\s*_view\s*\.\s*IsValid\s*\(\s*\)\s*\)\s*\{\s*continue\s*;"), lid);
 
-        // Nothing else in the product decides passage or landing.
+        // Nothing else in the product decides passage or landing: the cellar door's leaves (CL-005 #486 slice 4) answer
+        // the same rules for their own pair, pinned in CellarLadderTests.
         foreach (string file in ProductFiles())
         {
             string relative = Path.GetRelativePath(ProductRoot, file).Replace('\\', '/');
-            if (relative == "Runtime/TrapdoorLid.cs" || relative.StartsWith("Domain/Doors/", StringComparison.Ordinal)) { continue; }
+            if (relative == "Runtime/TrapdoorLid.cs" || relative == "Runtime/CellarLeaves.cs" ||
+                relative.StartsWith("Domain/Doors/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             string text = Code(File.ReadAllText(file));
             Assert.DoesNotMatch(new Regex(@"\bIsPassage\s*\(|\bIsLanding\s*\("), text);
         }
@@ -316,7 +322,7 @@ public sealed class HatchLadderTests
         int gate = Index(surface, @"if\s*\(\s*TrapdoorLid\s*\.\s*Any\s*&&\s*Solid\s*\(\s*hit\s*\.\s*collider\s*\)\s*&&\s*!\s*TrapdoorLid\s*\.\s*MayLandOn\s*\(\s*hit\s*\.\s*collider\s*\)\s*\)\s*\{\s*floor\s*=\s*default\s*;\s*return\s+false\s*;");
         int slope = Index(surface, @"hit\s*\.\s*normal\s*\.\s*y\s*<\s*0\.65f");
         Assert.True(gate < slope, "A lid must be refused before the slope test can accept its tilted face.");
-        Assert.Single(Regex.Matches(clearance, @"MayLandOn\s*\("));
+        Assert.Single(Regex.Matches(clearance, @"TrapdoorLid\s*\.\s*MayLandOn\s*\("));
     }
 
     [Fact]
@@ -363,7 +369,8 @@ public sealed class HatchLadderTests
         // The only dismount-on-Use in Update is that one.
         Assert.Single(Regex.Matches(update, @"TrySafeDismount\s*\("));
         string suppress = Between(runtime, @"internal\s+bool\s+SuppressInteract\s*\(", @"private\s+static\s+bool\s+HoversInteractable\s*\(");
-        Assert.Matches(new Regex(@"ClimbControls\s*\.\s*HoldsBackInteract\s*\(\s*Time\s*\.\s*frameCount\s*,\s*_departFrame\s*,\s*_dismountUseFrame\s*,\s*TrapdoorLid\s*\.\s*Any\s*\)"), suppress);
+        // Once trapdoors or cellar doors exist (CL-005 #486 slice 4 adds the second door family).
+        Assert.Matches(new Regex(@"ClimbControls\s*\.\s*HoldsBackInteract\s*\(\s*Time\s*\.\s*frameCount\s*,\s*_departFrame\s*,\s*_dismountUseFrame\s*,\s*TrapdoorLid\s*\.\s*Any\s*\|\|\s*CellarLeaves\s*\.\s*Any\s*\)"), suppress);
         // The hover test is the interactable one, so a trapdoor (a native Door) counts.
         Assert.Matches(new Regex(@"hover\s*\.\s*GetComponentInParent\s*<\s*Interactable\s*>\s*\(\s*\)\s*!=\s*null"), runtime);
         // The climber holds still on the rungs through the game's interact animation (a minor action) rather than letting go.
