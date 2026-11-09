@@ -15,6 +15,9 @@ Not published. In progress on `main`; 1.0.0 is the latest published build.
   without letting go, climbs out through an open lid, and is held below a
   closed or closing one. None of it has been tried in game yet, so leave it
   off.
+- Sloped cellar doors (CL-005, #486), in progress: the shape, the paired
+  leaves' motion rule and the cost of the nine cellar doors are designed. This
+  build adds nothing to the game for them yet.
 
 ## 1.0.0
 

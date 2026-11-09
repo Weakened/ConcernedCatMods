@@ -251,7 +251,12 @@ internal static class TrapdoorBlueprint
     /// the same items, amounts and order, every one recovered on deconstruction. An empty observed list never
     /// matches (Jötunn keeps the donor's requirements when <c>PieceConfig.Requirements</c> is empty, so emptiness is
     /// not a way to clear them).</summary>
-    internal static IReadOnlyList<string> RequirementMismatches(DoorFamily family, IReadOnlyList<ObservedRequirement>? observed)
+    internal static IReadOnlyList<string> RequirementMismatches(DoorFamily family, IReadOnlyList<ObservedRequirement>? observed) =>
+        RequirementMismatches(family.Costs, observed);
+
+    /// <summary>The same comparison against any pinned cost list: the donor's own (above), or a cellar door's
+    /// (<see cref="CellarDoorFamily.Costs"/>, CL-005), so both pieces read their clones back with one rule.</summary>
+    internal static IReadOnlyList<string> RequirementMismatches(IReadOnlyList<DoorCost> costs, IReadOnlyList<ObservedRequirement>? observed)
     {
         var problems = new List<string>();
         if (observed == null)
@@ -260,16 +265,16 @@ internal static class TrapdoorBlueprint
             return problems;
         }
 
-        if (observed.Count != family.Costs.Count)
+        if (observed.Count != costs.Count)
         {
-            problems.Add("requirement count " + observed.Count + ", pinned " + family.Costs.Count);
+            problems.Add("requirement count " + observed.Count + ", pinned " + costs.Count);
         }
 
-        int shared = Math.Min(observed.Count, family.Costs.Count);
+        int shared = Math.Min(observed.Count, costs.Count);
         for (int index = 0; index < shared; ++index)
         {
             ObservedRequirement seen = observed[index];
-            DoorCost pinned = family.Costs[index];
+            DoorCost pinned = costs[index];
             string? item = PrefabName(seen.Item);
             if (!string.Equals(item, pinned.Item, StringComparison.Ordinal))
             {
