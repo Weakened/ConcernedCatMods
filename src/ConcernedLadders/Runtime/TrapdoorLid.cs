@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
@@ -42,8 +43,14 @@ internal sealed class TrapdoorLid : MonoBehaviour, IHatchOccupancy
     private static int _blockingMask;
     private static bool _faultLogged;
 
+    /// <summary>Every lid that has woken in this session and not been destroyed: placed pieces, and also the placement
+    /// ghost and icon renders, which have no ZDO and are skipped by every query (slice 4). Empty for the whole session
+    /// when <c>Trapdoors/Enabled</c> is off, because then no trapdoor prefab exists.</summary>
+    private static readonly List<TrapdoorLid> Live = new List<TrapdoorLid>();
+
     private ZNetView? _view;
     private Transform? _hinge;
+    private Transform? _hingePart;
     private Vector3 _hingeLocal;
     private Vector3 _boxCentreInHinge;
     private Quaternion _boxRotationInHinge = Quaternion.identity;
@@ -91,8 +98,10 @@ internal sealed class TrapdoorLid : MonoBehaviour, IHatchOccupancy
 
     private void Awake()
     {
+        Live.Add(this);
         _view = GetComponent<ZNetView>();
         Transform? hinge = transform.Find(TrapdoorBlueprint.Hinge);
+        _hingePart = hinge;
         Transform? holder = hinge != null ? hinge.Find(TrapdoorBlueprint.LidCollider.Name) : null;
         BoxCollider? box = holder != null ? holder.GetComponent<BoxCollider>() : null;
         if (_view == null || hinge == null || box == null || !ResolveLayers())
@@ -165,6 +174,61 @@ internal sealed class TrapdoorLid : MonoBehaviour, IHatchOccupancy
         _faultLogged = true;
         try { Log?.Invoke("Trapdoor lid stopped (" + SafeFailure.Brief(exception) + "); it stays where it is."); }
         catch (Exception) { }
+    }
+
+    private void OnDestroy() => Live.Remove(this);
+
+    /// <summary>True while any trapdoor exists in this session (slice 4). The ladder adapters ask nothing of trapdoors
+    /// while it is false, which it always is with <c>Trapdoors/Enabled</c> off, so they behave exactly as before.</summary>
+    internal static bool Any => Live.Count > 0;
+
+    /// <summary>The opening is a passage (<see cref="HatchMotion.IsPassage"/>): fully open and not asked to close. A lid
+    /// that has not settled, has stopped on a fault, lacks its parts or has no ZDO is neither a passage nor a
+    /// landing.</summary>
+    internal bool Passage => TryReadOpen(out bool open) && HatchMotion.IsPassage(_progress, open);
+
+    /// <summary>The lid is a floor (<see cref="HatchMotion.IsLanding"/>): closed and not asked to open.</summary>
+    internal bool Landing => TryReadOpen(out bool open) && HatchMotion.IsLanding(_progress, open);
+
+    /// <summary>The native door state now, not as of this lid's last update: a Use this frame already counts.</summary>
+    private bool TryReadOpen(out bool open)
+    {
+        open = false;
+        ZNetView? view = _view;
+        if (!enabled || !_settled || view == null || !view.IsValid() || _hinge == null) { return false; }
+        open = HatchMotion.IsOpenState(view.GetZDO().GetInt(ZDOVars.s_state));
+        return true;
+    }
+
+    /// <summary>Would a climber's capsule of <paramref name="radius"/> at <paramref name="at"/>, occupying world heights
+    /// <paramref name="low"/> to <paramref name="high"/> over a route, cross the opening of a placed trapdoor whose lid
+    /// is not a passage (<see cref="HatchLadder.Crosses"/>, <see cref="HatchLadder.AllowsRoute"/>)? Ghosts and icon
+    /// renders are skipped. No allocation; one pass over the live lids.</summary>
+    internal static bool RouteShut(Vector3 at, float radius, float low, float high)
+    {
+        for (int index = 0; index < Live.Count; index++)
+        {
+            TrapdoorLid lid = Live[index];
+            if (lid == null || lid._view == null || !lid._view.IsValid()) { continue; }
+            Transform hatch = lid.transform;
+            Vector3 local = hatch.InverseTransformPoint(at);
+            float origin = hatch.position.y;
+            bool crosses = HatchLadder.Crosses(local.x, local.z, radius, low - origin, high - origin);
+            if (!HatchLadder.AllowsRoute(crosses, crosses && lid.Passage)) { return true; }
+        }
+
+        return false;
+    }
+
+    /// <summary>May the ladder's landing search stand a climber on this collider (<see cref="HatchLadder.IsLandingSurface"/>)?
+    /// True for anything that is not part of a trapdoor.</summary>
+    internal static bool MayLandOn(Collider collider)
+    {
+        TrapdoorLid? lid = collider != null ? collider.GetComponentInParent<TrapdoorLid>() : null;
+        if (lid == null) { return true; }
+        HatchPart part = lid._hingePart == null ? HatchPart.Unknown
+            : collider!.transform.IsChildOf(lid._hingePart) ? HatchPart.Lid : HatchPart.Frame;
+        return HatchLadder.IsLandingSurface(part, part == HatchPart.Lid && lid.Landing);
     }
 
     private void Apply()
