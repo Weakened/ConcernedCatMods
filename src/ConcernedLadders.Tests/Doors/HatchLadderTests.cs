@@ -16,8 +16,9 @@ namespace TheConcernedCat.ConcernedLadders.Tests.Doors;
 /// so with <c>Trapdoors/Enabled</c> off every ladder path is the one it was before.</summary>
 public sealed class HatchLadderTests
 {
-    private const float Radius = 0.4f;
-    private const float Height = 1.8f;
+    // The installed game's player capsule (docs/mods/concerned-ladders/animation/NATIVE_ANIMATION_BASELINE.md).
+    private const float Radius = 0.49f;
+    private const float Height = 1.85f;
     private const float Margin = 0.05f;
 
     // ---- Anchor ----
@@ -124,10 +125,54 @@ public sealed class HatchLadderTests
     {
         // Standing on a closed lid: the capsule starts above the frame's top.
         Assert.False(HatchLadder.Crosses(0f, 0f, Radius, HatchGeometry.TopY + 0.02f, HatchGeometry.TopY + 0.02f + Height));
-        // The bottom step-off in a 2 m basement under the hatch, at the low route lift, stays under the frame: a closed lid
-        // never refuses getting off at the foot of the ladder.
+        // The bottom step-off onto ground exactly 2 m under the hatch, at the low route lift, stays under the frame. A floor
+        // built 2 m down stands about 0.1 m higher, and then the step-off crosses and is refused while the lid is shut:
+        // the climber is released standing at the foot instead (LadderRuntime), never held.
         float feet = HatchGeometry.LadderOrigin.Y;
         Assert.False(HatchLadder.Crosses(0f, FrontLane, Radius, feet, feet + LadderRules.RouteLift + Height + Margin));
+        float onFloor = feet + 0.097f;
+        Assert.True(HatchLadder.Crosses(0f, FrontLane, Radius, onFloor, onFloor + LadderRules.RouteLift + Height + Margin));
+    }
+
+    [Fact]
+    public void ContactWithTheFrameIsNotACrossing()
+    {
+        // Standing on a wood floor flush with the hatch, beside it (feet at the floor's top, as the body rests).
+        Assert.False(HatchLadder.Crosses(0f, -1.1f, Radius, HatchGeometry.TopY, HatchGeometry.TopY + Height));
+        // A head that just meets the frame's underside.
+        Assert.False(HatchLadder.Crosses(0f, FrontLane, Radius, HatchGeometry.FrameBottomY - Height, HatchGeometry.FrameBottomY));
+        // Within the slack (a body resting a hair into the floor, a head grazing the underside) is still contact.
+        Assert.False(HatchLadder.Crosses(0f, -1.1f, Radius, HatchGeometry.TopY - 0.01f, HatchGeometry.TopY + Height));
+        Assert.False(HatchLadder.Crosses(0f, FrontLane, Radius, -2f, HatchGeometry.FrameBottomY + 0.01f));
+        // Any real reach into the depth is.
+        Assert.True(HatchLadder.Crosses(0f, FrontLane, Radius, HatchGeometry.TopY - HatchLadder.ContactSlack - 0.01f, 2f));
+        Assert.True(HatchLadder.Crosses(0f, FrontLane, Radius, -2f, HatchGeometry.FrameBottomY + HatchLadder.ContactSlack + 0.01f));
+    }
+
+    [Fact]
+    public void ALandingOnAClosedLidReachedFromBelowIsNotACrossingOfThatLid()
+    {
+        // Review of 5a5e2cb, blocker 2: an exit from an open hatch A onto a closed neighbour B. The route rises out of A,
+        // crosses above the floors, and settles on B's lid. Tested per leg, only the rise spans A's depth; at B (lid
+        // centre, B-local) the cross leg and the settle occupy heights at and above B's top.
+        float feet = -1f, floorY = HatchGeometry.TopY + 0.02f, raised = floorY + LadderRules.StepLift, height = Height + Margin;
+        HatchLadder.LegSpan(raised, raised, height, out float crossLow, out float crossHigh);
+        Assert.False(HatchLadder.Crosses(0f, 0.28f, Radius, crossLow, crossHigh));
+        HatchLadder.LegSpan(raised, floorY, height, out float settleLow, out float settleHigh);
+        Assert.False(HatchLadder.Crosses(0f, 0.28f, Radius, settleLow, settleHigh));
+        // The rise out of A is the leg that crosses A.
+        HatchLadder.LegSpan(feet, raised, height, out float riseLow, out float riseHigh);
+        Assert.True(HatchLadder.Crosses(0f, FrontLane, Radius, riseLow, riseHigh));
+        // The whole-route span the reviewer found would have refused the landing on B.
+        Assert.True(HatchLadder.Crosses(0f, 0.28f, Radius, feet, raised + height));
+    }
+
+    [Fact]
+    public void ALegSpansFromItsLowerEndToTheCapsuleTopAtItsHigherEnd()
+    {
+        HatchLadder.LegSpan(2f, -1f, 1.9f, out float low, out float high);
+        Assert.Equal(-1f, low);
+        Assert.Equal(3.9f, high, 5);
     }
 
     [Fact]
@@ -248,6 +293,22 @@ public sealed class HatchLadderTests
     }
 
     [Fact]
+    public void EveryWokenLidIsRegisteredUntilItIsDestroyedAndAnyMeansSomeAre()
+    {
+        // Review of 5a5e2cb, note 2: without these, slice 4 could go silently dead (no lid registered) or ask trapdoors
+        // with none in the world (Any always true).
+        string lid = Code(Source("Runtime/TrapdoorLid.cs"));
+        string awake = Between(lid, @"private\s+void\s+Awake\s*\(\s*\)\s*\{", @"_view\s*=\s*GetComponent");
+        Assert.Matches(new Regex(@"^\s*private\s+void\s+Awake\s*\(\s*\)\s*\{\s*Live\s*\.\s*Add\s*\(\s*this\s*\)\s*;\s*$"), awake);
+        Assert.Single(Regex.Matches(lid, @"\bLive\s*\.\s*Add\s*\("));
+        Assert.Single(Regex.Matches(lid, @"private\s+void\s+OnDestroy\s*\(\s*\)\s*=>\s*Live\s*\.\s*Remove\s*\(\s*this\s*\)\s*;"));
+        Assert.Single(Regex.Matches(lid, @"\bLive\s*\.\s*Remove\s*\("));
+        Assert.Single(Regex.Matches(lid, @"internal\s+static\s+bool\s+Any\s*=>\s*Live\s*\.\s*Count\s*>\s*0\s*;"));
+        Assert.DoesNotMatch(new Regex(@"\bLive\s*\.\s*(Clear|Insert|RemoveAt|RemoveAll|AddRange)\s*\(|(?<!List\s*<\s*TrapdoorLid\s*>\s*)\bLive\s*=(?!=)"), lid);
+        Assert.Matches(new Regex(@"private\s+static\s+readonly\s+List\s*<\s*TrapdoorLid\s*>\s+Live\s*="), lid);
+    }
+
+    [Fact]
     public void TheLandingSearchRefusesANonLandingLidBeforeItsSlopeTest()
     {
         string clearance = Code(Source("Runtime/LadderClearance.cs"));
@@ -263,17 +324,19 @@ public sealed class HatchLadderTests
     {
         string runtime = Code(Source("Runtime/LadderRuntime.cs"));
         string plan = Between(runtime, @"private\s+bool\s+PlanExitTo\s*\(", @"private\s+bool\s+CrossesShutHatch\s*\(");
-        int gate = Index(plan, @"if\s*\(\s*TrapdoorLid\s*\.\s*Any\s*&&\s*CrossesShutHatch\s*\(\s*feet\s*,\s*path\s*,\s*raised\s*\)\s*\)");
+        int gate = Index(plan, @"if\s*\(\s*TrapdoorLid\s*\.\s*Any\s*&&\s*CrossesShutHatch\s*\(\s*feet\s*,\s*path\s*\)\s*\)");
         int sweep = Index(plan, @"_clearance\s*\.\s*CanFollow\s*\(\s*feet\s*,\s*path\s*\)");
         int commit = Index(plan, @"_mode\s*=\s*Mode\s*\.\s*Exiting\s*;");
         Assert.True(gate < sweep && sweep < commit, "The trapdoor test must refuse a route before it is swept and committed.");
         Assert.Single(Regex.Matches(runtime, @"_mode\s*=\s*Mode\s*\.\s*Exiting\s*;"));
 
-        // The helper tests where the route starts and every point of it, over the capsule's whole height.
+        // The helper tests each leg, from where the route starts, at both its ends over that leg's own span (LegSpan) and
+        // the capsule's whole height.
         string helper = Between(runtime, @"private\s+bool\s+CrossesShutHatch\s*\(", @"private\s+const\s+float\s+RouteTopMargin");
-        Assert.Matches(new Regex(@"float\s+top\s*=\s*highest\s*\+\s*_clearance\s*\.\s*Height\s*\+\s*RouteTopMargin\s*;"), helper);
-        Assert.Matches(new Regex(@"TrapdoorLid\s*\.\s*RouteShut\s*\(\s*start\s*,\s*radius\s*,\s*low\s*,\s*top\s*\)"), helper);
-        Assert.Matches(new Regex(@"foreach\s*\(\s*Vector3\s+point\s+in\s+path\s*\)\s*\{\s*if\s*\(\s*TrapdoorLid\s*\.\s*RouteShut\s*\(\s*point\s*,\s*radius\s*,\s*low\s*,\s*top\s*\)\s*\)\s*\{\s*return\s+true\s*;"), helper);
+        Assert.Matches(new Regex(@"float\s+height\s*=\s*_clearance\s*\.\s*Height\s*\+\s*RouteTopMargin\s*;"), helper);
+        Assert.Matches(new Regex(@"Vector3\s+from\s*=\s*start\s*;\s*foreach\s*\(\s*Vector3\s+to\s+in\s+path\s*\)"), helper);
+        Assert.Matches(new Regex(@"HatchLadder\s*\.\s*LegSpan\s*\(\s*from\s*\.\s*y\s*,\s*to\s*\.\s*y\s*,\s*height\s*,\s*out\s+float\s+low\s*,\s*out\s+float\s+top\s*\)"), helper);
+        Assert.Matches(new Regex(@"if\s*\(\s*TrapdoorLid\s*\.\s*RouteShut\s*\(\s*from\s*,\s*radius\s*,\s*low\s*,\s*top\s*\)\s*\|\|\s*TrapdoorLid\s*\.\s*RouteShut\s*\(\s*to\s*,\s*radius\s*,\s*low\s*,\s*top\s*\)\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*from\s*=\s*to\s*;"), helper);
     }
 
     [Fact]
@@ -286,7 +349,7 @@ public sealed class HatchLadderTests
 
         string mount = Between(runtime, @"private\s+bool\s+TryPlanMount\s*\(", @"private\s+static\s+bool\s+StandsOnLadder\s*\(");
         int gate = Index(mount, @"if\s*\(\s*topEntry\s*&&\s*TrapdoorLid\s*\.\s*Any\s*&&\s*TrapdoorLid\s*\.\s*RouteShut\s*\(\s*line\s*,");
-        int refusal = Index(mount, @"first\s*=\s*Keep\s*\(\s*first\s*,\s*ClimbRefusal\s*\.\s*HatchClosed\s*\)\s*;\s*continue\s*;");
+        int refusal = Index(mount, @"first\s*=\s*ClimbRefusal\s*\.\s*HatchClosed\s*;\s*continue\s*;");
         int route = Index(mount, @"Vector3\s*\[\s*\]\s*\?\s*route\s*=\s*null\s*;");
         Assert.True(gate < refusal && refusal < route, "A descending entry is refused before any route is chosen.");
     }
@@ -320,9 +383,11 @@ public sealed class HatchLadderTests
         // The anchor comes after both ladder-on-ladder placements and before the floor-edge snap.
         Assert.True(Index(snap, @"LadderSegment\s*\?\s*column\s*=") < Index(snap, @"TrapdoorLid\s*\?\s*hatch\s*="));
         Assert.True(Index(snap, @"TrapdoorLid\s*\?\s*hatch\s*=") < Index(snap, @"LadderEdgeSnap\s*\.\s*TryPlace\s*\(\s*request"));
-        // The lid's own kinematic body is aimable only while trapdoors exist.
-        Assert.Matches(new Regex(@"private\s+static\s+bool\s+OnTrapdoorLid\s*\(\s*Collider\s+collider\s*\)\s*=>\s*TrapdoorLid\s*\.\s*Any\s*&&"), snap);
-        Assert.Matches(new Regex(@"hit\s*\.\s*collider\s*\.\s*attachedRigidbody\s*!=\s*null\s*&&\s*!\s*OnTrapdoorLid\s*\(\s*hit\s*\.\s*collider\s*\)"), snap);
+        // The game's own placement ray (Player.PieceRayTest) skips any collider with a body and then hides the ghost, so
+        // the adapter never runs on a lid hit (review of 5a5e2cb, blocker 1): the anchor is reached through the frame, and
+        // the adapter's own ray keeps skipping bodies, exactly as on main.
+        Assert.Matches(new Regex(@"hit\s*\.\s*collider\s*==\s*null\s*\|\|\s*hit\s*\.\s*collider\s*\.\s*attachedRigidbody\s*!=\s*null\s*\)"), snap);
+        Assert.DoesNotMatch(new Regex(@"OnTrapdoorLid"), snap);
     }
 
     [Fact]
@@ -332,7 +397,7 @@ public sealed class HatchLadderTests
         // (false all session with Trapdoors/Enabled off), or inside a helper that only such a statement calls (or that
         // asks it itself, pinned above).
         var consults = new Regex(@"TrapdoorLid\s*\.\s*(RouteShut|MayLandOn)\s*\(|GetComponent\w*\s*<\s*TrapdoorLid\s*>|CrossesShutHatch\s*\(");
-        var helpers = new Regex(@"private\s+(static\s+)?bool\s+(CrossesShutHatch|OnTrapdoorLid)\s*\([^)]*\)\s*(=>|\{)");
+        var helpers = new Regex(@"private\s+(static\s+)?bool\s+(CrossesShutHatch)\s*\([^)]*\)\s*(=>|\{)");
         foreach (string relative in new[] { "Runtime/LadderRuntime.cs", "Runtime/LadderClearance.cs", "Pieces/LadderSnapAlignment.cs" })
         {
             string text = Code(Source(relative));

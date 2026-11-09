@@ -18,7 +18,8 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// <item>aimed at a placed ladder's rails: it extends that column at the end the mode names (Bottom stacks on top, Top
 /// hangs below, Auto takes the nearer end and never buries a section under a column that stands on the ground); the
 /// side modes refuse here (they align to floors and walls only);</item>
-/// <item>aimed at a trapdoor (CL-004 #485, slice 4) in Auto or Top: hung in the hatch's own anchor inside the opening,
+/// <item>aimed at a trapdoor's frame (CL-004 #485, slice 4; the game's own placement ray skips the lid, which carries a
+/// kinematic body, and hides the ghost) in Auto or Top: hung in the hatch's own anchor inside the opening,
 /// facing the hinge, in the hatch's rotation (<see cref="HatchLadder"/>); Auto only when there is room below, as on a
 /// floor edge. Bottom and the side modes treat a trapdoor as the 2 m floor tile it is. Only while trapdoors exist;</item>
 /// <item>aimed at a floor or a wall (<see cref="LadderEdgeSnap"/>): on the floor edge nearest the aim, hanging below it
@@ -432,7 +433,7 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (GameCamera.instance == null) { return false; }
         Transform camera = GameCamera.instance.transform;
         if (!Physics.Raycast(camera.position, camera.forward, out hit, 50f, _placeMask) || hit.collider == null ||
-            (hit.collider.attachedRigidbody != null && !OnTrapdoorLid(hit.collider)))
+            hit.collider.attachedRigidbody != null)
         {
             return false;
         }
@@ -442,11 +443,6 @@ internal sealed class LadderSnapAlignment : IDisposable
         LadderSegment? ladder = piece.GetComponent<LadderSegment>();
         return ladder == null || ladder.IsLive; // The ghost itself never counts.
     }
-
-    /// <summary>A trapdoor's lid carries its own kinematic body, which the general rule above skips; aimed at, it still
-    /// names its trapdoor (slice 4). Never true while no trapdoor exists.</summary>
-    private static bool OnTrapdoorLid(Collider collider) =>
-        TrapdoorLid.Any && collider.GetComponentInParent<TrapdoorLid>() != null;
 
     /// <summary>Nothing solid but the hatch itself under the anchored ladder's footprint for most of a section's height
     /// (<see cref="HatchLadder.RoomProbe"/>): the room test Auto applies under a floor edge, from below the frame. A

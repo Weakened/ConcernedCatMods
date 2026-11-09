@@ -71,15 +71,31 @@ internal static class HatchLadder
     /// <summary>Does a climber's capsule at hatch-local (<paramref name="x"/>, <paramref name="z"/>) of radius
     /// <paramref name="radius"/>, occupying heights <paramref name="low"/> to <paramref name="high"/> relative to the
     /// hatch's origin over its route, cross this hatch's opening? The opening is widened by the radius on every side
-    /// (a square, not a rounded rectangle, so a capsule near a corner counts), and the hatch is as deep as its frame.
-    /// Any non-finite input crosses: a route that cannot be measured is held to the passage rule.</summary>
+    /// (a square, not a rounded rectangle, so a capsule near a corner counts), and the hatch is as deep as its frame,
+    /// less <see cref="ContactSlack"/> at each face: a capsule standing on the frame's top, or whose head just meets its
+    /// underside, touches the hatch and does not cross it. Any non-finite input crosses: a route that cannot be measured
+    /// is held to the passage rule.</summary>
     internal static bool Crosses(float x, float z, float radius, float low, float high)
     {
         if (!Finite(x) || !Finite(z) || !Finite(radius) || !Finite(low) || !Finite(high) || radius < 0f) { return true; }
         float reach = HatchGeometry.HalfAperture + radius;
         return Math.Abs(x) < reach && Math.Abs(z) < reach &&
-               Math.Min(low, high) <= HatchGeometry.TopY && Math.Max(low, high) >= HatchGeometry.FrameBottomY;
+               Math.Min(low, high) < HatchGeometry.TopY - ContactSlack && Math.Max(low, high) > HatchGeometry.FrameBottomY + ContactSlack;
     }
+
+    /// <summary>The heights one straight leg of a route occupies, from its lower end to the capsule's top
+    /// (<paramref name="capsuleHeight"/>, any float margin included) at its higher end. Each leg is tested over its own
+    /// span, never the whole route's: a settle onto a floor occupies only that floor's height, so a landing on a closed
+    /// lid, or beside a hatch, is not mistaken for a crossing because the route started lower down.</summary>
+    internal static void LegSpan(float fromY, float toY, float capsuleHeight, out float low, out float high)
+    {
+        low = Math.Min(fromY, toY);
+        high = Math.Max(fromY, toY) + capsuleHeight;
+    }
+
+    /// <summary>How far a capsule may reach into the hatch's depth at its top or bottom face and still only touch it,
+    /// metres: the ladder clearance's own skin, by which a landing floats above the surface it found.</summary>
+    internal const float ContactSlack = 0.02f;
 
     /// <summary>May a route be committed past this hatch? Always when it does not cross the opening; otherwise only
     /// while the lid is a passage (<see cref="HatchMotion.IsPassage"/>).</summary>

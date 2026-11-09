@@ -501,7 +501,8 @@ internal sealed class LadderRuntime : IDisposable
             if (topEntry && TrapdoorLid.Any && TrapdoorLid.RouteShut(line, clearance.Radius, Mathf.Min(entryLow, line.y),
                     Mathf.Max(feet.y, line.y) + LadderRules.StepLift + clearance.Height + RouteTopMargin))
             {
-                first = Keep(first, ClimbRefusal.HatchClosed);
+                // The more useful reason: the rear face meeting the floor slab first must not hide it (review of 5a5e2cb).
+                first = ClimbRefusal.HatchClosed;
                 continue;
             }
 
@@ -1260,7 +1261,7 @@ internal sealed class LadderRuntime : IDisposable
                 ? new[] { new Vector3(feet.x, raised, feet.z), new Vector3(floor.x, raised, floor.z), floor }
                 : new[] { clear, new Vector3(clear.x, raised, clear.z), new Vector3(floor.x, raised, floor.z), floor };
             // CL-004 #485 slice 4: no exit route is committed through a trapdoor whose lid is not a passage.
-            if (TrapdoorLid.Any && CrossesShutHatch(feet, path, raised))
+            if (TrapdoorLid.Any && CrossesShutHatch(feet, path))
             {
                 _hatchShut = true;
                 if (LogLandings) { Landing(kind, floor, "refused: the route crosses a trapdoor that is not open (lift " + lift.ToString("F2") + ")"); }
@@ -1283,20 +1284,21 @@ internal sealed class LadderRuntime : IDisposable
     }
 
     /// <summary>Would this route's capsule cross the opening of a trapdoor whose lid is not a passage (CL-004 #485 slice
-    /// 4)? Every point of the route, and where it starts, is tested over the whole height the route reaches, from its
-    /// lowest point to the capsule's top at its highest (<paramref name="highest"/>), so a rise through an opening is
-    /// seen at its start and a settle onto one at its end. Only the points are tested: a straight leg between two points
-    /// outside an opening that passes over it does so above the lip, where the capsule sweep sees the lid's own pose.</summary>
-    private bool CrossesShutHatch(Vector3 start, Vector3[] path, float highest)
+    /// 4)? Each leg is tested at both its ends over its own height only, from its lower end to the capsule's top at its
+    /// higher end: the rise out of a shaft is seen at its start, the settle onto a floor only over that floor's own
+    /// height, so a landing on a closed lid (a floor) or beside one is never refused because the route started lower
+    /// (independent review of 5a5e2cb, blocker 2). Only the ends are tested: a straight leg between two ends outside an
+    /// opening that passes over it does so above the lip, where the capsule sweep sees the lid's own pose.</summary>
+    private bool CrossesShutHatch(Vector3 start, Vector3[] path)
     {
         float radius = _clearance!.Radius;
-        float low = start.y;
-        foreach (Vector3 point in path) { low = Mathf.Min(low, point.y); }
-        float top = highest + _clearance.Height + RouteTopMargin;
-        if (TrapdoorLid.RouteShut(start, radius, low, top)) { return true; }
-        foreach (Vector3 point in path)
+        float height = _clearance.Height + RouteTopMargin;
+        Vector3 from = start;
+        foreach (Vector3 to in path)
         {
-            if (TrapdoorLid.RouteShut(point, radius, low, top)) { return true; }
+            Domain.Doors.HatchLadder.LegSpan(from.y, to.y, height, out float low, out float top);
+            if (TrapdoorLid.RouteShut(from, radius, low, top) || TrapdoorLid.RouteShut(to, radius, low, top)) { return true; }
+            from = to;
         }
 
         return false;
@@ -1348,7 +1350,7 @@ internal sealed class LadderRuntime : IDisposable
     private const float NoLandingStop = 1.3f;
 
     /// <summary>The highest floor above the run's top the top exit looks for (<see cref="LadderClearance.TryTopSurface"/>).</summary>
-    private const float TopSurfaceAbove = 0.75f;
+    private const float TopSurfaceAbove = LadderClearance.TopSurfaceAbove;
 
     /// <summary>Registered with the trapdoors, so it exists only when they do (CL-004 #485 slice 4).</summary>
     private const string HatchClosedNotice = "$" + Domain.Doors.TrapdoorBlueprint.HatchClosedToken;
