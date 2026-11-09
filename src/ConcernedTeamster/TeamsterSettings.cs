@@ -43,12 +43,16 @@ internal sealed class TeamsterSettings
         ConfigEntry<int> schemaVersion,
         ConfigEntry<bool> gunnarHaulingEnabled,
         ConfigEntry<bool> gunnarCollectionEnabled,
+        ConfigEntry<bool> gunnarChestTakeEnabled,
+        ConfigEntry<bool> gunnarIdleHammerEnabled,
         ConfigEntry<KeyboardShortcut> containerPermissionShortcut,
         ConfigEntry<GunnarPullStrength> gunnarPullStrength,
         ConfigEntry<string> workerBaseCreature)
     {
         GunnarHaulingEnabled = gunnarHaulingEnabled;
         GunnarCollectionEnabled = gunnarCollectionEnabled;
+        GunnarChestTakeEnabled = gunnarChestTakeEnabled;
+        GunnarIdleHammerEnabled = gunnarIdleHammerEnabled;
         ContainerPermissionShortcut = containerPermissionShortcut;
         GunnarPullStrength = gunnarPullStrength;
         WorkerBaseCreature = workerBaseCreature;
@@ -137,6 +141,18 @@ internal sealed class TeamsterSettings
     /// a player who wanted a cart pulled has not thereby asked for anything to be
     /// picked up.</summary>
     public ConfigEntry<bool> GunnarCollectionEnabled { get; }
+
+    /// <summary>Workers (#381, `DECISIONS.md` D20): whether Gunnar may take from a
+    /// chest the player explicitly marked Take or Both. Off by default, its own
+    /// switch, and it needs <see cref="GunnarCollectionEnabled"/> as well.</summary>
+    public ConfigEntry<bool> GunnarChestTakeEnabled { get; }
+    /// <summary>Workers (#381, owner decision 2026-10-31, D21): while Gunnar is
+    /// idle beside the cart assigned to him, he now and then walks over, faces it
+    /// and plays the vanilla hammer swing. Cosmetic only. Effective only while
+    /// <see cref="GunnarHaulingEnabled"/> is on - which is off by default - so
+    /// it is read only by an already opted-in Gunnar. <b>Off</b> by default all
+    /// the same, like each of the owner's 2026-10-31 grants.</summary>
+    public ConfigEntry<bool> GunnarIdleHammerEnabled { get; }
 
     /// <summary>#374: while looking at a container, press this to change what
     /// Gunnar may do with it. The four states are cycled in one order - off,
@@ -271,6 +287,18 @@ internal sealed class TeamsterSettings
                 "food, no chests, no piles somebody dropped, no trees. Works only in single player or as the " +
                 "host with nobody else connected, only on a source this session already controls - he never " +
                 "takes control of one - and only while he is standing next to it; nothing here moves him."),
+            config.Bind("Workers", "GunnarChestTakeEnabled", GunnarCollectionDefaults.ChestTakeEnabled,
+                "Let Gunnar take an item you name out of a chest you chose and marked for taking (or both), into " +
+                "his own inventory, counting both sides and leaving whatever does not fit in the chest. OFF by " +
+                "default, and it also needs GunnarCollectionEnabled. He never takes from a chest you have not " +
+                "marked, never picks a chest himself, never takes everything, and works only in single player or " +
+                "as the host with nobody else connected, standing next to the chest."),
+            config.Bind("Workers", "GunnarIdleHammerEnabled", GunnarHaulingDefaults.IdleHammerEnabled,
+                "While Gunnar is idle near the cart you assigned him, he now and then walks over to it, faces it " +
+                "and plays the game's own hammer swing. Scenery only: it repairs nothing, uses nothing and changes " +
+                "nothing about the cart, and it never happens while the cart is hitched to anyone or he has a job. " +
+                "Takes effect only while GunnarHaulingEnabled is on, and under the same rule - single player or " +
+                "the host with nobody else connected. OFF by default; with it off he simply stands and waits."),
             config.Bind("Workers", "ContainerPermissionShortcut",
                 new KeyboardShortcut(KeyCode.F9),
                 "While looking at a chest, press this to choose what Gunnar may do with it: nothing, take " +

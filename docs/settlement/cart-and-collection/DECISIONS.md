@@ -3,7 +3,8 @@
 Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
 by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
 death door named in `GUNNAR_COLLECTION.md` §6c) and **C6** (2026-10-28, D17 - the collection tour's walking and
-load size). D16's fail-closed reading was confirmed by the owner on 2026-10-28.
+load size) and **C7** (2026-10-31, D21 - Gunnar's cosmetic idle hammer swing). D16's fail-closed reading was confirmed
+by the owner on 2026-10-28.
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -257,6 +258,40 @@ suspended, and #282's broader harvesting stays open as deferred scope.
    or operates the game.
 5. **Live criteria.** A PR whose issue carries live gameplay criteria uses `Refs #`, not `Closes #`. Such an issue
    closes only on observed evidence.
+6. **Foreman ladder traversal** (owner decision 2026-11-01, #334; the owner's words and question are in
+   `docs/mods/concerned-foreman/WORKER_LADDER_AUTHORITY_2026_11_01.md`). The single exception to "moved only through
+   the vanilla motor". Built by #334's binding slice (2026-11-08), and only this:
+   - **Who and when.** Thorstein's own worker body, on an explicit `cf_worker climb here | <x> <y> <z>` order, with
+     `Ladders/NpcClimbing` on (off by default) and D3's authority granted (opted in, host, not dedicated, no other
+     peers). Either switch off refuses the order and ends it. His actor mode is held through Concerned NPC's arbiter
+     for the whole order, so presentation, collection, construction and a despawn all see him as busy.
+   - **Where.** Only along a Concerned Ladders link the #501 receiver published after measuring it against the real
+     colliders and his real capsule - supported foot, mount lane, vertical lane, supported top - reached by a route
+     whose walk edges are vanilla navigation-mesh paths verified in height at both ends. A fresh survey runs at
+     admission and again immediately before every ladder entry, and an entry whose link generation moved is refused.
+     Vanilla ladders are not admitted.
+   - **How.** One scoped motor, `src/ConcernedForeman/Runtime/Ladders/WorkerClimbMotor.cs`. While it holds him his AI
+     reports sleeping - vanilla's own switch that makes `Character.UpdateMotion` skip walking - and `ForemanWorkerAI`
+     neither plans nor calls `BaseAI.MoveTo`; his own rigidbody is made kinematic and its original flag is restored
+     after; each step of the checked path is one rigidbody position write, after a fresh capsule sweep from where he
+     is to where he is going. Walking legs stay on vanilla's motor.
+   - **Every exit gives the body back where it stands.** Arrival, a blocked or refused leg, a cancel, a world unload,
+     death, a lost, faulted or unsimulated body, the switch going off, lost authority and plugin teardown all restore
+     the motor first; the identity is released only once that succeeds. An interrupted climb is never finished by
+     placing him at a landing - vanilla physics has him from where he is (lead default pending owner confirmation:
+     a non-player takes no fall damage in 1.0.12, so this costs nothing but a drop).
+   - **Not granted.** No teleport, entry snap, velocity, force or rotation write, ownership takeover, RPC, cart or
+     cargo movement, generic worker positioning, other body, player motor, or world-save write. Concerned Ladders
+     never drives a worker.
+   - **Known limit, by design.** Every survey - at admission, before each entry, and every two seconds on the way -
+     counts any other character as a blocker. Somebody standing at the ladder's foot, in its lane or on the landing
+     when one runs refuses the entry or ends the climb. That is the fail-closed direction; the player watches from a
+     few metres away. The body's capsule is measured once per order so an unchanged ladder keeps its generation.
+   - **Proof.** The #400 capability audit pins the motor's two kinematic writes and one position write; the #334
+     worker climb audit pins the sweep directly in front of that write, the worker's own rigidbody, who may create,
+     request, start and end a lease, and the ground-motor suspension. Planted escapes:
+     `tools/tests/test_foreman_worker_climb_audit.py`; every exit: `WorkerClimbOrderTests`. Text audits, so they do not
+     prove control flow. **Never observed in game**; gate G5 is OWNER GO-AROUND PENDING.
 
 ---
 
@@ -431,7 +466,8 @@ intended narrowing, not a defect to be widened later.
   `SetMaxHealth`, `.Damage(`, `ApplyDamage`, `RPC_Damage`) is refused anywhere in Teamster.
 - *Vanilla inside the call.* `Humanoid.DropItem` also plays the body's `interact` trigger and the drop effects, and
   places each stack a metre in front of the body with a small push. Those are vanilla's, inside the one pinned call,
-  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`.
+  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`. (Since D21, one file
+  does - the idle hammer port, for a cosmetic swing - and nothing on the death path does.)
 
 **Never observed in game.** The port binds Unity; the decision, the classification, the accounting and the record
 format are unit-tested (`WorkerDeathDropTests`), the shape is pinned, and nothing has been watched happening.
@@ -461,7 +497,7 @@ planning limit**: the rest of a larger look is the next load, never dropped and 
 that is an empty order, not a size judgement - but one or two units are walked to the chest like any other load.
 
 **What is not granted:** no cart use on a tour, no felling (`TreeBase.Damage`), no idle gesture
-(`ZSyncAnimation.SetTrigger`), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
+(`ZSyncAnimation.SetTrigger` - granted separately on 2026-10-31 as D21, outside the tour), no chest-to-chest take, no ownership takeover, no movement of anyone but Gunnar, and no
 change to D15's deposit or D16's death drop. Each of those still needs its own owner decision.
 
 **Never observed in game.** The tour's rows in `GUNNAR_COLLECTION.md` §10 are OWNER GO-AROUND PENDING.
@@ -619,3 +655,146 @@ most fail-closed reading of the decision:
 - mod data in a vanilla object.
 
 **Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F11).
+
+## D20. Gunnar may take from a chest the player marked TAKE or BOTH
+
+Status: **accepted** (owner decision 2026-10-31, #381, asked directly by the completion lead; the issue comment of
+that date records it). **Implemented** in the same change as this entry.
+
+**What is granted.** Gunnar's opted-in collection runtime may move items **out of a vanilla `Container`'s
+inventory into his own**, when **that exact source container** carries the player's explicit `Take` or `Both` mark
+in `NpcContainerDesk`, measured on both sides, with the remainder left in the chest, off by default and pinned like
+D15.
+
+**The calls.** D15's three, with the roles exchanged: `Inventory.MoveItemToThis` for a whole stack, and for part of a
+stack `Inventory.AddItem` of a clone of that stack's own data into Gunnar followed by `Inventory.RemoveItem` of exactly
+what arrived, off the chest's stack. D15's reasoning for why the clone is not "spawning item instances" applies
+unchanged: the clone is of a stack in the chest that the same operation removes from, and the measurement proves the
+units are conserved.
+
+**The gates, all re-asked in the frame of the move:** D15's nine, with `Take` where D15 has `Deposit`, plus the take's
+own switch: Teamster's master switch, the collection switch and `Workers/GunnarChestTakeEnabled` (**off by
+default**); the start-up probe; the work-authority rule of D3; a body whose inventory record is trusted (an
+unwritable or unreadable record is handed nothing more, as D15 already contains it); the player's `Take` or `Both`
+mark on that exact container, resolved the way it was recorded; this client owning it; nobody having it open, and no
+cart it rides in use; the ward and privacy setting; and reach.
+
+**Measurement.** Both sides counted before and after; only what arrived in Gunnar is removed from the chest and
+credited; what does not fit stays in the chest; a fault halfway is uncertain and never retried blind, compensated or
+minted; a spent permit cannot record a second transfer.
+
+**Where it is enforced.** `Adapters/Workers/GunnarTakePort.cs`, pinned by the scope audit (each call verbatim and
+once, refused everywhere else in the product) and by `#381 chest-take audit`; planted escapes in
+`tools/tests/test_teamster_take_audit.py`, each refused by those rules and passing a validator without them.
+
+**How the decision was read where it leaves a choice** - each a **lead default pending owner confirmation**, the
+smallest and most fail-closed reading the brief allows:
+
+- *What may be taken.* One item, named exactly by the player (`ct_collect take <item> [count]`), with no wildcard, no
+  list and no "everything". A name the game does not know is refused. The owner's words name the chest, not the
+  items; the narrowing to one named item per order is this record's.
+- *How much.* At most what fits under D17's carry limit (a vanilla player's base limit plus Megingjord's bonus, less
+  everything he already carries) and his own slots. Without a count, that much of the one named item.
+- *Where he stands.* Within reach of the chest. Nothing here walks him; a manual chest-to-chest mode that walks him
+  between chests is a separate leaf of #381 and uses D14.2's own-body pathfinding when it is built.
+- *Putting it down again.* `ct_collect deposit <item>` deposits one named item through D15's unchanged port, so what
+  he took is not stranded in him. D15's grant already covers any item in his inventory; the default deposit filter
+  (what collecting yields) is unchanged. Equipped stacks are never offered. **A known edge:** if Gunnar is ever
+  issued a tool (the felling decision would), an unequipped issued tool could be named and deposited; the leaf that
+  issues one must filter issued items out of this path.
+- *The ledger.* A take is acquired in `CollectionAccount` like a pick, so the session's "taken" total counts what he
+  took from chests as well as what he collected; it is a record of where material physically is, not of what was
+  collected.
+
+**What is not granted:** no nearest-chest inference; no take from an unmarked chest, one marked `Deposit` only, or one
+marked and then unmarked; no ownership takeover; no synthetic or replacement resources; no extra copies; no teleporting
+of cargo; no mod data in a vanilla object; no bypass of ward, privacy, ownership or in-use checks; no take as part of a
+tour or into a cart's container (the cart-assisted round is its own decision, recorded in the 2026-10-31 paragraph of
+`CLAUDE.md`); no widening of any other Teamster capability.
+
+**Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 49-55 are OWNER GO-AROUND PENDING.
+
+## D21. Gunnar's idle hammer swing is cosmetic, and is one pinned animation trigger on his own body
+
+Status: **accepted** (contract revision **C7**, owner decision 2026-10-31, given to the lead and relayed for #381).
+It answers the question `GUNNAR_COLLECTION.md` §10 row 10 put to the owner, and the "idle gesture" D17 left out.
+The brief that relayed it called it "D18"; D18 had already been used for the worker look, D19 for Thorstein's
+felling and D20 for Gunnar's chest take, so it is recorded here as D21.
+
+**What is granted.** While Gunnar is idle beside the cart assigned to him, his worker runtime may play the vanilla
+hammer swing on **his own body**, through vanilla's own `ZSyncAnimation.SetTrigger`, as scenery. One call, in one
+file (`Adapters/Workers/GunnarIdleHammerPort.cs`):
+- the receiver is the `ZSyncAnimation` of the body carrying `TeamsterWorkerAI` - Gunnar's worker prefab, and no other
+  body;
+- the trigger name is the one the vanilla Hammer item itself plays, read from the item database
+  (`m_shared.m_attack.m_attackAnimation`) - the name vanilla's own repair swing plays from the hammer in a player's
+  hand. The product invents no animation name;
+- the body's animator is asked first whether it has that trigger (`ZSyncAnimation.HasParameter`), and nothing is
+  played if it does not.
+
+Walking to the cart and turning to face it use the vanilla motor on his own body that D14.2 already allows.
+
+**Gates, all re-read in the worker tick that acts:** Teamster's master switch, `Workers/GunnarHaulingEnabled` (off by
+default), the new `Workers/GunnarIdleHammerEnabled` (**off by default**), the start-up capability probe, and the shared work-authority rule
+of D3. He must hold a cart lease with nothing else happening - phase `Ready`, no haul, no leg, no joint, no hold, no
+pending stop - and **nobody may hold his identity**. The cart must be the leased one, resolved, not hitched to anyone,
+and within 12 m of him. A job arriving, the cart being hitched, or any gate going away disarms the routine, hands the
+tick back to the haul executor, and banks no swing for later.
+
+**What is not granted:**
+- no repair, no consumption, no hit points restored, no buff, and no other effect: `CartUpkeepIdle` can say only
+  nothing, walk, face or swing, and has no way to hand a cart back;
+- no write to the cart or to any other object: the routine reads the executor's own last observation of the cart and
+  touches nothing;
+- no other animator state: no `SetBool`, `SetFloat`, `SetInt` (each of which writes the body's network object), speed,
+  reset, play or cross-fade;
+- no trigger on any other body, the player's included, and no trigger name the product chose;
+- no network message of the product's own: `SetTrigger` routes the trigger to every client's animator inside vanilla,
+  as `Pickup`'s destruction is vanilla's inside the pinned pickup;
+- no idle walking without an assigned cart, no walking further than 12 m to reach one, and no walking to it for more
+  than 20 s at a time;
+- no widening of D14-D18.
+
+**Where it is enforced.** `tools/validate_repo.py`: `.SetTrigger(` is refused everywhere in Teamster source and in the
+three `src/Shared` trees its project file compiles in, inside `Adapters/Workers` and out, except
+`animation.SetTrigger(swing)` verbatim and once in the port; the `D21 idle-hammer audit` pins the lines that decide
+whose animator (`body = gunnar.GetComponent<Character>()`, `animation = body.m_zanim`, each once) and which animation
+(`swing = HammerSwing()`, a read of the Hammer's own attack animation with no string literal), the `HasParameter`
+refusal above the call, and the absence of every other animator write in the port. Before this decision **nothing**
+refused `SetTrigger` in Teamster; the documents said "not authorized" while any file could spell it. The planted
+escapes in `tools/tests/test_teamster_carveout.py`'s `IdleHammerIsCosmetic`, each verified to pass the validator from
+before this change, are refused. `scripts/audit-teamster-hauling-api.ps1` pins the IL: `ZSyncAnimation::SetTrigger`
+exactly once, in the port's type, and no animator bool, float, int or speed write anywhere.
+
+**Proved to change nothing.** `CartUpkeepIdleTests` (the decision) and `CartUpkeepDriverTests` (the decision driven
+end to end beside a real haul executor holding a real lease for an in-game hour: the lease, the phase, the identity
+hold and the executor's revision are exactly as they were, and the only port calls are his own body's walk, turn and
+stop). The load-bearing part is that journal and the structural assertions - the routine has no way to hand a cart
+back - because the fake cart cannot move; a physical shove is the one effect a test here cannot see, so he walks to
+where a puller stands at the handle (`ApproachPoint`), never at the cart's centre, and row 50 checks the cart's
+position in game.
+
+**Not established.** Whether the body Gunnar is cloned from (`Dverger` by default) has the hammer's trigger in its
+animator could not be read without running the game. If it does not, the port refuses on every swing and logs why
+once, and he walks to his cart, faces it and stands there. The swing would then need a different base creature or a
+further decision; it is never replaced by a name the product invents.
+
+**Never observed in game.** OWNER GO-AROUND PENDING (`GUNNAR_COLLECTION.md` §10).
+
+## Lead default pending owner confirmation (2026-11-08): a resting figure and doors (#295 S5, #461)
+
+Not numbered on purpose: other lanes are adding D-numbers at the same time, and the lead numbers this one when it
+merges. It grants no world authority: it says how the owner's 2026-09-16 door-permission rule applies to a
+presentation figure that is **set down** at a spot and never walks.
+
+- The figure never opens, closes or uses a door, and is never set down in or right beside a doorway.
+- It is never set down on the far side of a doorway or a wall from home. A spot is refused when anything solid
+  stands between it and home at chest height (a wall, a shut door; a ray cast that cannot be completed counts as
+  solid), or when the straight line from home to it passes through a doorway (the shared `DoorPortal.IsCrossedBy`).
+- Concerned Foreman (and, when built, Concerned Teamster) keeps no list of doors opened to companions, so every
+  door counts as one the figure may not use. This is the rule's own default (`OnlyAllowedDoors` with nothing
+  allowed). If the doors near home cannot be read, the figure is seated nowhere new.
+- **The open question for the owner.** A bed inside a house whose door is shut still counts as home, so the figure
+  may rest in that room. Hulgi, who walks, stays out of such a house, because he would have to come in through the
+  door. A figure that is only set down at a spot never passes the door. If the owner wants the stricter reading,
+  the bound becomes "never indoors behind a door" and the fallback is to stand outside.

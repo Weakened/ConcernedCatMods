@@ -53,6 +53,12 @@ WorkerRouteRunnerTests (real LinkTraversal, walk/motor exclusivity, cancel/loss,
 restoration failure/retry, unsupported exit and direct stale-generation exit).
 Together with existing traversal seam tests, the focused run has 57 passing cases.
 
+Native integration, 2026-11-08 (#334 binding slice): implemented as
+`WorkerNavMeshWalkProbe`, `WorkerClimbMotor`, `WorkerClimbRuntime` and the
+game-free `WorkerClimbOrder`; recorded as DECISIONS.md D14.6 and pinned by the
+#400 and #334 worker climb audits. G5 remains NOT RUN. The paragraph below is
+the requirement it was built against.
+
 Native integration STILL OPEN: IWorkerWalkProbe must supply full, height-verified
 path evidence, never a horizontal-only or projected-floor success. A scoped
 IWorkerRoutePort / IWorkerLadderMotor must be audited before it writes an engine

@@ -11,6 +11,22 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — Thorstein climbs a ladder when you send him (#334, owner decision 2026-11-01, D14.6)
+
+- **`cf_worker climb here`** (or `cf_worker climb <x> <y> <z>`) sends Thorstein's
+  worker body to that spot. He walks, and where a Concerned Ladders ladder is the
+  way up or down he climbs it, steps off at the top or bottom and walks on.
+  `cf_worker climb cancel` stops him; `cf_worker climb status` says where he is.
+- **Off by default**, under `Ladders/NpcClimbing`. It also needs the settlement
+  runtime on, and works only as the host with nobody else connected.
+- **Only ladders it has measured.** Before he sets off, and again just before
+  each ladder, it checks the ladder, the floor at both ends and the room for his
+  body. Anything new in the way stops him. Stopped part-way, he lets go where he
+  is; he is never put at the top or bottom by magic. The game's own ladders are
+  not used.
+- **Stand a few metres clear** of the ladder while he uses it: anybody at its
+  foot, in its lane or on the landing counts as in the way, and he stops.
+
 ### Added — interrupted work is never repeated (#379)
 
 - **Thorstein now keeps a work plan for each job**, collecting and building, beside the
@@ -53,6 +69,23 @@ moved: 0.1.0 has never shipped, so these are still its notes.
 - **Never felled:** full-size trees, saplings you planted, berry bushes, and
   anything else.
 - Not yet observed in game.
+
+### Added — Thorstein sits at home (#295 S5)
+
+- **At rest he sits on the ground near home** rather than standing beside the respawn
+  point: 1.5-6 m out, on the same floor, by a fire when there is one, facing it, or facing
+  home.
+- **The spot** comes from the shared companion placement planner, the one Hulgi uses. It
+  refuses water, slopes, obstructions, beds, doorways, the fire itself and the starting
+  temple. Foreman's own read-only probe answers it.
+- **Doors.** He never uses a door and is never set down through a doorway from home. Every
+  door counts as closed to him.
+- **Camp.** He rests inside Concerned NPC's camp once it is established.
+- **The pose** is Concerned NPC's `NpcFigureDresser.SitOnGround` on his own local figure.
+  Nothing is claimed or changed.
+- **He moves only** when his spot is built over or a warmer one appears.
+- Until a spot is found he stands as before, and `cf_worker status` says why. Chairs are
+  not used yet. **Not observed in game.**
 
 ### Added — Thorstein's tools panel (#295 S4)
 

@@ -2,7 +2,9 @@ using System;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
+using Jotunn.Managers;
 using Jotunn.Utils;
+using TheConcernedCat.ConcernedLadders.Excavation;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.ConcernedLadders.Pieces;
 using TheConcernedCat.ConcernedLadders.Runtime;
@@ -30,6 +32,7 @@ public sealed class Plugin : BaseUnityPlugin
     private LadderSkill? _skill;
     private OriginalClimbPresenter? _presenter;
     private LadderSnapAlignment? _snap;
+    private ExcavationRuntime? _excavation;
     private ConfigEntry<bool>? _trapdoorsEnabled;
     private TrapdoorPieceRegistration? _trapdoors;
 
@@ -82,6 +85,7 @@ public sealed class Plugin : BaseUnityPlugin
         else { try { _presenter.Dispose(); } catch { /* Presentation cleanup only. */ } _presenter = null; }
         _runtime.Enabled = _enabled.Value && _pieces.IsReady;
         _runtime.Install(PluginGuid + ".motor");
+        InstallExcavation();
         string revision = typeof(Plugin).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? PluginVersion;
         Logger.LogInfo(PluginName + " " + revision + " loaded.");
@@ -92,10 +96,40 @@ public sealed class Plugin : BaseUnityPlugin
         if (_runtime == null || _enabled == null) return;
         _runtime.Enabled = _enabled.Value && _pieces?.IsReady == true;
         _runtime.Update(Time.deltaTime);
+        _excavation?.Update();
+    }
+
+    /// <summary>Iron Shovel excavation (#487 slice 2). The terrain operations register on every peer, because the tile
+    /// owner applies them; the console harness that commits one exists only when the off-by-default switch is on. A
+    /// fault here never stops the ladders.</summary>
+    private void InstallExcavation()
+    {
+        ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", false,
+            "Experimental, off by default (#487): adds the cl_excavate console command, which plans and digs one measured " +
+            "2x2x2 m or 4x4x4 m basement hole through the game's own terrain operation. No shovel item yet. Not yet " +
+            "observed in game. Every player needs the same version of this mod. Restart after changing.");
+        try
+        {
+            _excavation = new ExcavationRuntime(message => Logger.LogInfo(message), enabled.Value);
+            _excavation.Install();
+            if (enabled.Value)
+            {
+                _excavation.Report = ExcavationCommand.Print;
+                CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(_excavation));
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogInfo("Excavation unavailable (" + SafeFailure.Brief(exception) + "); ladders are unaffected.");
+            try { _excavation?.Dispose(); } catch { /* Cleanup only. */ }
+            _excavation = null;
+        }
     }
 
     private void OnDestroy()
     {
+        try { _excavation?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        _excavation = null;
         try { _runtime?.Dispose(); _presenter?.Dispose(); }
         catch (Exception exception)
         {

@@ -30,6 +30,13 @@ internal static class GunnarHaulingDefaults
     /// on.</summary>
     public const bool HaulingEnabled = false;
 
+    /// <summary><c>Workers/GunnarIdleHammerEnabled</c> (D21). <b>Off</b>, like
+    /// every grant of 2026-10-31: each arrives behind its own off-by-default
+    /// switch, and a player who turned hauling on has not thereby asked for him
+    /// to walk about between jobs. It is read only while
+    /// <see cref="HaulingEnabled"/> is on as well.</summary>
+    public const bool IdleHammerEnabled = false;
+
     /// <summary><c>Workers/GunnarPullStrength</c>, the only supported value.
     /// </summary>
     public const GunnarPullStrength PullStrength = GunnarPullStrength.MatchPlayer;
