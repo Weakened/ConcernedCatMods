@@ -16,10 +16,12 @@ public sealed class GunnarCampTests
     {
         public int Calls;
         public bool Unloaded;
+        public float Lift;
         public PlacementProbeSample Probe(WorldPoint p)
         {
             Calls++;
-            return Unloaded ? PlacementProbeSample.NotLoaded(p) : new(p,PlacementRejection.None,-1,SeatAvailability.None);
+            return Unloaded ? PlacementProbeSample.NotLoaded(p)
+                : new(new WorldPoint(p.X,p.Y+Lift,p.Z),PlacementRejection.None,-1,SeatAvailability.None);
         }
     }
     private sealed class Seats : IPlacementProbe,ISeatFinder
@@ -276,6 +278,13 @@ public sealed class GunnarCampTests
         var after=routine.Step(Facts(),anchor,Survey(camp),true,epoch,probe,around);
         Assert.Equal(GunnarCampAction.Retain,after.Action);
         Assert.Equal(first.Placement.Position,after.Placement.Position);
+        // Ground that answers at another height - a thin floor built on his
+        // spot - is not the same spot: a fresh plan, which stands him on it.
+        probe.Lift=0.2f; around.Revision++;
+        var floored=routine.Step(Facts(),anchor,Survey(camp),true,epoch,probe,around);
+        Assert.Equal(GunnarCampAction.Reposition,floored.Action);
+        Assert.Equal(first.Placement.Position.Y+0.2f,floored.Placement.Position.Y,3);
+        probe.Lift=0f;
         // A moved home is a fresh plan, whatever still fits.
         var moved=new CompanionAnchor(AnchorKind.ClaimedBed,new WorldPoint(5f,0,0));
         around.Revision++;

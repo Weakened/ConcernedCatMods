@@ -49,9 +49,10 @@ the seat. No seat is offered, named or claimed.
 3. A plan is kept until the anchor moves, camp's revision changes or the pieces
    near home change. Then, if home has not moved, the spot he stands on is asked
    again first (one probe and the same admission) and kept while it still
-   passes, so something built or removed elsewhere does not move him; only a
-   spot that no longer passes, or a moved home, gets a fresh plan. A step with none of those allocates nothing and probes
-   nothing (measured: 0 bytes over 100,000 warmed steps, no probe, no wall
+   passes on the same ground (re-measured within 2 cm), so something built or
+   removed elsewhere does not move him; only a spot that no longer passes, or a
+   moved home, gets a fresh plan. A step in which nothing changed allocates
+   nothing and probes nothing (measured: 0 bytes over 100,000 warmed steps, no probe, no wall
    check). A deferral because ground is not loaded is asked again on the next
    pass; a figure already standing keeps its spot meanwhile.
 

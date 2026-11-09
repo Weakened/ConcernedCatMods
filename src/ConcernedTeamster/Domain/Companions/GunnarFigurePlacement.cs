@@ -18,6 +18,10 @@ internal static class GunnarFigurePlacement
     public static readonly PlacementRules Rules = new(1.5f, 4f, 0f, 1f);
     private static readonly PlacementPlanner Planner = new(Rules);
 
+    /// <summary>How far the re-measured ground under his spot may be from the
+    /// spot itself and still be the same spot.</summary>
+    private const float SameSpotMetres = 0.02f;
+
     /// <param name="admits">Optional (#461): a spot that passed every ground
     /// rule and the keepsake clearance is still skipped when this says no - the
     /// camp, the door rule and the wall check. Asked lazily, best spot first,
@@ -51,6 +55,11 @@ internal static class GunnarFigurePlacement
         if (!anchor.IsValid || !Finite(anchor.Position) || !Finite(spot) || otherKeepsakes == null) return false;
         PlacementProbeSample sample = probe.Probe(spot);
         if (!sample.IsUsable || !Finite(sample.Position)) return false;
+        // The ground under him answered somewhere else - a thin floor built on
+        // his spot, a slope re-measured: he would be kept inside it or above
+        // it, so a fresh plan decides instead.
+        if (sample.Position.HorizontalDistanceTo(spot) > SameSpotMetres ||
+            Math.Abs(sample.Position.Y - spot.Y) > SameSpotMetres) return false;
         for (int i = 0; i < otherKeepsakes.Count; i++)
             if (!Finite(otherKeepsakes[i]) ||
                 sample.Position.HorizontalDistanceTo(otherKeepsakes[i]) < GunnarKeepsake.Clearance) return false;
