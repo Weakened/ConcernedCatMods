@@ -79,6 +79,10 @@ internal static class ExcavationReport
             case ExcavationCommitRefusal.Obstructed: return "Something that is not a building piece is in the way" + (string.IsNullOrEmpty(obstruction) ? "" : " (" + obstruction + ")") + ". Clear it by hand first; this tool never removes objects.";
             case ExcavationCommitRefusal.ScanOverflow: return "Too many objects overlap this square to check them all. Nothing is changed.";
             case ExcavationCommitRefusal.SpawnRefused: return "The game declined the terrain edit here (ward or no-build area). Nothing is changed.";
+            case ExcavationCommitRefusal.NoShovel: return "Equip the Iron Shovel to dig. Nothing is changed.";
+            case ExcavationCommitRefusal.NotReady: return "You cannot dig right now (mid-swing, dodging or staggered). Nothing is changed.";
+            case ExcavationCommitRefusal.ShovelWorn: return "The Iron Shovel needs " + F0(ExcavationCost.For(plan.Mode).Durability) + " durability for a " + ModeName(plan.Mode) + " hole. Repair it at a forge. Nothing is changed or charged.";
+            case ExcavationCommitRefusal.NotEnoughStamina: return "You need " + F0(ExcavationCost.For(plan.Mode).Stamina) + " stamina for a " + ModeName(plan.Mode) + " hole. Rest, then try again. Nothing is changed or charged.";
             default: return "Refused. Nothing is changed.";
         }
     }
@@ -108,6 +112,14 @@ internal static class ExcavationReport
             : "Nothing in the way.";
         if (pieces > 0) text += " " + pieces.ToString(CultureInfo.InvariantCulture) + " building-piece collider(s) stand on ground that would change; the game's own support rules decide whether they hold.";
         return text;
+    }
+
+    /// <summary>What an Iron Shovel dig of this mode is charged, once, when it goes ahead (#487 slice 3).</summary>
+    internal static string Cost(ExcavationMode mode)
+    {
+        ExcavationCost cost = ExcavationCost.For(mode);
+        return "A shovel dig here costs " + F0(cost.Stamina) + " stamina and " + F0(cost.Durability) +
+               " durability (before world modifiers), charged once when it goes ahead.";
     }
 
     private static string F0(float value) => value.ToString("0", CultureInfo.InvariantCulture);

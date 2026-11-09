@@ -49,6 +49,18 @@ internal enum ExcavationCommitRefusal
 
     /// <summary>The game's own terrain-tool path declined to place the operation.</summary>
     SpawnRefused = 13,
+
+    /// <summary>The Iron Shovel is not the equipped weapon (#487 slice 3).</summary>
+    NoShovel = 14,
+
+    /// <summary>The player is mid-swing, dodging, staggered or knocked back.</summary>
+    NotReady = 15,
+
+    /// <summary>The shovel has less durability left than this dig costs. Repair it at a forge.</summary>
+    ShovelWorn = 16,
+
+    /// <summary>The player has less stamina than this dig costs.</summary>
+    NotEnoughStamina = 17,
 }
 
 /// <summary>How a committed operation ended.</summary>

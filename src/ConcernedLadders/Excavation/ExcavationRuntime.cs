@@ -6,25 +6,24 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Excavation;
 
-/// <summary>Plans and commits one measured excavation (#487 slice 2), behind the off-by-default
+/// <summary>Plans and commits one measured excavation (#487 slices 2 and 3), behind the off-by-default
 /// <c>[Excavation] Enabled</c> switch. This is the only place in the product that changes terrain, and it does so in
 /// exactly one way: one <c>Attack.SpawnOnHitTerrain</c> call with this mod's own registered terrain operation, the
 /// path the pickaxe uses, so persistence, reload and synchronisation are the game's own (EXCAVATION.md section 3).
-/// It writes no height, delta, ZDO or RPC of its own, removes nothing, and charges nothing (there is no shovel yet).
+/// It writes no height, delta, ZDO or RPC of its own and removes nothing. Since slice 3 the only trigger is a press of
+/// the equipped Iron Shovel (<see cref="ExcavationShovelInput"/>), and a dig that goes ahead charges the shovel's
+/// durability and the player's stamina once, here and nowhere else.
 ///
 /// The order of a commit: switch, start-up probe, registration, the game's terrain-op kill switch, one-in-flight,
-/// a fresh terrain read, the planner, then - only for a Ready plan - the ward at the wider radius, no-build locations
-/// and the object scan, then the single spawn. After it, the floor is read back every frame through
+/// a fresh terrain read, the planner, then - only for a Ready plan - whether the shovel and the player can pay
+/// (equipped, free to act, durability, stamina), then the ward at the wider radius, no-build locations and the object
+/// scan, then the single spawn, then the charge. After it, the floor is read back every frame through
 /// <see cref="ExcavationPlanner.Check"/> until it is Complete, Overshot, Unreadable or timed out. Nothing is ever
 /// retried; the next dig is a fresh plan the player asks for.
 ///
 /// <b>Not observed in game.</b> Every in-game row of #487 is OWNER GO-AROUND PENDING.</summary>
 internal sealed class ExcavationRuntime : IDisposable
 {
-    /// <summary>How far from the player the console harness may aim. A harness bound only; the shovel's reach and
-    /// targeting rule belong to the preview slice.</summary>
-    internal const float HarnessReach = 10f;
-
     private readonly Action<string> _log;
     private readonly ExcavationTerrainOps _ops;
     private readonly ExcavationTerrainReader _reader = new ExcavationTerrainReader();
@@ -49,7 +48,8 @@ internal sealed class ExcavationRuntime : IDisposable
     /// <summary>Both start-up probes found every game member they read.</summary>
     internal bool Available => _reader.Available && _world.Available && !_faulted;
 
-    /// <summary>Called for every printed result, so the console harness can show it; the log always gets it too.</summary>
+    /// <summary>Called for every later result (the read-back of a dig), so the console and the HUD can show it; the log
+    /// always gets it too.</summary>
     internal Action<string>? Report { get; set; }
 
     /// <summary>Registers the terrain ops on every peer (see <see cref="ExcavationTerrainOps"/>) and logs the probe.</summary>
@@ -83,14 +83,15 @@ internal sealed class ExcavationRuntime : IDisposable
         if (plan.Status == ExcavationStatus.Ready)
         {
             int obstructions = _world.Obstructions(plan, HighestGround(samples), out int pieces, out bool overflow, out string? first);
-            text += " " + ExcavationReport.Ground(obstructions, first, pieces, overflow);
+            text += " " + ExcavationReport.Ground(obstructions, first, pieces, overflow) + " " + ExcavationReport.Cost(plan.Mode);
         }
         return text;
     }
 
-    /// <summary>The commit gate. Returns what happened; the result of a submitted dig arrives later through
-    /// <see cref="Update"/>.</summary>
-    internal string DigAtAim(ExcavationMode mode)
+    /// <summary>The commit gate for one press of the Iron Shovel. Returns what happened; the result of a submitted dig
+    /// arrives later through <see cref="Update"/>. Runs inside the game's own attack-input step, which the game gives no
+    /// press while chat, the console, a menu, the inventory or the map has the input.</summary>
+    internal string DigWithShovel(ExcavationMode mode, Player player, ItemDrop.ItemData shovel)
     {
         try
         {
@@ -110,6 +111,17 @@ internal sealed class ExcavationRuntime : IDisposable
                 TerrainOp.m_forceDisableTerrainOps, _inFlight.IsActive, fault, plan);
             if (refusal != ExcavationCommitRefusal.None) return ExcavationReport.Commit(refusal, fault, plan, null);
 
+            // Whether the shovel and the player can pay, before any world check (a tired player flashes no ward).
+            float durabilityCost = IronShovel.DurabilityCost(mode, Game.m_durabilityRate);
+            float staminaCost = ExcavationCost.For(mode).Stamina;
+            refusal = IronShovel.CanPay(Equipped(player, shovel), Ready(player), shovel.m_shared.m_useDurability, shovel.m_durability,
+                durabilityCost, player.HaveStamina(IronShovel.StaminaNeeded(mode, Game.m_staminaRate)));
+            if (refusal != ExcavationCommitRefusal.None)
+            {
+                if (refusal == ExcavationCommitRefusal.NotEnoughStamina) FlashStamina();
+                return ExcavationReport.Commit(refusal, fault, plan, null);
+            }
+
             bool ward = ExcavationWorldChecks.WardAllows(plan);
             bool noBuild = ward && _world.InNoBuildArea(plan);
             int pieces = 0;
@@ -119,7 +131,7 @@ internal sealed class ExcavationRuntime : IDisposable
             refusal = ExcavationGate.WorldChecks(ward, noBuild, obstructions, overflow);
             if (refusal != ExcavationCommitRefusal.None) return ExcavationReport.Commit(refusal, fault, plan, obstruction);
 
-            return Commit(plan, pieces);
+            return Commit(plan, pieces, player, shovel, staminaCost, durabilityCost);
         }
         catch (Exception exception)
         {
@@ -128,8 +140,9 @@ internal sealed class ExcavationRuntime : IDisposable
     }
 
     /// <summary>The single terrain change. Takes the in-flight slot before spawning, so no second commit can start
-    /// while this one is unresolved, and frees it only through a read-back.</summary>
-    private string Commit(in ExcavationPlan plan, int pieces)
+    /// while this one is unresolved, and frees it only through a read-back. Charges once, only after the game has
+    /// placed the operation.</summary>
+    private string Commit(in ExcavationPlan plan, int pieces, Player player, ItemDrop.ItemData shovel, float staminaCost, float durabilityCost)
     {
         TerrainOp? op = _ops.For(plan.Mode);
         if (op == null || !_inFlight.TryStart(plan, Time.time))
@@ -145,14 +158,55 @@ internal sealed class ExcavationRuntime : IDisposable
         if (ReferenceEquals(placed, null))
         {
             // The game's own terrain-tool path refused (its ward or no-build re-check). Nothing was instantiated, so
-            // there is nothing to wait for.
+            // there is nothing to wait for, and nothing is charged.
             _inFlight.Abandon();
             return ExcavationReport.Commit(ExcavationCommitRefusal.SpawnRefused, ExcavationReadFault.None, plan, null);
         }
+        // The charge, once (EXCAVATION.md 7.3). The operation has been handed to every tile owner, so whatever the
+        // read-back later reports (Complete, Overshot, TimedOut, Unreadable, Abandoned), this dig has been paid for and
+        // is never paid for again: the in-flight slot refuses a second commit until it resolves, and a repeat of a
+        // completed plan is NothingToDig, which is free.
+        Charge(player, shovel, staminaCost, durabilityCost);
         string text = ExcavationReport.Commit(ExcavationCommitRefusal.None, ExcavationReadFault.None, plan, null) + " " + ExcavationReport.Plan(plan);
         if (pieces > 0) text += " " + pieces.ToString(CultureInfo.InvariantCulture) + " building-piece collider(s) stand on the changed ground; their support is the game's own.";
         _log("Excavation committed: " + text);
         return text;
+    }
+
+    /// <summary>Takes the dig's cost from the shovel and the player. Stamina first, through the game's own UseStamina
+    /// (which applies the world's stamina modifier), then durability (a plain field of the player's own item, which
+    /// cannot throw), so a fault charges nothing rather than half.
+    ///
+    /// <b>No animation is played.</b> The donor's swing clip raises the game's attack-trigger event, and
+    /// <c>Humanoid.OnAttackTrigger</c> runs <c>m_currentAttack.OnAttackTrigger()</c> on whatever attack is still stored,
+    /// which nothing clears when an attack finishes (only StartAttack and unequipping its weapon do): a punch thrown
+    /// before equipping the shovel would land a real melee hit outside this gate (independent review of slice 3). A
+    /// coherent tool animation that cannot reach a stored attack is an owner question for the preview slice.</summary>
+    private static void Charge(Player player, ItemDrop.ItemData shovel, float staminaCost, float durabilityCost)
+    {
+        player.UseStamina(staminaCost);
+        if (shovel.m_shared.m_useDurability) shovel.m_durability = IronShovel.DurabilityAfter(shovel.m_durability, durabilityCost);
+    }
+
+    /// <summary>The shovel is this player's equipped weapon right now: the item the press came from is still the one in
+    /// hand.</summary>
+    private static bool Equipped(Player player, ItemDrop.ItemData shovel) =>
+        ReferenceEquals(player, Player.m_localPlayer) && ReferenceEquals(player.GetCurrentWeapon(), shovel) &&
+        IronShovel.IsShovelName(shovel.m_shared.m_name);
+
+    /// <summary>The states in which the game itself refuses to start an attack (Humanoid.StartAttack), and teleporting.</summary>
+    private static bool Ready(Player player) =>
+        !player.InAttack() && !player.InDodge() && player.CanMove() && !player.IsStaggering() && !player.IsKnockedBack() &&
+        !player.InMinorAction() && !player.IsTeleporting();
+
+    private static void FlashStamina()
+    {
+        try
+        {
+            Hud hud = Hud.instance;
+            if (hud != null) hud.StaminaBarEmptyFlash();
+        }
+        catch { /* Feedback only. */ }
     }
 
     /// <summary>Reads back an operation in flight. Called every frame; does nothing when none is.</summary>
@@ -163,7 +217,10 @@ internal sealed class ExcavationRuntime : IDisposable
         {
             ExcavationPlan plan = _inFlight.Plan;
             float now = Time.time;
-            if (now <= _inFlight.StartedAt) return; // The operation's rebuild runs in this frame's LateUpdate.
+            // The slot is taken in the press's FixedUpdate, where Time.time is the fixed clock, usually a little behind
+            // the same frame's Update clock; so this guard does not always skip the commit frame. That is harmless: a
+            // read before the rebuild sees a queued rebuild (Rebuilding) or the old heights (Pending), and both wait.
+            if (now <= _inFlight.StartedAt) return;
             if (Player.m_localPlayer == null || ZNetScene.instance == null)
             {
                 if (_inFlight.Abandon()) Publish(ExcavationReport.Outcome(ExcavationOutcome.Abandoned, plan));
@@ -197,8 +254,9 @@ internal sealed class ExcavationRuntime : IDisposable
         return text;
     }
 
-    /// <summary>The console harness's target: the terrain the camera looks at, within <see cref="HarnessReach"/> of the
-    /// player, snapped to the vertex the engine op will centre on.</summary>
+    /// <summary>The target of a shovel press or a console plan: the terrain the camera looks at, within
+    /// <see cref="ExcavationLimits.Reach"/> of the player, snapped to the vertex the engine op will centre on. The full
+    /// reach and targeting rule (under a player-built floor, from a ladder) belongs to the preview slice.</summary>
     private static bool Aim(out int centreX, out int centreZ, out string? why)
     {
         centreX = 0;
@@ -213,9 +271,9 @@ internal sealed class ExcavationRuntime : IDisposable
             why = "Look at the ground to aim.";
             return false;
         }
-        if (Vector3.Distance(player.transform.position, hit.point) > HarnessReach)
+        if (Vector3.Distance(player.transform.position, hit.point) > ExcavationLimits.Reach)
         {
-            why = "Aim within " + HarnessReach.ToString("0", CultureInfo.InvariantCulture) + " m of yourself.";
+            why = "Aim within " + ExcavationLimits.Reach.ToString("0", CultureInfo.InvariantCulture) + " m of yourself.";
             return false;
         }
         centreX = ExcavationGeometry.SnapToVertex(hit.point.x);
