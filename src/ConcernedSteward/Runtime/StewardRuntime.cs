@@ -9,6 +9,7 @@ using BepInEx.Bootstrap;
 using TheConcernedCat.ConcernedSteward;
 using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedNPC.Bodies;
+using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Interruption;
 using TheConcernedCat.ConcernedSteward.Domain.Appearance;
@@ -90,6 +91,14 @@ internal sealed class StewardRuntime
     private readonly FuelWorldDownCarry _worldDown = new FuelWorldDownCarry();
     private string _carryingName = string.Empty;
     private StewardWorkerAI? _body;
+
+    // #372 (F2e): her body is Concerned NPC's NpcBody, whose three callbacks
+    // are events shared by every product that loads the library. The handlers
+    // this product attached, kept so they can be taken off again: the events
+    // live in the library's assembly, which outlives this plugin.
+    private static Action<NpcBody>? s_onLoaded;
+    private static Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? s_onDied;
+    private static Action<string>? s_onError;
     private StewardCensus _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);
     private RestockDiscovery _restock = RestockDiscovery.NotProbed;
     private bool _restockProbed;
@@ -209,9 +218,17 @@ internal sealed class StewardRuntime
                 "says is written to this log only.");
         }
 
-        StewardBody.ErrorLog = message => _log(message);
-        StewardBody.Loaded = OnBodyLoaded;
-        StewardBody.Died = OnBodyDied;
+        // Each handler takes her own prefab only, so another role's body never
+        // reaches her ledger. Detached first so a second runtime in one process
+        // replaces rather than doubles the first, as the settable callbacks of
+        // the copy this replaces did.
+        DetachBodyEvents();
+        s_onLoaded = OnBodyLoaded;
+        s_onDied = OnBodyDied;
+        s_onError = message => _log(message);
+        NpcBody.Loaded += s_onLoaded;
+        NpcBody.Died += s_onDied;
+        NpcBody.ErrorLog += s_onError;
         StewardWorkerPrefab.Install(_settings.BaseCreature.Value, message => _log(message));
     }
 
@@ -328,7 +345,7 @@ internal sealed class StewardRuntime
         _voice.Reset();
         _body = null;
         _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);
-        StewardBody.ForgetAll();
+        NpcBody.ForgetAll(StewardNpcRole.Contract);
         _epoch = string.Empty;
         _scope.UseIdentityEpoch(null);
         _restockProbed = false;
@@ -492,9 +509,23 @@ internal sealed class StewardRuntime
                 == WorkAuthorityVerdict.Granted;
     }
 
-    private void OnBodyLoaded(StewardBody body)
+    /// <summary>Takes this product's handlers off Concerned NPC's shared body
+    /// events (#372). Called at plugin teardown; a plugin torn down without it
+    /// would leave its runtime subscribed - and alive - for the rest of the
+    /// process.</summary>
+    internal static void DetachBodyEvents()
     {
-        if (!StewardRole.IsSteward(body.Key))
+        NpcBody.Loaded -= s_onLoaded;
+        NpcBody.Died -= s_onDied;
+        NpcBody.ErrorLog -= s_onError;
+        s_onLoaded = null;
+        s_onDied = null;
+        s_onError = null;
+    }
+
+    private void OnBodyLoaded(NpcBody body)
+    {
+        if (!StewardSavedBodies.IsSteward(body) || !StewardRole.IsSteward(body.StoredKey))
         {
             // Not his. A body carrying somebody else's identity is left
             // entirely alone.
@@ -515,9 +546,9 @@ internal sealed class StewardRuntime
     /// <see cref="FuelPlace.Carried"/> and become unaccounted for, because
     /// "somewhere on the ground where he fell" is not a place this ledger can
     /// name. The Steward stops until a person says they have looked.</summary>
-    private void OnBodyDied(StewardBody body, IReadOnlyList<DroppedItem> dropped, Vector3 where)
+    private void OnBodyDied(NpcBody body, IReadOnlyList<NpcDroppedItem> dropped, Vector3 where)
     {
-        if (!StewardRole.IsSteward(body.Key))
+        if (!StewardSavedBodies.IsSteward(body) || !StewardRole.IsSteward(body.StoredKey))
         {
             return;
         }
@@ -548,7 +579,7 @@ internal sealed class StewardRuntime
         _log(_loop.Explanation);
     }
 
-    private static string Describe(IReadOnlyList<DroppedItem> dropped)
+    private static string Describe(IReadOnlyList<NpcDroppedItem> dropped)
     {
         if (dropped == null || dropped.Count == 0)
         {

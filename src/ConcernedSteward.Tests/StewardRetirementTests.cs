@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedSteward.Domain.Retirement;
 using TheConcernedCat.ConcernedSteward.Runtime;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedSteward.Tests;
 
@@ -92,7 +93,7 @@ public sealed class StewardRetirementTests
     public void An_empty_owned_body_is_removed_through_its_own_network_object_and_nothing_else()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
 
         StewardRetireOutcome outcome = StewardRetirementPort.Retire(body, Clear(), out string answer);
 
@@ -102,14 +103,14 @@ public sealed class StewardRetirementTests
 
         // And from that call on nothing can find her: the census cannot adopt a
         // body whose object is gone for the rest of the frame.
-        Assert.Null(StewardBody.FindLive(StewardRole.Worker.Value));
+        Assert.Null(StewardSavedBodies.FindLive(StewardRole.Worker.Value));
     }
 
     [Fact]
     public void A_body_carrying_anything_is_never_removed_whatever_the_ledger_says()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
         body.Inventory!.AddItem(Scene.Stack("$item_resin", 4));
 
         // The ledger claims empty; the pack is read from the body itself.
@@ -124,7 +125,7 @@ public sealed class StewardRetirementTests
     public void A_pack_stated_in_the_ledger_only_ever_adds_a_refusal()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
 
         // The body is empty and readable; a caller that says otherwise is
         // believed in the direction that keeps her.
@@ -141,7 +142,7 @@ public sealed class StewardRetirementTests
     public void A_body_whose_last_change_was_not_saved_is_unreadable_and_kept()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
         view.Zdo.FailWrites = true;
         body.Inventory!.AddItem(Scene.Stack("$item_wood", 1));
         body.Inventory.RemoveItem(body.Inventory.GetAllItems()[0], 1);
@@ -156,7 +157,7 @@ public sealed class StewardRetirementTests
     public void An_open_round_keeps_an_empty_body()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
 
         Assert.Equal(StewardRetireOutcome.Refused,
             StewardRetirementPort.Retire(body, Clear(round: true), out _));
@@ -175,7 +176,7 @@ public sealed class StewardRetirementTests
     public void A_body_another_peer_owns_is_not_this_games_to_remove()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
         view.Ownership = StubOwnership.Other;
 
         Assert.Equal(StewardRetireOutcome.NotOurs, StewardRetirementPort.Retire(body, Clear(), out _));
@@ -187,7 +188,7 @@ public sealed class StewardRetirementTests
     public void A_body_whose_network_object_is_already_gone_is_not_removed_again()
     {
         using var scene = new Scene();
-        (StewardBody body, ZNetView view) = PlaceBody();
+        (NpcBody body, ZNetView view) = PlaceBody();
         view.Valid = false;
 
         Assert.Equal(StewardRetireOutcome.NotOurs, StewardRetirementPort.Retire(body, Clear(), out _));
@@ -240,17 +241,15 @@ public sealed class StewardRetirementTests
         return count;
     }
 
-    private static (StewardBody body, ZNetView view) PlaceBody()
+    private static (NpcBody body, ZNetView view) PlaceBody()
     {
-        var host = new GameObject("steward");
+        var host = new GameObject(StewardBodyFixtures.Instance);
         ZNetView view = host.Add(new ZNetView());
         view.Zdo.m_uid = new ZDOID(7L, 77u);
-        view.Zdo.Set(StewardBody.KeyField, StewardRole.Worker.Value);
+        view.Zdo.Set(StewardSavedBodies.KeyField, StewardRole.Worker.Value);
         host.Add(new Humanoid());
-        StewardBody body = host.Add(new StewardBody());
-        typeof(StewardBody)
-            .GetMethod("Start", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .Invoke(body, Array.Empty<object>());
+        NpcBody body = host.Add(new NpcBody());
+        StewardBodyFixtures.Start(body);
         return (body, view);
     }
 }

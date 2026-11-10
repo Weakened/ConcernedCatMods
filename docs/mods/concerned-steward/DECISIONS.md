@@ -79,8 +79,13 @@ untouched; `cs_steward recruit` brings her body back.
   `\u` escape spelling `Destroy` inside an identifier.
 - The port reads her pack from the body itself; a pack the caller states in the ledger can only add a reason to
   refuse (more held, or unreadable), never remove one.
-- `StewardBody.FindLive` skips a body whose network object is no longer valid, so for the rest of the frame in which
-  she is retired nothing can adopt the body that is going.
+- `StewardBody.FindLive` (since #372 `StewardSavedBodies.FindLive`, over Concerned NPC's `NpcBody`) skips a body
+  whose network object is no longer valid, so for the rest of the frame in which she is retired nothing can adopt
+  the body that is going.
+- Since #372 her body is Concerned NPC's `NpcBody`, a type every role's body shares, so the port no longer gets
+  "only hers" from its parameter's type: it refuses (`NotOurs`) a body whose prefab is not `CS_Steward` before it
+  takes the network object, which it reads off the body it was handed (`body.GetComponent<ZNetView>()`; the
+  library keeps its own handle internal). Both are pinned by the S1 audit, with plants.
 
 **Known limits of this text audit.** Ten successive independent reviews each found another spelling of the same
 destruction that a text audit could not see, and each was closed with a refusal and a plant. That does not converge,

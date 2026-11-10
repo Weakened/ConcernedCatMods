@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -39,7 +40,7 @@ internal enum StewardCensusVerdict
 internal sealed class StewardCensus
 {
     internal StewardCensus(
-        StewardCensusVerdict verdict, int saved, int unidentified, StewardBody? live)
+        StewardCensusVerdict verdict, int saved, int unidentified, NpcBody? live)
     {
         Verdict = verdict;
         Saved = saved;
@@ -63,7 +64,7 @@ internal sealed class StewardCensus
 
     /// <summary>The loaded body, when there is exactly one and it is here.
     /// </summary>
-    public StewardBody? Live { get; }
+    public NpcBody? Live { get; }
 
     public bool CanWork => Verdict == StewardCensusVerdict.Present;
 
@@ -156,7 +157,7 @@ internal static class StewardCensusTaker
                 continue;
             }
 
-            string stored = zdo.GetString(StewardBody.KeyField, string.Empty);
+            string stored = zdo.GetString(StewardSavedBodies.KeyField, string.Empty);
             if (stored.Length == 0)
             {
                 unidentified++;
@@ -177,7 +178,7 @@ internal static class StewardCensusTaker
             return new StewardCensus(StewardCensusVerdict.Duplicated, saved, unidentified, null);
         }
 
-        StewardBody? live = StewardBody.FindLive(identityKey);
+        NpcBody? live = StewardSavedBodies.FindLive(identityKey);
         return new StewardCensus(
             live != null && live.IsLoaded && live.Fault == null
                 ? StewardCensusVerdict.Present

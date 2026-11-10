@@ -93,6 +93,12 @@ the mod and says why.
   counts her saved bodies itself and stamps her identity in the same call; a body whose identity could not be
   written is destroyed again rather than left standing. Prefab, keys and registration are unchanged. Not observed
   in game (OWNER GO-AROUND PENDING).
+- **Her saved body is Concerned NPC's (#372).** The component that keeps her identity and pack in her own network
+  object, writes every change in the call that made it, and drops exactly what she carried when she dies is now
+  Concerned NPC's `NpcBody`, the one Thorstein's body already uses, instead of this mod's own copy. The same three
+  keys (`tcc.steward.key`, `tcc.steward.inventory`, `tcc.steward.revision`) and the same package, so a body saved
+  before this loads unchanged, with no migration; a test loads one written by hand. `cs_steward retire` still removes
+  only her own body, now checked by its prefab. Not observed in game (OWNER GO-AROUND PENDING).
 - **Off by default.** `[Steward] StewardRuntimeEnabled` and, inside it,
   `[Steward] TendFiresEnabled`. With both off the mod changes nothing.
 - **Single player only for now:** host, not a dedicated server, nobody else

@@ -12,6 +12,11 @@ four, 8144fbd: three, 3b23929: one, 3252bcd: one, 21b6c73: one, 785606f: one),
 whose rule they got past. Once main moved on, d72b397's own rules stopped
 passing the merged tree, so the rule-less check for the twelve from 75d837d to
 21b6c73 used origin/main 0171cf6, and for the last one origin/main 7900862.
+#372 (F2e) moved her body onto Concerned NPC's NpcBody, so the port reads the
+view off the body (`body.GetComponent<ZNetView>()`) and checks the body is hers
+by prefab; its three plants (another role's body, the check moved below the
+view, `out NpcBody? body`) were each verified to pass a copy of that head's
+validator with those three additions taken out.
 Setting STEWARD_PLANT_VALIDATOR to another validator's path
 re-runs that check, expecting every plant to get through it.
 """
@@ -49,7 +54,8 @@ PORT_ALLOWS = "        if (!StewardRetirement.Allows(verdict))\n"
 PORT_VIEW_CHECK = "        if (view == null || !view.IsValid() || !view.IsOwner())\n"
 PORT_SUCCESS ="        answer = \"Her worker body has left"
 LOOKED_UP ="ZNetScene.instance.FindInstance(ZDOID.None)!.GetComponent<ZNetView>()"
-PORT_VIEW = "        ZNetView? view = body.View;\n"
+PORT_VIEW = "        ZNetView? view = body.GetComponent<ZNetView>();\n"
+PORT_HERS = "        if (body == null || !StewardSavedBodies.IsSteward(body))\n"
 RUNTIME_MARKER = "            _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);\n            _log(answer);\n"
 
 
@@ -180,7 +186,7 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
 
     def test_swapping_the_body_parameter_is_refused(self):
         self.swap_in(PORT, PORT_VIEW,
-                     "        body = StewardBody.FindLive(\"someone-else\") ?? body;\n" + PORT_VIEW)
+                     "        body = StewardSavedBodies.FindLive(\"someone-else\") ?? body;\n" + PORT_VIEW)
         self.assert_refused("the guard read one body and the removal acted on another")
 
     def test_a_second_caller_through_using_static_is_refused(self):
@@ -390,13 +396,33 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
                      RUNTIME_MARKER + "            UnityEngine.Object.Destr\\u006Fy(_census.Live!.gameObject);\n")
         self.assert_refused("C# read `Destr\\u006Fy` as Destroy; no count spelled it")
 
+    def test_retiring_another_roles_body_is_refused(self):
+        # #372 (F2e): the parameter is the library's NpcBody, which every role's
+        # body is; the old StewardBody type was the guarantee, now the check is.
+        self.swap_in(PORT, PORT_HERS, "        if (body == null)\n")
+        self.assert_refused("the port would remove any role's NpcBody, not only hers")
+
+    def test_checking_she_is_hers_after_taking_the_view_is_refused(self):
+        self.swap_in(PORT, PORT_HERS, "        if (body == null)\n")
+        self.swap_in(PORT, PORT_VIEW,
+                     PORT_VIEW + "        if (body == null || !StewardSavedBodies.IsSteward(body))\n"
+                     "        {\n            answer = \"Not hers.\";\n"
+                     "            return StewardRetireOutcome.NotOurs;\n        }\n\n")
+        self.assert_refused("the view was taken from a body before it was known to be hers")
+
+    def test_rebinding_the_body_through_a_typed_out_is_refused(self):
+        # The by-reference rule listed its types, and the list said StewardBody.
+        self.swap_in(PORT, PORT_VIEW,
+                     "        StewardSavedBodies.TryRebind(out NpcBody? body);\n" + PORT_VIEW)
+        self.assert_refused("`out NpcBody? body` swapped the body after the guard read it")
+
     def test_this_suite_is_not_vacuous(self):
         # Not a plant: the guard text every plant above edits is still where
         # the plants expect it, so a refactor cannot turn them into no-ops.
         with open(PORT, encoding="utf-8-sig") as handle:
             port = handle.read()
         for pinned in (PORT_GUARD, PORT_REMOVAL, PORT_VIEW, PORT_DECIDE, PORT_RETIRED, PORT_SUCCESS,
-                       PORT_ALLOWS, PORT_VIEW_CHECK):
+                       PORT_ALLOWS, PORT_VIEW_CHECK, PORT_HERS):
             self.assertEqual(1, port.count(pinned), pinned)
         with open(RUNTIME, encoding="utf-8-sig") as handle:
             self.assertEqual(1, handle.read().count(RUNTIME_MARKER))

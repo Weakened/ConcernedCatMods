@@ -9,7 +9,8 @@ namespace TheConcernedCat.ConcernedSteward.Runtime;
 /// <b>Everything here writes into the Steward's OWN network object and nothing
 /// else.</b> That is what a worker body is for — `CLAUDE.md` allows a worker to
 /// keep its identity and its own state in its own object — and it is the same
-/// object <c>StewardBody</c> already writes the identity and the pack into.
+/// object her body (Concerned NPC's <c>NpcBody</c> since #372) already writes
+/// the identity and the pack into.
 /// Nothing in this file touches a vanilla object, a player, a piece or the
 /// world.
 ///

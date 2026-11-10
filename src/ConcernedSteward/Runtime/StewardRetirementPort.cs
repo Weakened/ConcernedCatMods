@@ -1,5 +1,6 @@
 using System;
 using TheConcernedCat.ConcernedSteward.Domain.Retirement;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -33,8 +34,9 @@ internal enum StewardRetireOutcome
 /// <c>StewardRetirementTests</c>' job.
 ///
 /// <b>Never a vanilla object.</b> The only thing removed is the network object
-/// of a <see cref="StewardBody"/> - a <c>CS_Steward</c> body, this product's own
-/// prefab - and only when this game owns it. No ownership is taken, nothing is
+/// of a <c>CS_Steward</c> body - Concerned NPC's <see cref="NpcBody"/> on this
+/// product's own prefab since #372, checked here by prefab - and only when this
+/// game owns it. No ownership is taken, nothing is
 /// dropped, and nothing else in the world is touched.</summary>
 internal static class StewardRetirementPort
 {
@@ -48,9 +50,11 @@ internal static class StewardRetirementPort
     /// </param>
     /// <param name="answer">The sentence for the player.</param>
     internal static StewardRetireOutcome Retire(
-        StewardBody? body, in StewardRetireFacts ledger, out string answer)
+        NpcBody? body, in StewardRetireFacts ledger, out string answer)
     {
-        if (body == null)
+        // #372 (F2e): her body is the library's NpcBody, a type every role's
+        // body shares, so "hers" is now her prefab rather than the type.
+        if (body == null || !StewardSavedBodies.IsSteward(body))
         {
             answer = "She has no body here to retire.";
             return StewardRetireOutcome.NotOurs;
@@ -82,7 +86,10 @@ internal static class StewardRetirementPort
             return StewardRetireOutcome.Refused;
         }
 
-        ZNetView? view = body.View;
+        // The network object of the body she was handed, and nothing else: the
+        // library keeps its own handle internal, so it is read off the same
+        // game object, which is the one that handle names.
+        ZNetView? view = body.GetComponent<ZNetView>();
         if (view == null || !view.IsValid() || !view.IsOwner())
         {
             answer = "Refused: this game does not own her body, so it is not this game's to remove.";

@@ -141,5 +141,6 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         _steward?.OnWorldUnloaded();
+        StewardRuntime.DetachBodyEvents();
     }
 }

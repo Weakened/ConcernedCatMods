@@ -191,3 +191,44 @@ Stated after the F2d review (APPROVE WITH NITS, record on the PR):
 - **Not widened here.** Foreman's `#400` worker-ZDO token is `\bzdo\s*\.\s*Set\s*\(`, which a different receiver name
   (`_view.GetZDO().Set(`) would not spell; it was that narrow before this change, and widening it needs the shared
   Interop tree's unrelated `message.Set(` excluded. A follow-up, not a regression.
+
+## 2026-11-10 addendum (F2e): Sunniva's body moved; Gunnar's did not
+
+Base `origin/feat/cnpc-376-slice3` `ee319c8` (PR #545, stacked on #542). The same "body inventory" move, for the
+second role: Concerned Steward's own `StewardBody` is gone and her `CS_Steward` prefab carries the library's `NpcBody`,
+registered with `NpcBody.TryRegister` before the prefab is built, under the same three keys (`tcc.steward.key`,
+`.inventory`, `.revision`) and the same package. A pre-#372 object written by hand loads unchanged, with nothing
+written by the load (`BodyTests.A_body_saved_before_372_loads_unchanged_and_keeps_its_keys`). With two roles on it,
+`NpcBody` is now the one body-persistence surface #372's "used by at least two roles" asks for.
+
+What the move had to keep that the type used to give:
+- **Only her body is retired.** `StewardRetirementPort.Retire` took a `StewardBody`; it now takes the shared `NpcBody`,
+  so it refuses (`NotOurs`) any body whose prefab is not hers before it reads the network object. The view is read
+  off the body handed in (`body.GetComponent<ZNetView>()`), because the library's handle is internal. The S1 audit
+  pins both, and its by-reference rule now refuses any declared type (it listed `StewardBody`, so
+  `out NpcBody? body` would have got past it). Three plants, each passing a copy of the validator without them.
+- **A just-retired body is not found.** The copy's lookup skipped a body whose network object was already reset;
+  the library's does not, so `StewardSavedBodies.FindLive` does (`A_body_whose_network_object_is_gone_is_not_found`).
+- **Only her body reaches her ledger.** Her `Loaded`/`Died` handlers filter by prefab as well as key, and come off the
+  library's events at plugin teardown.
+
+Differences, stated: the library restores an item saved as equipped on load (she never equips one, so nothing for
+her); a throwing `Loaded` subscriber leaves the body loaded rather than inert; messages say "NPC body"; her error
+handler hears every product's body errors, as Foreman's does. Concerned Steward now writes to no network object at
+all, and `SourceAuditTests` fails if a write, a drop or an equip reappears in it (it used to allow one file).
+
+**Not moved: Gunnar's `TeamsterWorkerRecord`.** It is not a near-copy, and moving it changes behaviour that an owner
+decision governs:
+- **Death.** `NpcBody` drops everything on every death. Gunnar's death drop is D16's own port
+  (`GunnarDeathDropPort`), gated on both switches, work authority, the probe, a read inventory and a detached cart,
+  and it *fails closed*: when a gate refuses, nothing drops and the loss is recorded as unresolved. Putting `NpcBody`
+  on his prefab would drop on a death D16 says must not drop. The library needs a keeps mode whose death is the role's
+  (no drop, no `Died`), or D16 needs an owner decision to move into the library; neither is this slice.
+- **Load.** His record decides through `WorkerInventoryRecord.Decide` and counts revisions with
+  `WorkerInventoryRecord.Next`; it reads no identity (his AI is told it at stamp); it unhooks the change callback in
+  `OnDisable` and re-hooks it in `OnEnable`, where `NpcBody` unhooks in `OnDestroy`. Likely equal on every path that
+  matters, but that needs its own proof rather than this sentence.
+- **Pins.** Its `"tcc.worker."` writes sit inside the validator's Teamster network-object allowance (literal keys in
+  `TeamsterWorkerPrefab.cs`), `scripts/audit-teamster-hauling-api.ps1` counts them in IL by type
+  (`TeamsterWorkerRecord`), and the D16 death-drop port, the hauling runtime and the world-down trust (#376) read the
+  record. Each moves with its own plant set; some of the Teamster suites run for over an hour.

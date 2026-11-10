@@ -19,7 +19,9 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 VALIDATOR = os.path.join(ROOT, "tools", "validate_repo.py")
-STEWARD_BODY = os.path.join(ROOT, "src", "ConcernedSteward", "Runtime", "StewardBody.cs")
+# #372 (F2e): her own body file is gone (Concerned NPC's NpcBody); any Steward
+# source carries the plant as well, and this one replaced it.
+STEWARD_BODY = os.path.join(ROOT, "src", "ConcernedSteward", "Runtime", "StewardSavedBodies.cs")
 FOREMAN_POSE = os.path.join(ROOT, "src", "ConcernedForeman", "Runtime", "Construction", "BuildPose.cs")
 NPC_PLANT = os.path.join(ROOT, "src", "ConcernedNPC", "Custody", "ZzPlanted480.cs")
 TEST_PLANT = os.path.join(ROOT, "src", "ConcernedNPC.Tests", "ZzPlanted480.cs")

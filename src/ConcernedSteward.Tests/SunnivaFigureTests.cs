@@ -274,7 +274,9 @@ public sealed class SunnivaFigureTests
         Assert.True(refuses > claims, "a refused claim no longer refuses the spawn");
         Assert.True(spawns > refuses, "her body is not created under the lease that was claimed for it");
         Assert.True(releases > spawns, "a body that was not created keeps its hold");
-        Assert.DoesNotContain("StewardBody.TryStamp(", ensure, StringComparison.Ordinal);
+        // #372: no identity write of the product's own, in any spelling: the
+        // library stamps the lease's identity.
+        Assert.DoesNotContain("TryStamp(", ensure, StringComparison.Ordinal);
     }
 
     [Fact]
