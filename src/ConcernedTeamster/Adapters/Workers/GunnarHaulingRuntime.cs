@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedNPC.Containers;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Adapters.Navigation;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
@@ -121,8 +122,10 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     internal bool SeamAvailable => _seam != null && _seam.IsAvailable;
 
     /// <summary>Whether a cart is assigned to Gunnar or hitched to him. A
-    /// collection tour is on foot and never starts, or keeps going, while this
-    /// is true. No executor answers false: no world, no lease.</summary>
+    /// chest tour is on foot and never starts, or keeps going, while this is
+    /// true; a cart-assisted tour (D22) needs it and reads
+    /// <see cref="AssignedCart"/> instead. No executor answers false: no world,
+    /// no lease.</summary>
     internal bool HoldsACart
     {
         get
@@ -132,11 +135,46 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         }
     }
 
+    /// <summary>#381, D22: the cart assigned to Gunnar, as the cart-assisted
+    /// tour may see it - the executor's own getters and its last frame
+    /// observation, copied into values. Defaulted ("no cart") once the runtime
+    /// has faulted or no world is loaded.</summary>
+    internal AssignedCartFacts AssignedCart => _faulted ? default : AssignedCartFacts.Read(_executor);
+
+    /// <summary>#381, D22: the cart the lease names, resolved through the seam
+    /// by the lease's own key and the reference the player's selection
+    /// remembered - never searched for. Null without a lease, once faulted, or
+    /// when it no longer resolves.</summary>
+    internal Vagon? AssignedVagon() => _faulted ? null : LeasedCart();
+
+    /// <summary>#381, D22: what the assignment allows for this cart's
+    /// container, asked at the moment of every load. <c>Deposit</c> only while
+    /// the lease names exactly this cart and the executor is doing nothing with
+    /// it; <c>Off</c> for anything else, a fault included. Never <c>Take</c>:
+    /// the grant is loading into the cart, and nothing out of it.</summary>
+    internal NpcContainerUse CartLoadAllowance(Vagon? cart)
+    {
+        try
+        {
+            if (cart == null || _faulted || !AssignedCartFacts.IsIdle(_executor))
+            {
+                return NpcContainerUse.Off;
+            }
+
+            return ReferenceEquals(LeasedCart(), cart) ? NpcContainerUse.Deposit : NpcContainerUse.Off;
+        }
+        catch (Exception)
+        {
+            return NpcContainerUse.Off;
+        }
+    }
+
     /// <summary>The collection runtime's tour, handed the bound body's 20 Hz
     /// tick (#381). It answers true while it drives him, and the haul executor
     /// is not ticked then - so the two never steer him in the same tick. It is
-    /// only ever consulted when no cart is assigned or hitched: a lease or a
-    /// joint always goes to the executor.</summary>
+    /// consulted when no cart is assigned or hitched, and (D22) when a cart is
+    /// assigned and the executor is doing nothing with it; a haul, a leg, a
+    /// joint, a hold or a pending stop always goes to the executor.</summary>
     internal Func<TeamsterWorkerAI, bool>? CollectionDrive { get; set; }
 
     /// <summary>Gunnar's bound body as a character, or null when no single
@@ -443,8 +481,13 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return;
         }
 
+        // #381, D22: a cart-assisted tour drives him beside the cart assigned to
+        // him, but only while the executor is doing nothing with it - parked,
+        // unhitched, no haul, no leg, no hold, no stop. A haul, a joint or a
+        // pending park always goes to the executor, as before; a chest tour with
+        // a cart assigned is ended by the collection runtime itself.
         Func<TeamsterWorkerAI, bool>? drive = CollectionDrive;
-        if (drive != null && !HoldsACart && drive(ai))
+        if (drive != null && (!HoldsACart || AssignedCartFacts.IsIdle(_executor)) && drive(ai))
         {
             return;
         }

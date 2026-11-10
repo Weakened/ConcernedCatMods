@@ -1771,7 +1771,7 @@ def _teamster_role_findings(code: str, roles: tuple, shape: re.Pattern, calls: t
     # field set in the entry point), or a parameter reassigned, would reverse the
     # move and the measurement together, so the reversal would be recorded as a
     # clean transfer.
-    for parameter in ("worker", "container", "source", "destination"):
+    for parameter in ("worker", "container", "source", "destination", "assigned"):
         word = r"\b" + re.escape(parameter) + r"\b"
         written = (re.findall(word + SPACE + r"(?:\?\?|<<|>>|[-+*/%&|^])?=(?![=>])", blank)
                    + re.findall(r"\b(?:ref|out)" + SPACES + r"(?:[\w?<>]+" + SPACES + r")?" + word, blank))
@@ -2018,6 +2018,494 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
         "three calls sit in the mover's own body, which holds no lambda or local function, and `chest` and `gunnar` "
         "are declared and written only by their derivations; an open tour plan refuses; and the "
         "source is set from the pointed-at chest and cleared, nowhere else. A text audit; it does not follow "
+        "delegates or prove control flow",
+    ]
+
+
+TEAMSTER_CART_LOAD_LABEL = "[interop] #381 cart-load audit"
+TEAMSTER_CART_LOAD_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.CartTour.cs"
+TEAMSTER_CART_LOAD_TOUR_FILE = "Adapters/Workers/GunnarCollectionRuntime.Tour.cs"
+TEAMSTER_CART_LOAD_SUBJECT_FILE = "Adapters/Workers/AssignedCartContainer.cs"
+TEAMSTER_CART_LOAD_HAULING_FILE = "Adapters/Workers/GunnarHaulingRuntime.cs"
+TEAMSTER_CART_LOAD_LEGS_CALL = re.compile(r"(?<![\w.])CartLoadLegs\s*\(")
+TEAMSTER_CART_LOAD_LEGS_DECLARATION = re.compile(r"\bDepositTally\s+CartLoadLegs\s*\(")
+# Whole methods, header to closing brace, comments stripped. A line pin inside a
+# method lets an early `return Redirect;`, a `catch { return _fallback; }` or a
+# `return true;` sit around the pinned line (review of #381 item 2, M1 and m3), so
+# the methods that decide WHICH container is loaded, whether the cart is where it
+# stood, whether he can reach it, and what this tour picked are pinned entire.
+TEAMSTER_CART_LOAD_SUBJECT_METHODS = (
+    ("public AssignedCartContainer( Vagon? cart, string expectedKey, NpcWorldEpoch epoch, Func<Vagon?, NpcContainerUse> "
+     "allowance, Func<Vector3?> workerPosition, Vector3 parkedAt, float reachMetres, float mostDriftMetres) { "
+     "_cart = cart; _expectedKey = expectedKey ?? string.Empty; _epoch = epoch; _allowance = allowance; "
+     "_workerPosition = workerPosition; _parkedAt = parkedAt; _reachMetres = reachMetres; "
+     "_mostDriftMetres = mostDriftMetres; }",
+     "the subject is told the cart, the lease's id and where it stood by its caller, and keeps them as given"),
+    ("public NpcContainerAccess Access { get { try { Container? bed = BedOf(_cart); if (_cart == null || bed == null || "
+     "bed.GetInventory() == null) { return new NpcContainerAccess(NpcContainerUse.Off, NpcContainerRefusal.Gone); } "
+     "if (_expectedKey.Length == 0 || !string.Equals(LiveKeyOf(_cart), _expectedKey, StringComparison.Ordinal) || "
+     "!Parked()) { return new NpcContainerAccess(NpcContainerUse.Off, NpcContainerRefusal.NotThisContainer); } "
+     "NpcContainerUse allowed = _allowance(_cart); ZNetView? view = _cart.m_nview; if (view == null || "
+     "!view.IsValid() || !view.IsOwner() || !bed.IsOwner()) { return new NpcContainerAccess(allowed, "
+     "NpcContainerRefusal.NotOwnedHere); } if (bed.IsInUse() || _cart.InUse() || _cart.IsAttached()) { return new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.InUse); } if (bed.m_checkGuardStone && "
+     "!PrivateArea.CheckAccess(bed.transform.position, 0f, flash: false, wardCheck: false)) { return new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.WardDenied); } if (!PrivacyAllows(bed)) { return new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.PrivacyDenied); } return WithinReach() ? new "
+     "NpcContainerAccess(allowed, NpcContainerRefusal.None) : new NpcContainerAccess(allowed, "
+     "NpcContainerRefusal.OutOfReach); } catch (Exception) { return new NpcContainerAccess(NpcContainerUse.Off, "
+     "NpcContainerRefusal.Gone); } } }",
+     "every question the cart is asked before a load - its id, where it stands, ownership, open or hitched, ward, "
+     "privacy and reach - in order, with no early yes"),
+    ("private static bool PrivacyAllows(Container container) { switch (container.m_privacy) { case "
+     "Container.PrivacySetting.Public: return true; case Container.PrivacySetting.Private: { Game game = "
+     "Game.instance; Piece? piece = container.GetComponent<Piece>(); return game != null && piece != null && "
+     "piece.GetCreator() == game.GetPlayerProfile().GetPlayerID(); } default: return false; } }",
+     "vanilla's container privacy, mirrored"),
+    ("internal static Container? BedOf(Vagon? cart) { try { Container? bed = cart == null ? null : cart.m_container; "
+     "return bed != null && ReferenceEquals(bed.m_wagon, cart) ? bed : null; } catch (Exception) { return null; } }",
+     "the cart's bed is its own m_container riding that cart, and nothing else - not a redirect, not a fallback"),
+    ("internal static string LiveKeyOf(Vagon? cart) { try { ZNetView? view = cart == null ? null : cart.m_nview; "
+     "ZDO? record = view == null || !view.IsValid() ? null : view.GetZDO(); return record == null ? string.Empty : "
+     "record.m_uid.ToString(); } catch (Exception) { return string.Empty; } }",
+     "the cart's id is its own network record's, compared with the lease's"),
+    ("private bool Parked() { if (_cart == null) { return false; } Vector3 drift = _cart.transform.position - _parkedAt; "
+     "float vertical = Mathf.Abs(drift.y); drift.y = 0f; float flat = drift.magnitude; return !float.IsNaN(flat) && "
+     "!float.IsNaN(vertical) && flat <= _mostDriftMetres && vertical <= _mostDriftMetres; }",
+     "a cart that moved since the tour began is not parked"),
+    ("private bool WithinReach() { Vector3? worker = _workerPosition(); if (!worker.HasValue || _cart == null) { "
+     "return false; } Transform attach = _cart.m_attachPoint; Vector3 handle = attach != null ? attach.position - "
+     "_cart.m_attachOffset : _cart.transform.position; Vector3 flat = worker.Value - handle; flat.y = 0f; "
+     "return flat.magnitude <= _reachMetres; }",
+     "he loads standing within reach of the cart's live handle"),
+)
+TEAMSTER_CART_LOAD_SUBJECT_FIELDS = (
+    "private readonly Vagon? _cart;",
+    "private readonly string _expectedKey;",
+    "private readonly NpcWorldEpoch _epoch;",
+    "private readonly Func<Vagon?, NpcContainerUse> _allowance;",
+    "private readonly Func<Vector3?> _workerPosition;",
+    "private readonly Vector3 _parkedAt;",
+    "private readonly float _reachMetres;",
+    "private readonly float _mostDriftMetres;",
+)
+TEAMSTER_CART_LOAD_RUNTIME_METHODS = (
+    ("private IReadOnlyList<KeyValuePair<string, int>> PickedByThisTour(IReadOnlyList<KeyValuePair<string, int>> "
+     "carried) { _tourCartOffer.Clear(); for (int index = 0; index < carried.Count; index++) { KeyValuePair<string, "
+     "int> material = carried[index]; if (!_tourCartPicked.TryGetValue(material.Key, out int picked) || picked <= 0 "
+     "|| material.Value <= 0) { continue; } _tourCartOffer.Add(new KeyValuePair<string, int>(material.Key, "
+     "material.Value < picked ? material.Value : picked)); } return _tourCartOffer; }",
+     "a load offers, per material, at most what this tour picked and has not loaded"),
+    ("private void NoteCartTourPick(string material, int units) { if (!CartTourRunning || "
+     "string.IsNullOrEmpty(material) || units <= 0) { return; } _tourCartPicked.TryGetValue(material, out int "
+     "already); _tourCartPicked[material] = already + units; }",
+     "only a measured pick of this cart tour adds to what may go into the cart"),
+)
+
+
+TEAMSTER_CART_LOAD_PUNCTUATION = re.compile(r"\s*([()\[\].,;:?<>!&=|{}+\-*/%^~])\s*")
+
+
+def _teamster_cart_load_normal(text: str) -> str:
+    """`text` with every run of whitespace collapsed to one space and the space
+    around punctuation removed, so a whole method can be compared by string
+    rather than by a pattern with an optional space between every token.
+
+    The pattern form is what the line pins use, and for a spelling hundreds of
+    tokens long it backtracks without bound on a near miss: a one-line plant
+    inside a pinned method left the validator running for over an hour instead
+    of refusing (found running this rule's own plants). A string comparison
+    cannot hang."""
+    return TEAMSTER_CART_LOAD_PUNCTUATION.sub(r"\1", re.sub(r"\s+", " ", text)).strip()
+
+
+def check_teamster_cart_load_moves_only_into_the_assigned_cart(errors: list[str]) -> list[str]:
+    """D22 (owner decision 2026-10-31, #381): Gunnar's collection tour may load
+    his own picked items into his explicitly assigned cart's container,
+    measured.
+
+    The scope audit pins the cart-load port's three vanilla calls verbatim. This
+    rule pins what a call pin cannot see, the way `#381 chest-take audit` does
+    for the take, plus the load's own properties:
+
+    1. *Nothing built from a name, and the direction cannot be renamed away.* One
+       clone of his own stack, assigned once; one item lookup, in SafeRoom; no
+       instantiation; the mover takes the worker and the CART and derives
+       `gunnar` from the worker and `cart` from the assigned cart's own
+       container, twice each, and the shared role audit refuses every way found
+       so far to exchange them below those lines.
+    2. *The cart is the assigned one and is only loaded.* One permit, for
+       Deposit; the port spells no other use; the subject is built once, in the
+       port; the container is the cart's own `m_container`, riding that cart; the
+       subject refuses a cart whose id differs from the lease's, a cart that has
+       moved, one in use or hitched; and the hauling runtime's allowance answers
+       Deposit only for the very cart its lease names while it stands idle, and
+       never Take.
+    3. *One call site, behind its own switch and gates.* The port is built once
+       and `LoadOne` called once, in the cart-tour part; that part's opt-in reads
+       the master, collection, hauling and cart-tour switches; the load in the
+       tour half asks the load gate (every input pinned, the cart's own watch
+       included) and refuses with a return, offers only what this tour picked,
+       and writes the trip down first (#379); `CartLoadLegs` is called nowhere
+       else; the start asks its own gate and refuses a tour he would begin
+       carrying something; the worker tick hands the tour his body beside a cart
+       only while the executor is idle; and the switch is off by default.
+
+    A text audit, like every Teamster rule: it does not follow delegates or prove
+    control flow."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = TEAMSTER_CART_LOAD_LABEL
+    port = teamster_dir.joinpath(*TEAMSTER_CART_LOAD_PORT_PATH)
+    port_rel = "/".join(TEAMSTER_CART_LOAD_PORT_PATH)
+    if not port.is_file():
+        fail(f"{label}: missing src/ConcernedTeamster/{port_rel} - the cart load's authorized calls have no file "
+             "to be confined to", errors)
+        return []
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8-sig"))
+
+    def exactly(spelling: str, expected: int, why: str, text: str = code, where: str = port_rel) -> bool:
+        found = len(_teamster_take_exact(spelling).findall(text))
+        if found != expected:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of `{spelling}` and exactly "
+                 f"{expected} {'is' if expected == 1 else 'are'} expected - {why}", errors)
+            return False
+        return True
+
+    # 1. Nothing built from a name.
+    if not exactly("ItemDrop.ItemData part = stack.Clone()", 1,
+                   "that initializer is what makes the authorized `cart.AddItem(part)` a move of part of his own "
+                   "stack rather than an item built from a name"):
+        return []
+    assignments = len(re.findall(r"\bpart" + SPACE + r"=" + SPACE + r"(?!=)", code))
+    if assignments != 1:
+        fail(f"{label}: `part` is assigned {assignments} time(s) in src/ConcernedTeamster/{port_rel}; exactly one "
+             "is authorized, the pinned clone. A second assignment replaces what the authorized add adds while "
+             "leaving that call byte-identical", errors)
+        return []
+    lookups = len(re.findall(r"GetItemPrefab" + SPACE + r"\(", code))
+    if lookups != 1:
+        fail(f"{label}: src/ConcernedTeamster/{port_rel} looks an item prefab up {lookups} time(s); exactly one "
+             "is authorized, in SafeRoom. Any other is a way to build material from a name", errors)
+        return []
+    if not exactly("database.GetItemPrefab(itemPrefab)", 1,
+                   "the one lookup asks what the cart would merge into, and nothing else"):
+        return []
+    for token, why in (
+            ("Instantiate", "instantiating anything - the load moves items that already exist"),
+            ("ObjectDB.instance.GetItemPrefab(", "reaching the item database inline, next to the authorized add"),
+            ("m_dropPrefab.GetComponent", "templating an item off its own prefab")):
+        if _audit_token(token).search(code):
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} spells `{token}`. That is {why}; creating or "
+                 "templating an item is outside D22, which authorizes moving what he already carries", errors)
+            return []
+
+    # ... and the direction cannot be renamed away.
+    mover = "private MoveTally Move(Humanoid? worker, Vagon? assigned, string itemPrefab, int units)"
+    if not exactly(mover, 1, "the mover takes the worker and the CART and derives both inventories itself, because "
+                             "two same-typed `Inventory` parameters can be renamed into an unload out of the cart "
+                             "with every pinned call byte-identical"):
+        return []
+    for spelling, role in (("Inventory? gunnar = InventoryOf(worker);", "the source is Gunnar"),
+                           ("Inventory? cart = InventoryOf(AssignedCartContainer.BedOf(assigned));",
+                            "the destination is the assigned cart's own container")):
+        if not exactly(spelling, 2, f"the line that establishes that {role}, once where the counts are taken and "
+                                    "once where the items move. Reversing a load into an unload needs only "
+                                    "their order if these can move"):
+            return []
+    findings = _teamster_role_findings(code, ("gunnar", "cart"), _teamster_take_exact(mover),
+                                       TEAMSTER_CART_LOAD_PORT_CALLS, 2, TEAMSTER_TAKE_INVENTORY_OF,
+                                       ("GunnarCartLoadPort", "MoveTally"))
+    if findings:
+        for finding in findings:
+            fail(f"{label}: src/ConcernedTeamster/{port_rel}: {finding}. Pinning the derivations means nothing if "
+                 "the two roles can be exchanged below them - the load becomes an unload out of the cart with every "
+                 "pinned call byte-identical", errors)
+        return []
+
+    # 2. The cart is the assigned one, and it is only loaded.
+    mints = len(re.findall(r"\bNpcContainerPermit" + SPACE + r"\." + SPACE + r"Issue" + SPACE + r"\(", code))
+    if mints != 1:
+        fail(f"{label}: src/ConcernedTeamster/{port_rel} mints {mints} permit(s); exactly one is authorized, "
+             "for Deposit", errors)
+        return []
+    if not exactly("NpcContainerPermit.Issue(subject, NpcContainerUse.Deposit, world, out refusal)", 1,
+                   "the one mint asks the cart for Deposit"):
+        return []
+    for other in ("Take", "Both", "Off"):
+        if re.search(r"\bNpcContainerUse" + SPACE + r"\." + SPACE + other + r"\b", code):
+            fail(f"{label}: src/ConcernedTeamster/{port_rel} spells `NpcContainerUse.{other}`. The cart load asks "
+                 "for Deposit and nothing else, so nothing can come out of the cart", errors)
+            return []
+    if not exactly("var subject = new AssignedCartContainer(", 1,
+                   "the cart is asked about through the one subject that re-reads the assignment, the id, where "
+                   "it stands, ownership, in-use, ward, privacy and reach"):
+        return []
+
+    sources: dict[str, str] = {}
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        rel = path.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin"):
+            continue
+        sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+
+    def whole(spelling: str, why: str, text: str, where: str) -> bool:
+        found = _teamster_cart_load_normal(text).count(_teamster_cart_load_normal(spelling))
+        if found != 1:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of the whole method `{spelling[:80]}...` and "
+                 f"exactly 1 is expected - {why} (the whole method is pinned)", errors)
+            return False
+        return True
+
+    def only_in(spelling: str, rel: str, why: str) -> bool:
+        pattern = _teamster_take_exact(spelling)
+        where = [(name, len(pattern.findall(text))) for name, text in sources.items() if pattern.search(text)]
+        if where != [(rel, 1)]:
+            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly once, in src/ConcernedTeamster/{rel}, "
+                 f"is authorized - {why}", errors)
+            return False
+        return True
+
+    if not only_in("new AssignedCartContainer(", port_rel,
+                   "the subject that says yes to a load is built by the port, in the call that moves anything"):
+        return []
+
+    subject = sources.get(TEAMSTER_CART_LOAD_SUBJECT_FILE, "")
+    for spelling, why in (
+            ("Container? bed = cart == null ? null : cart.m_container;",
+             "the container is the cart's own, never one found near it"),
+            ("return bed != null && ReferenceEquals(bed.m_wagon, cart) ? bed : null;",
+             "and it must say it rides that very cart"),
+            ("|| !string.Equals(LiveKeyOf(_cart), _expectedKey, StringComparison.Ordinal)",
+             "a cart whose network id is not the lease's is not the assigned cart"),
+            ("|| !Parked())", "a cart that has moved since the tour began fails closed"),
+            ("if (view == null || !view.IsValid() || !view.IsOwner() || !bed.IsOwner())",
+             "a cart this client does not own is refused, since a non-owner write is lost"),
+            ("if (bed.IsInUse() || _cart.InUse() || _cart.IsAttached())",
+             "a cart that is open or hitched to anybody is in use"),
+            ("NpcContainerUse allowed = _allowance(_cart);", "the allowance is the assignment's, asked now")):
+        if not exactly(spelling, 1, why, subject, TEAMSTER_CART_LOAD_SUBJECT_FILE):
+            return []
+    for spelling, why in TEAMSTER_CART_LOAD_SUBJECT_METHODS:
+        if not whole(spelling, why, subject, TEAMSTER_CART_LOAD_SUBJECT_FILE):
+            return []
+    subject_blank = CS_STRING.sub('""', subject)
+    declared_types = sorted(set(re.findall(
+        r"\b(?:class|struct|interface|enum|record|delegate)" + SPACES + r"([A-Za-z_]\w*)", subject_blank)))
+    members = [line.strip() for line in subject_blank.splitlines()
+               if re.match(r"^    (?! )", line) and line.rstrip().endswith(";") and "=>" not in line
+               and "(" not in line]
+    statics = [line.strip() for line in subject_blank.splitlines()
+               if re.match(r"^    (?! )[^(]*\bstatic\b", line) and "(" not in line]
+    if declared_types != ["AssignedCartContainer"] or sorted(members) != sorted(TEAMSTER_CART_LOAD_SUBJECT_FIELDS) \
+            or statics:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_SUBJECT_FILE} declares the types {declared_types}, "
+             f"the class-level members {members} and the static state {statics}; exactly the type "
+             "AssignedCartContainer and its eight readonly constructor fields are authorized - any other state is "
+             "somewhere a redirected container or a cached answer could live out of sight of the method pins", errors)
+        return []
+    for other in ("Take", "Both", "Deposit"):
+        if re.search(r"\bNpcContainerUse" + SPACE + r"\." + SPACE + other + r"\b", subject):
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_SUBJECT_FILE} spells `NpcContainerUse.{other}`; "
+                 "what the cart allows is the hauling runtime's answer about its own lease, never the subject's",
+                 errors)
+            return []
+    if re.search(r"\bm_container\b", "\n".join(
+            text for name, text in sources.items()
+            if name not in (TEAMSTER_CART_LOAD_SUBJECT_FILE, "Adapters/Workers/VagonHitchSeam.cs",
+                            "Adapters/Workers/HaulingCapabilityProbe.cs", "Adapters/CartAdapter.cs",
+                            "Adapters/Workers/GunnarRecruitmentCartPort.cs"))):
+        fail(f"{label}: a cart's `m_container` is read outside the files that observe a cart and "
+             f"{TEAMSTER_CART_LOAD_SUBJECT_FILE} - the only container a load reaches is the assigned cart's own, "
+             "through BedOf", errors)
+        return []
+
+    hauling = sources.get(TEAMSTER_CART_LOAD_HAULING_FILE, "")
+    for spelling, why in (
+            ("if (cart == null || _faulted || !AssignedCartFacts.IsIdle(_executor))",
+             "the allowance refuses a cart the executor is doing anything with"),
+            ("return ReferenceEquals(LeasedCart(), cart) ? NpcContainerUse.Deposit : NpcContainerUse.Off;",
+             "the allowance is Deposit only for the very cart the lease names"),
+            ("if (drive != null && (!HoldsACart || AssignedCartFacts.IsIdle(_executor)) && drive(ai))",
+             "the tour is handed his body beside a cart only while the executor is idle - a haul, a leg, a joint, "
+             "a hold or a pending stop goes to the executor")):
+        if not exactly(spelling, 1, why, hauling, TEAMSTER_CART_LOAD_HAULING_FILE):
+            return []
+    for use, expected in (("Deposit", 1), ("Take", 0), ("Both", 0)):
+        found = len(re.findall(r"\bNpcContainerUse" + SPACE + r"\." + SPACE + use + r"\b", hauling))
+        if found != expected:
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_HAULING_FILE} spells `NpcContainerUse.{use}` "
+                 f"{found} time(s) and {expected} {'is' if expected == 1 else 'are'} authorized - the assignment "
+                 "allows loading into its own cart, once, and never anything out of it", errors)
+            return []
+
+    # 3. One call site, behind its own switch and gates.
+    if not only_in("new GunnarCartLoadPort()", TEAMSTER_CART_LOAD_RUNTIME_FILE,
+                   "the cart-load port is constructed once, by the runtime's cart-tour part"):
+        return []
+    if not only_in("_cartLoad.LoadOne(", TEAMSTER_CART_LOAD_RUNTIME_FILE,
+                   "the load is made in one place, the cart tour's legs"):
+        return []
+    stray = [rel for rel, text in sources.items()
+             if rel not in (TEAMSTER_CART_LOAD_RUNTIME_FILE, port_rel) and re.search(r"\bLoadOne" + SPACE + r"\(", text)]
+    runtime = sources.get(TEAMSTER_CART_LOAD_RUNTIME_FILE, "")
+    if stray or len(re.findall(r"\bLoadOne" + SPACE + r"\(", runtime)) != 1:
+        fail(f"{label}: LoadOne is named in {stray or 'the cart-tour part more than once'} - the load is made in "
+             f"one place, src/ConcernedTeamster/{TEAMSTER_CART_LOAD_RUNTIME_FILE}, behind its own gates", errors)
+        return []
+    for spelling, why in (
+            ("return OptedIn() && _settings.GunnarHaulingEnabled.Value && _settings.GunnarCartTourEnabled.Value;",
+             "the cart tour's opt-in reads the master and collection switches, hauling's, AND its own"),
+            ("WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(CartTourOptedIn()))",
+             "the cart tour's authority is the shared rule, asked about the cart tour's own opt-in"),
+            ("CartTourRefusal refusal = CartTourGate.EvaluateStart(request);", "the start gate decides"),
+            ("cartTourEnabled: CartTourOptedIn()", "the start gate is told the cart tour's own opt-in"),
+            ("authority: CartTourAuthority()", "the start gate is told the work-authority rule"),
+            ("cart: cart,", "the start gate is told the cart the lease names, as the executor observed it"),
+            ("carryingCollected: carrying.Count > 0,", "the start gate is told whether he already carries a load"),
+            ("refuseIfCarrying: true,", "a cart tour never begins with a load he brought along"),
+            ("_tourCartId = cartId;", "the cart's id is the one read off the leased cart at the start"),
+            ("_tourCartId,", "the load names the cart by that id"),
+            ("_tourCartEpoch,", "and by the world load the tour began in"),
+            ("_cartAllowance,", "the load is allowed by the hauling runtime's answer, and nothing else"),
+            ("AssignedVagonNow(),", "the cart loaded is the one the lease names now, resolved in the frame"),
+            ("_cartAllowance = allowance ?? throw new ArgumentNullException(nameof(allowance));",
+             "the allowance is connected once, from the plugin")):
+        if not exactly(spelling, 1, why, runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
+            return []
+    for spelling, why in TEAMSTER_CART_LOAD_RUNTIME_METHODS:
+        if not whole(spelling, why, runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
+            return []
+    if not exactly("\"the cart assigned to him\", CollectionTourLimits.AtTheCart(_limits), refuseIfCarrying: true,", 1,
+                   "the cart tour arrives at the handle with a margin inside the load's reach, and refuses a load "
+                   "he brought", runtime, TEAMSTER_CART_LOAD_RUNTIME_FILE):
+        return []
+    tour_domain = sources.get("Domain/Collection/CollectionTour.cs", "")
+    for spelling, why in (
+            ("depositReachMetres: Math.Min(limits.PickupReachMetres, limits.ArrivalToleranceMetres + 0.1f));",
+             "at the cart he counts as arrived just outside the motor's tolerance, well inside the load's reach"),
+            ("Walk(standingAt, now, _chest, _limits.DepositReachMetres, _toDepositing, _chestUnreachable);",
+             "the walk to where a load goes uses the deposit reach, in the one helper every trip walks through")):
+        if not exactly(spelling, 1, why, tour_domain, "Domain/Collection/CollectionTour.cs"):
+            return []
+    if len(re.findall(r"\bWalk" + SPACE + r"\(" + SPACE + r"standingAt" + SPACE + r"," + SPACE + r"now" + SPACE + r","
+                      + SPACE + r"_chest\b", tour_domain)) != 1:
+        fail(f"{label}: src/ConcernedTeamster/Domain/Collection/CollectionTour.cs walks to the chest other than through "
+             "WalkToChest, at a reach that is not the deposit reach", errors)
+        return []
+    writes = len(re.findall(r"\b_tourCartId" + SPACE + r"(?:\?\?)?=(?!=)", runtime))
+    allowance_writes = sum(len(re.findall(r"\b_cartAllowance" + SPACE + r"(?:\?\?)?=(?!=)", text))
+                           for text in sources.values())
+    others = [rel for rel, text in sources.items() if rel != TEAMSTER_CART_LOAD_RUNTIME_FILE
+              and re.search(r"\b_tourCartId\b|\b_cartAllowance\b", text)]
+    if writes != 3 or allowance_writes != 2 or others:
+        fail(f"{label}: _tourCartId is assigned {writes} time(s) and _cartAllowance {allowance_writes} (and they are "
+             f"named in {others}); the cart's id is initialized empty, set at the start and cleared, and the "
+             f"allowance initialized and connected, all in src/ConcernedTeamster/{TEAMSTER_CART_LOAD_RUNTIME_FILE}",
+             errors)
+        return []
+    ordered = False
+    for _header, _start, block in _teamster_tour_plan_methods(runtime):
+        body = "\n".join(block)
+        begin = _teamster_take_exact("BeginTour(").search(body)
+        if begin is None:
+            continue
+        evaluate = _teamster_take_exact("CartTourRefusal refusal = CartTourGate.EvaluateStart(request);").search(body)
+        refused = _teamster_take_exact("if (refusal != CartTourRefusal.None)").search(body)
+        ordered = bool(evaluate and refused and evaluate.start() < refused.start() < begin.start()
+                       and re.match(SPACE + r"\{" + SPACE + r"return\b", body[refused.end():]))
+    if not ordered:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_RUNTIME_FILE} does not decide, refuse with a return, "
+             "and only then begin the tour, in that order and in the method that begins it", errors)
+        return []
+
+    tour = sources.get(TEAMSTER_CART_LOAD_TOUR_FILE, "")
+    if not exactly("? LoadCartForTour(worker, out detail)", 1,
+                   "a cart tour's trip is a load into the cart, and only a cart tour's", tour,
+                   TEAMSTER_CART_LOAD_TOUR_FILE):
+        return []
+    trips = ["\n".join(block) for header, _start, block in _teamster_tour_plan_methods(tour)
+             if re.search(r"\bLoadCartForTour" + SPACE + r"\(", header)]
+    if len(trips) != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_TOUR_FILE} declares LoadCartForTour {len(trips)} "
+             "time(s); exactly one is expected, the cart tour's trip", errors)
+        return []
+    for spelling, why in (
+            ("IReadOnlyList<KeyValuePair<string, int>> carried = PickedByThisTour(",
+             "the load offers only what this tour picked and has not loaded"),
+            ("cartTourEnabled: CartTourOptedIn(),", "the load gate is told the cart tour's own opt-in"),
+            ("worldIsUp: _lifecycle.WorldIsUp,", "the load gate is told whether the world is going away"),
+            ("authority: CartTourAuthority(),", "the load gate is told the work-authority rule"),
+            ("seamAvailable: _seamAvailable(),", "the load gate is told the start-up probe"),
+            ("workerRecordUnwritable: _recordUnwritable(),", "the load gate is told whether his record can be written"),
+            ("workerRecordUnreadable: _recordUnreadable(),", "the load gate is told whether his record can be read"),
+            ("transferInFlight: _ordered || _port.Phase == PickPhase.Gathering,",
+             "the load gate is told what else is in flight"),
+            ("cartWatch: WatchTourCart(),", "the load gate is told whether the cart is still the parked cart the tour "
+                                           "began with, read in this frame"),
+            ("CartTourRefusal refusal = CartTourGate.EvaluateLoad(request);", "the load gate decides")):
+        if not exactly(spelling, 1, why + " (in LoadCartForTour)", trips[0], TEAMSTER_CART_LOAD_TOUR_FILE):
+            return []
+    loads_here = 0
+    for header, start, block in _teamster_tour_plan_methods(tour):
+        body = "\n".join(block)
+        calls = list(TEAMSTER_CART_LOAD_LEGS_CALL.finditer(body))
+        if not calls:
+            continue
+        loads_here += len(calls)
+        evaluate = _teamster_take_exact("CartTourRefusal refusal = CartTourGate.EvaluateLoad(request);").search(body)
+        refused = re.search(r"\bdefault" + SPACE + r":" + SPACE + r"detail" + SPACE + r"=" + r"[^;]*;" + SPACE
+                            + r"return\b", body)
+        unguarded = _teamster_tour_plan_guarded(block, TEAMSTER_CART_LOAD_LEGS_CALL, TEAMSTER_TOUR_PLAN_DEPOSIT_GUARD,
+                                                skip=TEAMSTER_CART_LOAD_LEGS_DECLARATION)
+        if (evaluate is None or refused is None or not evaluate.start() < refused.start() < calls[0].start()
+                or unguarded):
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_TOUR_FILE}:{start + 1} `{header}` calls "
+                 "CartLoadLegs( without, above it in the same method, the load gate's decision, a `default:` that "
+                 "returns, and a returning `if (!_tourPlan.IntendDeposit(...))` - a load nobody admitted, or one the "
+                 "plan was not told about first (#379)", errors)
+            return []
+    if loads_here != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_CART_LOAD_TOUR_FILE} calls CartLoadLegs( {loads_here} time(s); "
+             "exactly one is authorized, the cart tour's trip", errors)
+        return []
+    elsewhere = []
+    for rel, text in sources.items():
+        if rel == TEAMSTER_CART_LOAD_TOUR_FILE:
+            continue
+        for match in TEAMSTER_CART_LOAD_LEGS_CALL.finditer(text):
+            line = text[text.rfind("\n", 0, match.start()) + 1:text.find("\n", match.start())]
+            if not TEAMSTER_CART_LOAD_LEGS_DECLARATION.search(line):
+                elsewhere.append(rel)
+    declared = [rel for rel, text in sources.items() if TEAMSTER_CART_LOAD_LEGS_DECLARATION.search(text)]
+    if elsewhere or declared != [TEAMSTER_CART_LOAD_RUNTIME_FILE]:
+        fail(f"{label}: CartLoadLegs is called in {elsewhere} or declared in {declared}; it is declared in "
+             f"src/ConcernedTeamster/{TEAMSTER_CART_LOAD_RUNTIME_FILE} and called only by the cart tour's trip, "
+             f"behind its gates", errors)
+        return []
+
+    if not exactly("public const bool CartTourEnabled = false;", 1, "filling a cart is off by default",
+                   sources.get(TEAMSTER_TAKE_DEFAULTS_FILE, ""), TEAMSTER_TAKE_DEFAULTS_FILE):
+        return []
+    if not exactly('config.Bind("Workers", "GunnarCartTourEnabled", GunnarCollectionDefaults.CartTourEnabled,', 1,
+                   "the switch is bound to the off default", sources.get(TEAMSTER_TAKE_SETTINGS_FILE, ""),
+                   TEAMSTER_TAKE_SETTINGS_FILE):
+        return []
+
+    return [
+        f"{label}: the cart-load port clones exactly his own stack it removes from, assigns that clone once, looks "
+        "an item prefab up once and only in SafeRoom, instantiates nothing, derives Gunnar from the worker and the "
+        "destination from the assigned cart's own container inside the mover, and mints one permit, for Deposit; the "
+        "subject is built once, by the port, holds no state but its eight constructor fields, and - its BedOf, "
+        "LiveKeyOf, Parked and WithinReach pinned whole - reads the cart's own m_container riding that cart and "
+        "refuses a cart whose id is not the lease's, one that has moved, one not owned here, one open or hitched and "
+        "one he is not standing at the handle of; the hauling "
+        "runtime allows Deposit only for the very cart its lease names while idle, never Take; the port is built and "
+        f"called once, in {TEAMSTER_CART_LOAD_RUNTIME_FILE}, whose opt-in reads Workers/GunnarCartTourEnabled (off "
+        "by default) with the master, collection and hauling switches; the one trip that loads asks the load gate "
+        "(every input pinned, the cart's watch included), refuses with a return, offers only what this tour picked "
+        "(PickedByThisTour and NoteCartTourPick pinned whole) and writes the trip down first; the start refuses a tour begun carrying a load; and the worker tick hands "
+        "the tour his body beside a cart only while the executor is idle. A text audit; it does not follow "
         "delegates or prove control flow",
     ]
 
@@ -2945,13 +3433,35 @@ TEAMSTER_IDLE_HAMMER_PORT_CALLS = (
      "vanilla's own hammer swing, once, on Gunnar's own body, cosmetic only"),
 )
 
+# The cart load (owner decision 2026-10-31, #381; `DECISIONS.md` D22). The
+# deposit's three calls with a different destination: the container of the cart
+# the player assigned him, derived inside the mover from the cart the lease
+# names (`#381 cart-load audit` pins that derivation and the one for Gunnar). The
+# variable names are the pin, as for the deposit and the take: the reversal into
+# an unload out of the cart - `gunnar.MoveItemToThis(cart, stack)` - and a remove
+# of anything but what arrived, or from anything but Gunnar, spell a different
+# call and fail.
+TEAMSTER_CART_LOAD_PORT_PATH = ("Adapters", "Workers", "GunnarCartLoadPort.cs")
+TEAMSTER_CART_LOAD_PORT_CALLS = (
+    (".MoveItemToThis(",
+     re.compile(r"\bcart\s*\.\s*MoveItemToThis\s*\(\s*gunnar\s*,\s*stack\s*\)"),
+     "vanilla's whole-stack move out of Gunnar into the assigned cart's container"),
+    (".AddItem(",
+     re.compile(r"\bcart\s*\.\s*AddItem\s*\(\s*part\s*\)"),
+     "the clone of part of his own stack, added to the cart before anything is removed"),
+    (".RemoveItem(",
+     re.compile(r"\bgunnar\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*arrived\s*\)"),
+     "exactly what arrived in the cart, taken off his own stack after the add"),
+)
+
 # Which file may spell which authorized calls. A path absent from this table has
-# no allowance at all, which is every file in the product bar these five.
+# no allowance at all, which is every file in the product bar these six.
 TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
     TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
     TEAMSTER_DEATH_DROP_PORT_PATH: TEAMSTER_DEATH_DROP_PORT_CALLS,
     TEAMSTER_TAKE_PORT_PATH: TEAMSTER_TAKE_PORT_CALLS,
+    TEAMSTER_CART_LOAD_PORT_PATH: TEAMSTER_CART_LOAD_PORT_CALLS,
     TEAMSTER_IDLE_HAMMER_PORT_PATH: TEAMSTER_IDLE_HAMMER_PORT_CALLS,
 }
 
@@ -3121,6 +3631,10 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"owner-authorized as three pinned calls, each verbatim and each once, in "
         f"{'/'.join(TEAMSTER_TAKE_PORT_PATH)} alone (D20's chest take, the deposit's calls with the chest as the "
         f"source); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_CART_LOAD_PORT_CALLS)} "
+        f"owner-authorized as three pinned calls, each verbatim and each once, in "
+        f"{'/'.join(TEAMSTER_CART_LOAD_PORT_PATH)} alone (D22's cart load, the deposit's calls with his assigned "
+        f"cart's container as the destination); "
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_IDLE_HAMMER_PORT_CALLS)} "
         f"owner-authorized as one pinned call, verbatim and once, in "
         f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D21's cosmetic idle hammer swing); every one refused "
@@ -3130,7 +3644,7 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"(scanned across the product AND the {len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) its "
         f"project file compiles in, which were outside this audit until D15) "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no direct Inventory.AddItem outside the two pinned calls above (the deposit's and the take's), and no ZNetScene reference outside "
+        f"tuning writes, no direct Inventory.AddItem outside the three pinned calls above (the deposit's, the take's and the cart load's), and no ZNetScene reference outside "
         f"Adapters/Workers; no component surgery or reflection outside the prefab factory (inside "
         f"Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) "
         f"({hits} violations)",
@@ -8358,6 +8872,7 @@ def main() -> int:
     report.extend(check_container_permit_stays_unforgeable(errors))
     report.extend(check_teamster_deposit_adds_only_what_it_is_removing(errors))
     report.extend(check_teamster_take_moves_only_out_of_the_marked_chest(errors))
+    report.extend(check_teamster_cart_load_moves_only_into_the_assigned_cart(errors))
     report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_console_command_copies_agree(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))

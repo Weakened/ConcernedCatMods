@@ -145,7 +145,7 @@ public sealed class Plugin : BaseUnityPlugin
             // runtime's own D4 teardown before anything he carries is dropped.
             // No hauling runtime, no release: the drop is refused.
             body => _hauling?.ReleaseCartFromDyingBody(body) ?? false,
-            // A tour is on foot. No hauling runtime is "held": unknown refuses.
+            // A chest tour is on foot. No hauling runtime is "held": unknown refuses.
             () => _hauling?.HoldsACart ?? true,
             // #379: the census's answer, so an interrupted tour's plan is
             // revalidated only once his body is accounted for. No hauling
@@ -156,8 +156,19 @@ public sealed class Plugin : BaseUnityPlugin
         if (_hauling != null)
         {
             // #381: a collection tour drives Gunnar's body from the same worker
-            // tick the haul executor uses, and only while no cart is his.
+            // tick the haul executor uses, and only while no cart is his or (D22)
+            // while his assigned cart stands idle.
             _hauling.CollectionDrive = _collection.DriveWorker;
+
+            // #381, D22: the cart-assisted tour sees the cart assigned to him
+            // only through the hauling runtime's lease - its facts, the cart the
+            // lease names, and the allowance that answers Deposit only for that
+            // cart while it stands idle. No hauling runtime, no cart.
+            Adapters.Workers.GunnarHaulingRuntime hauling = _hauling;
+            _collection.ConnectCart(
+                () => hauling.AssignedCart,
+                hauling.AssignedVagon,
+                hauling.CartLoadAllowance);
         }
 
         // #317: publish Gunnar's real service through concernedcat.haul/1.

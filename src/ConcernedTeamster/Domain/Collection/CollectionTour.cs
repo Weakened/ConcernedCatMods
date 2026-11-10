@@ -207,9 +207,13 @@ internal enum TourDepositEnd
 /// <summary>The bounds a tour walks within.</summary>
 internal sealed class CollectionTourLimits
 {
-    public CollectionTourLimits(float reachMetres, float stallSeconds, int mostSteps)
+    public CollectionTourLimits(float reachMetres, float stallSeconds, int mostSteps, float? depositReachMetres = null)
     {
         ReachMetres = reachMetres > 0f && !float.IsNaN(reachMetres) ? reachMetres : throw new ArgumentOutOfRangeException(nameof(reachMetres));
+        float deposit = depositReachMetres ?? reachMetres;
+        DepositReachMetres = deposit > 0f && !float.IsNaN(deposit) && deposit <= ReachMetres
+            ? deposit
+            : throw new ArgumentOutOfRangeException(nameof(depositReachMetres));
         StallSeconds = stallSeconds > 0f && !float.IsNaN(stallSeconds) ? stallSeconds : throw new ArgumentOutOfRangeException(nameof(stallSeconds));
         MostSteps = mostSteps > 0 ? mostSteps : throw new ArgumentOutOfRangeException(nameof(mostSteps));
     }
@@ -217,6 +221,11 @@ internal sealed class CollectionTourLimits
     /// <summary>How close he must stand to a source or the chest to act on it.
     /// The same reach the ordered pick and the deposit port already use.</summary>
     public float ReachMetres { get; }
+
+    /// <summary>How close counts as arrived at the place every load goes to:
+    /// <see cref="ReachMetres"/> for a chest, closer for a cart (D22), never
+    /// further.</summary>
+    public float DepositReachMetres { get; }
 
     /// <summary>How long a walk may go without getting at least
     /// <see cref="ProgressMetres"/> closer before it is given up as unreachable.
@@ -243,6 +252,19 @@ internal sealed class CollectionTourLimits
 
     public static CollectionTourLimits Default(CollectionLimits limits) =>
         new CollectionTourLimits(limits.PickupReachMetres, stallSeconds: 12f, mostSteps: 512);
+
+    /// <summary>A cart-assisted tour's bounds (D22). At the cart he counts as
+    /// arrived only just outside the motor's own arrival tolerance, well inside
+    /// the load's reach of the cart's handle, so a cart that settled a little
+    /// since the tour began is still within reach when the load asks. Sources
+    /// keep the ordinary reach: a stone a little off the navigation mesh is still
+    /// reached the way a chest tour reaches it.</summary>
+    public static CollectionTourLimits AtTheCart(CollectionLimits limits) =>
+        new CollectionTourLimits(
+            limits.PickupReachMetres,
+            stallSeconds: 12f,
+            mostSteps: 512,
+            depositReachMetres: Math.Min(limits.PickupReachMetres, limits.ArrivalToleranceMetres + 0.1f));
 }
 
 /// <summary>Gunnar's collection tour (#381): survey, plan, walk a load, take it
@@ -278,6 +300,7 @@ internal sealed class CollectionTour
     private readonly ITourPump _pump;
     private readonly CollectionTourLimits _limits;
     private readonly CollectionPoint _chest;
+    private readonly string _destination;
 
     private TourStep _step;
     private bool _hasStep;
@@ -298,11 +321,20 @@ internal sealed class CollectionTour
     private readonly Action _sourceUnreachable;
     private readonly Action _chestUnreachable;
 
-    public CollectionTour(ITourPump pump, CollectionTourLimits limits, CollectionPoint chest, bool startWithDeposit)
+    /// <param name="destination">What a player calls the place every load
+    /// goes to, for the reasons the tour stops with: the chest they chose, or
+    /// (D22) the cart they assigned him.</param>
+    public CollectionTour(
+        ITourPump pump,
+        CollectionTourLimits limits,
+        CollectionPoint chest,
+        bool startWithDeposit,
+        string destination = "the chest you chose")
     {
         _pump = pump ?? throw new ArgumentNullException(nameof(pump));
         _limits = limits ?? throw new ArgumentNullException(nameof(limits));
         _chest = chest;
+        _destination = string.IsNullOrEmpty(destination) ? "the chest you chose" : destination;
         Reason = string.Empty;
         _toPicking = EnterPicking;
         _toDepositing = EnterDepositing;
@@ -352,9 +384,9 @@ internal sealed class CollectionTour
             case TourPhase.Asking:
                 return Ask(standingAt, now);
             case TourPhase.ToSource:
-                return Walk(standingAt, now, _step.At, _toPicking, _sourceUnreachable);
+                return Walk(standingAt, now, _step.At, _limits.ReachMetres, _toPicking, _sourceUnreachable);
             case TourPhase.ToChest:
-                return Walk(standingAt, now, _chest, _toDepositing, _chestUnreachable);
+                return WalkToChest(standingAt, now);
             case TourPhase.Picking:
                 return Issue(TourOrder.Pick, _step.At, _step.Key);
             case TourPhase.Depositing:
@@ -418,14 +450,14 @@ internal sealed class CollectionTour
                 ResetWalk();
                 return;
             case TourDepositEnd.ChestFull:
-                Stop("the chest you chose is full, so he stopped with the rest still on him" +
+                Stop(_destination + " is full, so he stopped with the rest still on him" +
                     Suffix(detail));
                 return;
             case TourDepositEnd.Refused:
-                Stop("the chest you chose refused what he brought, so he kept all of it" + Suffix(detail));
+                Stop(_destination + " refused what he brought, so he kept all of it" + Suffix(detail));
                 return;
             default:
-                Stop("whether what he brought went into the chest could not be established, so nothing " +
+                Stop("whether what he brought went into " + _destination + " could not be established, so nothing " +
                     "more is attempted and nothing is assumed" + Suffix(detail));
                 return;
         }
@@ -504,12 +536,12 @@ internal sealed class CollectionTour
                     // A new load begins: this one goes to the chest first, and
                     // the stop that announced the new load waits for him.
                     EnterToChest();
-                    return Walk(standingAt, now, _chest, _toDepositing, _chestUnreachable);
+                    return WalkToChest(standingAt, now);
                 }
 
                 Phase = TourPhase.ToSource;
                 ResetWalk();
-                return Walk(standingAt, now, _step.At, _toPicking, _sourceUnreachable);
+                return Walk(standingAt, now, _step.At, _limits.ReachMetres, _toPicking, _sourceUnreachable);
             case TourProgress.Finished:
                 return End(standingAt, now, string.Empty);
             case TourProgress.Stopped:
@@ -530,7 +562,7 @@ internal sealed class CollectionTour
         {
             _finishing = true;
             EnterToChest();
-            return Walk(standingAt, now, _chest, _toDepositing, _chestUnreachable);
+            return WalkToChest(standingAt, now);
         }
 
         Close();
@@ -551,8 +583,13 @@ internal sealed class CollectionTour
         }
     }
 
+    /// <summary>The walk to where every load goes, at the deposit reach (D22:
+    /// closer for a cart than for a chest).</summary>
+    private TourInstruction WalkToChest(CollectionPoint standingAt, float now) =>
+        Walk(standingAt, now, _chest, _limits.DepositReachMetres, _toDepositing, _chestUnreachable);
+
     private TourInstruction Walk(
-        CollectionPoint standingAt, float now, CollectionPoint to, Action arrived, Action unreachable)
+        CollectionPoint standingAt, float now, CollectionPoint to, float reach, Action arrived, Action unreachable)
     {
         float distance = standingAt.FlatDistanceTo(to);
         if (float.IsNaN(distance))
@@ -561,7 +598,7 @@ internal sealed class CollectionTour
             return TourInstruction.Hold;
         }
 
-        if (distance <= _limits.ReachMetres)
+        if (distance <= reach)
         {
             arrived();
             return TourInstruction.Hold;
@@ -623,7 +660,7 @@ internal sealed class CollectionTour
 
     private void ChestUnreachable()
     {
-        Stop("he could not get to the chest you chose, so he stopped with what he collected still on him");
+        Stop("he could not get to " + _destination + ", so he stopped with what he collected still on him");
     }
 
     private void Stop(string why)
