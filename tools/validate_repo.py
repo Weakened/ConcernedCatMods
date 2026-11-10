@@ -1622,6 +1622,9 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
 
 TEAMSTER_TAKE_LABEL = "[interop] #381 chest-take audit"
 TEAMSTER_TAKE_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Take.cs"
+# #381 item 4: the manual chest-to-chest haul makes its own take leg, behind its
+# own gate - pinned by `#381 manifest-haul audit`, not by this one.
+TEAMSTER_HAUL_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Haul.cs"
 TEAMSTER_TAKE_DEFAULTS_FILE = "Domain/Collection/GunnarCollectionDefaults.cs"
 TEAMSTER_TAKE_SETTINGS_FILE = "TeamsterSettings.cs"
 TEAMSTER_TAKE_PUNCTUATION = "().,;:?<>!&=|{}"
@@ -1831,7 +1834,9 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
        for `NpcContainerUse.Take`; no other use is spelled in the port, so a chest
        marked for putting things in only cannot authorize a take.
     3. *One call site, behind its own switch and gate.* The port is constructed
-       once and `TakeOne` called once, in the runtime's take part alone; that part
+       once and `TakeOne` called once, in the runtime's take part (the haul's take
+       leg, #381 item 4, is the one other call, pinned by `#381 manifest-haul
+       audit` behind a gate of its own); that part
        feeds the gate the take's own opt-in, which reads the take switch; the
        gate's refusal returns before the call; an open tour plan refuses; the
        switch is off by default; and the source is set only from the chest the
@@ -1930,16 +1935,22 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
             continue
         sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
 
-    for spelling, why in (("new GunnarTakePort()", "the take port is constructed once, by the runtime's take part"),
-                          ("_take.TakeOne(", "the take is made in one place, behind its own gate")):
+    # The haul's take leg (#381 item 4) is the one other call, once, in its own
+    # file and behind its own gate, which `#381 manifest-haul audit` pins.
+    for spelling, expected, why in (
+            ("new GunnarTakePort()", [(TEAMSTER_TAKE_RUNTIME_FILE, 1)],
+             "the take port is constructed once, by the runtime's take part"),
+            ("_take.TakeOne(", [(TEAMSTER_HAUL_RUNTIME_FILE, 1), (TEAMSTER_TAKE_RUNTIME_FILE, 1)],
+             "the take is made in the ordered take and in the haul's take leg, each once behind its own gate")):
         pattern = _teamster_take_exact(spelling)
-        where = [(rel, len(pattern.findall(text))) for rel, text in sources.items() if pattern.search(text)]
-        if where != [(TEAMSTER_TAKE_RUNTIME_FILE, 1)]:
-            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly once, in "
-                 f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, is authorized - {why}", errors)
+        where = sorted((rel, len(pattern.findall(text))) for rel, text in sources.items() if pattern.search(text))
+        if where != expected:
+            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly {expected} is authorized - {why}",
+                 errors)
             return []
     stray = [rel for rel, text in sources.items()
-             if rel not in (TEAMSTER_TAKE_RUNTIME_FILE, port_rel) and re.search(r"\bTakeOne" + SPACE + r"\(", text)]
+             if rel not in (TEAMSTER_TAKE_RUNTIME_FILE, TEAMSTER_HAUL_RUNTIME_FILE, port_rel)
+             and re.search(r"\bTakeOne" + SPACE + r"\(", text)]
     if stray:
         fail(f"{label}: TakeOne is named in {stray} - the take is made in one place, "
              f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, behind its own gate", errors)
@@ -2012,7 +2023,9 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
         f"{label}: the take port clones exactly the chest's stack it removes from, assigns that clone once, looks "
         "an item prefab up once and only in SafeRoom, instantiates nothing, derives its source from the chosen "
         "chest and its destination from Gunnar inside the mover, and mints one permit, for Take; it is built and "
-        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, in the method whose take gate refuses with a return above "
+        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE} (and called once more by the haul's take leg in "
+        f"{TEAMSTER_HAUL_RUNTIME_FILE}, which `#381 manifest-haul audit` pins), in the method whose take gate "
+        "refuses with a return above "
         "it, every gate input pinned (the switches, the world, the work-authority rule, the probe, his body and its "
         "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); the "
         "three calls sit in the mover's own body, which holds no lambda or local function, and `chest` and `gunnar` "
@@ -6163,6 +6176,14 @@ def check_teamster_tour_writes_ahead(errors: list[str]) -> list[str]:
         code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
         if not TEAMSTER_TOUR_PLAN_PART.search(code):
             continue
+        if rel == TEAMSTER_HAUL_RUNTIME_FILE:
+            # #381 item 4: the haul unloads through DepositLegs behind D15's gate,
+            # which `#381 manifest-haul audit` pins; it never picks.
+            if TEAMSTER_TOUR_PLAN_PICK.search(code):
+                hits += 1
+                fail(f"{label}: src/ConcernedTeamster/{rel} picks; the haul from chest to chest takes from a chest "
+                     "and unloads into one, and never picks", errors)
+            continue
         if TEAMSTER_TOUR_PLAN_PICK.search(code) or TEAMSTER_TOUR_PLAN_DEPOSIT.search(code):
             hits += 1
             fail(f"{label}: src/ConcernedTeamster/{rel} is a part of the collection runtime and picks or deposits; "
@@ -6176,6 +6197,191 @@ def check_teamster_tour_writes_ahead(errors: list[str]) -> list[str]:
         "part of the runtime does either; and the death host tells the plan in Prepare before it returns and in "
         "Died before the tour is cancelled. A text audit of order: it does not follow delegates or prove control "
         f"flow ({hits} violations)",
+    ]
+
+
+# #381 item 4: the manual chest-to-chest haul. It is glue over two pinned ports -
+# D20's take and D15's deposit - and adds no vanilla call of its own (the scope
+# audit still refuses every inventory token in its file). This pins what keeps
+# it inside those two grants. A text audit of order on comment-masked text.
+TEAMSTER_HAUL_LABEL = "[interop] #381 manifest-haul audit"
+TEAMSTER_HAUL_TAKE_CALL = "_take.TakeOne("
+TEAMSTER_HAUL_TAKE_EVALUATE = "TakeRefusal refusal = TakeOrderGate.Evaluate(request);"
+TEAMSTER_HAUL_TAKE_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*TakeRefusal\s*\.\s*None\s*\)")
+TEAMSTER_HAUL_DEPOSIT_CALL = "DepositLegs("
+TEAMSTER_HAUL_DEPOSIT_EVALUATE = "DepositRefusal refusal = DepositOrderGate.Evaluate(request);"
+TEAMSTER_HAUL_DEPOSIT_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*DepositRefusal\s*\.\s*None\s*\)")
+TEAMSTER_HAUL_START_CALL = "_haul = new ChestHaul("
+TEAMSTER_HAUL_START_EVALUATE = "ChestHaulRefusal refusal = ChestHaulGate.Evaluate(request);"
+TEAMSTER_HAUL_START_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*ChestHaulRefusal\s*\.\s*None\s*\)")
+TEAMSTER_HAUL_IN_FLIGHT = "transferInFlight: _ordered || _tour != null || _port.Phase == PickPhase.Gathering"
+# Each leg's gate inputs, every one spelled once in the method that makes the move.
+TEAMSTER_HAUL_TAKE_INPUTS = (
+    ("collectionEnabled: OptedIn()", "the gate is told the collection switches"),
+    ("takeEnabled: HaulOptedIn()", "the take is gated on the haul's own opt-in, which needs the take switch too"),
+    ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+    ("authority: HaulAuthority()", "the gate is told the work-authority rule, asked about the haul's opt-in"),
+    ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+    ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+    ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+    (TEAMSTER_HAUL_IN_FLIGHT, "the gate is told what else is in flight; only the haul itself is not counted"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses the take (#379)"),
+    ("TakeOrderGate.UnitsToAsk(wanted, fits!.Value)",
+     "he asks for no more than the manifest's line and the carry limit allow"),
+)
+TEAMSTER_HAUL_DEPOSIT_INPUTS = (
+    ("featureEnabled: HaulOptedIn()", "the unload is gated on the haul's own opt-in"),
+    ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+    ("authority: HaulAuthority()", "the gate is told the work-authority rule"),
+    ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+    ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+    ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+    (TEAMSTER_HAUL_IN_FLIGHT, "the gate is told what else is in flight"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses the unload (#379)"),
+    ("int offered = holding < wanted ? holding : wanted;", "he offers no more than this tour measured taking"),
+)
+TEAMSTER_HAUL_START_INPUTS = (
+    ("haulEnabled: HaulOptedIn()", "the start is gated on the haul's own switch"),
+    ("authority: HaulAuthority()", "the start is gated on the work-authority rule"),
+    ("somethingInFlight: TourRunning || _ordered || _port.Phase == PickPhase.Gathering",
+     "nothing else may be in flight when a haul starts"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a haul (#379)"),
+    ("cartAssigned: CartHeld()", "a haul never starts while a cart is assigned to him"),
+    ("carryingCargo: carrying.Count > 0", "a haul starts holding none of its cargo, so the reconcile can count it"),
+    ("HaulRequest admitted = HaulRequestGate.Check(", "the one answer to whether a manual haul may start decides"),
+    ("named, carry, CartCapacity.None);", "the request gate is offered no cart: a manual haul is on foot"),
+    ("HaulManifestPlanner.Plan(admitted, cargo, new HaulCapacity(carry.FreeKilograms, freeSlots), CartCapacity.None)",
+     "the manifest is planned from what the request gate admitted, on foot; no cart room is counted, because no "
+     "cart round is authorized"),
+)
+
+
+def _teamster_haul_method_with(code: str, call: str, label: str, errors: list[str]) -> "list[str] | None":
+    """The body of the one method that makes `call`, or None (with a failure)
+    when the call is not exactly once, inside exactly one braced method."""
+    pattern = _teamster_take_exact(call)
+    total = len(pattern.findall(code))
+    holders = [block for _header, _start, block in _teamster_tour_plan_methods(code)
+               if pattern.search("\n".join(block))]
+    inside = sum(len(pattern.findall("\n".join(block))) for block in holders)
+    if total != 1 or len(holders) != 1 or inside != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} makes `{call}` {total} time(s), "
+             f"{inside} inside a method; exactly once, inside one braced method, is authorized", errors)
+        return None
+    return holders[0]
+
+
+def check_teamster_manifest_haul_is_gated(errors: list[str]) -> list[str]:
+    """Fails when the manual chest-to-chest haul (#381 item 4) could take, unload
+    or start without its gate, or reach a move no owner decision covers.
+
+    1. *One take, one unload, one start, each behind its own gate.* In
+       `GunnarCollectionRuntime.Haul.cs`, `_take.TakeOne(`, `DepositLegs(` and
+       `_haul = new ChestHaul(` are each made once, inside one braced method,
+       with the leg's gate evaluated and a returning `if (refusal != ...None)`
+       written above the move in that method - so a helper that lifts the move
+       out of its method is a method with the move and no guard.
+    2. *Every gate input pinned in the method that moves.* The haul's own opt-in
+       (which needs the take switch), the work-authority rule asked about it,
+       the world, the probe, his record, what else is in flight, an open tour
+       plan, and the bounds on how much is asked: the manifest's line and the
+       carry limit for a take, what this tour measured taking for an unload.
+    3. *On foot.* The manifest is planned with `CartCapacity.None`, and the
+       start refuses while a cart is assigned.
+    4. *Nothing else.* No `DepositOne` (the world check and the ledger live in
+       DepositLegs), no port constructed here, no cart load, and no ChestHaul
+       built anywhere else.
+    5. *Off by default*, bound to the off default, and re-asked every frame.
+
+    A text audit: it does not follow delegates or prove control flow.
+    `ChestHaulTests`, `HaulManifestTests` and `ChestHaulGateTests` prove the
+    decisions; a reviewer proves the rest."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = TEAMSTER_HAUL_LABEL
+    path = teamster_dir / TEAMSTER_HAUL_RUNTIME_FILE
+    if not path.is_file():
+        fail(f"{label}: missing src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE}", errors)
+        return []
+    code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+
+    def once(spelling: str, why: str, text: str, where: str) -> bool:
+        found = len(_teamster_take_exact(spelling).findall(text))
+        if found != 1:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of `{spelling}` where exactly one is "
+                 f"expected - {why}", errors)
+            return False
+        return True
+
+    for call, evaluate, guard, inputs, what in (
+            (TEAMSTER_HAUL_TAKE_CALL, TEAMSTER_HAUL_TAKE_EVALUATE, TEAMSTER_HAUL_TAKE_GUARD,
+             TEAMSTER_HAUL_TAKE_INPUTS, "a take"),
+            (TEAMSTER_HAUL_DEPOSIT_CALL, TEAMSTER_HAUL_DEPOSIT_EVALUATE, TEAMSTER_HAUL_DEPOSIT_GUARD,
+             TEAMSTER_HAUL_DEPOSIT_INPUTS, "an unload"),
+            (TEAMSTER_HAUL_START_CALL, TEAMSTER_HAUL_START_EVALUATE, TEAMSTER_HAUL_START_GUARD,
+             TEAMSTER_HAUL_START_INPUTS, "a haul's start")):
+        block = _teamster_haul_method_with(code, call, label, errors)
+        if block is None:
+            return []
+        body = "\n".join(block)
+        for spelling, why in ((evaluate, "the leg's gate decides"),) + inputs:
+            if not once(spelling, why, body, TEAMSTER_HAUL_RUNTIME_FILE + f" (the method that makes {what})"):
+                return []
+        decided = _teamster_take_exact(evaluate).search(body)
+        refused = guard.search(body)
+        moved = _teamster_take_exact(call).search(body)
+        unguarded = _teamster_tour_plan_guarded(block, _teamster_take_exact(call), guard)
+        if unguarded or not (decided and refused and moved and decided.start() < refused.start() < moved.start()):
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} does not decide {what}, refuse it "
+                 "with a returning block and only then make the move, in that order and in the method that makes "
+                 "it - a move the gate did not admit", errors)
+            return []
+
+    for token, why in (
+            (r"\bDepositOne\s*\(", "a deposit straight through the port skips DepositLegs' world check and ledger"),
+            (r"\bnew\s+Gunnar\w*Port\s*\(", "the haul uses the runtime's ports and constructs none"),
+            (r"\b_cartLoad\b", "a manual haul never loads a cart (no grant covers a chest-to-chest cart round)")):
+        if re.search(token, code):
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} spells `{token}` - {why}", errors)
+            return []
+    if not once("return TakeOptedIn() && _settings.GunnarChestHaulEnabled.Value;",
+                "the haul's opt-in reads the master, collection and take switches AND its own",
+                code, TEAMSTER_HAUL_RUNTIME_FILE):
+        return []
+    if not once("WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(HaulOptedIn()))",
+                "the haul's authority is the shared rule, asked about the haul's own opt-in",
+                code, TEAMSTER_HAUL_RUNTIME_FILE):
+        return []
+
+    sources: dict[str, str] = {}
+    for other in sorted(teamster_dir.rglob("*.cs")):
+        rel = other.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin"):
+            continue
+        sources[rel] = _strip_cs_comments(other.read_text(encoding="utf-8-sig"))
+    starts = [rel for rel, text in sources.items() if _teamster_take_exact("new ChestHaul(").search(text)]
+    if starts != [TEAMSTER_HAUL_RUNTIME_FILE]:
+        fail(f"{label}: a ChestHaul is constructed in {starts or 'nothing'}; only "
+             f"src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE}, behind the start gate, may", errors)
+        return []
+    if not once("WatchHaulFromFrame();", "a running haul is re-asked every frame",
+                sources.get(TEAMSTER_TOUR_PLAN_RUNTIME_FILE, ""), TEAMSTER_TOUR_PLAN_RUNTIME_FILE):
+        return []
+    if not once("public const bool ChestHaulEnabled = false;", "the haul is off by default",
+                sources.get(TEAMSTER_TAKE_DEFAULTS_FILE, ""), TEAMSTER_TAKE_DEFAULTS_FILE):
+        return []
+    if not once('config.Bind("Workers", "GunnarChestHaulEnabled", GunnarCollectionDefaults.ChestHaulEnabled,',
+                "the switch is bound to the off default", sources.get(TEAMSTER_TAKE_SETTINGS_FILE, ""),
+                TEAMSTER_TAKE_SETTINGS_FILE):
+        return []
+
+    return [
+        f"{label}: the chest-to-chest haul takes once, unloads once and starts once, each inside one method whose "
+        "own gate refuses with a return above the move, every gate input pinned there (the haul's opt-in, which "
+        "needs the take switch; the work-authority rule; the world; the probe; his record; what else is in flight; "
+        "an open tour plan) and each move bounded (the manifest line and the carry limit, what the tour measured "
+        "taking); the manifest is planned with no cart and the start refuses with a cart assigned; it spells no "
+        "DepositOne, constructs no port, loads no cart, builds no ChestHaul elsewhere, is re-asked every frame, and "
+        "is off by default. A text audit; it does not follow delegates or prove control flow",
     ]
 
 
@@ -8890,6 +9096,7 @@ def main() -> int:
     report.extend(check_teamster_source_is_plain(errors))
     report.extend(check_source_has_no_format_characters(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))
+    report.extend(check_teamster_manifest_haul_is_gated(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))
