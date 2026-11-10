@@ -43,10 +43,10 @@ version and the same values for these settings.
   - While the shovel is held, an outline drawn through the ground shows the
     floor, the depth at each corner, the sloping border and, if the floor
     would sit below water, the water line. It is green when a press would dig,
-    amber when it would do nothing, and red when it would be refused. A line
-    under the crosshair gives the size, what a press would do (or why not,
-    and what to do about it), the cost, and the controls from your current
-    key bindings.
+    amber when it would do nothing, and red when it would be refused. Text
+    under the crosshair gives the size, what a press would do and its cost
+    (or why not, and what to do about it), and the controls from your
+    current key bindings.
   - Attack digs the size shown, where it is shown; Secondary Attack switches
     the size and never digs. Aiming, switching, menus, the inventory, chat and
     the console never dig. The ground you aim at must be within 5 m and be the
@@ -54,7 +54,8 @@ version and the same values for these settings.
     rock; to dig under a floor, look through an opening in it. The square
     follows the world grid and does not rotate. No digging from a ladder.
   - A dig costs 20 stamina and 4 durability (2x2x2 m) or 40 stamina and 16
-    durability (4x4x4 m), charged once and only when the dig is placed. A
+    durability (4x4x4 m), before the world's stamina and durability
+    settings, charged once and only when the dig is placed. A
     refused dig, a hole that is already dug, or a cancelled press costs
     nothing. It is refused inside a ward that does not grant you access, in
     no-build areas, below the terrain's dig limit, and over rocks, trees, ore,
@@ -64,9 +65,10 @@ version and the same values for these settings.
   - The shovel has no attack and plays no animation yet, and it looks like a
     darker iron pickaxe for now. It raises no skill. A read-only `cl_excavate`
     console diagnostic plans a dig without digging.
-  - Turning the setting off again removes the shovel from the game, and the
-    game discards crafted shovels when their inventory or chest loads. Not yet
-    observed in game.
+  - Turning the setting off again, or uninstalling, removes the shovel from
+    the game, and the game discards crafted shovels when their inventory or
+    chest loads. The mod does not undo holes already dug. Not yet observed
+    in game.
 
 ## 1.0.0
 
