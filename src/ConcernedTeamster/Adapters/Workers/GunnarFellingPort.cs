@@ -53,9 +53,9 @@ internal sealed class GunnarFellReport
 /// axe's plain damage, built from its own item data with Gunnar as attacker and
 /// no skill factor, multiplier or status effect; inside an explicit work area
 /// (his only one is the area set with <c>ct_collect area</c>); never within 15 m
-/// of a player or a player-built piece; never where a ward denies the player, in a dungeon or in a
-/// world location, or where any covering ward denies the player; owned by this process, so vanilla's handler runs in this call
-/// and spawns its own drops in it. TreeBase and TreeLog stay unused.
+/// of a player or a player-built piece; never where a ward denies the player, in a
+/// dungeon or in a world location; owned by this process, so vanilla's handler runs
+/// in this call and spawns its own drops in it. TreeBase and TreeLog stay unused.
 ///
 /// <b>The axe is his.</b> It is read from his own inventory - put there by the
 /// player through D20's chest take - and never built, cloned or equipped here.
@@ -77,8 +77,9 @@ internal sealed class GunnarFellingPort
     internal const float DropSearchMetres = 3f;
 
     /// <summary>How far from the tree a ward could stand and still cover it: a
-    /// vanilla guard stone reaches 32 m. Every zone within this of the tree must
-    /// be loaded before the ward is asked, or the answer is a refusal.</summary>
+    /// vanilla guard stone reaches 32 m. Every zone touching the square of this
+    /// half-side around the tree must be loaded before the ward is asked, or the
+    /// answer is a refusal.</summary>
     private const float WardReachMetres = 32f;
 
     private static readonly int[] AllowlistedHashes = BuildHashes();
@@ -436,20 +437,27 @@ internal sealed class GunnarFellingPort
     {
         try
         {
+            // Every zone that touches the square around the tree a ward's reach
+            // spans: a 3 x 3 grid at -32, 0 and +32 m on both axes, corners
+            // included. A zone is 64 m wide, so a 64 m side meets at most two
+            // zones and both its ends land in one each - no zone touching the
+            // square is stepped over (review of #381 item 5: an 8-point circle
+            // missed the diagonal zone).
             ZoneSystem zones = ZoneSystem.instance;
-            if (zones == null || !zones.IsZoneLoaded(at))
+            if (zones == null)
             {
                 return false;
             }
 
-            for (int step = 0; step < 8; step++)
+            for (int dx = -1; dx <= 1; dx++)
             {
-                double angle = step * Math.PI / 4d;
-                var edge = new Vector3(
-                    at.x + (float)(Math.Cos(angle) * WardReachMetres), at.y, at.z + (float)(Math.Sin(angle) * WardReachMetres));
-                if (!zones.IsZoneLoaded(edge))
+                for (int dz = -1; dz <= 1; dz++)
                 {
-                    return false;
+                    var corner = new Vector3(at.x + (dx * WardReachMetres), at.y, at.z + (dz * WardReachMetres));
+                    if (!zones.IsZoneLoaded(corner))
+                    {
+                        return false;
+                    }
                 }
             }
 

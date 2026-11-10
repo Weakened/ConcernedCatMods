@@ -166,6 +166,13 @@ class FellingIsNarrow(unittest.TestCase):
                      "            return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: false);\n")
         self.assert_refused("the lenient ward question passed")
 
+    def test_the_ward_may_not_be_asked_over_unloaded_zones(self):
+        # Review round 2: a ward in an unloaded zone is invisible to the
+        # question, which then grants.
+        self.swap_in(PORT, "                    if (!zones.IsZoneLoaded(corner))\n",
+                     "                    if (corner.y < -100000f)\n")
+        self.assert_refused("the ward was asked with its zones unloaded")
+
     def test_an_axe_may_not_be_made(self):
         self.swap_in(PORT, "        return best;\n    }\n",
                      "        return best ?? ObjectDB.instance.GetItemPrefab(\"AxeStone\").GetComponent<ItemDrop>()"
