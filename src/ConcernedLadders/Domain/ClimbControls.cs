@@ -27,6 +27,20 @@ internal static class ClimbControls
         return ClimbAction.None;
     }
 
+    /// <summary>Whether a Use press while climbing asks the ladder for a safe dismount (N07; CL-004 #485 slice 4). Not
+    /// in the frame that mounted, and never while the native hover target is an interactable: vanilla routes that press
+    /// to the hovered object, and a hovered door or trapdoor is opened or closed by it, not dismounted from. The ladder
+    /// itself is an interactable too; its own Interact is what dismounts when it is hovered. The game's interact
+    /// animation then holds the climber on the rungs (a minor action), so one press is one action.</summary>
+    internal static bool UseAsksDismount(bool mountFrame, bool hoversInteractable) => !mountFrame && !hoversInteractable;
+
+    /// <summary>Whether the game's own interaction is held back in this frame: in the frame of a Jump or Drop departure
+    /// (as before), and, once trapdoors exist in the world, in the frame a Use press already asked the ladder for a
+    /// dismount. The runtime reads the hover target in its own update, which can run before the game's; if the hover
+    /// changed in between (a lid swinging under the crosshair), the same press would otherwise reach a door too.</summary>
+    internal static bool HoldsBackInteract(int frame, int departFrame, int dismountUseFrame, bool routeUseOnce) =>
+        frame == departFrame || (routeUseOnce && frame == dismountUseFrame);
+
     /// <summary>An attached climber may stay attached through a native building action: build mode is active,
     /// the right hand holds a building tool and the animator is in its tool swing. In build mode the game never
     /// starts a combat attack (PlayerAttackInput returns at once), so this exemption cannot cover combat.</summary>

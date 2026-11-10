@@ -6,9 +6,12 @@ using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedLadders.Excavation;
 
-/// <summary>The Iron Shovel's deliberate action (#487 slice 3): one press of the game's own Attack (small hole) or
-/// Secondary Attack (large hole) binding, keyboard or controller, while the shovel is the local player's equipped
-/// weapon, asks <see cref="ExcavationRuntime.DigWithShovel"/> for one dig.
+/// <summary>The Iron Shovel's deliberate action (#487 slices 3 and 4): while the shovel is the local player's equipped
+/// weapon, one press of the game's own Attack binding (keyboard or controller) asks
+/// <see cref="ExcavationRuntime.DigWithShovel"/> to dig the size the preview shows, where it shows it; one press of
+/// Secondary Attack switches the previewed size between 2x2x2 m and 4x4x4 m and never digs. Both in the same step ask
+/// for nothing. A press while any menu, the inventory, the map, chat, the console or the build menu is open is ignored
+/// here too, on top of the game withholding it.
 ///
 /// Read from the decompiled installed game (1.0.21): <c>PlayerController.FixedUpdate</c> turns the Attack and
 /// Secondary Attack buttons into <c>Character.m_attack</c> / <c>m_secondaryAttack</c>, true for exactly one input step
@@ -82,8 +85,14 @@ internal sealed class ExcavationShovelInput : IDisposable
             if (!ReferenceEquals(__instance, Player.m_localPlayer) || __instance.InPlaceMode()) return;
             ItemDrop.ItemData? weapon = __instance.GetCurrentWeapon();
             if (weapon == null || weapon.m_shared == null || !IronShovel.IsShovelName(weapon.m_shared.m_name)) return;
-            if (!IronShovel.ModeFor(attack(__instance), secondary(__instance), out ExcavationMode mode)) return;
-            Show(runtime.DigWithShovel(mode, __instance, weapon));
+            ExcavationPress press = ExcavationPreviewRules.PressFor(attack(__instance), secondary(__instance));
+            if (press == ExcavationPress.None || ExcavationPreview.UiOpen()) return;
+            if (press == ExcavationPress.SwitchSize)
+            {
+                runtime.SwitchMode();
+                return;
+            }
+            Show(runtime.DigWithShovel(__instance, weapon));
         }
         catch (Exception exception)
         {

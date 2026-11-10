@@ -42,17 +42,6 @@ public sealed class IronShovelTests
         Assert.Throws<ArgumentOutOfRangeException>(() => ExcavationCost.For((ExcavationMode)7));
     }
 
-    [Theory]
-    [InlineData(true, false, true, (int)ExcavationMode.Small)]
-    [InlineData(false, true, true, (int)ExcavationMode.Large)]
-    [InlineData(true, true, false, 0)]
-    [InlineData(false, false, false, 0)]
-    public void OnePressAsksForOneMode(bool primary, bool secondary, bool asks, int expected)
-    {
-        Assert.Equal(asks, IronShovel.ModeFor(primary, secondary, out ExcavationMode mode));
-        if (asks) Assert.Equal((ExcavationMode)expected, mode);
-    }
-
     private static ExcavationCommitRefusal Pay(bool equipped = true, bool ready = true, bool usesDurability = true,
         float durability = 100f, float cost = 4f, bool stamina = true) =>
         IronShovel.CanPay(equipped, ready, usesDurability, durability, cost, stamina);
@@ -113,7 +102,10 @@ public sealed class IronShovelTests
         string text = IronShovel.Description();
         Assert.Contains("2x2x2 m (20 stamina, 4 durability)", text);
         Assert.Contains("4x4x4 m (40 stamina, 16 durability)", text);
-        Assert.Contains("within 10 m", text);
+        Assert.Contains("within 5 m", text);
+        Assert.Contains("Attack: dig the size shown", text);
+        Assert.Contains("Secondary attack: switch between", text);
+        Assert.Contains("outline shows", text);
         Assert.Contains("Charged once", text);
         string cost = ExcavationReport.Cost(ExcavationMode.Large);
         Assert.Contains("40 stamina and 16 durability", cost);

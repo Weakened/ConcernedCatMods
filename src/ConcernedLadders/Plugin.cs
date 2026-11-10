@@ -36,8 +36,11 @@ public sealed class Plugin : BaseUnityPlugin
     private ExcavationRuntime? _excavation;
     private ConfigEntry<bool>? _trapdoorsEnabled;
     private TrapdoorPieceRegistration? _trapdoors;
+    private ConfigEntry<bool>? _cellarDoorsEnabled;
+    private CellarDoorPieceRegistration? _cellarDoors;
     private ExcavationShovelInput? _shovelInput;
     private IronShovelItem? _shovel;
+    private ExcavationPreview? _preview;
 
     private void Awake()
     {
@@ -62,6 +65,21 @@ public sealed class Plugin : BaseUnityPlugin
                 Logger.LogError("Trapdoors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
                 try { _trapdoors.Dispose(); } catch { /* Unsubscribe only. */ }
                 _trapdoors = null;
+            }
+        }
+        // Sloped cellar doors (CL-005 #486), unfinished and off by default, their own switch: with it off nothing is
+        // cloned or localized and the hammer menu is unchanged. Their failures never touch the ladders or trapdoors.
+        _cellarDoorsEnabled = Config.Bind(CellarDoorSettings.Section, CellarDoorSettings.Key, CellarDoorSettings.EnabledByDefault,
+            CellarDoorSettings.Description);
+        if (_cellarDoorsEnabled.Value)
+        {
+            _cellarDoors = new CellarDoorPieceRegistration(message => Logger.LogInfo(message));
+            try { _cellarDoors.Install(); }
+            catch (Exception exception)
+            {
+                Logger.LogError("Cellar doors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
+                try { _cellarDoors.Dispose(); } catch { /* Unsubscribe only. */ }
+                _cellarDoors = null;
             }
         }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
@@ -100,17 +118,20 @@ public sealed class Plugin : BaseUnityPlugin
         _runtime.Enabled = _enabled.Value && _pieces?.IsReady == true;
         _runtime.Update(Time.deltaTime);
         _excavation?.Update();
+        _preview?.Update();
     }
 
-    /// <summary>Iron Shovel excavation (#487 slices 2 and 3). The terrain operations register on every peer, because the
-    /// tile owner applies them. The Iron Shovel item, its attack input and the read-only console diagnostic exist only
-    /// when the off-by-default switch is on; with it off nothing is added. A fault here never stops the ladders.</summary>
+    /// <summary>Iron Shovel excavation (#487 slices 2 to 4). The terrain operations register on every peer, because the
+    /// tile owner applies them. The Iron Shovel item, its attack input, its placement preview and the read-only console
+    /// diagnostic exist only when the off-by-default switch is on; with it off nothing is added. A fault here never stops
+    /// the ladders.</summary>
     private void InstallExcavation()
     {
         ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", false,
-            "Experimental, off by default (#487): adds the Iron Shovel (Forge: Iron and Wood), which digs one measured " +
-            "2x2x2 m (attack) or 4x4x4 m (secondary attack) basement hole through the game's own terrain operation, and " +
-            "the read-only cl_excavate console diagnostic. Not yet observed in game. Every player needs the same version " +
+            "Experimental, off by default (#487): adds the Iron Shovel (Forge: Iron and Wood). While held it previews one " +
+            "measured 2x2x2 m or 4x4x4 m basement hole (secondary attack switches the size); attack digs the hole shown, " +
+            "through the game's own terrain operation. Also adds the read-only cl_excavate console diagnostic. Not yet " +
+            "observed in game. Every player needs the same version " +
             "and the same setting. Turning it off again removes the item from the game, and the game discards unknown items " +
             "from inventories and chests when it loads them. Restart after changing.");
         try
@@ -120,19 +141,25 @@ public sealed class Plugin : BaseUnityPlugin
             if (enabled.Value)
             {
                 _excavation.Report = Announce;
-                CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(_excavation));
+                CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(() => _excavation));
                 _shovelInput = new ExcavationShovelInput(message => Logger.LogInfo(message));
                 if (!_shovelInput.Install(PluginGuid + ".excavation", _excavation)) _shovelInput = null;
                 _shovel = new IronShovelItem(message => Logger.LogInfo(message), craftable: _shovelInput != null && _excavation.Available);
                 _shovel.Install();
+                _excavation.Faulted = () => _shovel?.DisableRecipe();
+                _preview = _shovelInput != null ? new ExcavationPreview(message => Logger.LogInfo(message), _excavation) : null;
+                _preview?.Install();
             }
         }
         catch (Exception exception)
         {
             Logger.LogInfo("Excavation unavailable (" + SafeFailure.Brief(exception) + "); ladders are unaffected.");
+            try { _preview?.Dispose(); } catch { /* Cleanup only. */ }
+            try { _shovel?.DisableRecipe(); } catch { /* Cleanup only. */ }
             try { _shovelInput?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.Dispose(); } catch { /* Cleanup only. */ }
             try { _excavation?.Dispose(); } catch { /* Cleanup only. */ }
+            _preview = null;
             _shovelInput = null;
             _shovel = null;
             _excavation = null;
@@ -148,9 +175,11 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        try { _preview?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovelInput?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovel?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _excavation?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        _preview = null;
         _shovelInput = null;
         _shovel = null;
         _excavation = null;
@@ -163,6 +192,8 @@ public sealed class Plugin : BaseUnityPlugin
         _pieces?.Dispose();
         _trapdoors?.Dispose();
         _trapdoors = null;
+        _cellarDoors?.Dispose();
+        _cellarDoors = null;
         _snap = null;
         _runtime = null;
         _pieces = null;

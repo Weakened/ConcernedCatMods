@@ -4,23 +4,26 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 
 /// <summary>One job's material, at one place, of one kind. The unit of
 /// conservation: every recorded unit is in exactly one of these.</summary>
-internal readonly struct NpcHolding
+public readonly struct NpcHolding
 {
+    private readonly string? _jobId;
+
     internal NpcHolding(string? jobId, NpcCustodyLocation location, NpcMaterial material, int count)
     {
-        JobId = jobId ?? string.Empty;
+        _jobId = jobId ?? string.Empty;
         Location = location;
         Material = material;
         Count = count;
     }
 
-    internal string JobId { get; }
+    /// <summary>The job the units are held for. Never null.</summary>
+    public string JobId => _jobId ?? string.Empty;
 
-    internal NpcCustodyLocation Location { get; }
+    public NpcCustodyLocation Location { get; }
 
-    internal NpcMaterial Material { get; }
+    public NpcMaterial Material { get; }
 
-    internal int Count { get; }
+    public int Count { get; }
 
     public override string ToString() =>
         JobId + " " + Material + " x" + Count.ToString(CultureInfo.InvariantCulture) + " at " + Location;

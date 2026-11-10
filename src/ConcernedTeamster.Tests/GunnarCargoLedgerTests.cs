@@ -1,3 +1,4 @@
+using TheConcernedCat.ConcernedNPC.Custody;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 
 namespace ConcernedTeamster.Tests;
@@ -163,5 +164,135 @@ public sealed class GunnarCargoLedgerTests
         Assert.Empty(ledger.Holding(CargoPlace.Carried));
         Assert.Equal(0, ledger.At("Stone", CargoPlace.Carried));
         Assert.Equal(2, ledger.At("Stone", CargoPlace.Delivered));
+    }
+
+    // ------------------------------------------------------------------
+    // #376: the invariant is Concerned NPC's, and Gunnar's names stay one
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Every_unit_lives_in_the_library_ledger_and_balances_there()
+    {
+        var ledger = new CargoLedger();
+        ledger.Take("t", "Stone", 10);
+        ledger.Move("stow", "Stone", 4, CargoPlace.Carried, CargoPlace.InCart);
+        ledger.Move("give", "Stone", 3, CargoPlace.Carried, CargoPlace.Delivered);
+        ledger.CartDestroyed("boom");
+
+        NpcCustodyLedger custody = ledger.Custody;
+        NpcMaterial stone = NpcMaterial.Of("Stone");
+        Assert.True(custody.IsConserved("gunnar-collection", stone));
+        Assert.Equal(10, custody.Acquired("gunnar-collection", stone));
+        Assert.Equal(10, custody.TotalEverywhere("gunnar-collection", stone));
+
+        // Where the library holds them is where Gunnar says they are: three on
+        // his back, three delivered, four released with the cart.
+        var places = custody.Holdings
+            .Where(holding => holding.Material.Equals(stone))
+            .ToDictionary(holding => holding.Location.Place, holding => holding.Count);
+        Assert.Equal(3, places[NpcCustodyPlace.Carried]);
+        Assert.Equal(3, places[NpcCustodyPlace.Delivered]);
+        Assert.Equal(4, places[NpcCustodyPlace.Released]);
+        Assert.False(places.ContainsKey(NpcCustodyPlace.Stored));
+    }
+
+    [Fact]
+    public void A_spill_and_a_death_drop_are_released_rather_than_lost_and_stay_apart()
+    {
+        var ledger = new CargoLedger();
+        ledger.Take("t", "Stone", 6);
+        ledger.Move("stow", "Stone", 2, CargoPlace.Carried, CargoPlace.InCart);
+        ledger.CartDestroyed("boom");
+        ledger.Move("died", "Stone", 3, CargoPlace.Carried, CargoPlace.DroppedOnDeath);
+        ledger.Move("held", "Stone", 1, CargoPlace.Carried, CargoPlace.UnresolvedAtDeath);
+
+        Assert.Equal(2, ledger.At("Stone", CargoPlace.SpilledFromCart));
+        Assert.Equal(3, ledger.At("Stone", CargoPlace.DroppedOnDeath));
+        Assert.Equal(1, ledger.At("Stone", CargoPlace.UnresolvedAtDeath));
+        Assert.Equal(0, ledger.At("Stone", CargoPlace.Lost));
+        Assert.True(ledger.IsConserved);
+
+        int released = ledger.Custody.Holdings
+            .Where(holding => holding.Location.Place == NpcCustodyPlace.Released)
+            .Sum(holding => holding.Count);
+        int lost = ledger.Custody.Holdings
+            .Where(holding => holding.Location.Place == NpcCustodyPlace.Lost)
+            .Sum(holding => holding.Count);
+        Assert.Equal(5, released);
+        Assert.Equal(1, lost);
+    }
+
+    [Fact]
+    public void A_name_means_one_thing_across_takes_moves_and_spills()
+    {
+        var ledger = new CargoLedger();
+        Assert.Equal(CargoOutcome.Recorded, ledger.Take("a", "Stone", 5));
+        Assert.Equal(CargoOutcome.NameReused, ledger.Move("a", "Stone", 5, CargoPlace.Carried, CargoPlace.InCart));
+        Assert.Equal(CargoOutcome.NameReused, ledger.CartDestroyed("a"));
+
+        Assert.Equal(CargoOutcome.Recorded, ledger.Move("b", "Stone", 2, CargoPlace.Carried, CargoPlace.InCart));
+        Assert.Equal(CargoOutcome.NameReused, ledger.Take("b", "Stone", 2));
+        Assert.Equal(CargoOutcome.NameReused, ledger.CartDestroyed("b"));
+        Assert.Equal(CargoOutcome.AlreadyRecorded,
+            ledger.Move("b", "Stone", 2, CargoPlace.Carried, CargoPlace.InCart));
+        Assert.Equal(CargoOutcome.NameReused, ledger.Move("b", "Stone", 1, CargoPlace.Carried, CargoPlace.InCart));
+
+        Assert.Equal(CargoOutcome.Recorded, ledger.CartDestroyed("c"));
+        Assert.Equal(CargoOutcome.NameReused, ledger.Take("c", "Stone", 1));
+        Assert.Equal(CargoOutcome.NameReused, ledger.Move("c", "Stone", 1, CargoPlace.Carried, CargoPlace.Delivered));
+
+        Assert.Equal(5, ledger.Acquired);
+        Assert.Equal(3, ledger.At("Stone", CargoPlace.Carried));
+        Assert.Equal(0, ledger.At("Stone", CargoPlace.InCart));
+        Assert.Equal(2, ledger.At("Stone", CargoPlace.SpilledFromCart));
+        Assert.True(ledger.IsConserved);
+    }
+
+    [Fact]
+    public void Material_that_left_him_for_good_is_never_moved_again_as_his()
+    {
+        var ledger = new CargoLedger();
+        ledger.Take("t", "Stone", 8);
+        ledger.Move("d", "Stone", 2, CargoPlace.Carried, CargoPlace.Delivered);
+        ledger.Move("l", "Stone", 2, CargoPlace.Carried, CargoPlace.Lost);
+        ledger.Move("x", "Stone", 2, CargoPlace.Carried, CargoPlace.DroppedOnDeath);
+        ledger.Move("stow", "Stone", 2, CargoPlace.Carried, CargoPlace.InCart);
+        ledger.CartDestroyed("boom");
+
+        Assert.Equal(CargoOutcome.Malformed,
+            ledger.Move("back-1", "Stone", 1, CargoPlace.Delivered, CargoPlace.Carried));
+        Assert.Equal(CargoOutcome.Malformed,
+            ledger.Move("back-2", "Stone", 1, CargoPlace.Lost, CargoPlace.Carried));
+        Assert.Equal(CargoOutcome.Malformed,
+            ledger.Move("back-3", "Stone", 1, CargoPlace.DroppedOnDeath, CargoPlace.Carried));
+        Assert.Equal(CargoOutcome.Malformed,
+            ledger.Move("back-4", "Stone", 1, CargoPlace.SpilledFromCart, CargoPlace.InCart));
+
+        Assert.Equal(0, ledger.At("Stone", CargoPlace.Carried));
+        Assert.Equal(2, ledger.At("Stone", CargoPlace.Delivered));
+        Assert.Equal(2, ledger.At("Stone", CargoPlace.SpilledFromCart));
+        Assert.Equal(8, ledger.TotalEverywhere);
+        Assert.True(ledger.IsConserved);
+
+        // A refused name stays free for the move that is real.
+        Assert.Equal(CargoOutcome.NotThatMuchThere,
+            ledger.Move("back-1", "Stone", 1, CargoPlace.Carried, CargoPlace.Delivered));
+    }
+
+    [Fact]
+    public void Each_item_balances_on_its_own_not_only_in_total()
+    {
+        var ledger = new CargoLedger();
+        ledger.Take("t1", "Stone", 4);
+        ledger.Take("t2", "Wood", 4);
+        ledger.Move("m", "Wood", 4, CargoPlace.Carried, CargoPlace.InCart);
+
+        Assert.Equal(8, ledger.Acquired);
+        Assert.Equal(8, ledger.TotalEverywhere);
+        Assert.Equal(4, ledger.AcquiredOf("Stone"));
+        Assert.Equal(4, ledger.AcquiredOf("Wood"));
+        Assert.True(ledger.Custody.IsConserved("gunnar-collection", NpcMaterial.Of("Stone")));
+        Assert.True(ledger.Custody.IsConserved("gunnar-collection", NpcMaterial.Of("Wood")));
+        Assert.True(ledger.IsConserved);
     }
 }

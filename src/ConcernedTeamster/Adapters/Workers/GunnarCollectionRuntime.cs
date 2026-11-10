@@ -239,14 +239,19 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
         if (worldUp && _tour != null)
         {
-            WorkAuthorityVerdict tourAuthority = Authority();
+            // A cart tour (D22) is asked about its own four switches; a chest
+            // tour about collection's. Either way the cart is watched here too:
+            // a chest tour never goes on with a cart assigned, and a cart tour
+            // only while its cart is still the parked cart it began with.
+            WorkAuthorityVerdict tourAuthority = CartTourRunning ? CartTourAuthority() : Authority();
+            string cartStop = tourAuthority == WorkAuthorityVerdict.Granted ? TourCartStop() : string.Empty;
             if (tourAuthority != WorkAuthorityVerdict.Granted)
             {
                 CancelTour(WorkAuthorityPolicy.Describe(tourAuthority));
             }
-            else if (CartHeld())
+            else if (cartStop.Length != 0)
             {
-                CancelTour("a cart was assigned to him while he was on the tour");
+                CancelTour(cartStop);
             }
         }
 
@@ -675,7 +680,15 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             case "area":
                 return SetArea(args);
             case "start":
-                return StartTour();
+                if (args == null || args.Length < 2)
+                {
+                    return StartTour();
+                }
+
+                return string.Equals(args[1], "cart", StringComparison.OrdinalIgnoreCase)
+                    ? StartCartTour()
+                    : "Usage: ct_collect start (a tour into the chest you chose) or ct_collect start cart (a tour " +
+                      "into the cart assigned to him). Nothing started.";
             case "stop":
                 return StopTour();
             case "resolve":
@@ -690,7 +703,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 return "ct_collect: status, pick (the thing you are pointing at), cancel, "
                     + "destination (the chest you are pointing at), deposit [item], "
                     + "source (the chest you are pointing at, to take from), take <item> [count], "
-                    + "area [radius] (around where you stand), start (a tour of the area), stop, "
+                    + "area [radius] (around where you stand), start (a tour of the area), "
+                    + "start cart (a tour into the cart assigned to him), stop, "
                     + "resolve (after you have looked at a tour stopped for you), "
                     + "chest [status|list|clear].";
         }
@@ -720,6 +734,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             "; chest " + (_destination == null ? "NOT CHOSEN - he never looks for the nearest one"
                 : "chosen") +
             "; taking from a chest is " + (TakeOptedIn() ? "on" : "OFF (the default)") +
+            "; filling his assigned cart is " + (CartTourOptedIn() ? "on" : "OFF (the default)") +
             ", source chest " + (_source == null ? "not chosen" : "chosen") +
             "; tour plan: " + _tourPlan.Describe() +
             (_tourPlan.Standing == TourPlanStanding.Recovered && TourPlanWaitingFor().Length != 0

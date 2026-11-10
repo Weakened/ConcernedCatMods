@@ -307,6 +307,45 @@ TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Deposit : TheConce
 TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Off : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, Literal, HasDefault = System.Int32:0
 TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field Take : TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Static, Literal, HasDefault = System.Int32:1
 TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger ctor() Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method Acquire(request:TheConcernedCat.ConcernedNPC.Reservations.ReservationId None,at:TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation None,material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None,count:System.Int32 None) : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method Acquired(jobId:System.String None,material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method HoldingAt(jobId:System.String None,location:TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation None,material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method IsConserved(jobId:System.String None,material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None) : System.Boolean Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method OpenJob(jobId:System.String None) : System.Void Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method RecordMeasuredMove(request:TheConcernedCat.ConcernedNPC.Reservations.ReservationId None,from:TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation None,to:TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation None,material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None,count:System.Int32 None) : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger method TotalEverywhere(jobId:System.String None,material:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None) : System.Int32 Public, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger property Holdings() : System.Collections.Generic.IReadOnlyList`1<TheConcernedCat.ConcernedNPC.Custody.NpcHolding> get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation ctor(place:TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace None,key:System.String None,epoch:TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch None) Public, HideBySig, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation method Equals(other:TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation method GetHashCode() : System.Int32 Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation property Epoch() : TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch get=Public, Final, Virtual, HideBySig, VtableLayoutMask, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation property IsSpecified() : System.Boolean get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation property Key() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation property Place() : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field AlreadySatisfied : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field Applied : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field Rejected : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field RejectedDifferentPayload : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field Stale : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field Unspecified : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Carried : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:2
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Delivered : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:4
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Ground : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:1
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Handed : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:5
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Lost : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:6
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Released : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:7
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Stored : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:3
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field Unspecified : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Static, Literal, HasDefault = System.Int32:0
+TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace field value__ : System.Int32 Public, SpecialName, RTSpecialName
+TheConcernedCat.ConcernedNPC.Custody.NpcHolding method ToString() : System.String Public, Virtual, HideBySig
+TheConcernedCat.ConcernedNPC.Custody.NpcHolding property Count() : System.Int32 get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcHolding property JobId() : System.String get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcHolding property Location() : TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation get=Public, HideBySig, SpecialName set=-
+TheConcernedCat.ConcernedNPC.Custody.NpcHolding property Material() : TheConcernedCat.ConcernedNPC.Custody.NpcMaterial get=Public, HideBySig, SpecialName set=-
 TheConcernedCat.ConcernedNPC.Custody.NpcMaterial ctor(itemName:System.String None,quality:System.Int32 None,variant:System.Int32 None) Public, HideBySig, SpecialName, RTSpecialName
 TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method Equals(obj:System.Object None) : System.Boolean Public, Virtual, HideBySig
 TheConcernedCat.ConcernedNPC.Custody.NpcMaterial method Equals(other:TheConcernedCat.ConcernedNPC.Custody.NpcMaterial None) : System.Boolean Public, Final, Virtual, HideBySig, VtableLayoutMask
@@ -830,6 +869,11 @@ type TheConcernedCat.ConcernedNPC.Containers.INpcContainer Public, ClassSemantic
 type TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
 type TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
 type TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLedger Public, Sealed, BeforeFieldInit : System.Object interfaces=
+type TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Custody.NpcCustodyLocation>,TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped
+type TheConcernedCat.ConcernedNPC.Custody.NpcCustodyOutcome Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Custody.NpcCustodyPlace Public, Sealed : System.Enum interfaces=System.IComparable,System.IConvertible,System.IFormattable,System.ISpanFormattable
+type TheConcernedCat.ConcernedNPC.Custody.NpcHolding Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=
 type TheConcernedCat.ConcernedNPC.Custody.NpcMaterial Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterial>
 type TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack Public, SequentialLayout, Sealed, BeforeFieldInit : System.ValueType interfaces=System.IEquatable`1<TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack>
 type TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy Public, ClassSemanticsMask, Abstract, BeforeFieldInit : - interfaces=

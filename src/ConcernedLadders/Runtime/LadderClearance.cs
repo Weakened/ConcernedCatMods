@@ -194,7 +194,11 @@ internal sealed class LadderClearance
 
     /// <summary>A floor near the run's top: up to a step above it (a ladder ending below a thick floor) or
     /// half a metre below it (a ladder standing proud of the floor).</summary>
-    internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.75f, 0.5f, out floor);
+    internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, TopSurfaceAbove, 0.5f, out floor);
+
+    /// <summary>How far above the run's top <see cref="TryTopSurface"/> looks for a floor.</summary>
+    internal const float TopSurfaceAbove = 0.75f;
+
     /// <summary>A floor within a step of the climber's feet, above or below, for a mid-ladder dismount.</summary>
     internal bool TryNearbySurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.45f, 0.45f, out floor);
 
@@ -223,6 +227,14 @@ internal sealed class LadderClearance
         for (int index = 0; index < found; index++)
         {
             RaycastHit hit = _hits[index];
+            // CL-004 #485 slice 4: a trapdoor lid that is not closed and staying closed is never a landing, even where
+            // its tilted face passes the slope test below; a ray that meets one finds no landing at this point at all.
+            if (TrapdoorLid.Any && Solid(hit.collider) && !TrapdoorLid.MayLandOn(hit.collider))
+            {
+                floor = default;
+                return false;
+            }
+
             if (!Solid(hit.collider) || hit.normal.y < 0.65f || hit.collider.GetComponentInParent<LadderSegment>() != null ||
                 hit.collider.GetComponentInParent<Character>() != null)
             {
