@@ -1622,6 +1622,9 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
 
 TEAMSTER_TAKE_LABEL = "[interop] #381 chest-take audit"
 TEAMSTER_TAKE_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Take.cs"
+# #381 item 4: the manual chest-to-chest haul makes its own take leg, behind its
+# own gate - pinned by `#381 manifest-haul audit`, not by this one.
+TEAMSTER_HAUL_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Haul.cs"
 TEAMSTER_TAKE_DEFAULTS_FILE = "Domain/Collection/GunnarCollectionDefaults.cs"
 TEAMSTER_TAKE_SETTINGS_FILE = "TeamsterSettings.cs"
 TEAMSTER_TAKE_PUNCTUATION = "().,;:?<>!&=|{}"
@@ -1831,7 +1834,9 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
        for `NpcContainerUse.Take`; no other use is spelled in the port, so a chest
        marked for putting things in only cannot authorize a take.
     3. *One call site, behind its own switch and gate.* The port is constructed
-       once and `TakeOne` called once, in the runtime's take part alone; that part
+       once and `TakeOne` called once, in the runtime's take part (the haul's take
+       leg, #381 item 4, is the one other call, pinned by `#381 manifest-haul
+       audit` behind a gate of its own); that part
        feeds the gate the take's own opt-in, which reads the take switch; the
        gate's refusal returns before the call; an open tour plan refuses; the
        switch is off by default; and the source is set only from the chest the
@@ -1930,16 +1935,22 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
             continue
         sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
 
-    for spelling, why in (("new GunnarTakePort()", "the take port is constructed once, by the runtime's take part"),
-                          ("_take.TakeOne(", "the take is made in one place, behind its own gate")):
+    # The haul's take leg (#381 item 4) is the one other call, once, in its own
+    # file and behind its own gate, which `#381 manifest-haul audit` pins.
+    for spelling, expected, why in (
+            ("new GunnarTakePort()", [(TEAMSTER_TAKE_RUNTIME_FILE, 1)],
+             "the take port is constructed once, by the runtime's take part"),
+            ("_take.TakeOne(", [(TEAMSTER_HAUL_RUNTIME_FILE, 1), (TEAMSTER_TAKE_RUNTIME_FILE, 1)],
+             "the take is made in the ordered take and in the haul's take leg, each once behind its own gate")):
         pattern = _teamster_take_exact(spelling)
-        where = [(rel, len(pattern.findall(text))) for rel, text in sources.items() if pattern.search(text)]
-        if where != [(TEAMSTER_TAKE_RUNTIME_FILE, 1)]:
-            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly once, in "
-                 f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, is authorized - {why}", errors)
+        where = sorted((rel, len(pattern.findall(text))) for rel, text in sources.items() if pattern.search(text))
+        if where != expected:
+            fail(f"{label}: `{spelling}` appears {where or 'nowhere'}; exactly {expected} is authorized - {why}",
+                 errors)
             return []
     stray = [rel for rel, text in sources.items()
-             if rel not in (TEAMSTER_TAKE_RUNTIME_FILE, port_rel) and re.search(r"\bTakeOne" + SPACE + r"\(", text)]
+             if rel not in (TEAMSTER_TAKE_RUNTIME_FILE, TEAMSTER_HAUL_RUNTIME_FILE, port_rel)
+             and re.search(r"\bTakeOne" + SPACE + r"\(", text)]
     if stray:
         fail(f"{label}: TakeOne is named in {stray} - the take is made in one place, "
              f"src/ConcernedTeamster/{TEAMSTER_TAKE_RUNTIME_FILE}, behind its own gate", errors)
@@ -2012,7 +2023,9 @@ def check_teamster_take_moves_only_out_of_the_marked_chest(errors: list[str]) ->
         f"{label}: the take port clones exactly the chest's stack it removes from, assigns that clone once, looks "
         "an item prefab up once and only in SafeRoom, instantiates nothing, derives its source from the chosen "
         "chest and its destination from Gunnar inside the mover, and mints one permit, for Take; it is built and "
-        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE}, in the method whose take gate refuses with a return above "
+        f"called once, in {TEAMSTER_TAKE_RUNTIME_FILE} (and called once more by the haul's take leg in "
+        f"{TEAMSTER_HAUL_RUNTIME_FILE}, which `#381 manifest-haul audit` pins), in the method whose take gate "
+        "refuses with a return above "
         "it, every gate input pinned (the switches, the world, the work-authority rule, the probe, his body and its "
         "record, what is in flight) and the opt-in reading Workers/GunnarChestTakeEnabled (off by default); the "
         "three calls sit in the mover's own body, which holds no lambda or local function, and `chest` and `gunnar` "
@@ -3167,7 +3180,10 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     # health to nothing" or "hit him" would reach it through vanilla with
     # every gate green - a voluntary verb reaching the death path, which D16
     # says the validator refuses. Every way to take health away is refused,
-    # inside the worker runtime and out.
+    # inside the worker runtime and out, with ONE pinned exception since #381
+    # item 5: D19's felling hit, `tree.Damage(hit)` in GunnarFellingPort.cs,
+    # whose receiver `D19 Gunnar felling audit` pins to the `Destructible` the
+    # strike is handed - a small tree, never a character.
     "SetHealth",
     "UseHealth",
     "SetMaxHealth",
@@ -3265,9 +3281,11 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
 # port, which makes exactly one game call and names no `InvokeRPC` anywhere.
 # Felling a tree (`TreeBase.Damage`) and the cosmetic hammer animation
 # (`ZSyncAnimation.SetTrigger`) are separate capabilities and were NOT part of
-# this grant. Felling is still unauthorized. The hammer animation got its own
-# owner decision on 2026-10-31 (`DECISIONS.md` D21): one pinned call in its own
-# file, `TEAMSTER_IDLE_HAMMER_PORT_PATH` below, never in this one.
+# this grant. Both got their own owner decision on 2026-10-31: the hammer is
+# `DECISIONS.md` D21, one pinned call in `TEAMSTER_IDLE_HAMMER_PORT_PATH` below;
+# felling is D19 (#381), built for Gunnar in #381 item 5 as one pinned
+# `Destructible.Damage` in `TEAMSTER_FELLING_PORT_PATH` below (small trees are
+# Destructible; TreeBase stays unused). Neither is ever in this file.
 #
 # So: two tokens, in one file. Every other forbidden token still fails in that
 # file, and both of these still fail in every other file, inside Workers and out.
@@ -3454,8 +3472,24 @@ TEAMSTER_CART_LOAD_PORT_CALLS = (
      "exactly what arrived in the cart, taken off his own stack after the add"),
 )
 
+# The small-tree felling hit (owner decision 2026-10-31, #381; `DECISIONS.md`
+# D19, Gunnar's half built in #381 item 5 with Thorstein's scope as the lead
+# default). One call, vanilla's own `Destructible.Damage`, once per explicit
+# `ct_collect fell`. The receiver and argument names are the pin, as for D21:
+# `tree` is the `Destructible` StrikeOnce is handed and `hit` is built once from
+# his own axe, and `D19 Gunnar felling audit` pins where each comes from, that
+# the strike is reached only behind the shared site rule, and that it is reached
+# only from `ct_collect fell`. Until this grant `.Damage(` was refused here like
+# everywhere else; it still is everywhere but this one call.
+TEAMSTER_FELLING_PORT_PATH = ("Adapters", "Workers", "GunnarFellingPort.cs")
+TEAMSTER_FELLING_PORT_CALLS = (
+    (".Damage(",
+     re.compile(r"\btree\s*\.\s*Damage\s*\(\s*hit\s*\)"),
+     "vanilla's own damage, one hit, on one of D19's four small trees"),
+)
+
 # Which file may spell which authorized calls. A path absent from this table has
-# no allowance at all, which is every file in the product bar these six.
+# no allowance at all, which is every file in the product bar these seven.
 TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
     TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
@@ -3463,6 +3497,7 @@ TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_TAKE_PORT_PATH: TEAMSTER_TAKE_PORT_CALLS,
     TEAMSTER_CART_LOAD_PORT_PATH: TEAMSTER_CART_LOAD_PORT_CALLS,
     TEAMSTER_IDLE_HAMMER_PORT_PATH: TEAMSTER_IDLE_HAMMER_PORT_CALLS,
+    TEAMSTER_FELLING_PORT_PATH: TEAMSTER_FELLING_PORT_CALLS,
 }
 
 
@@ -3637,7 +3672,10 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"cart's container as the destination); "
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_IDLE_HAMMER_PORT_CALLS)} "
         f"owner-authorized as one pinned call, verbatim and once, in "
-        f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D21's cosmetic idle hammer swing); every one refused "
+        f"{'/'.join(TEAMSTER_IDLE_HAMMER_PORT_PATH)} alone (D21's cosmetic idle hammer swing); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_FELLING_PORT_CALLS)} "
+        f"owner-authorized as one pinned call, verbatim and once, in "
+        f"{'/'.join(TEAMSTER_FELLING_PORT_PATH)} alone (D19's small-tree felling hit); every one refused "
         f"everywhere else in the "
         f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
@@ -5467,9 +5505,12 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
         "and the subscription to the body's own m_onDeath (subscribed once, removed once, touched "
         "nowhere else in src/ConcernedTeamster), its _onDeath delegate is invoked by nobody but vanilla, "
         "it is told the body died by IsDead() and never by a literal, and it empties only the body's own "
-        "inventory; and nothing in Teamster may take health away (SetHealth/UseHealth/Damage/RPC_Damage are "
-        "refused by the #313 token pin), so no retire, cancel, unload or teardown verb can reach it or cause "
-        "the death that does. A source-text audit: it does not follow delegates or prove control flow "
+        "inventory; and nothing in Teamster may take health away from a character (SetHealth/UseHealth/"
+        "SetMaxHealth/ApplyDamage/RPC_Damage are refused by the #313 token pin, and so is every `.Damage(` but "
+        "D19's one pinned `tree.Damage(hit)`, whose receiver the D19 Gunnar felling audit pins to the "
+        "Destructible small tree StrikeOnce is handed and whose only caller is ct_collect fell), so no retire, "
+        "cancel, unload or teardown verb can reach it or cause the death that does. A source-text audit: it does "
+        "not follow delegates or prove control flow "
         f"({hits} violations)",
     ]
 
@@ -5723,6 +5764,381 @@ def check_teamster_idle_hammer_port(errors: list[str]) -> list[str]:
         "it compiles in names an animator (m_zanim, m_animator, ZSyncAnimation, Animator), the prefab factory's "
         "one component check aside. A source-text audit "
         f"({hits} violations)",
+    ]
+
+
+# D19, Gunnar's half (#381 item 5; owner decision 2026-10-31, Thorstein's
+# scope as the lead default). The #313 token pin says the one `.Damage(` is
+# spelled once, in one file, as `tree.Damage(hit)`. That alone would let `tree`
+# be a character - his own body, or the player - and `hit` be anything the
+# product made up, each a one-line change the token pin cannot see. So the lines
+# that decide WHAT is struck, WITH WHAT, WHEN and FROM WHERE are pinned here:
+#
+# - `tree` is the `Destructible` parameter of `StrikeOnce`, declared nowhere
+#   else in the port, never assigned, never passed by `out`/`ref`; and the one
+#   caller hands it the allowlisted tree the finder resolved (`target = part`);
+# - `hit` is `HitFrom(axe, worker, workerAt, treeAt)`, assigned once, carrying
+#   the axe's own `GetDamage()` and Gunnar as attacker, with no other damage
+#   write and no multiplier;
+# - the finder reads only D19's four prefab hashes and keeps only what the
+#   shared classifier calls eligible;
+# - `StrikeOnce` is declared once and called once, from `TryFellOne`, below
+#   the shared site rule's verdict and a returning refusal, with every site fact
+#   the owner named (switch, authority, explicit area, inside it, owned here,
+#   ward, 15 m from players and built pieces, reach, his own usable axe) read in
+#   that method;
+# - the Wood is taken only through `GunnarCollectionPort.TakeFelled`, handed the
+#   strike's own `_spawned` list, which chooses through the tested
+#   `FelledWoodTake` and takes through the port's one pinned `Humanoid.Pickup`
+#   (now in `TakeDropped`, reached from the pick's gather and from here only);
+# - `TryFellOne` is called once in the product, from `Fell()`, behind
+#   `FellOrderGate` with every gate input pinned; `Fell()` is named by its
+#   declaration and `case "fell":` alone, so no tour, haul, retire, cancel,
+#   unload or teardown verb reaches a hit;
+# - its switch is its own, off by default, bound to that default;
+# - and nowhere in Teamster or the shared trees it compiles in may TreeBase or
+#   TreeLog be named, or the instant kill be called: decided, unused.
+#
+# A source-text audit with comments stripped (and literals blanked for the
+# populations): it does not follow delegates or prove control flow.
+TEAMSTER_FELLING_LABEL = "[interop] D19 Gunnar felling audit"
+TEAMSTER_FELLING_PORT_FILE = "Adapters/Workers/GunnarFellingPort.cs"
+TEAMSTER_FELLING_PICKUP_FILE = "Adapters/Workers/GunnarCollectionPort.cs"
+TEAMSTER_FELLING_RUNTIME_FILE = "Adapters/Workers/GunnarCollectionRuntime.Fell.cs"
+TEAMSTER_FELLING_COMMAND_FILE = "Adapters/Workers/GunnarCollectionRuntime.cs"
+TEAMSTER_FELLING_FORBIDDEN = (
+    ("TreeBase/TreeLog (decided, unused)", re.compile(r"\b(?:TreeBase|TreeLog)\b")),
+    ("the instant kill", re.compile(r"\.\s*DestroyNow\s*\(")),
+)
+# (file, exact spelling, expected count, why) - whitespace-tolerant exact text.
+TEAMSTER_FELLING_PINS = (
+    (TEAMSTER_FELLING_PORT_FILE,
+     "internal FellOutcome StrikeOnce( Destructible tree, ZNetView view, SmallTreeKind kind, ItemDrop.ItemData axe, "
+     "Humanoid worker, Vector3 workerAt, List<ItemDrop> spawned,", 1,
+     "the strike is handed a Destructible, his own axe and his own body"),
+    (TEAMSTER_FELLING_PORT_FILE, "HitData hit = HitFrom(axe, worker, workerAt, treeAt);", 1,
+     "the hit is built once, from the axe the strike is handed"),
+    (TEAMSTER_FELLING_PORT_FILE, "made.m_damage.Add(axe.GetDamage());", 1, "the hit carries the axe's own damage"),
+    (TEAMSTER_FELLING_PORT_FILE, "made.SetAttacker(worker);", 1, "the attacker is Gunnar"),
+    (TEAMSTER_FELLING_PORT_FILE, "return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: true);", 1,
+     "the ward is asked the way Foreman asks it: any covering ward that denies the player refuses"),
+    (TEAMSTER_FELLING_PORT_FILE, "for (int dx = -1; dx <= 1; dx++)", 1, "the ward's zones are sampled on a 3 x 3 grid"),
+    (TEAMSTER_FELLING_PORT_FILE, "for (int dz = -1; dz <= 1; dz++)", 1, "the ward's zones are sampled on a 3 x 3 grid"),
+    (TEAMSTER_FELLING_PORT_FILE,
+     "var corner = new Vector3(at.x + (dx * WardReachMetres), at.y, at.z + (dz * WardReachMetres));", 1,
+     "each sample is a ward's reach from the tree on each axis"),
+    (TEAMSTER_FELLING_PORT_FILE, "if (!zones.IsZoneLoaded(corner)) { return false; }", 1,
+     "an unloaded zone a ward could stand in refuses before the ward is asked"),
+    (TEAMSTER_FELLING_PORT_FILE, "private const float WardReachMetres = 32f;", 1, "a guard stone reaches 32 m"),
+    (TEAMSTER_FELLING_PORT_FILE, "Inventory? inventory = worker.GetInventory();", 1,
+     "the axe is looked for in his own inventory"),
+    (TEAMSTER_FELLING_PORT_FILE, "foreach (ItemDrop.ItemData item in inventory.GetAllItems())", 1,
+     "the axe is one of the items he holds"),
+    (TEAMSTER_FELLING_PORT_FILE,
+     "FellOutcome outcome = StrikeOnce(target, view, kind, axe!, worker, workerAt, _spawned,", 1,
+     "the one call of the strike, with the tree the finder resolved"),
+    (TEAMSTER_FELLING_PORT_FILE, "target = part;", 1, "the target is the one Destructible of an eligible tree"),
+    (TEAMSTER_FELLING_PORT_FILE,
+     "Array.IndexOf(AllowlistedHashes, candidate.GetZDO().GetPrefab()) < 0", 1,
+     "the finder reads only D19's four prefab hashes"),
+    (TEAMSTER_FELLING_PORT_FILE, "hashes[index] = SmallTreeFelling.Allowlist[index].Prefab.GetStableHashCode();", 1,
+     "the hashes are the shared allowlist's"),
+    (TEAMSTER_FELLING_PORT_FILE, "SmallTreeRefusal verdict = SmallTreeFelling.Classify(facts);", 1,
+     "the shared classifier decides what is a small tree"),
+    (TEAMSTER_FELLING_PORT_FILE, "if (verdict != SmallTreeRefusal.Eligible)", 1,
+     "an ineligible tree is skipped"),
+    (TEAMSTER_FELLING_PORT_FILE, "pickup.TakeFelled(worker, _spawned, room.Value)", 1,
+     "the take is handed only what the strike saw spawn"),
+    (TEAMSTER_FELLING_PICKUP_FILE,
+     "internal FelledTake TakeFelled(Humanoid? worker, List<ItemDrop> spawned, int room)", 1,
+     "the felled take's declaration"),
+    (TEAMSTER_FELLING_PICKUP_FILE, "FelledWoodTake.Choose(_felledFacts, room, _felledChosen);", 1,
+     "only Wood, owned here, whole drops that fit, are chosen"),
+    (TEAMSTER_FELLING_PICKUP_FILE, "ItemDrop drop = spawned[_felledChosen[pick]];", 1,
+     "only a chosen drop is taken"),
+    (TEAMSTER_FELLING_PICKUP_FILE, "FelledWoodTake.Credit(threw, added, before, after, stack, gone)", 1,
+     "only what measurably arrived is credited"),
+    (TEAMSTER_FELLING_PICKUP_FILE,
+     "private bool TakeDropped(GameObject dropped) => _worker != null && _worker.Pickup(dropped, autoequip: false, "
+     "autoPickupDelay: false);", 1, "the one pinned pickup lives in the helper"),
+    (TEAMSTER_FELLING_PICKUP_FILE, "if (TakeDropped(dropped))", 1, "a pick's gather takes through it"),
+    (TEAMSTER_FELLING_PICKUP_FILE, "added = TakeDropped(drop.gameObject);", 1, "a felled drop is taken through it"),
+    (TEAMSTER_FELLING_RUNTIME_FILE, "return OptedIn() && _settings.GunnarFellsSmallTrees.Value;", 1,
+     "felling's opt-in reads the master and collection switches AND its own"),
+    (TEAMSTER_FELLING_RUNTIME_FILE,
+     "WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(FellOptedIn()))", 1,
+     "felling's authority is the shared rule, asked about felling's own opt-in"),
+    (TEAMSTER_FELLING_RUNTIME_FILE, "private readonly GunnarFellingPort _felling = new GunnarFellingPort();", 1,
+     "the one felling port"),
+    (TEAMSTER_FELLING_RUNTIME_FILE, "private string Fell()", 1, "the command's own verb"),
+    (TEAMSTER_FELLING_COMMAND_FILE, 'case "fell": return Fell();', 1, "ct_collect fell is the verb's one caller"),
+    (TEAMSTER_TAKE_DEFAULTS_FILE, "public const bool FellingEnabled = false;", 1, "felling is off by default"),
+    (TEAMSTER_TAKE_SETTINGS_FILE,
+     'config.Bind("Workers", "GunnarFellsSmallTrees", GunnarCollectionDefaults.FellingEnabled,', 1,
+     "the switch is bound to the off default"),
+)
+# Populations over the whole scope (comment-stripped, literals blanked): the
+# name's spellings, wherever they are, and how many there may be.
+TEAMSTER_FELLING_POPULATIONS = (
+    ("StrikeOnce(", re.compile(r"\bStrikeOnce\s*\("), {TEAMSTER_FELLING_PORT_FILE: 2},
+     "the strike is declared once and called once, in the port"),
+    ("TryFellOne(", re.compile(r"\bTryFellOne\s*\("),
+     {TEAMSTER_FELLING_PORT_FILE: 1, TEAMSTER_FELLING_RUNTIME_FILE: 1},
+     "the felling is declared in the port and called once, from ct_collect fell"),
+    ("TakeFelled(", re.compile(r"\bTakeFelled\s*\("),
+     {TEAMSTER_FELLING_PICKUP_FILE: 1, TEAMSTER_FELLING_PORT_FILE: 1},
+     "the felled take is declared in the collection port and called once, from the felling port"),
+    ("TakeDropped(", re.compile(r"\bTakeDropped\s*\("), {TEAMSTER_FELLING_PICKUP_FILE: 3},
+     "the pinned pickup's helper is declared once and called from the gather and the felled take"),
+    ("Fell(", re.compile(r"\bFell\s*\("), {TEAMSTER_FELLING_RUNTIME_FILE: 1, TEAMSTER_FELLING_COMMAND_FILE: 1},
+     "the command's verb is declared once and named only by `case \"fell\":`"),
+    ("new GunnarFellingPort(", re.compile(r"\bnew\s+GunnarFellingPort\s*\("), {TEAMSTER_FELLING_RUNTIME_FILE: 1},
+     "one felling port, in the command's file"),
+    # The #313 token pin walks three of the shared trees; this walks every one the
+    # project file compiles in, Companions included, so "the one `.Damage(` in
+    # Teamster" is true of the whole assembly's source.
+    (".Damage(", re.compile(r"\.\s*Damage\s*\("), {TEAMSTER_FELLING_PORT_FILE: 1},
+     "the one hit in the whole of Teamster's source is the felling port's"),
+    # Review of #381 item 5: a second finder call after the site guard would
+    # strike a tree the site rule never measured, and a second set of facts
+    # (positional, so no named-argument pin counts it) would answer the rule
+    # with made-up values.
+    ("TryFindTree(", re.compile(r"\bTryFindTree\s*\("), {TEAMSTER_FELLING_PORT_FILE: 2},
+     "the finder is declared once and asked once, above the site rule"),
+    ("new FellSiteFacts(", re.compile(r"\bnew\s+FellSiteFacts\s*\("), {TEAMSTER_FELLING_PORT_FILE: 1},
+     "the site facts are built once, every one measured there"),
+    # ...and `Execute(new[] { "fell" })` reaches `case "fell":` with every
+    # literal the audit reads blanked. The command dispatchers are pinned by
+    # population: these are today's declarations and callers, and a new one is a
+    # new route to a hit (and to every other subcommand) that a person decides.
+    ("Execute(", re.compile(r"\bExecute\s*\("),
+     {"Adapters/Workers/GunnarCollectionRuntime.cs": 1, "Adapters/Workers/CollectConsoleCommand.cs": 1,
+      "Adapters/Workers/GunnarHaulingRuntime.cs": 1, "Adapters/Workers/HaulConsoleCommand.cs": 1,
+      "Adapters/Interop/HaulPanelBridge.cs": 1, "Domain/Hauling/Navigation/CartRouteEvaluator.cs": 2,
+      "Plugin.cs": 1},
+     "a command dispatcher is declared or called only where it is today; a new caller could dispatch `fell`"),
+)
+# In the port: the identifiers whose provenance the pins above establish may
+# not be re-bound anywhere else in it.
+TEAMSTER_FELLING_PORT_NEVER = (
+    ("`tree` declared other than as the strike's Destructible parameter",
+     re.compile(r"\b(?!(?:return|in|is|as|out|ref|new|await|throw|case|when|else|yield|not|and|or|"
+                r"Destructible)\b)[A-Za-z_][\w.<>\[\]]*\??\s+tree\b")),
+    ("`tree` assigned", re.compile(r"\btree\s*(?:[-+*/%&|^]|\?\?)?=(?!=)")),
+    ("`tree` re-bound through out/ref", re.compile(r"\b(?:out|ref)\s+(?:var\s+)?tree\b")),
+    ("`hit` re-bound through out/ref", re.compile(r"\b(?:out|ref)\s+(?:var\s+)?hit\b")),
+    ("what is struck, or what the rule is told, re-bound through an untyped out/ref",
+     re.compile(r"\b(?:out|ref)\s+(?:var\s+)?(?:target|view|kind|axe|site|reachMetres|worker|area|areaChosen)\b")),
+    ("what the rule is told, re-assigned",
+     re.compile(r"\b(?:reachMetres|areaChosen|area|worker|view)\s*(?:[-+*/%&|^]|\?\?)?=(?!=)")),
+    ("an axe, an item or a hit made rather than read from his inventory",
+     re.compile(r"\bObjectDB\b|\.\s*Clone\s*\(|\bnew\s+ItemDrop\s*\.\s*ItemData\b")),
+    ("a damage multiplier or a resistance applied by the product",
+     re.compile(r"\.\s*(?:Modify|ApplyArmor|ApplyResistance|ApplyModifier)\s*\(")),
+)
+TEAMSTER_FELLING_PORT_COUNTED = (
+    ("`tree` declared", re.compile(r"\bDestructible\s*\??\s+tree\b"), 1),
+    ("`hit` assigned", re.compile(r"\bhit\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 1),
+    ("the hit's damage reached", re.compile(r"\b(?:made|hit)\s*\.\s*m_damage\b"), 1),
+    ("`target` assigned (null, then the eligible tree)", re.compile(r"\btarget\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 2),
+    ("`site` assigned", re.compile(r"\bsite\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 1),
+    ("`axe` assigned", re.compile(r"\baxe\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 1),
+)
+# What the strike's one caller must decide and refuse above it, in its method.
+TEAMSTER_FELLING_SITE_EVALUATE = "FellSiteRefusal refusal = SmallTreeFelling.CheckSite(site, reachMetres);"
+TEAMSTER_FELLING_SITE_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*FellSiteRefusal\s*\.\s*Allowed\s*\)")
+TEAMSTER_FELLING_SITE_INPUTS = (
+    ("featureEnabled: enabled()", "the site rule is told the switch, re-read"),
+    ("authorityGranted: authority() == WorkAuthorityVerdict.Granted", "the site rule is told the work authority"),
+    ("explicitArea: areaChosen", "the site rule is told whether the area was set in this world load"),
+    ("insideArea: area.Contains(new CollectionPoint(treeAt.x, treeAt.y, treeAt.z))", "the tree is inside the area"),
+    ("ownedHere: view!.IsOwner()", "this process owns the tree, so vanilla's handler runs in the call"),
+    ("wardAllows: WardAllows(treeAt)", "no ward protects the tree"),
+    ("nearestPlayerMetres: PlayerClearanceMetres(treeAt)", "15 m from every player"),
+    ("nearestBuiltPieceMetres: PieceClearanceMetres(treeAt)", "15 m from every player-built piece"),
+    ("workerDistanceMetres: Utils.DistanceXZ(workerAt, treeAt)", "he stands at the tree"),
+    ("hasUsableAxe: axe != null", "he carries a usable axe"),
+    ("ItemDrop.ItemData? axe = BestAxe(worker);", "the axe is read from his own inventory"),
+    ("if (Character.InInterior(treeAt))", "never in a dungeon"),
+    ("if (location != LocationStanding.Outside)", "never in a world location"),
+)
+TEAMSTER_FELLING_ORDER_EVALUATE = "FellRefusal refusal = FellOrderGate.Evaluate(request);"
+TEAMSTER_FELLING_ORDER_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*FellRefusal\s*\.\s*None\s*\)")
+TEAMSTER_FELLING_ORDER_INPUTS = (
+    ("collectionEnabled: OptedIn()", "the gate is told the collection switches"),
+    ("fellingEnabled: FellOptedIn()", "the gate is told felling's own switch"),
+    ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+    ("authority: FellAuthority()", "the gate is told the work-authority rule, asked about felling's opt-in"),
+    ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+    ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+    ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+    ("transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering",
+     "the gate is told what else is in flight"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a hit (#379)"),
+    ("workerPresent: worker != null && !worker.IsDead()", "the gate is told whether he is here and alive"),
+    ("areaChosen: areaThisWorld", "the gate is told whether the area was set in this world load"),
+    ("bool areaThisWorld = _area != null && !world.IsUnknown && world.Matches(_areaEpoch);",
+     "the area counts only in the world load it was set in"),
+    ("_felling.TryFellOne( worker, _area, areaThisWorld, FellOptedIn, FellAuthority, _limits.PickupReachMetres, "
+     "_port, WoodRoom,", "the port is handed the area, the switch, the authority, his reach and the pinned pickup"),
+)
+
+
+def _teamster_felling_linked(errors: list[str]) -> "list[str] | None":
+    """The shared trees ConcernedTeamster.csproj compiles in, read from the
+    project file - so a tree linked later is followed, and one the #313 list
+    does not name (Companions) is walked too. Anything unreadable refuses."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    csproj = teamster_dir / "ConcernedTeamster.csproj"
+    if not csproj.is_file():
+        fail(f"{TEAMSTER_FELLING_LABEL}: ConcernedTeamster.csproj is missing, so the shared trees it compiles in "
+             "cannot be read; the audit refuses rather than shrinking its scope", errors)
+        return None
+    linked: list[str] = []
+    for raw in re.findall(r'Include="(\.\.[\\/]Shared[\\/][^"]*)"', csproj.read_text(encoding="utf-8-sig")):
+        match = re.match(r'\.\.[\\/]Shared[\\/]([A-Za-z0-9_]+)[\\/]', raw)
+        if match is None:
+            fail(f"{TEAMSTER_FELLING_LABEL}: a shared include this audit cannot follow: {raw}", errors)
+            return None
+        if match.group(1) not in linked:
+            linked.append(match.group(1))
+    if not linked:
+        fail(f"{TEAMSTER_FELLING_LABEL}: ConcernedTeamster.csproj names no shared tree; the audit expected some and "
+             "refuses rather than walking less than the product", errors)
+        return None
+    return linked
+
+
+def _teamster_felling_sources(errors: list[str]) -> "dict[str, str] | None":
+    """Comment-stripped text of the whole product less obj/ and bin/, and of
+    the shared trees its project file compiles in (keyed `Shared/...`)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    linked = _teamster_felling_linked(errors)
+    if linked is None:
+        return None
+    sources: dict[str, str] = {}
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        rel = path.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin"):
+            continue
+        sources[rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+    for name in linked:
+        shared = ROOT / "src" / "Shared" / name
+        if not shared.is_dir():
+            fail(f"{TEAMSTER_FELLING_LABEL}: src/Shared/{name} is compiled into Teamster but missing; the audit "
+                 "refuses rather than walking less than the product", errors)
+            return None
+        for path in sorted(shared.rglob("*.cs")):
+            rel = path.relative_to(shared).as_posix()
+            if rel.split("/")[0] in ("obj", "bin"):
+                continue
+            sources["Shared/" + name + "/" + rel] = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+    return sources
+
+
+def _teamster_felling_method(code: str, call: str, header: str, where: str, errors: list[str]) -> "list[str] | None":
+    """The one braced method in `code` that makes `call`, which must be the
+    method `header` names; None (with a failure) otherwise."""
+    pattern = _teamster_take_exact(call)
+    holders = [(head, block) for head, _start, block in _teamster_tour_plan_methods(code)
+               if pattern.search("\n".join(block))]
+    total = len(pattern.findall(code))
+    if total != 1 or len(holders) != 1 or not re.search(r"\b" + re.escape(header) + r"\s*\(", holders[0][0]):
+        fail(f"{TEAMSTER_FELLING_LABEL}: src/ConcernedTeamster/{where} makes `{call}` {total} time(s), not once inside "
+             f"{header}() - the call belongs in that one method, below its gate", errors)
+        return None
+    return holders[0][1]
+
+
+def check_teamster_felling_port(errors: list[str]) -> list[str]:
+    """Fails when D19's one Teamster hit could strike anything but an
+    allowlisted small tree with Gunnar's own axe, could land without the shared
+    site rule, could be reached from anything but `ct_collect fell`, or could
+    take anything but the Wood that hit dropped."""
+    label = TEAMSTER_FELLING_LABEL
+    before = len(errors)
+    sources = _teamster_felling_sources(errors)
+    if sources is None:
+        return []
+    blanked = {rel: _teamster_blank_literals(code) for rel, code in sources.items()}
+
+    for rel, code in blanked.items():
+        for what, pattern in TEAMSTER_FELLING_FORBIDDEN:
+            for match in pattern.finditer(code):
+                fail(f"{label}: forbidden {what} in {rel}:{code.count(chr(10), 0, match.start()) + 1}", errors)
+
+    for rel, spelling, expected, why in TEAMSTER_FELLING_PINS:
+        found = len(_teamster_take_exact(spelling).findall(sources.get(rel, "")))
+        if found != expected:
+            fail(f"{label}: src/ConcernedTeamster/{rel} contains {found} of `{spelling}` where {expected} is "
+                 f"expected - {why}", errors)
+
+    for name, pattern, where, why in TEAMSTER_FELLING_POPULATIONS:
+        for rel, code in blanked.items():
+            found = len(pattern.findall(code))
+            if found != where.get(rel, 0):
+                fail(f"{label}: {rel} names `{name}` {found} time(s), {where.get(rel, 0)} expected - {why}", errors)
+
+    port = sources.get(TEAMSTER_FELLING_PORT_FILE)
+    if port is None:
+        fail(f"{label}: missing src/ConcernedTeamster/{TEAMSTER_FELLING_PORT_FILE} - the felling hit has no pinned "
+             "home", errors)
+        return []
+    port_code = blanked[TEAMSTER_FELLING_PORT_FILE]
+    for what, pattern in TEAMSTER_FELLING_PORT_NEVER:
+        for match in pattern.finditer(port_code):
+            fail(f"{label}: {TEAMSTER_FELLING_PORT_FILE}:{port_code.count(chr(10), 0, match.start()) + 1} - {what} "
+                 f"('{match.group(0).strip()}')", errors)
+    for what, pattern, expected in TEAMSTER_FELLING_PORT_COUNTED:
+        found = len(pattern.findall(port_code))
+        if found != expected:
+            fail(f"{label}: {TEAMSTER_FELLING_PORT_FILE} has {found} of {what}, {expected} expected", errors)
+
+    # The strike sits inside StrikeOnce; the strike's call inside TryFellOne,
+    # below the site rule's verdict and a returning refusal.
+    strike = _teamster_felling_method(port, "tree.Damage(hit)", "StrikeOnce", TEAMSTER_FELLING_PORT_FILE, errors)
+    caller = _teamster_felling_method(port, "StrikeOnce(target,", "TryFellOne", TEAMSTER_FELLING_PORT_FILE, errors)
+    for block, evaluate, guard, call, inputs, where in (
+            (caller, TEAMSTER_FELLING_SITE_EVALUATE, TEAMSTER_FELLING_SITE_GUARD, "StrikeOnce(target,",
+             TEAMSTER_FELLING_SITE_INPUTS, TEAMSTER_FELLING_PORT_FILE),
+            (_teamster_felling_method(sources.get(TEAMSTER_FELLING_RUNTIME_FILE, ""), "_felling.TryFellOne(",
+                                      "Fell", TEAMSTER_FELLING_RUNTIME_FILE, errors),
+             TEAMSTER_FELLING_ORDER_EVALUATE, TEAMSTER_FELLING_ORDER_GUARD, "_felling.TryFellOne(",
+             TEAMSTER_FELLING_ORDER_INPUTS, TEAMSTER_FELLING_RUNTIME_FILE)):
+        if block is None:
+            continue
+        body = "\n".join(block)
+        for spelling, why in ((evaluate, "the rule decides"),) + inputs:
+            found = len(_teamster_take_exact(spelling).findall(body))
+            if found != 1:
+                fail(f"{label}: the method in src/ConcernedTeamster/{where} that makes `{call}` contains {found} of "
+                     f"`{spelling}` where one is expected - {why}", errors)
+        decided = _teamster_take_exact(evaluate).search(body)
+        refused = guard.search(body)
+        moved = _teamster_take_exact(call).search(body)
+        unguarded = _teamster_tour_plan_guarded(block, _teamster_take_exact(call), guard)
+        if unguarded or not (decided and refused and moved and decided.start() < refused.start() < moved.start()):
+            fail(f"{label}: src/ConcernedTeamster/{where} does not decide, refuse with a returning block and only "
+                 f"then make `{call}`, in that order and in one method - a hit the rule did not admit", errors)
+    if strike is None:
+        # Already failed above: the hit is not inside StrikeOnce.
+        pass
+
+    hits = len(errors) - before
+    linked = _teamster_felling_linked([]) or []
+    return [
+        f"{label}: the one Teamster `.Damage(` is `tree.Damage(hit)` inside StrikeOnce in {TEAMSTER_FELLING_PORT_FILE}, "
+        "on the Destructible it is handed (declared, never assigned or re-bound) with a hit built once from his own "
+        "axe's damage and Gunnar as attacker, no multiplier; the strike is called once, from TryFellOne, on the "
+        "tree the allowlist and the shared classifier chose, below SmallTreeFelling.CheckSite's verdict and a "
+        "returning refusal with every D19 site fact read there; TryFellOne is called once, from Fell(), behind "
+        "FellOrderGate with every gate input pinned; Fell() is named only by `case \"fell\":` and the command "
+        "dispatchers (`Execute(`) are pinned to today's declarations and callers; the Wood is taken only "
+        "through TakeFelled, handed the strike's own drops, choosing through FelledWoodTake and taking through the "
+        "one pinned pickup's helper; the switch is its own and off by default; and TreeBase, TreeLog and DestroyNow "
+        f"are refused across Teamster and the {len(linked)} shared tree(s) its project file compiles in "
+        f"({', '.join(linked)}). "
+        f"A source-text audit; it does not follow delegates or prove control flow ({hits} violations)",
     ]
 
 
@@ -6189,6 +6605,14 @@ def check_teamster_tour_writes_ahead(errors: list[str]) -> list[str]:
         code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
         if not TEAMSTER_TOUR_PLAN_PART.search(code):
             continue
+        if rel == TEAMSTER_HAUL_RUNTIME_FILE:
+            # #381 item 4: the haul unloads through DepositLegs behind D15's gate,
+            # which `#381 manifest-haul audit` pins; it never picks.
+            if TEAMSTER_TOUR_PLAN_PICK.search(code):
+                hits += 1
+                fail(f"{label}: src/ConcernedTeamster/{rel} picks; the haul from chest to chest takes from a chest "
+                     "and unloads into one, and never picks", errors)
+            continue
         if TEAMSTER_TOUR_PLAN_PICK.search(code) or TEAMSTER_TOUR_PLAN_DEPOSIT.search(code):
             hits += 1
             fail(f"{label}: src/ConcernedTeamster/{rel} is a part of the collection runtime and picks or deposits; "
@@ -6202,6 +6626,200 @@ def check_teamster_tour_writes_ahead(errors: list[str]) -> list[str]:
         "part of the runtime does either; and the death host tells the plan in Prepare before it returns and in "
         "Died before the tour is cancelled. A text audit of order: it does not follow delegates or prove control "
         f"flow ({hits} violations)",
+    ]
+
+
+# #381 item 4: the manual chest-to-chest haul. It is glue over two pinned ports -
+# D20's take and D15's deposit - and adds no vanilla call of its own (the scope
+# audit still refuses every inventory token in its file). This pins what keeps
+# it inside those two grants. A text audit of order on comment-masked text.
+TEAMSTER_HAUL_LABEL = "[interop] #381 manifest-haul audit"
+TEAMSTER_HAUL_TAKE_CALL = "_take.TakeOne("
+TEAMSTER_HAUL_TAKE_EVALUATE = "TakeRefusal refusal = TakeOrderGate.Evaluate(request);"
+TEAMSTER_HAUL_TAKE_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*TakeRefusal\s*\.\s*None\s*\)")
+TEAMSTER_HAUL_DEPOSIT_CALL = "DepositLegs("
+TEAMSTER_HAUL_DEPOSIT_EVALUATE = "DepositRefusal refusal = DepositOrderGate.Evaluate(request);"
+TEAMSTER_HAUL_DEPOSIT_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*DepositRefusal\s*\.\s*None\s*\)")
+TEAMSTER_HAUL_START_CALL = "_haul = new ChestHaul("
+TEAMSTER_HAUL_START_EVALUATE = "ChestHaulRefusal refusal = ChestHaulGate.Evaluate(request);"
+TEAMSTER_HAUL_START_GUARD = re.compile(r"\bif\s*\(\s*refusal\s*!=\s*ChestHaulRefusal\s*\.\s*None\s*\)")
+TEAMSTER_HAUL_IN_FLIGHT = "transferInFlight: _ordered || _tour != null || _port.Phase == PickPhase.Gathering"
+# Each leg's gate inputs, every one spelled once in the method that makes the move.
+TEAMSTER_HAUL_TAKE_INPUTS = (
+    ("collectionEnabled: OptedIn()", "the gate is told the collection switches"),
+    ("takeEnabled: HaulOptedIn()", "the take is gated on the haul's own opt-in, which needs the take switch too"),
+    ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+    ("authority: HaulAuthority()", "the gate is told the work-authority rule, asked about the haul's opt-in"),
+    ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+    ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+    ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+    (TEAMSTER_HAUL_IN_FLIGHT, "the gate is told what else is in flight; only the haul itself is not counted"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses the take (#379)"),
+    ("TakeOrderGate.UnitsToAsk(wanted, fits!.Value)",
+     "he asks for no more than the manifest's line and the carry limit allow"),
+)
+TEAMSTER_HAUL_DEPOSIT_INPUTS = (
+    ("featureEnabled: HaulOptedIn()", "the unload is gated on the haul's own opt-in"),
+    ("worldIsUp: _lifecycle.WorldIsUp", "the gate is told whether the world is going away"),
+    ("authority: HaulAuthority()", "the gate is told the work-authority rule"),
+    ("seamAvailable: _seamAvailable()", "the gate is told the start-up probe"),
+    ("workerRecordUnwritable: _recordUnwritable()", "the gate is told whether his record can be written"),
+    ("workerRecordUnreadable: _recordUnreadable()", "the gate is told whether his record can be read"),
+    (TEAMSTER_HAUL_IN_FLIGHT, "the gate is told what else is in flight"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses the unload (#379)"),
+    ("int offered = holding < wanted ? holding : wanted;", "he offers no more than this tour measured taking"),
+)
+TEAMSTER_HAUL_START_INPUTS = (
+    ("haulEnabled: HaulOptedIn()", "the start is gated on the haul's own switch"),
+    ("authority: HaulAuthority()", "the start is gated on the work-authority rule"),
+    ("somethingInFlight: TourRunning || _ordered || _port.Phase == PickPhase.Gathering",
+     "nothing else may be in flight when a haul starts"),
+    ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a haul (#379)"),
+    ("cartAssigned: CartHeld()", "a haul never starts while a cart is assigned to him"),
+    ("carryingCargo: carrying.Count > 0", "a haul starts holding none of its cargo, so the reconcile can count it"),
+    ("HaulRequest admitted = HaulRequestGate.Check(", "the one answer to whether a manual haul may start decides"),
+    ("named, carry, CartCapacity.None);", "the request gate is offered no cart: a manual haul is on foot"),
+    ("HaulManifestPlanner.Plan(admitted, cargo, new HaulCapacity(carry.FreeKilograms, freeSlots), CartCapacity.None)",
+     "the manifest is planned from what the request gate admitted, on foot; no cart room is counted, because no "
+     "cart round is authorized"),
+)
+
+
+def _teamster_haul_method_with(code: str, call: str, label: str, errors: list[str]) -> "list[str] | None":
+    """The body of the one method that makes `call`, or None (with a failure)
+    when the call is not exactly once, inside exactly one braced method."""
+    pattern = _teamster_take_exact(call)
+    total = len(pattern.findall(code))
+    holders = [block for _header, _start, block in _teamster_tour_plan_methods(code)
+               if pattern.search("\n".join(block))]
+    inside = sum(len(pattern.findall("\n".join(block))) for block in holders)
+    if total != 1 or len(holders) != 1 or inside != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} makes `{call}` {total} time(s), "
+             f"{inside} inside a method; exactly once, inside one braced method, is authorized", errors)
+        return None
+    return holders[0]
+
+
+def check_teamster_manifest_haul_is_gated(errors: list[str]) -> list[str]:
+    """Fails when the manual chest-to-chest haul (#381 item 4) could take, unload
+    or start without its gate, or reach a move no owner decision covers.
+
+    1. *One take, one unload, one start, each behind its own gate.* In
+       `GunnarCollectionRuntime.Haul.cs`, `_take.TakeOne(`, `DepositLegs(` and
+       `_haul = new ChestHaul(` are each made once, inside one braced method,
+       with the leg's gate evaluated and a returning `if (refusal != ...None)`
+       written above the move in that method - so a helper that lifts the move
+       out of its method is a method with the move and no guard.
+    2. *Every gate input pinned in the method that moves.* The haul's own opt-in
+       (which needs the take switch), the work-authority rule asked about it,
+       the world, the probe, his record, what else is in flight, an open tour
+       plan, and the bounds on how much is asked: the manifest's line and the
+       carry limit for a take, what this tour measured taking for an unload.
+    3. *On foot.* The manifest is planned with `CartCapacity.None`, and the
+       start refuses while a cart is assigned.
+    4. *Nothing else.* No `DepositOne` (the world check and the ledger live in
+       DepositLegs), no port constructed here, no cart load, and no ChestHaul
+       built anywhere else.
+    5. *Off by default*, bound to the off default, and re-asked every frame.
+
+    A text audit: it does not follow delegates or prove control flow.
+    `ChestHaulTests`, `HaulManifestTests` and `ChestHaulGateTests` prove the
+    decisions; a reviewer proves the rest."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    label = TEAMSTER_HAUL_LABEL
+    path = teamster_dir / TEAMSTER_HAUL_RUNTIME_FILE
+    if not path.is_file():
+        fail(f"{label}: missing src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE}", errors)
+        return []
+    code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+
+    def once(spelling: str, why: str, text: str, where: str) -> bool:
+        found = len(_teamster_take_exact(spelling).findall(text))
+        if found != 1:
+            fail(f"{label}: src/ConcernedTeamster/{where} contains {found} of `{spelling}` where exactly one is "
+                 f"expected - {why}", errors)
+            return False
+        return True
+
+    for call, evaluate, guard, inputs, what in (
+            (TEAMSTER_HAUL_TAKE_CALL, TEAMSTER_HAUL_TAKE_EVALUATE, TEAMSTER_HAUL_TAKE_GUARD,
+             TEAMSTER_HAUL_TAKE_INPUTS, "a take"),
+            (TEAMSTER_HAUL_DEPOSIT_CALL, TEAMSTER_HAUL_DEPOSIT_EVALUATE, TEAMSTER_HAUL_DEPOSIT_GUARD,
+             TEAMSTER_HAUL_DEPOSIT_INPUTS, "an unload"),
+            (TEAMSTER_HAUL_START_CALL, TEAMSTER_HAUL_START_EVALUATE, TEAMSTER_HAUL_START_GUARD,
+             TEAMSTER_HAUL_START_INPUTS, "a haul's start")):
+        block = _teamster_haul_method_with(code, call, label, errors)
+        if block is None:
+            return []
+        body = "\n".join(block)
+        for spelling, why in ((evaluate, "the leg's gate decides"),) + inputs:
+            if not once(spelling, why, body, TEAMSTER_HAUL_RUNTIME_FILE + f" (the method that makes {what})"):
+                return []
+        decided = _teamster_take_exact(evaluate).search(body)
+        refused = guard.search(body)
+        moved = _teamster_take_exact(call).search(body)
+        unguarded = _teamster_tour_plan_guarded(block, _teamster_take_exact(call), guard)
+        if unguarded or not (decided and refused and moved and decided.start() < refused.start() < moved.start()):
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} does not decide {what}, refuse it "
+                 "with a returning block and only then make the move, in that order and in the method that makes "
+                 "it - a move the gate did not admit", errors)
+            return []
+
+    # Whatever the receiver: an alias of the port (`var t = _take; t.TakeOne(`)
+    # spells no `_take.TakeOne(`, and the chest-take audit's stray check skips
+    # this file, so the bare name is counted here.
+    bare = len(re.findall(r"\bTakeOne\s*\(", code))
+    if bare != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} names TakeOne {bare} time(s); exactly one "
+             "call is authorized, the gated `_take.TakeOne(` - a second, through an alias of the port, would sit "
+             "outside its gate", errors)
+        return []
+    for token, why in (
+            (r"\bDepositOne\s*\(", "a deposit straight through the port skips DepositLegs' world check and ledger"),
+            (r"\bnew\s+Gunnar\w*Port\s*\(", "the haul uses the runtime's ports and constructs none"),
+            (r"\b_cartLoad\b", "a manual haul never loads a cart (no grant covers a chest-to-chest cart round)")):
+        if re.search(token, code):
+            fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} spells `{token}` - {why}", errors)
+            return []
+    if not once("return TakeOptedIn() && _settings.GunnarChestHaulEnabled.Value;",
+                "the haul's opt-in reads the master, collection and take switches AND its own",
+                code, TEAMSTER_HAUL_RUNTIME_FILE):
+        return []
+    if not once("WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(HaulOptedIn()))",
+                "the haul's authority is the shared rule, asked about the haul's own opt-in",
+                code, TEAMSTER_HAUL_RUNTIME_FILE):
+        return []
+
+    sources: dict[str, str] = {}
+    for other in sorted(teamster_dir.rglob("*.cs")):
+        rel = other.relative_to(teamster_dir).as_posix()
+        if rel.split("/")[0] in ("obj", "bin"):
+            continue
+        sources[rel] = _strip_cs_comments(other.read_text(encoding="utf-8-sig"))
+    starts = [rel for rel, text in sources.items() if _teamster_take_exact("new ChestHaul(").search(text)]
+    if starts != [TEAMSTER_HAUL_RUNTIME_FILE]:
+        fail(f"{label}: a ChestHaul is constructed in {starts or 'nothing'}; only "
+             f"src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE}, behind the start gate, may", errors)
+        return []
+    if not once("WatchHaulFromFrame();", "a running haul is re-asked every frame",
+                sources.get(TEAMSTER_TOUR_PLAN_RUNTIME_FILE, ""), TEAMSTER_TOUR_PLAN_RUNTIME_FILE):
+        return []
+    if not once("public const bool ChestHaulEnabled = false;", "the haul is off by default",
+                sources.get(TEAMSTER_TAKE_DEFAULTS_FILE, ""), TEAMSTER_TAKE_DEFAULTS_FILE):
+        return []
+    if not once('config.Bind("Workers", "GunnarChestHaulEnabled", GunnarCollectionDefaults.ChestHaulEnabled,',
+                "the switch is bound to the off default", sources.get(TEAMSTER_TAKE_SETTINGS_FILE, ""),
+                TEAMSTER_TAKE_SETTINGS_FILE):
+        return []
+
+    return [
+        f"{label}: the chest-to-chest haul takes once, unloads once and starts once, each inside one method whose "
+        "own gate refuses with a return above the move, every gate input pinned there (the haul's opt-in, which "
+        "needs the take switch; the work-authority rule; the world; the probe; his record; what else is in flight; "
+        "an open tour plan) and each move bounded (the manifest line and the carry limit, what the tour measured "
+        "taking); the manifest is planned with no cart and the start refuses with a cart assigned; it spells no "
+        "DepositOne, constructs no port, loads no cart, builds no ChestHaul elsewhere, is re-asked every frame, and "
+        "is off by default. A text audit; it does not follow delegates or prove control flow",
     ]
 
 
@@ -8909,6 +9527,7 @@ def main() -> int:
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_death_drop_verb(errors))
     report.extend(check_teamster_idle_hammer_port(errors))
+    report.extend(check_teamster_felling_port(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_steward_retire_is_guarded(errors))
     report.extend(check_teamster_ward_queries_are_quiet(errors))
@@ -8916,6 +9535,7 @@ def main() -> int:
     report.extend(check_teamster_source_is_plain(errors))
     report.extend(check_source_has_no_format_characters(errors))
     report.extend(check_teamster_tour_writes_ahead(errors))
+    report.extend(check_teamster_manifest_haul_is_gated(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))

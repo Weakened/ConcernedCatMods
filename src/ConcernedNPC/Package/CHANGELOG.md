@@ -15,7 +15,7 @@ Eleven additive changes share this version:
 * a role whose worker prefab predates the factory spawns it through the factory's gated build (#372);
 * a role whose worker prefab predates the factory can carry this library's own body component (#372);
 * a role can keep its material in the library's conservation ledger and record what it measured moving (#376,
-  Concerned Teamster's Gunnar).
+  Concerned Teamster's Gunnar and Concerned Steward's Sunniva).
 
 ### A role keeps its material in the library's conservation ledger (#376)
 
@@ -30,7 +30,8 @@ Eleven additive changes share this version:
   death drop. Terminal; the job never takes it up again.
 * `NpcCustodyOutcome` gains `Unspecified` as its zero, so a defaulted answer never reads as `Applied`. It was internal
   until now and nothing persists it.
-* Nothing is read or written on disk. Concerned Teamster's collection account adopts it in the same change.
+* Nothing is read or written on disk. Concerned Teamster's collection account adopts it in the same change, and
+  Concerned Steward's fuel ledger adopts it next, with no change to the library: two roles keep their material in it.
 
 ### A role's own prefab carries the library's own body (#372, the body-inventory move)
 

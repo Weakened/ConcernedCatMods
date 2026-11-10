@@ -601,7 +601,7 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
 - Taking the wood, and felling as part of a collection order, belong to the next leaf, which will use the same-call
   custody granted above.
 - The eligibility rules are game-free in `src/Shared/Workers/Felling/SmallTreeFelling.cs`, so Teamster's Gunnar can
-  reuse them. **D19 grants felling to Thorstein only:** Gunnar felling anything still needs its own owner decision.
+  reuse them. **When this leaf was built, D19 was recorded for Thorstein only.** The owner's #381 decision of the same day (decision 1 of the 2026-10-31 issue comment) covers Gunnar too, without setting a scope of his own; his half is built below, with Thorstein's scope as the lead default.
 - The felling audit's limit is stated rather than left to be found. It is a text audit with comments stripped, so a
   call reached through a delegate spells none of these tokens and is invisible to it.
   `tools/tests/test_foreman_felling_audit.py` plants each escape (in `Runtime/`, `Ui/`, `Plugin.cs`, `Domain/` and two
@@ -657,6 +657,57 @@ most fail-closed reading of the decision:
 
 **Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F11).
 
+**Gunnar's half (#381 item 5), built 2026-11-10.** The owner's #381 comment of 2026-10-31 (decision 1: "Felling -
+yes, small trees only ... with the real issued axe, only inside an explicit work area, off by default") covers Gunnar
+and sets no scope of his own. Built with Thorstein's scope as the lead default:
+- **What is built.** `ct_collect fell`: one hit on the eligible small tree nearest Gunnar inside the area the player set
+  with `ct_collect area` in this world load, through `Destructible.Damage`, in
+  `src/ConcernedTeamster/Adapters/Workers/GunnarFellingPort.cs` alone. The hit is built from the axe's own item data
+  with Gunnar as attacker, exactly as Thorstein's. On a fell the item drops that appeared beside the tree during the
+  hit are handed, by instance and in the same call, to `GunnarCollectionPort.TakeFelled`, which takes only Wood owned by
+  this process, whole drops that fit his D17 carry limit, through the collection port's one pinned `Humanoid.Pickup`,
+  and credits only what measurably arrived; the session ledger records it like a pick. Everything else lies on the
+  ground.
+- **The switch.** `Workers/GunnarFellsSmallTrees`, off by default, needing `Workers/GunnarCollectionEnabled` and
+  Teamster's master switch; D3's work-authority rule, the start-up probe and his record are asked by
+  `FellOrderGate`, and every D19 site rule is re-measured by the shared `SmallTreeFelling.CheckSite` in the frame of the
+  hit.
+- **The validator.** The #313 scope audit's pinned-call table admits exactly one `.Damage(` in Teamster:
+  `tree.Damage(hit)` in the felling port. `check_teamster_felling_port` ("D19 Gunnar felling audit") pins that `tree`
+  is the `Destructible` the strike is handed and is never re-bound, that `hit` is built once from his axe with him as
+  attacker, that the finder reads only the four allowlisted hashes and the shared classifier, that the strike is called
+  once, from `TryFellOne`, below the site verdict and a returning refusal with every site fact read there, that
+  `TryFellOne` is called once, from `Fell()`, behind `FellOrderGate` with every input pinned, that `Fell()` is named only
+  by `case "fell":` (so no retire, cancel, unload or teardown verb lands a hit, and no tour does), that the Wood is taken
+  only through `TakeFelled` with the strike's own drops and the one pinned pickup, that the switch is its own and off
+  by default, and that `.Damage(` appears once and TreeBase, TreeLog and DestroyNow never across Teamster and every
+  shared tree its project file compiles in. The IL twin is in `scripts/audit-teamster-hauling-api.ps1`. Planted
+  escapes: `tools/tests/test_teamster_felling_audit.py`, each refused by these rules and passing without them.
+- **Lead defaults pending owner confirmation (2026-11-10)**, Thorstein's scope read for Gunnar:
+  1. *The four prefabs*, tool tier 0, and nothing else. `TreeBase` and `TreeLog` stay unused.
+  2. *The axe is one he carries.* The player puts it in his inventory through D20's take (`ct_collect source`, then
+     `ct_collect take AxeStone`); nothing here issues, mints, clones or equips one. His best usable axe by tool tier;
+     a broken one is refused; its durability is untouched, because vanilla wears only a player's weapon.
+  3. *The explicit area is `ct_collect area`*, set in this world load. Gunnar has no default circle at all.
+  4. *Clearances*: 15 m from every player - the one giving the order included - and every player-built piece; never
+     where any covering ward denies the player (`wardCheck: true`, asked only once every zone a ward reaching the
+     tree could stand in is loaded - Foreman's designation site asks it the same way), in a dungeon or inside a
+     world location (D10's exclusions, as Thorstein's default 6).
+  5. *One hit per command.* Nothing repeats it and nothing walks him: he must be standing at the tree, within
+     `CollectionLimits.PickupReachMetres` (2.2 m).
+  6. *Wood only*, whole drops, up to his D17 carry limit; resin, fir cones and the rest lie on the ground.
+  7. *No swing animation.* D21's trigger stays pinned to the idle hammer; vanilla's own hit effects play.
+  8. *The axe is an ordinary item of his.* `ct_collect deposit <axe>` puts it back (the player's own act, so D20's
+     issued-tool edge does not arise: nothing was issued); `ct_haul retire` refuses while he carries it; on a genuine
+     death D16 drops it with the rest.
+- **Not built, at the authority boundary.** Felling inside a collection tour, as Thorstein's order fells after the
+  branches - D19 does not set Gunnar's scope, so this stops at the explicit command; walking him to the tree (D14.2's
+  own-body pathfinding would cover it, but it is not built); a swing animation (it would need a grant beyond D21);
+  full-size trees and logs.
+- **Owner questions.** Confirm Thorstein's scope for Gunnar, or set his own. May a tour fell, after the branches, as
+  Thorstein's order does? Should `ct_collect fell` walk him to the nearest tree first?
+- **Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 72-79 are OWNER GO-AROUND PENDING.
+
 ## D20. Gunnar may take from a chest the player marked TAKE or BOTH
 
 Status: **accepted** (owner decision 2026-10-31, #381, asked directly by the completion lead; the issue comment of
@@ -697,12 +748,14 @@ smallest and most fail-closed reading the brief allows:
 - *How much.* At most what fits under D17's carry limit (a vanilla player's base limit plus Megingjord's bonus, less
   everything he already carries) and his own slots. Without a count, that much of the one named item.
 - *Where he stands.* Within reach of the chest. Nothing here walks him; a manual chest-to-chest mode that walks him
-  between chests is a separate leaf of #381 and uses D14.2's own-body pathfinding when it is built.
+  between chests is a separate leaf of #381 and uses D14.2's own-body pathfinding when it is built. (Built on
+  2026-11-09, on foot, through this port and D15's: the manual-haul lead default at the end of this file.)
 - *Putting it down again.* `ct_collect deposit <item>` deposits one named item through D15's unchanged port, so what
   he took is not stranded in him. D15's grant already covers any item in his inventory; the default deposit filter
   (what collecting yields) is unchanged. Equipped stacks are never offered. **A known edge:** if Gunnar is ever
   issued a tool (the felling decision would), an unequipped issued tool could be named and deposited; the leaf that
-  issues one must filter issued items out of this path.
+  issues one must filter issued items out of this path. (The felling leaf, #381 item 5, issues none:
+  his axe is one the player had him take, so naming it in a deposit is the player's own act.)
 - *The ledger.* A take is acquired in `CollectionAccount` like a pick, so the session's "taken" total counts what he
   took from chests as well as what he collected; it is a record of where material physically is, not of what was
   collected.
@@ -925,3 +978,71 @@ every consumer body built by Concerned NPC's gated build under a worker lease, s
   names both commands. Teamster has no write-off that spawns while a job holds him. The same open question applies: a
   spawn under the job's own lease was not built.
   OWNER GO-AROUND PENDING.
+
+## Lead default pending owner confirmation (2026-11-09): the manual chest-to-chest haul (#381 item 4)
+
+Not numbered on purpose, for the reason the two sections above give. **It grants no world authority.** It records how
+#381's manual mode - "chest to chest, with an explicit source, an explicit destination and a requested cargo filter,
+both containers permitting the operation ... a haul manifest, on-foot and cart capacity, the number of tours and the
+loading order, and each tour as provision, travel, unload, reconcile" - was built out of grants that already exist,
+and where it stops because nothing grants more.
+
+**What it is built from.** Every take is D20's, through the pinned `GunnarTakePort`, behind D20's gate asked again in
+the frame of the move; every unload is D15's, through `DepositLegs` and the pinned `GunnarDepositPort`, behind D15's
+gate asked again in the frame of the move; the permit mint asks each container for the player's mark, ownership,
+in-use, ward, privacy and reach at the moment of the move. Walking him between the two chests is D14.2's own-body
+pathfinding, which D20's "where he stands" default already named for this leaf and D17 confirmed covers his walking
+on foot. **No vanilla call is added.** The code is `Adapters/Workers/GunnarCollectionRuntime.Haul.cs` (glue),
+`Domain/Collection/HaulManifest.cs` (manifest), `ChestHaul.cs` (provision, travel, unload, reconcile) and
+`ChestHaulGate.cs` (start gate); `HaulRequestGate` (already there and tested, with no production caller until now) decides whether
+the haul may start and its loading order. Pinned by `#381 manifest-haul audit`; plants in
+`tools/tests/test_teamster_haul_audit.py`.
+
+**The defaults** - each the smallest, most fail-closed reading the owner's words and the existing grants allow:
+
+1. *A switch of its own.* `Workers/GunnarChestHaulEnabled`, **off by default**, and it needs
+   `Workers/GunnarCollectionEnabled` and `Workers/GunnarChestTakeEnabled` as well. All of them, and the work-authority
+   rule, are re-asked every frame while a haul runs and again at every move.
+2. *The two chests are the ones the player pointed at.* `ct_collect source` (marked `Take` or `Both`) and
+   `ct_collect destination` (marked `Deposit` or `Both`), each chosen in this world load, two different chests. No
+   inference, no fallback, no other chest when one is full.
+3. *The cargo filter is a short list of exact names.* `ct_collect haul [plan] <item>[:count] ...`, one to four items,
+   each named exactly as the game names it, optionally with a whole-number count; without a count, all of it the
+   source held when the haul was planned. No wildcard and no "everything". D20's "one named item per order" still
+   holds for every take inside the haul: each take is one named item through D20's port.
+4. *The manifest is worked out before anything moves, and is a plan, not a promise.* `ct_collect haul plan` says it
+   and moves nothing. Capacity per tour is D17's carry limit (a vanilla player's base plus Megingjord's bonus, less
+   everything he carries) and his free slots, both read from the game. The loading order is `HaulRequestGate`'s,
+   heaviest first, then by name. Each tour takes as much of the first item still owed as fits under both limits, then
+   the next. Bounded: at most 4 items and 32 tours; a larger haul is refused and says to ask for less, and an item
+   that cannot fit even one unit refuses the whole haul rather than being left behind silently. The shared runtime's
+   `TourPartitioner` is not used: it is internal to ConcernedNPC and answers a different question (indivisible
+   targets at places, bin-packed by distance), where this has one place and divisible cargo.
+5. *Each tour is provision, travel, unload, reconcile.* At the source, one take per item of the tour, asking for at
+   most the manifest's line and what fits now; walk to the destination; one unload per item, offering at most what
+   this tour **measured** taking; then a fresh count of what he carries of the cargo, which must equal what the
+   measured moves add up to. He starts a haul holding none of the cargo (it refuses otherwise), so the count is exact.
+6. *It stops, and what he holds stays in him,* on: an uncertain take or unload (nothing more is attempted); a take
+   or an unload measuring more than was asked for or carried (never credited); a destination that took less than he
+   brought (full, or refusing); a count that does not agree, or could not be made;
+   a tour that took nothing; a walk with no progress for 12 s (NEEDS ATTENTION, with the reason); the switches, the
+   authority, his record, his body or his job changing; a cart being assigned; the world going. Nothing is retried,
+   compensated, minted or moved back. A take shorter than planned is not made up later; the haul ends with what was
+   delivered and says how much.
+7. *On foot only.* The manifest is planned with no cart and a haul refuses while a cart is assigned to him. The plan
+   says what a cart would need only when one is offered, which the runtime never does.
+8. *Not written ahead, not resumed.* A haul is not part of the #379 tour plan and is refused while one is open. A
+   reload ends it; what he took is in his own persisted inventory and goes back through `ct_collect deposit <item>`
+   at a chest the player chose. Because nothing resumes, nothing can be moved twice by a resume.
+9. *The ledger.* Takes and unloads are recorded in `CollectionAccount` exactly as the ordered take and deposit
+   record them.
+
+**Where it stops, because nothing grants more - owner questions:**
+
+- **A cart round for a chest-to-chest haul.** It would need two things no decision grants: loading what a D20 take
+  gave him into the assigned cart (D22's lead default 6 loads only what a tour picked), and an unload out of the cart
+  (D22's unload half is unbuilt and its mechanism undecided). Until the owner decides both, the manual haul is on foot.
+- **Whether the 4-item, 32-tour bounds and the heaviest-first loading order are right**, and whether a haul should
+  re-plan to make up a short take rather than end with it reported.
+
+**Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 64-71 are OWNER GO-AROUND PENDING.

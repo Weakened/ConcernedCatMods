@@ -218,10 +218,11 @@ public sealed class CellarLeavesTests
     public void TheLeavesReadTheNativeDoorStateAndWriteNothingToTheNetwork()
     {
         string leaves = Code(Source(Runtime));
-        // Two reads of the one native value: the first pose (TrySettle) and each frame (Update), each after IsValid().
-        Assert.Equal(2, Regex.Matches(leaves, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
-        Assert.Equal(2, Regex.Matches(leaves, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
-        Assert.Equal(2, Regex.Matches(leaves, @"\bGetZDO\b").Count);
+        // Three reads of the one native value: the first pose (TrySettle), each frame (Update), and the ladder's passage
+        // and landing questions (TryReadOpen, slice 4), each after IsValid().
+        Assert.Equal(3, Regex.Matches(leaves, @"\.\s*GetZDO\s*\(\s*\)\s*\.\s*GetInt\s*\(\s*ZDOVars\s*\.\s*s_state\s*\)").Count);
+        Assert.Equal(3, Regex.Matches(leaves, @"view\s*==\s*null\s*\|\|\s*!\s*view\s*\.\s*IsValid\s*\(\s*\)").Count);
+        Assert.Equal(3, Regex.Matches(leaves, @"\bGetZDO\b").Count);
         foreach (string forbidden in new[]
                  {
                      @"\bInvokeRPC\b", @"\bRoutedRPC\b", @"\.\s*Register\s*<", @"\.\s*Register\s*\(", @"\.\s*Set\s*\(",
@@ -243,8 +244,8 @@ public sealed class CellarLeavesTests
         Assert.Matches(new Regex(@"new\s+Pivot\s*\(\s*leftHinge\s*,\s*leftBox\s*,\s*CellarGeometry\s*\.\s*HingeRotationSign\s*\(\s*CellarLeaf\s*\.\s*Left\s*\)\s*\)"), leaves);
         Assert.Matches(new Regex(@"new\s+Pivot\s*\(\s*rightHinge\s*,\s*rightBox\s*,\s*CellarGeometry\s*\.\s*HingeRotationSign\s*\(\s*CellarLeaf\s*\.\s*Right\s*\)\s*\)"), leaves);
         Assert.Matches(new Regex(@"Quaternion\s+turn\s*=\s*Quaternion\s*\.\s*Euler\s*\(\s*0f\s*,\s*0f\s*,\s*part\s*\.\s*Sign\s*\*\s*angleDegrees\s*\)\s*;"), leaves);
-        // Not a trapdoor: nothing joins the lid's registry, so the ladder code is unchanged by it.
-        Assert.DoesNotMatch(new Regex(@"\bLive\b|\bTrapdoorLid\s*\.\s*(Any|RouteShut|MayLandOn)\b"), leaves);
+        // Not a trapdoor: nothing joins the lid's registry. Since slice 4 the covers have their own (CellarLadderTests).
+        Assert.DoesNotMatch(new Regex(@"\bTrapdoorLid\s*\.\s*(Any|RouteShut|MayLandOn|Live)\b"), leaves);
     }
 
     [Fact]
@@ -314,7 +315,22 @@ public sealed class CellarLeavesTests
         Assert.Matches(new Regex(@"if\s*\(\s*own\s*\[\s*index\s*\]\s*==\s*collider\s*\)\s*\{\s*return\s+true\s*;\s*\}"), leaves);
         // Never by hierarchy, name, tag or layer: the lid's IsChildOf test would hide anything parented under the piece.
         Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|\.\s*name\b|\.\s*tag\b|CompareTag|\.\s*layer\b|\broot\b"), Between(leaves, @"private\s+bool\s+IsOwn\s*\(", null));
-        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|CompareTag"), leaves);
+        // Slice 4 adds one hierarchy lookup, the ladder's landing question (MayLandOn), which tells a leaf from the frame
+        // for the landing search and is never part of an occupancy query. Everywhere else in the type, none.
+        // Exactly the method's own body is excluded: anything added after it is still under the ban.
+        Match header = Regex.Match(leaves, @"internal\s+static\s+bool\s+MayLandOn\s*\(\s*Collider\s+collider\s*\)\s*\{");
+        Assert.True(header.Success, "MayLandOn");
+        int depth = 1, end = header.Index + header.Length;
+        while (end < leaves.Length && depth > 0) { depth += leaves[end] == '{' ? 1 : leaves[end] == '}' ? -1 : 0; end++; }
+        Assert.Equal(0, depth);
+        string landing = leaves.Substring(header.Index, end - header.Index);
+        Assert.DoesNotMatch(new Regex(@"\bIsChildOf\b|GetComponentInParent|CompareTag"), leaves.Remove(header.Index, end - header.Index));
+        Assert.Matches(new Regex(@"GetComponentInParent\s*<\s*CellarLeaves\s*>"), landing);
+        Assert.Single(Regex.Matches(leaves, @"\bMayLandOn\s*\("));
+        foreach (string query in new[] { @"public\s+bool\s+Occupied\s*\(", @"private\s+bool\s+Query\s*\(", @"private\s+bool\s+Blocks\s*\(", @"private\s+bool\s+Moves\s*\(" })
+        {
+            Assert.DoesNotMatch(new Regex(@"\bMayLandOn\b|\bIsChildOf\b|GetComponentInParent"), Between(leaves, query, @"\n\s*\}\s*\n"));
+        }
         Assert.Single(Regex.Matches(leaves, @"\b_own\s*=(?!=)"));
     }
 
@@ -354,13 +370,18 @@ public sealed class CellarLeavesTests
         Assert.Matches(new Regex(@"foreach\s*\(\s*string\s+path\s+in\s+CellarBlueprint\s*\.\s*QueryIgnores\s*\)"), adapter);
         Assert.Matches(new Regex(@"CellarLeaves\s*\.\s*Log\s*=\s*_log\s*;"), adapter);
 
-        // Nothing else in the product adds the leaves or names them in code: the ladder code does not know them yet.
+        // Nothing else in the product adds the leaves. Since slice 4 the ladder adapters name them too, each consult
+        // gated by CellarLeaves.Any (CellarLadderTests); no other file does.
+        var ladders = new[] { "Runtime/LadderRuntime.cs", "Runtime/LadderClearance.cs", "Pieces/LadderSnapAlignment.cs" };
         foreach (string file in ProductFiles())
         {
             string relative = Path.GetRelativePath(ProductRoot, file).Replace('\\', '/');
             string text = Code(File.ReadAllText(file));
             if (relative != Adapter) { Assert.DoesNotMatch(new Regex(@"AddComponent\s*<\s*CellarLeaves\s*>"), text); }
-            if (relative != Adapter && relative != Runtime) { Assert.DoesNotMatch(new Regex(@"\bCellarLeaves\b"), text); }
+            if (relative != Adapter && relative != Runtime && Array.IndexOf(ladders, relative) < 0)
+            {
+                Assert.DoesNotMatch(new Regex(@"\bCellarLeaves\b"), text);
+            }
         }
     }
 

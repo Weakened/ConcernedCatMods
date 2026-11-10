@@ -55,6 +55,8 @@ internal static class HaulingCapabilityProbe
             Type? vector2s = Game("Vector2s", missingTypes);
             Type? zsyncAnimation = Game("ZSyncAnimation", missingTypes);
             Type? attack = Game("Attack", missingTypes);
+            Type? destructible = Game("Destructible", missingTypes);
+            Type? hitData = Game("HitData", missingTypes);
             Game("Catapult", missingTypes);
             Game("SiegeMachine", missingTypes);
             Type? gameObject = Engine("UnityEngine.GameObject, UnityEngine.CoreModule", missingTypes);
@@ -260,6 +262,20 @@ internal static class HaulingCapabilityProbe
                 new("ObjectDB", objectDb, "instance", GameMemberKind.StaticProperty, objectDb),
                 new("ItemDrop+ItemData+SharedData", sharedData, "m_attack", GameMemberKind.InstanceField, attack),
                 new("Attack", attack, "m_attackAnimation", GameMemberKind.InstanceField, typeof(string)),
+
+                // #381 item 5, Gunnar's half of D19: the one hit GunnarFellingPort
+                // lands, the tree's own fields it reads first, the attacker it
+                // names, and the drop list it compares before and after the hit.
+                // A changed game turns the worker runtime off - felling with it -
+                // rather than throwing out of a command.
+                new("Destructible", destructible, "Damage", GameMemberKind.InstanceMethod, typeof(void),
+                    new[] { hitData! }),
+                new("Destructible", destructible, "m_minToolTier", GameMemberKind.InstanceField, typeof(int)),
+                new("Destructible", destructible, "m_health", GameMemberKind.InstanceField, typeof(float)),
+                new("HitData", hitData, "SetAttacker", GameMemberKind.InstanceMethod, typeof(void),
+                    new[] { character! }),
+                new("ItemDrop", itemDrop, "s_instances", GameMemberKind.StaticField,
+                    typeof(List<>).MakeGenericType(itemDrop!)),
 
                 // Engine members the joint and body checks read.
                 new("Joint", joint, "connectedBody", GameMemberKind.InstanceProperty, rigidbody),

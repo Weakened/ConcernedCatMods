@@ -27,6 +27,10 @@ internal sealed class CollectConsoleCommand : ConsoleCommand
         "Concerned Teamster: Gunnar collects loose stones and fallen branches (development aid). " +
         "Subcommands: status, pick (the one you point at), destination (the chest you point at), deposit [item], " +
         "source (a chest you point at and marked for taking), take <item> [count] (needs Workers/GunnarChestTakeEnabled), " +
+        "haul [plan] <item>[:count] ... (from that source to that destination, on foot; needs " +
+        "Workers/GunnarChestHaulEnabled), " +
+        "fell (one hit on the small tree nearest him in the area, with an axe he carries; needs " +
+        "Workers/GunnarFellsSmallTrees), " +
         "area [radius] (around where you stand), start (a tour of that area into that chest), " +
         "start cart (a tour into the cart assigned to him; needs Workers/GunnarCartTourEnabled), stop, cancel, " +
         "chest. Needs Workers/GunnarCollectionEnabled, single player or a host with nobody else connected.";
@@ -49,5 +53,5 @@ internal sealed class CollectConsoleCommand : ConsoleCommand
     }
 
     public override List<string> CommandOptionList() =>
-        new List<string> { "status", "pick", "destination", "deposit", "source", "take", "area", "start", "stop", "cancel", "chest" };
+        new List<string> { "status", "pick", "destination", "deposit", "source", "take", "fell", "area", "start", "stop", "cancel", "chest" };
 }

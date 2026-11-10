@@ -299,6 +299,13 @@ $requirements = @(
     @("Attack", "game", "Attack.m_attackAnimation", 'public string m_attackAnimation = "";'),
     @("Player", "game", "vanilla's own repair swing plays the tool's attack animation", 'm_zanim\.SetTrigger\(toolItem\.m_shared\.m_attack\.m_attackAnimation\);'),
 
+    # #381 item 5, Gunnar's half of D19: the one hit GunnarFellingPort lands and
+    # the members it reads first. HaulingCapabilityProbe is the runtime twin.
+    @("Destructible", "game", "Destructible.Damage(HitData)", 'public void Damage\(HitData hit\)'),
+    @("Destructible", "game", "Destructible.m_minToolTier", 'public int m_minToolTier;'),
+    @("Destructible", "game", "Destructible.m_health", 'public float m_health = 1f;'),
+    @("HitData", "game", "HitData.SetAttacker(Character)", 'public void SetAttacker\(Character attacker\)'),
+
     # Jotunn: registering the worker prefab for every session.
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.OnVanillaPrefabsAvailable", 'public static event Action OnVanillaPrefabsAvailable;'),
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.CreateClonedPrefab(string, GameObject)", 'public GameObject CreateClonedPrefab\(string name, GameObject prefab\)'),
@@ -386,6 +393,14 @@ Assert-OnlyIn 'Humanoid::DropItem' { param($h) $h.Type -eq ($workersNamespace + 
 # write anywhere in Teamster (SetBool/SetFloat/SetInt on ZSyncAnimation write the
 # body's network object, and a direct Animator write is outside the grant).
 Assert-OnlyIn 'ZSyncAnimation::SetTrigger' { param($h) $h.Type -eq ($workersNamespace + "GunnarIdleHammerPort") } "the hammer swing is triggered only by the idle hammer port, on Gunnar's own body" 1
+# #381 item 5 (D19, Gunnar's half): the one felling hit, by the felling port
+# alone; and nothing in Teamster damages a character, applies damage directly or
+# names a full-size tree.
+Assert-OnlyIn 'Destructible::Damage' { param($h) $h.Type -eq ($workersNamespace + "GunnarFellingPort") } "a small tree is struck only by the felling port" 1
+Assert-OnlyIn 'Character::Damage' { param($h) $false } "no Teamster code damages a character" 0
+Assert-OnlyIn 'Character::ApplyDamage' { param($h) $false } "no Teamster code applies damage to a character" 0
+Assert-OnlyIn 'TreeBase::' { param($h) $false } "no Teamster code touches a full-size tree" 0
+Assert-OnlyIn 'TreeLog::' { param($h) $false } "no Teamster code touches a felled log" 0
 Assert-OnlyIn 'ZSyncAnimation::SetBool' { param($h) $false } "no Teamster code writes an animator bool" 0
 Assert-OnlyIn 'ZSyncAnimation::SetFloat' { param($h) $false } "no Teamster code writes an animator float" 0
 Assert-OnlyIn 'ZSyncAnimation::SetInt' { param($h) $false } "no Teamster code writes an animator int" 0

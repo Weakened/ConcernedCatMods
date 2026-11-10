@@ -45,6 +45,33 @@ runtime and the presenter in one `try`, so a throw in the runtime's release skip
 only); the 1.0.0 changelog lists a "Fixed" swim-pose bullet that public users never saw; snapping beside another
 building-helper mod that moves the ghost (e.g. Gizmo) is untested.
 
+## 1.1.0 candidate provenance (built 2026-11-10, not installed)
+
+**A 1.1.0 candidate ZIP exists; it has not been installed, launched or smoked.** Built by the lead's lane M5 on PR #544
+(branch `feat/cl-487-1.1.0-candidate`), from the source below, following `TEST_PLAN.md` section 10 up to the point
+where the game is needed. The version number `1.1.0` is a **lead default pending owner approval**. The candidate is
+from the commit **before** the docs-only commit that records this table (the 1.0.0 precedent: `4cb5e56` is the source,
+its provenance was written later). The source is a PR branch, not yet `main`; if anything but this record changes
+before merge, the candidate is stale and must be rebuilt. The doors add no file to the package, so the editable
+sources are the source commit itself (`DOOR_ASSET_SOURCES.md`).
+
+| Item | 1.1.0 |
+|---|---|
+| Source | `61ae2dd1569829c4c793b0204715904efe078b5a` (`feat/cl-487-1.1.0-candidate`, clean tree; `main` `ff37bf1` plus the CHANGELOG and README commits of PR #544) |
+| Version | `1.1.0` in `Plugin.cs`, `ConcernedLadders.csproj` and `Package/thunderstore.toml`; CHANGELOG heading `## 1.1.0` (`package.ps1`'s `--expected-version 1.1.0` check passed). Lead default pending owner approval |
+| Dependencies | pinned in source: BepInExPack_Valheim 5.4.2351, Jötunn 2.30.2 (`manifest.json` lists exactly these two). Built against Valheim 1.0.21 (`EXCAVATION.md` section 2). PENDING: the game version on the candidate's own startup log |
+| Package | `scripts/package.ps1 -Product ConcernedLadders` under the build lock, exit 0 (`artifacts/ladders-1.1.0/package-m5-61ae2dd.log`) |
+| Verify | after packaging, `scripts/verify.ps1` under the lock: **PASSED**, Release build 16 assemblies, 7288 passed / 0 failed, validator exit 0 (`artifacts/ladders-1.1.0/verify-m5-61ae2dd-run2.log`, `artifacts/verify/20261110-031850-61ae2dd-508`). Run 1 on the same SHA failed only in the validator, on a DLL copy this lane had left in `artifacts/` (prohibited DLL outside bin/obj); it was renamed `.dll.copy` and run 2 is the evidence |
+| ZIP | `TheConcernedCat-ConcernedLadders-1.1.0.zip`, 527,725 B, SHA256 `cb203fb7b0c6b78c95d9c31020bbf7b3351436d7d144791db14f8e1cb9b5a2f4` (`artifacts/thunderstore/` and `artifacts/ladders-1.1.0/`, identical, hashed twice; local and git-ignored, not in Downloads yet) |
+| DLL | 345,088 B, SHA256 `cd9d94a0f4c31d321c82948962c9b7e75e346ebc0b17fb7093110581ea1b06a0`, `InformationalVersion` `1.1.0+61ae2dd1569829c4c793b0204715904efe078b5a`. **Built = packaged**: the ZIP entry, the build output after packaging, and the build output after the final verify are the same bytes. Installed: PENDING |
+| Contents | exactly six entries: `CHANGELOG.md` (14,455 B), `LICENSE` (1,070 B), `README.md` (13,404 B), `icon.png` (152,562 B, unchanged from 1.0.0), `manifest.json` (482 B), `plugins/TheConcernedCat.ConcernedLadders.dll`. No PDB, no other DLL, no animation sources, no media; the DLL's only PDB path is the mapped `/_/src/ConcernedLadders/obj/...`, no local path. Entry times canonicalized to 1980-01-01 |
+| Identity check | PENDING: `tools/verify_ladders_candidate.py` needs the installed plugins folder and a fresh game log (success is `IDENTITY_MATCH_ONLY`, with `gameplayVerified=false` and `binaryProvenanceVerified=false`) |
+| Install and smoke | **OWNER GO-AROUND PENDING**: import this exact ZIP into a dedicated profile, cold-start banner `1.1.0+61ae2dd…`, loaded / skipped / failed counts, prefab registrations with the three settings off and then on, 0 exceptions, copy to Downloads and compare the hash. Then the in-game rows of `DOOR_DONOR_MATRIX.md` section 9, `CELLAR_DOORS.md` section 10 and `EXCAVATION.md` sections 6.6, 7.5 and 8.8 (#470) |
+| Review | the CHANGELOG/README text at `dba1bee`: CHANGES REQUESTED (one blocker, the README's "built and tested against 1.0.20" line); fixed in `d3a62a7`, re-review APPROVE; its optional nit applied in `61ae2dd`. The product code is unchanged from `main` `ff37bf1`, reviewed in its own PRs |
+
+Publishing is not authorized by #485, #486 or #487 ("a reinstallable local candidate"). Uploading 1.1.0 needs the
+owner's own approval.
+
 ## 0.2.7 (superseded)
 
 | Item | 0.2.7 |

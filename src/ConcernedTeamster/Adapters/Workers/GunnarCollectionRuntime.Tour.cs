@@ -79,9 +79,10 @@ internal sealed partial class GunnarCollectionRuntime
 
     private Func<bool> _cartHeld = () => true;
 
-    /// <summary>Whether a tour is running. The ordered pick and deposit refuse
-    /// while one is.</summary>
-    private bool TourRunning => _tour != null;
+    /// <summary>Whether a tour, or a haul from chest to chest (#381 item 4,
+    /// <c>GunnarCollectionRuntime.Haul.cs</c>), is running. The ordered pick,
+    /// take and deposit, and every other start, refuse while one is.</summary>
+    private bool TourRunning => _tour != null || _haul != null;
 
     /// <summary>Called from the hauling runtime's 20 Hz worker tick for the bound
     /// body. True while a tour owns the body's motor this tick - the hauling
@@ -89,9 +90,15 @@ internal sealed partial class GunnarCollectionRuntime
     /// otherwise, and the executor ticks exactly as it always has.</summary>
     internal bool DriveWorker(TeamsterWorkerAI ai)
     {
-        if (_tour == null || _faulted)
+        if (_faulted)
         {
             return false;
+        }
+
+        if (_tour == null)
+        {
+            // #381 item 4: a haul from chest to chest walks him the same way.
+            return _haul != null && DriveHaul(ai);
         }
 
         _lastDriveAt = Time.time;
@@ -851,6 +858,11 @@ internal sealed partial class GunnarCollectionRuntime
 
     private string StopTour()
     {
+        if (_haul != null)
+        {
+            return StopHaul();
+        }
+
         if (_tour == null)
         {
             return "He is not on a collection tour.";
@@ -862,8 +874,10 @@ internal sealed partial class GunnarCollectionRuntime
     }
 
     private string TourStatus() =>
-        _tour == null
-            ? "no tour running (last: " + _lastTour + ")"
+        _haul != null
+            ? HaulStatus()
+            : _tour == null
+            ? "no tour running (last: " + _lastTour + "); " + HaulStatus()
             : (CartTourRunning ? "on a tour filling the cart assigned to him: " : "on a tour: ") +
               _tour.Phase + ", " + DescribeTour(_tour) +
               (_area == null ? "" : "; " + _area);
