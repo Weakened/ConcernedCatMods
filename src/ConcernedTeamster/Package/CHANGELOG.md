@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+* **Gunnar's body is created by Concerned NPC (#372).** `ct_haul spawn` now hands his prefab to Concerned NPC's gated
+  build instead of creating the body itself. The library checks that the worker lease is his and still held right
+  before the body appears, counts his saved bodies itself, refuses unloaded ground, and writes his identity in the same
+  call, destroying the new body again if that write fails. His prefab, its name and every saved field are unchanged,
+  so saved worlds load exactly as before. Two things now refuse that used to go ahead. `ct_haul spawn` while a haul or
+  a collection still holds him says so and creates nothing: end that job first - `ct_haul detach` ends a haul,
+  including one left waiting after his body was lost (`ct_haul stop` does not end a haul that has already stopped),
+  and `ct_collect cancel` ends a collection. And if Gunnar's figure runtime failed to install (a broken companion
+  configuration, which the log names), `ct_haul spawn` refuses, because nothing can grant the lease his body is built
+  under. **Not yet observed in game.**
 * **Gunnar keeps to camp at home (#461).** His figure now stands inside your camp - the player-built pieces around
   your bed, as Concerned NPC counts them; terrain edits and crops do not count - with room to stand, never in a
   doorway, and never on the far side of a door or a wall from the bed. No door is used and every door counts as one

@@ -319,6 +319,8 @@ N12 `spawn CT_TeamsterWorker` (the vanilla console command) → an **unkeyed** e
     needs two keyed bodies, which `ct_haul spawn` refuses to create.
 N13 Gunnar killed mid-pull → `WorkerBodyLost`, joint released **in that frame**, lease ended, and the cart is left where
     it stood. Watch for the despawn negative test of `CART_SEAM_AUDIT` §7.4: the joint must be gone before the body is.
+    Then (#372) `ct_haul spawn` is refused, naming the haul that still holds him, until `ct_haul detach` ends it
+    (`ct_haul stop` leaves the stopped haul as it is); after `detach`, `ct_haul spawn` brings him back.
 N14 sit in the cart (a chair on the handle side), then `ct_haul go` → the leg is **accepted**: `go` asks only for a
     lease and a route the cart fits along, and never reads whether the cart is in use. The refusal comes later, at the
     hitch, and nothing announces it: you have to ask. `ct_haul status` shows `Last hitch refusal: InUse (someone is

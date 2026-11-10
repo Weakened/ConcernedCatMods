@@ -19,6 +19,7 @@ public sealed class GunnarHandOverOrderTests
     private static readonly string Hauling = Read("src", "ConcernedTeamster", "Adapters", "Workers", "GunnarHaulingRuntime.cs");
     private static readonly string Role = Read("src", "ConcernedTeamster", "Adapters", "Workers", "GunnarNpcRole.cs");
     private static readonly string Plugin = Read("src", "ConcernedTeamster", "Plugin.cs");
+    private static readonly string Prefab = Read("src", "ConcernedTeamster", "Adapters", "Workers", "TeamsterWorkerPrefab.cs");
 
     [Fact]
     public void TheRegisteredRoleIsTheGameFreeContract()
@@ -27,6 +28,20 @@ public sealed class GunnarHandOverOrderTests
         // role the plugin registers is built from it and from nothing else.
         Assert.Contains("Body = Domain.Companions.GunnarBodyContract.Create();", Role);
         Assert.DoesNotContain("NpcBodyContract.ForWorker(", Role);
+        // #372: the contract the body is built under is the same game-free one.
+        Assert.Contains("internal static NpcBodyContract Contract { get; } = Domain.Companions.GunnarBodyContract.Create();", Role);
+    }
+
+    [Fact]
+    public void TheBodyIsBuiltByTheGatedBuildUnderTheRolesContractAndTheHandOversLease()
+    {
+        // #372: the prefab goes in with the lease Spawn was handed and the role's
+        // own contract; the validator refuses any instantiation in this product.
+        string spawn = Method(Prefab, "internal static TeamsterWorkerAI? Spawn(");
+        Assert.Contains("internal static TeamsterWorkerAI? Spawn(BodyLease? lease,", spawn);
+        Assert.Contains("NpcWorkerPrefabFactory.TrySpawnRoleBody(\n            lease, GunnarNpcRole.Contract, Prefab, position, rotation, Stamp, out failure);", spawn);
+        string stamp = Method(Prefab, "private static bool Stamp(");
+        AssertBefore(stamp, "if (view == null || ai == null)", "view.GetZDO().Set(\"tcc.worker.key\", WorkerKey.Gunnar.Value);");
     }
 
     [Fact]
@@ -53,9 +68,14 @@ public sealed class GunnarHandOverOrderTests
         AssertBefore(pass, "if (saved != 0)", "_environment.TryAnchor(");
         string take = Method(Runtime, "public bool TakeWorkerBody(");
         Assert.Contains("if (standing.HasValue && !HasHeadroom(standing.Value)) standing = null;", take);
-        // A second spawn before the first body is counted is refused even when
-        // a job's lease meant no arrival guard was taken.
+        // A second spawn before the first body is counted is refused before the
+        // hand-over is even asked.
         AssertBefore(take, "if (_arrivalPending)", "_figure.HandOverToWorker(");
+        // #372: the lease handed back is the arrival guard, read only after the
+        // hand-over was granted, and no lease is a refusal.
+        AssertBefore(take, "_figure.HandOverToWorker(", "lease = _leases.WorkerLease;");
+        Assert.Matches(new Regex(@"lease = _leases\.WorkerLease;\s*if \(lease == null\)\s*\{[^}]*return false;", RegexOptions.Singleline), take);
+        AssertBefore(take, "lease = _leases.WorkerLease;", "_arrivalPending = true;");
     }
 
     [Fact]
@@ -72,12 +92,17 @@ public sealed class GunnarHandOverOrderTests
     public void SpawnAsksForTheHandOverBeforeTheBodyIsCreatedAndPlacesItWhereHeStood()
     {
         string body = Method(Hauling, "private string Spawn(");
-        AssertBefore(body, "WorkerBodyCensus.MaySpawn(_bodyStatus)", "handOver(out standing, out string handOverRefusal)");
-        AssertBefore(body, "handOver(out standing, out string handOverRefusal)", "TeamsterWorkerPrefab.Spawn(position");
-        AssertBefore(body, "Vector3 position = standing ??", "TeamsterWorkerPrefab.Spawn(position");
+        const string handOver = "handOver(out Vector3? standing, out BodyLease? lease, out string handOverRefusal)";
+        const string spawn = "TeamsterWorkerPrefab.Spawn(lease, position, facing, out string failure)";
+        AssertBefore(body, "WorkerBodyCensus.MaySpawn(_bodyStatus)", handOver);
+        AssertBefore(body, handOver, spawn);
+        AssertBefore(body, "Vector3 position = standing ??", spawn);
+        // #372: no hand-over is no lease, and no lease is no body.
+        Assert.Matches(new Regex(@"if \(handOver == null\)\s*\{\s*return ""Refused: ", RegexOptions.Singleline), body);
+        AssertBefore(body, "if (handOver == null)", handOver);
         // A body that was not placed gives the hand-over's lease back.
         Assert.Matches(new Regex(@"if \(body == null\)\s*\{\s*ReleaseWorkerBody\?\.Invoke\(\);", RegexOptions.Singleline), body);
-        AssertBefore(body, "TeamsterWorkerPrefab.Spawn(position", "BodiesChanged?.Invoke();");
+        AssertBefore(body, spawn, "BodiesChanged?.Invoke();");
     }
 
     [Fact]

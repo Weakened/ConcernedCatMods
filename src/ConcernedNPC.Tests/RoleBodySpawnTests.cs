@@ -190,7 +190,11 @@ public sealed class RoleBodySpawnTests : IDisposable
         BodyClaim claim = registry.TryClaimBody(BodyFixtures.Thorstein, NpcBodyKind.Presentation, "figure");
         Assert.True(claim.IsGranted, claim.Reason);
 
-        Assert.Null(Spawn(claim.Lease, prefab, out string failure));
+        // The role's own contract, so the refusal is the gate's kind check and
+        // not the contract-vs-lease check in front of it.
+        Assert.Null(SpawnUnder(claim.Lease,
+            NpcBodyContract.ForWorkerWithPresentation(BodyFixtures.ForemanPrefab, BodyFixtures.WorkerKeyPrefix), prefab,
+            out string failure));
         Assert.Contains("permits a Presentation body", failure, StringComparison.Ordinal);
         Assert.Empty(_stamped);
     }
@@ -262,7 +266,85 @@ public sealed class RoleBodySpawnTests : IDisposable
         Assert.Contains("identity other than", failure, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_lease_never_builds_another_roles_prefab()
+    {
+        // #372 review: Thorstein's lease, handed in with a contract that names a
+        // prefab he never registered. Refused before the census - the census is
+        // made unanswerable here, so a refusal that came from it instead would
+        // say "census says".
+        const string otherPrefab = "CT_SomebodyElse";
+        GameObject prefab = Prefab(otherPrefab);
+        ZNetScene.instance.Named[otherPrefab] = prefab;
+        BodyLease lease = Claim(new NpcRoleRegistry());
+        ZDOMan.instance = null!;
+
+        Assert.Null(SpawnUnder(lease, NpcBodyContract.ForWorker(otherPrefab, BodyFixtures.WorkerKeyPrefix), prefab,
+            out string failure));
+        Assert.Contains("registered body contract", failure, StringComparison.Ordinal);
+        Assert.Empty(_stamped);
+    }
+
+    [Fact]
+    public void The_roles_prefab_under_another_key_prefix_is_not_its_contract()
+    {
+        GameObject prefab = Registered();
+        BodyLease lease = Claim(new NpcRoleRegistry());
+
+        Assert.Null(SpawnUnder(lease, NpcBodyContract.ForWorker(BodyFixtures.ForemanPrefab, "tcc.other."), prefab,
+            out string failure));
+        Assert.Contains("registered body contract", failure, StringComparison.Ordinal);
+        Assert.Empty(_stamped);
+    }
+
+    [Fact]
+    public void A_contract_that_differs_only_in_admitting_a_figure_is_not_the_roles_contract()
+    {
+        GameObject prefab = Registered();
+        BodyLease lease = Claim(new NpcRoleRegistry());
+
+        Assert.Null(SpawnUnder(lease,
+            NpcBodyContract.ForWorkerWithPresentation(BodyFixtures.ForemanPrefab, BodyFixtures.WorkerKeyPrefix), prefab,
+            out string failure));
+        Assert.Contains("registered body contract", failure, StringComparison.Ordinal);
+        Assert.Empty(_stamped);
+    }
+
+    [Fact]
+    public void A_lease_from_another_registry_is_judged_by_the_registry_that_granted_it()
+    {
+        // The contract a lease is checked against is the one its own arbiter
+        // recorded, not whatever some other registry was told.
+        GameObject prefab = Registered();
+        var granting = new NpcRoleRegistry();
+        granting.Register(new FakeRole(BodyFixtures.Thorstein,
+            NpcBodyContract.ForWorker("CF_Elsewhere", BodyFixtures.WorkerKeyPrefix)));
+        granting.BeginWorldLoad(out _);
+        BodyClaim claim = granting.TryClaimBody(BodyFixtures.Thorstein, NpcBodyKind.Worker, "test");
+        Assert.True(claim.IsGranted, claim.Reason);
+        var other = new NpcRoleRegistry();
+        other.Register(new FakeRole(BodyFixtures.Thorstein, BodyFixtures.ForemanContract()));
+
+        Assert.Null(Spawn(claim.Lease, prefab, out string failure));
+        Assert.Contains("registered body contract", failure, StringComparison.Ordinal);
+        Assert.Empty(_stamped);
+    }
+
     // -----------------------------------------------------------------
+
+    private GameObject? SpawnUnder(BodyLease? lease, NpcBodyContract contract, GameObject? prefab, out string failure) =>
+        NpcWorkerPrefabFactory.TrySpawnRoleBody(
+            lease,
+            contract,
+            prefab,
+            Vector3.zero,
+            Quaternion.identity,
+            instance =>
+            {
+                _stamped.Add(instance);
+                return true;
+            },
+            out failure);
 
     private GameObject? Spawn(BodyLease? lease, GameObject? prefab, out string failure, Vector3? at = null) =>
         NpcWorkerPrefabFactory.TrySpawnRoleBody(
