@@ -194,6 +194,23 @@ public sealed class NpcBodyTests : IDisposable
     }
 
     [Fact]
+    public void One_subscriber_that_throws_on_a_death_does_not_cost_the_next_its_record()
+    {
+        // #372 review: with two products subscribed, the first one's defect
+        // must not stop the second learning what its NPC dropped.
+        BodyFixtures.Register(BodyFixtures.ForemanContract());
+        NpcBody body = BodyFixtures.SavedBody(BodyFixtures.ForemanPrefab, Stamped);
+        int told = 0;
+        NpcBody.Died += (_, _, _) => throw new InvalidOperationException("another product's ledger is broken");
+        NpcBody.Died += (_, _, _) => told++;
+
+        body.Humanoid!.m_onDeath!.Invoke();
+
+        Assert.Equal(1, told);
+        Assert.Contains(_errors, line => line.Contains("a subscriber could not record the loss"));
+    }
+
+    [Fact]
     public void Live_bodies_are_found_by_prefab_and_then_by_identity()
     {
         // Two roles, one shared key prefix, two prefabs, and the SAME identity

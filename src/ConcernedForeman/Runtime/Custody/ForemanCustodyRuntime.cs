@@ -702,7 +702,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     /// to settle once they have picked them up.</summary>
     internal void OnWorkerDied(NpcBody body, IReadOnlyList<NpcDroppedItem> dropped, Vector3 where)
     {
-        if (_core == null || body == null || !string.Equals(body.StoredKey, WorkerKey.Value, StringComparison.Ordinal))
+        if (_core == null || !ForemanSavedBodies.IsForeman(body) || !string.Equals(body.StoredKey, WorkerKey.Value, StringComparison.Ordinal))
         {
             return;
         }

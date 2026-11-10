@@ -108,6 +108,20 @@ internal sealed class SettlementRuntime
     private static Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? s_onDied;
     private static Action<string>? s_onError;
 
+    /// <summary>Takes this product's handlers off Concerned NPC's shared body
+    /// events. The events live in the library's assembly, which outlives this
+    /// plugin, so a plugin torn down without this would leave its runtime
+    /// subscribed - and alive - for the rest of the process.</summary>
+    internal static void DetachBodyEvents()
+    {
+        NpcBody.Loaded -= s_onLoaded;
+        NpcBody.Died -= s_onDied;
+        NpcBody.ErrorLog -= s_onError;
+        s_onLoaded = null;
+        s_onDied = null;
+        s_onError = null;
+    }
+
     /// <summary>#295 step 1: the hand-over from Thorstein's figure at home to
     /// his worker body. Asked by <see cref="Spawn"/> immediately before a body
     /// is created: it takes the figure down, gives up its lease, and asks
@@ -475,7 +489,7 @@ internal sealed class SettlementRuntime
 
     private void OnWorkerBodyLoaded(NpcBody body)
     {
-        if (body == null || !string.Equals(body.StoredKey, _custody.WorkerKey.Value, StringComparison.Ordinal))
+        if (!ForemanSavedBodies.IsForeman(body) || !string.Equals(body.StoredKey, _custody.WorkerKey.Value, StringComparison.Ordinal))
         {
             return;
         }

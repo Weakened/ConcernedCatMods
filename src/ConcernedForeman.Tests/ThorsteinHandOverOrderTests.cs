@@ -112,6 +112,29 @@ public sealed class ThorsteinHandOverOrderTests
         AssertBefore(tight, "_presentation?.OnWorldUnloaded();", "_npc?.NoteWorldUnloaded();");
     }
 
+    [Fact]
+    public void OnlyHisOwnBodyReachesHisRuntimeThroughTheLibrarysSharedEvents()
+    {
+        // #372 review: NpcBody's events are shared by every product that loads
+        // Concerned NPC, so another role's body - even one stamped with his key -
+        // must stop at the prefab check in each handler, and the handlers must
+        // come off the events when the plugin goes.
+        string loaded = Method(Settlement, "private void OnWorkerBodyLoaded(NpcBody body)");
+        Assert.Contains("if (!ForemanSavedBodies.IsForeman(body) ||", loaded);
+        AssertBefore(loaded, "ForemanSavedBodies.IsForeman(body)", "Bind(");
+
+        string custody = Read(Path.Combine("src", "ConcernedForeman", "Runtime", "Custody", "ForemanCustodyRuntime.cs"));
+        string died = Method(custody, "internal void OnWorkerDied(NpcBody body,");
+        Assert.Contains("!ForemanSavedBodies.IsForeman(body)", died);
+        AssertBefore(died, "!ForemanSavedBodies.IsForeman(body)", "foreach (NpcDroppedItem item in dropped)");
+
+        string ctor = Method(Settlement, "internal SettlementRuntime(");
+        Assert.Equal(2, Regex.Matches(ctor, @"if \(!?ForemanSavedBodies\.IsForeman\(body\)\)").Count);
+
+        string plugin = Read(Path.Combine("src", "ConcernedForeman", "Plugin.cs"));
+        Assert.Contains("SettlementRuntime.DetachBodyEvents();", Method(plugin, "private void OnDestroy()"));
+    }
+
     private static void AssertBefore(string text, string first, string second)
     {
         int a = text.IndexOf(first, StringComparison.Ordinal);

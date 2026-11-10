@@ -532,13 +532,17 @@ public sealed class NpcBody : MonoBehaviour
         }
         finally
         {
+            // #372 review: each subscriber on its own, as Loaded is raised, so
+            // one product's throwing handler cannot cost another product the
+            // record of what its NPC lost. A single multicast invoke stopped at
+            // the first throw.
             try
             {
-                Died?.Invoke(this, dropped, where);
+                RaiseDied(this, dropped, where);
             }
             catch (Exception exception)
             {
-                ErrorLog?.Invoke("NPC body \"" + StoredKey
+                RaiseErrorLog("NPC body \"" + StoredKey
                     + "\" died and the loss could not all be recorded: " + SafeFailure.Describe(exception));
             }
         }

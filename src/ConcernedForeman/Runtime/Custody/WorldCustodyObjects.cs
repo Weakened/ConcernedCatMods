@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Settlement.Custody;
-using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 

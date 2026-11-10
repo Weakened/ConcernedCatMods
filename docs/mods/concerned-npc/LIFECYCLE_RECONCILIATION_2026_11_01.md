@@ -176,3 +176,18 @@ Still to do for #372's mind/body migration, and why each is its own change:
 - **Steward** (`StewardBody`, `StewardWorkerAI`) and **Teamster** (`TeamsterWorkerRecord`, `TeamsterWorkerAI`). The
   body halves are near-copies and the same two members serve them; Teamster's record sits in `Adapters/Workers`
   under the #313/#381 audits, and its writes are pinned there.
+
+Stated after the F2d review (APPROVE WITH NITS, record on the PR):
+- **Exposure.** `WorkerBody` was internal to Foreman; `NpcBody` is public, so another product's *code* can now reach
+  Thorstein's loaded body (its `Inventory`, `Humanoid`, `TryPersist`) through `NpcBody.FindLive` with his contract or
+  by subscribing to `Loaded`/`Died`. What stands in the way is each product's own inventory and capability audits
+  (Teamster #313/#381, Steward S1, Foreman #400), not the type system.
+- **Death report.** `NpcBody` now raises `Died` one subscriber at a time, as `Loaded` already was, so one product's
+  throwing handler no longer costs another product its record of what was dropped (fixed in review; before, a
+  multicast invoke stopped at the first throw).
+- **Other differences from `WorkerBody`.** A throwing `Loaded` subscriber leaves the body loaded but unbound (before:
+  inert), which the tick-time `FindLive` rebinding covers; messages say "NPC body"; Foreman's error handler hears every
+  product's body errors.
+- **Not widened here.** Foreman's `#400` worker-ZDO token is `\bzdo\s*\.\s*Set\s*\(`, which a different receiver name
+  (`_view.GetZDO().Set(`) would not spell; it was that narrow before this change, and widening it needs the shared
+  Interop tree's unrelated `message.Set(` excluded. A follow-up, not a regression.
