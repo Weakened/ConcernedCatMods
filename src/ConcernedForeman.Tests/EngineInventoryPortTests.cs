@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.Settlement.Custody;
 using UnityEngine;
 using static ConcernedForeman.Tests.ForemanFixtures;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -37,7 +38,7 @@ public sealed class EngineInventoryPortTests : IDisposable
         Player.m_localPlayer = null;
     }
 
-    private static WorkerInventoryPort WorkerPort(WorkerBody body, float carryWeight = 1000f) =>
+    private static WorkerInventoryPort WorkerPort(NpcBody body, float carryWeight = 1000f) =>
         new WorkerInventoryPort(body, () => carryWeight);
 
     private static ContainerInventoryPort ChestPort(Container chest, float reach = 3f, Vector3? worker = null) =>
@@ -69,7 +70,7 @@ public sealed class EngineInventoryPortTests : IDisposable
     public void AWholeStackDepositAddsToTheChestBeforeItTakesFromHim()
     {
         CustodyCore core = Custody();
-        WorkerBody body = Body();
+        NpcBody body = Body();
         Carry(core, body.Inventory!, Stone, 10);
         Container chest = Chest();
         _trace.Clear();
@@ -96,7 +97,7 @@ public sealed class EngineInventoryPortTests : IDisposable
         // arrived is taken off his stack. Inverting those two lines is the
         // regression review R2 traced to green with no test in its way.
         CustodyCore core = Custody();
-        WorkerBody body = Body();
+        NpcBody body = Body();
         Carry(core, body.Inventory!, Stone, 10);
         Container chest = Chest();
         _trace.Clear();
@@ -117,7 +118,7 @@ public sealed class EngineInventoryPortTests : IDisposable
     public void ADepositThatOnlyPartlyFitsCreditsWhatArrivedAndLeavesTheRest()
     {
         CustodyCore core = Custody();
-        WorkerBody body = Body();
+        NpcBody body = Body();
         Carry(core, body.Inventory!, Stone, 10, maxStack: 5);
         Container chest = Chest(width: 1, height: 1);
         chest.Bag.AddItem(Stack(Stone, 3, maxStack: 5));
@@ -139,7 +140,7 @@ public sealed class EngineInventoryPortTests : IDisposable
     public void AFullChestTakesNothingAndHeKeepsEverything()
     {
         CustodyCore core = Custody();
-        WorkerBody body = Body();
+        NpcBody body = Body();
         Carry(core, body.Inventory!, Stone, 10, maxStack: 5);
         Container chest = Chest(width: 1, height: 1);
         chest.Bag.AddItem(Stack(Stone, 5, maxStack: 5));
@@ -160,7 +161,7 @@ public sealed class EngineInventoryPortTests : IDisposable
         // that write fails, a receipt involving him is uncertain, never
         // completed -- the port says so by throwing at the end of the move.
         CustodyCore core = Custody();
-        WorkerBody body = Body();
+        NpcBody body = Body();
         Carry(core, body.Inventory!, Stone, 10);
         Container chest = Chest();
 
@@ -191,7 +192,7 @@ public sealed class EngineInventoryPortTests : IDisposable
     public void TheCarryBudgetAndTheRealFitBothLimitHim()
     {
         Prefab(Stone.PrefabName, maxStack: 50, weight: 2f);
-        WorkerBody body = Body();
+        NpcBody body = Body();
         WorkerInventoryPort port = WorkerPort(body, carryWeight: 10f);
 
         // 10 units of budget at 2.0 each.
@@ -205,7 +206,7 @@ public sealed class EngineInventoryPortTests : IDisposable
     public void AnIssuedToolIsNotMaterialAndNeverCountsAgainstTheBudget()
     {
         Prefab(Stone.PrefabName, maxStack: 50, weight: 2f);
-        WorkerBody body = Body();
+        NpcBody body = Body();
         body.Inventory!.AddItem(Axe());
         WorkerInventoryPort port = WorkerPort(body, carryWeight: 10f);
 
@@ -351,7 +352,7 @@ public sealed class EngineInventoryPortTests : IDisposable
     [Fact]
     public void AWorkerWithNoBodyNoOwnershipOrAnUnwrittenChangeIsNotAPlace()
     {
-        WorkerBody body = Body();
+        NpcBody body = Body();
         Assert.True(WorkerPort(body).IsAvailable);
 
         body.View!.Owner = false;

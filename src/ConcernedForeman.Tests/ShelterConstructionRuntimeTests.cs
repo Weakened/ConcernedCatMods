@@ -10,6 +10,7 @@ using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -41,7 +42,7 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
     private readonly FakeModes _modes = new FakeModes(Thorstein);
     private readonly FakeMotion _motion = new FakeMotion(Thorstein);
     private readonly FakePose _pose = new FakePose();
-    private readonly WorkerBody _body;
+    private readonly NpcBody _body;
     private readonly Container _chest;
     private readonly FakeCustody _custody;
     private readonly BuildOrderRuntime _orders;
@@ -96,9 +97,7 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
     public void Dispose()
     {
         Reset();
-        WorkerBody.Loaded = null;
-        WorkerBody.Died = null;
-        WorkerBody.ErrorLog = null;
+        ForemanFixtures.ResetBodies();
     }
 
     private static void Reset()

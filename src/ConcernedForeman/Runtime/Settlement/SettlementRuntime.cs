@@ -13,6 +13,7 @@ using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
 using TheConcernedCat.Diagnostics;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
@@ -71,14 +72,41 @@ internal sealed class SettlementRuntime
             area => _housing.Measure(area));
         _designations.Quest = new ThorsteinQuest(() => _custody.ToolWorker, HasAuthority, log);
 
-        WorkerBody.Loaded = OnWorkerBodyLoaded;
-        WorkerBody.Died = (body, dropped, where) =>
+        // #372: Thorstein's body is Concerned NPC's NpcBody, whose callbacks
+        // are events shared by every product that loads the library. Each
+        // handler takes Thorstein's own prefab only, so another role's body
+        // never reaches his custody. Detached first so a second runtime in one
+        // process replaces rather than doubles the first, as the settable
+        // callbacks of the copy this replaces did.
+        NpcBody.Loaded -= s_onLoaded;
+        NpcBody.Died -= s_onDied;
+        NpcBody.ErrorLog -= s_onError;
+        s_onLoaded = body =>
         {
+            if (ForemanWorkerBodies.IsForeman(body))
+            {
+                OnWorkerBodyLoaded(body);
+            }
+        };
+        s_onDied = (body, dropped, where) =>
+        {
+            if (!ForemanWorkerBodies.IsForeman(body))
+            {
+                return;
+            }
+
             _custody.OnWorkerDied(body, dropped, where);
             BodiesChanged?.Invoke();
         };
-        WorkerBody.ErrorLog = log;
+        s_onError = log;
+        NpcBody.Loaded += s_onLoaded;
+        NpcBody.Died += s_onDied;
+        NpcBody.ErrorLog += s_onError;
     }
+
+    private static Action<NpcBody>? s_onLoaded;
+    private static Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? s_onDied;
+    private static Action<string>? s_onError;
 
     /// <summary>#295 step 1: the hand-over from Thorstein's figure at home to
     /// his worker body. Asked by <see cref="Spawn"/> immediately before a body
@@ -140,7 +168,7 @@ internal sealed class SettlementRuntime
         try
         {
             ForemanWorkerAI? ai = Worker;
-            WorkerBody? body = ai == null ? null : ai.GetComponent<WorkerBody>();
+            NpcBody? body = ai == null ? null : ai.GetComponent<NpcBody>();
             bool present = body != null && body.IsLoaded;
             if (!_records.TryOpen(out SettlementRegister _, out SettlementJournal journal))
             {
@@ -302,7 +330,7 @@ internal sealed class SettlementRuntime
         {
             if (_worker == null)
             {
-                WorkerBody? body = WorkerBody.FindLive(_custody.WorkerKey.Value);
+                NpcBody? body = ForemanWorkerBodies.FindLive(_custody.WorkerKey.Value);
                 if (body != null)
                 {
                     Bind(body.GetComponent<ForemanWorkerAI>());
@@ -340,7 +368,7 @@ internal sealed class SettlementRuntime
         string goalText = worker.IsDeferred
             ? $"deferred ({Describe(worker.DeferredReason)})"
             : "active";
-        WorkerBody? live = worker.GetComponent<WorkerBody>();
+        NpcBody? live = worker.GetComponent<NpcBody>();
 
         return
             $"Settlement runtime: {(_settings.SettlementRuntimeEnabled.Value ? "on" : "off")}. " +
@@ -391,7 +419,7 @@ internal sealed class SettlementRuntime
             return census.IsDuplicated
                 ? "Refused: this world already holds two bodies for Thorstein. Nothing is created or removed automatically."
                 : "Thorstein already has a body in this world" +
-                    (WorkerBody.FindLive(key) == null ? ", in ground that is not loaded. Go there." : ".");
+                    (ForemanWorkerBodies.FindLive(key) == null ? ", in ground that is not loaded. Go there." : ".");
         }
 
         Player player = Player.m_localPlayer;
@@ -445,9 +473,9 @@ internal sealed class SettlementRuntime
         return $"Worker spawned at {Format(position)}. It has no order, so it should do nothing at all.";
     }
 
-    private void OnWorkerBodyLoaded(WorkerBody body)
+    private void OnWorkerBodyLoaded(NpcBody body)
     {
-        if (body == null || !string.Equals(body.Key, _custody.WorkerKey.Value, StringComparison.Ordinal))
+        if (body == null || !string.Equals(body.StoredKey, _custody.WorkerKey.Value, StringComparison.Ordinal))
         {
             return;
         }
@@ -573,7 +601,7 @@ internal sealed class SettlementRuntime
         // Never while he carries anything (D9): despawning would destroy it.
         // Asked before his goal is cleared, so a refusal really does leave
         // everything as it was (review R2, m9).
-        WorkerBody? body = worker.GetComponent<WorkerBody>();
+        NpcBody? body = worker.GetComponent<NpcBody>();
         if (body == null || !body.IsLoaded || body.ItemCount > 0 || RecordSaysHeHolds())
         {
             return "Refused: he is carrying " +

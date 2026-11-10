@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 
@@ -131,7 +132,7 @@ internal static class WorldCustodyObjects
                 continue;
             }
 
-            string stored = zdo.GetString(WorkerBody.KeyField, string.Empty);
+            string stored = zdo.GetString(ForemanWorkerBodies.KeyField, string.Empty);
             if (stored.Length == 0)
             {
                 unidentified++;
@@ -152,7 +153,7 @@ internal static class WorldCustodyObjects
     {
         try
         {
-            byte[]? stored = body.GetByteArray(WorkerBody.InventoryField, null);
+            byte[]? stored = body.GetByteArray(ForemanWorkerBodies.InventoryField, null);
             if (stored == null || stored.Length == 0)
             {
                 return 0;

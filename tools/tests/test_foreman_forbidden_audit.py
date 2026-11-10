@@ -211,6 +211,61 @@ class ForemanRuntimeCapabilitiesArePinned(unittest.TestCase):
             "}\n")
         self.assert_refused("the old FigureParts destruction came back at its old path and stayed pinned")
 
+    # #372 (F2d): his body moved to Concerned NPC's NpcBody, and its six #400
+    # pins left with WorkerBody.cs (test_npc_figure_parts_audit.py's
+    # NpcBodyWritesArePinned pins them in the library). The first plant holds
+    # all six of the old file's calls, each once and spelled as it was, at the
+    # old path: it passes the validator from before the move (origin/main
+    # 2233365) at exit 0 - exactly its pinned population - and is refused now.
+    # Each of its three kinds of call alone at that path is refused too.
+    OLD_BODY = ("Custody", "WorkerBody.cs")
+
+    def test_the_old_bodys_six_calls_put_back_are_unpinned_again(self):
+        self.plant_file(self.OLD_BODY,
+                        "internal sealed class ZzWorkerBody\n{\n"
+                        "    private const string KeyField = \"tcc.worker.key\";\n"
+                        "    private const string InventoryField = \"tcc.worker.inventory\";\n"
+                        "    private const string RevisionField = \"tcc.worker.revision\";\n"
+                        "    private Humanoid? _humanoid; private Inventory? _inventory; private int Revision;\n"
+                        "    private void Stamp(ZDO zdo, string key)\n    {\n"
+                        "        zdo.Set(KeyField, key);\n"
+                        "        zdo.Set(RevisionField, 0);\n    }\n"
+                        "    private void Persist(ZDO zdo, ZPackage package)\n    {\n"
+                        "        zdo.Set(InventoryField, package.GetArray());\n"
+                        "        zdo.Set(RevisionField, Revision);\n    }\n"
+                        "    private void Restore(ItemDrop.ItemData item) =>\n"
+                        "        _humanoid.EquipItem(item, triggerEquipEffects: false);\n"
+                        "    private void OnDeath(ItemDrop.ItemData item, int count) =>\n"
+                        "        _humanoid.DropItem(_inventory, item, count);\n"
+                        "}\n")
+        self.assert_refused("the old WorkerBody.cs came back at its old path and its six calls stayed pinned")
+
+    def test_a_regrown_body_drop_is_unpinned_again(self):
+        self.plant_file(self.OLD_BODY,
+                        "internal sealed class ZzWorkerBody\n{\n"
+                        "    private Humanoid? _humanoid; private Inventory? _inventory;\n"
+                        "    private void OnDeath(ItemDrop.ItemData item, int count) =>\n"
+                        "        _humanoid.DropItem(_inventory, item, count);\n"
+                        "}\n")
+        self.assert_refused("the old body's death drop came back at its old path and stayed pinned")
+
+    def test_a_regrown_body_equip_is_unpinned_again(self):
+        self.plant_file(self.OLD_BODY,
+                        "internal sealed class ZzWorkerBody\n{\n"
+                        "    private Humanoid? _humanoid;\n"
+                        "    private void Restore(ItemDrop.ItemData item) =>\n"
+                        "        _humanoid.EquipItem(item, triggerEquipEffects: false);\n"
+                        "}\n")
+        self.assert_refused("the old body's equipment restore came back at its old path and stayed pinned")
+
+    def test_a_regrown_body_object_write_is_unpinned_again(self):
+        self.plant_file(self.OLD_BODY,
+                        "internal sealed class ZzWorkerBody\n{\n"
+                        "    private const string KeyField = \"tcc.worker.key\";\n"
+                        "    private static void Stamp(ZDO zdo, string key) => zdo.Set(KeyField, key);\n"
+                        "}\n")
+        self.assert_refused("the old body's identity write came back at its old path and stayed pinned")
+
     def test_success_sentence_states_the_text_audits_limits(self):
         code, out = validate()
         self.assertEqual(0, code)

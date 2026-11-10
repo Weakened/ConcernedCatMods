@@ -12,6 +12,7 @@ using TheConcernedCat.Workers;
 // whole reason ArbiterActorMode exists. An alias keeps every assertion below
 // explicit about which of the two vocabularies it is talking about.
 using Lib = TheConcernedCat.ConcernedNPC.Bodies;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -98,18 +99,24 @@ public sealed class ForemanNpcAdoptionTests
     [Fact]
     public void TheThreeSavedKeysStillComposeFromThePrefixAndAreUnchanged()
     {
-        // The three literals WorkerBody has always written, spelled out here and
-        // left spelled out there. A saved body is READ by them, so they are not
-        // recomposed from the prefix in the product - that refactor would be a
-        // change to a player's save file wearing the clothes of a tidy-up. This is
-        // what stops the prefix and the keys drifting apart instead.
-        Assert.Equal("tcc.worker.key", WorkerBody.KeyField);
-        Assert.Equal("tcc.worker.inventory", WorkerBody.InventoryField);
-        Assert.Equal("tcc.worker.revision", WorkerBody.RevisionField);
+        // The three literals his body has always written, spelled out here and
+        // in ForemanWorkerBodies, where the census reads a saved body unloaded.
+        // A saved body is READ by them. Since #372 the body that writes them is
+        // Concerned NPC's NpcBody, which composes them from his contract's
+        // prefix, so the last three lines pin what the library actually writes
+        // against the literals: a drift on either side fails here.
+        Assert.Equal("tcc.worker.key", ForemanWorkerBodies.KeyField);
+        Assert.Equal("tcc.worker.inventory", ForemanWorkerBodies.InventoryField);
+        Assert.Equal("tcc.worker.revision", ForemanWorkerBodies.RevisionField);
 
-        Assert.Equal(ForemanRole.BodyKeyPrefix + "key", WorkerBody.KeyField);
-        Assert.Equal(ForemanRole.BodyKeyPrefix + "inventory", WorkerBody.InventoryField);
-        Assert.Equal(ForemanRole.BodyKeyPrefix + "revision", WorkerBody.RevisionField);
+        Assert.Equal(ForemanRole.BodyKeyPrefix + "key", ForemanWorkerBodies.KeyField);
+        Assert.Equal(ForemanRole.BodyKeyPrefix + "inventory", ForemanWorkerBodies.InventoryField);
+        Assert.Equal(ForemanRole.BodyKeyPrefix + "revision", ForemanWorkerBodies.RevisionField);
+
+        Assert.True(NpcBodyFields.TryFor(ForemanNpcRole.Contract, out NpcBodyFields written, out string reason), reason);
+        Assert.Equal(ForemanWorkerBodies.KeyField, written.Key);
+        Assert.Equal(ForemanWorkerBodies.InventoryField, written.Inventory);
+        Assert.Equal(ForemanWorkerBodies.RevisionField, written.Revision);
     }
 
     [Fact]

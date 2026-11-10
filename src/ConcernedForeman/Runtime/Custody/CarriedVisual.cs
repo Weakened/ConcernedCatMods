@@ -3,6 +3,7 @@ using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 
@@ -60,13 +61,13 @@ internal sealed class CarriedVisual
         NoBody,
     }
 
-    private readonly Func<WorkerBody?> _body;
+    private readonly Func<NpcBody?> _body;
     private readonly Action<string>? _log;
 
     private CarriedDisplay _shown = CarriedDisplay.Nothing;
     private bool _bound;
 
-    internal CarriedVisual(Func<WorkerBody?> body, Action<string>? log = null)
+    internal CarriedVisual(Func<NpcBody?> body, Action<string>? log = null)
     {
         _body = body ?? throw new ArgumentNullException(nameof(body));
         _log = log;
@@ -115,7 +116,7 @@ internal sealed class CarriedVisual
             return;
         }
 
-        WorkerBody? body = _body();
+        NpcBody? body = _body();
         VisEquipment? visuals = body == null || !body.IsOwned
             ? null
             : body.Humanoid == null ? null : body.Humanoid.GetComponent<VisEquipment>();

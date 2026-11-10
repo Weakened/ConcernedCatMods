@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Diagnostics;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -32,7 +33,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 /// at the piece.</item>
 /// <item><c>Humanoid.EquipItem(item, triggerEquipEffects: false)</c> for a
 /// hammer he is already carrying, and <c>UnequipItem</c> after. The precedent is
-/// in this product: <c>WorkerBody.RestoreEquipment</c> equips a carried tool on
+/// in this product: <c>NpcBody.RestoreEquipment</c> (Concerned NPC; <c>WorkerBody</c> before #372) equips a carried tool on
 /// exactly this body with exactly this call, for exactly the reason that a
 /// worker holding nothing looks wrong.</item>
 /// </list>
@@ -54,7 +55,7 @@ internal sealed class BuildPose : IBuildPose
     private static readonly int SidewaySpeed = ZSyncAnimation.GetHash("sideway_speed");
     private static readonly int TurnSpeed = ZSyncAnimation.GetHash("turn_speed");
 
-    private readonly Func<WorkerBody?> _body;
+    private readonly Func<NpcBody?> _body;
     private readonly Action<string> _log;
 
     private ItemDrop.ItemData? _equipped;
@@ -62,7 +63,7 @@ internal sealed class BuildPose : IBuildPose
 
     /// <param name="body">Thorstein's own persisted body, looked up live. A body
     /// captured once would be a body from the previous world load.</param>
-    internal BuildPose(Func<WorkerBody?> body, Action<string> log)
+    internal BuildPose(Func<NpcBody?> body, Action<string> log)
     {
         _body = body ?? throw new ArgumentNullException(nameof(body));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -78,7 +79,7 @@ internal sealed class BuildPose : IBuildPose
     {
         try
         {
-            WorkerBody? body = _body();
+            NpcBody? body = _body();
             if (body == null || !body.IsLoaded || !body.IsOwned)
             {
                 // Not ours to dress. Forget any hammer we thought we had put in
@@ -112,7 +113,7 @@ internal sealed class BuildPose : IBuildPose
     /// <summary>Zeroes the three locomotion parameters on the worker's own
     /// <c>ZSyncAnimation</c>, the same three <c>ClimbPose</c> writes on the local
     /// player's.</summary>
-    private static void Stand(WorkerBody body)
+    private static void Stand(NpcBody body)
     {
         ZSyncAnimation? animation = body.GetComponent<ZSyncAnimation>();
         if (animation == null)
@@ -125,7 +126,7 @@ internal sealed class BuildPose : IBuildPose
         animation.SetFloat(TurnSpeed, 0f);
     }
 
-    private void TakeOutTool(WorkerBody body)
+    private void TakeOutTool(NpcBody body)
     {
         if (_equipped != null)
         {
@@ -164,7 +165,7 @@ internal sealed class BuildPose : IBuildPose
         }
     }
 
-    private void PutAwayTool(WorkerBody body)
+    private void PutAwayTool(NpcBody body)
     {
         ItemDrop.ItemData? item = _equipped;
         _equipped = null;

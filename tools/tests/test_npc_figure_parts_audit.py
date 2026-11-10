@@ -377,5 +377,102 @@ class NpcFigurePartsArePinned(unittest.TestCase):
         self.assertIn("Cartographer's pre-library Hulgi copy exempt by name", out)
 
 
+BODY = os.path.join(LIBRARY, "Body", "NpcBody.cs")
+WITH_BODY_ROWS = "for what, broad, allowances in NPC_ENGINE_WRITES + NPC_BODY_PERSISTENCE_WRITES:"
+WITHOUT_BODY_ROWS = "for what, broad, allowances in NPC_ENGINE_WRITES:"
+
+
+class NpcBodyWritesArePinned(unittest.TestCase):
+    """#372 (F2d): Thorstein's body moved from Foreman's WorkerBody.cs to
+    Concerned NPC's NpcBody.cs, and its drop, equip and own-object writes - #400
+    pins in Foreman - moved with it into the census above, as
+    NPC_BODY_PERSISTENCE_WRITES. Each plant is refused by the census, and each
+    passes a copy of the validator with those rows taken out of it, so it proves
+    them and not some other rule."""
+
+    setUp = NpcFigurePartsArePinned.setUp
+    tearDown = NpcFigurePartsArePinned.tearDown
+    swap_in = NpcFigurePartsArePinned.swap_in
+    after = NpcFigurePartsArePinned.after
+    plant_file = NpcFigurePartsArePinned.plant_file
+
+    def without_the_body_rows(self):
+        with open(VALIDATOR, encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertEqual(1, source.count(WITH_BODY_ROWS), "the census loop moved")
+        path = os.path.join(ROOT, "tools", "_zz_without_npc_body_rows.py")
+        self.assertFalse(os.path.exists(path), "a previous copy was left behind")
+        self._planted.append(path)
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(source.replace(WITH_BODY_ROWS, WITHOUT_BODY_ROWS))
+        return path
+
+    def assert_refused(self, why):
+        code, out = validate()
+        self.assertNotEqual(0, code, why + "\n" + out[-3000:])
+        refusals = [line for line in out.splitlines() if line.startswith("ERROR: ") and AUDIT in line]
+        self.assertTrue(refusals, why + ": refused, but not by the census\n" + out[-3000:])
+        done = subprocess.run([sys.executable, self.without_the_body_rows()], cwd=ROOT,
+                              capture_output=True, text=True)
+        self.assertEqual(0, done.returncode, why + ": without the body rows something else still refuses it, so "
+                         "the plant does not prove them\n" + (done.stdout + done.stderr)[-3000:])
+
+    def test_a_drop_of_more_than_the_stack_is_refused(self):
+        self.swap_in(BODY, "_humanoid.DropItem(_inventory, item, count)",
+                     "_humanoid.DropItem(_inventory, item, count + 1)")
+        self.assert_refused("the death drop dropped a number that is not what the body holds")
+
+    def test_a_drop_from_another_inventory_is_refused(self):
+        self.swap_in(BODY, "_humanoid.DropItem(_inventory, item, count)",
+                     "_humanoid.DropItem(Player.m_localPlayer.GetInventory(), item, count)")
+        self.assert_refused("the death drop emptied somebody else's inventory")
+
+    def test_a_drop_in_another_library_file_is_refused(self):
+        self.plant_file(LIBRARY, ("Work", "ZzDrop.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Work;\n"
+                        "internal static class ZzDrop\n"
+                        "{\n"
+                        "    internal static void Run(Humanoid h, Inventory i, ItemDrop.ItemData item) =>\n"
+                        "        h.DropItem(i, item, 1);\n"
+                        "}\n")
+        self.assert_refused("a drop outside the body passed the census")
+
+    def test_the_allowance_does_not_follow_the_body_basename(self):
+        self.plant_file(LIBRARY, ("Work", "NpcBody.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Work;\n"
+                        "internal static class ZzSameName\n"
+                        "{\n"
+                        "    internal static void Run(Humanoid _humanoid, Inventory _inventory, "
+                        "ItemDrop.ItemData item, int count) =>\n"
+                        "        _humanoid.DropItem(_inventory, item, count);\n"
+                        "}\n")
+        self.assert_refused("a same-named file in another folder inherited the body's drop")
+
+    def test_an_equip_with_its_effects_is_refused(self):
+        self.swap_in(BODY, "_humanoid.EquipItem(item, triggerEquipEffects: false)",
+                     "_humanoid.EquipItem(item, triggerEquipEffects: true)")
+        self.assert_refused("the equipment restore played equip effects")
+
+    def test_a_write_of_another_field_into_the_body_is_refused(self):
+        marker = "            zdo.Set(_setup.Fields.Revision, Revision);"
+        self.after(BODY, marker, "            zdo.Set(_setup.Fields.Key, \"foreman/somebody\");")
+        self.assert_refused("the body wrote its identity again outside the stamp")
+
+    def test_a_stamp_of_another_identity_is_refused(self):
+        self.swap_in(BODY, "zdo.Set(setup.Fields.Key, identity.Value);",
+                     "zdo.Set(setup.Fields.Key, StoredKey);")
+        self.assert_refused("the stamp wrote an identity that is not the one it was given")
+
+    def test_an_object_write_in_another_library_file_is_refused(self):
+        self.plant_file(LIBRARY, ("Work", "ZzWrite.cs"),
+                        "namespace TheConcernedCat.ConcernedNPC.Work;\n"
+                        "internal static class ZzWrite\n"
+                        "{\n"
+                        "    internal static void Run(ZNetView view) =>\n"
+                        "        view.GetZDO().Set(\"tcc.worker.revision\", 0);\n"
+                        "}\n")
+        self.assert_refused("a network-object write outside the body passed the census")
+
+
 if __name__ == "__main__":
     unittest.main()

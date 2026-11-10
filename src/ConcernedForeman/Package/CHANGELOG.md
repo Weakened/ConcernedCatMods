@@ -11,6 +11,20 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Changed — Thorstein's saved body is Concerned NPC's body component (#372)
+
+- His own `WorkerBody` component is gone: his prefab carries Concerned NPC's `NpcBody`, which was derived from it
+  and does the same - identity, carried inventory and revision written into his own network object from the
+  inventory's own change callback, equipment restored on load, vanilla's own drop of exactly what he carried on a
+  genuine death - under the same three keys (`tcc.worker.key`, `.inventory`, `.revision`). A body saved by an
+  older build loads unchanged, with no migration (tested with a hand-written pre-#372 object).
+- His identity is now written by Concerned NPC's body, not by this product; a spawn whose key is not his lease's
+  identity is still refused, now before anything is built.
+- His mind (`ForemanWorkerAI`) is unchanged: the move onto Concerned NPC's `NpcBodyMind` is still to do.
+- Wording only: a body error now says "NPC body" where it said "Worker body", and the error channel is the
+  library's shared one, so another product's body error would reach this log too (no other product uses it yet).
+- In game: OWNER GO-AROUND PENDING.
+
 ### Changed — Thorstein's body is created through Concerned NPC's gated build (#372)
 
 - `cf_worker spawn` no longer creates his body itself. It hands his prefab to Concerned NPC, which requires the

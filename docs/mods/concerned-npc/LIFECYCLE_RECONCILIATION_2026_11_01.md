@@ -147,3 +147,32 @@ menu, so that case should not arise for Gunnar.
 With Teamster adopted, every consumer of Concerned NPC creates its bodies through the gated build and the audit holds
 no exception. What #372 still names beyond that is the mind/body component migration (moving `ForemanWorkerAI`,
 `StewardWorkerAI` and `TeamsterWorkerAI` onto `NpcBodyMind`/`NpcBody`), stated above as separate work.
+
+## 2026-11-10 addendum (F2d): the first body component moved
+
+Base `origin/main` `2233365` (#533 merged). The "body inventory" move of ARCHITECTURE.md section 5, for one role:
+Thorstein's own `WorkerBody` (Concerned Foreman) is gone and his prefab carries the library's `NpcBody`, which was
+derived from it line for line. Same three keys, same inventory package, same load-time equipment restore, same
+vanilla death drop of exactly what he carried, so a pre-#372 saved body loads with no migration code
+(`WorkerBodyTests.ABodySavedByTheCopyThisReplacesLoadsUnchangedWithNothingWritten`). Two public members were added:
+`NpcBody.TryRegister` (a role that builds its own prefab says what its bodies store, before any world loads) and a
+stamp-less `NpcWorkerPrefabFactory.TrySpawnRoleBody` overload (the library writes the lease's identity itself). The
+library's events are shared by every consumer, so Foreman's handlers and lookup take his prefab only
+(`AnotherRolesBodyWithHisKeyIsNeverTakenForHis`). The six Foreman `#400` pins that lived in `WorkerBody.cs` left with
+it, and the same six calls are now pinned in `Body/NpcBody.cs` by the library census (plants in
+`test_npc_figure_parts_audit.py` `NpcBodyWritesArePinned`, each passing a copy of the validator without those rows;
+`test_foreman_forbidden_audit.py` refuses the old file's six calls put back at their old path).
+
+Also closed: the F2c leftover "Teamster-side real-arbiter contract-match test"
+(`GunnarBodyTests.TheArrivalLeaseIsContractedForExactlyTheContractHisBodyIsBuiltUnder`).
+
+Still to do for #372's mind/body migration, and why each is its own change:
+- **Foreman's mind** (`ForemanWorkerAI` onto `NpcBodyMind`). `NpcBodyMind` cannot express what his mind does today:
+  it has no ground-motor suspension (his ladder climb overrides `IsSleeping` under a climb lease, pinned by the #334
+  climb audit), its leased motor walks with `SetWalk(true)` and `Time.fixedDeltaTime` where his walks at the
+  non-walk speed with the tick's `dt` (read from source, most likely a slower walk; not checked in game), and every motor command needs a live worker lease,
+  which the console's `cf_worker goto`/`stop` and the job motion do not route through today. Each is a library
+  change plus a behaviour change that wants its own in-game proof.
+- **Steward** (`StewardBody`, `StewardWorkerAI`) and **Teamster** (`TeamsterWorkerRecord`, `TeamsterWorkerAI`). The
+  body halves are near-copies and the same two members serve them; Teamster's record sits in `Adapters/Workers`
+  under the #313/#381 audits, and its writes are pinned there.

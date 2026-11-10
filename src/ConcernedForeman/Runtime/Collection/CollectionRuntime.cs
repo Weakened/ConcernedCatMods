@@ -19,6 +19,7 @@ using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
 
@@ -339,7 +340,7 @@ internal sealed class CollectionRuntime
             // dressed from `_custody.View`'s ledger — a worker visibly holding
             // stone that belongs to somebody else's record.
             _carried ??= new CarriedVisual(
-                () => WorkerBody.FindLive(Modes.Worker.Value),
+                () => ForemanWorkerBodies.FindLive(Modes.Worker.Value),
                 message => _log(message));
 
             CollectionOrderDefinition? order = world.Loop?.Order;

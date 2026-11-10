@@ -10,6 +10,7 @@ using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -18,7 +19,7 @@ namespace ConcernedForeman.Tests;
 public sealed class WorldBuildMaterialsTests : IDisposable
 {
     private readonly List<string> _log = new List<string>();
-    private readonly WorkerBody _body;
+    private readonly NpcBody _body;
     private readonly Container _chest;
     private readonly FakeCustody _custody;
     private SupplyChest _supply;
@@ -37,9 +38,7 @@ public sealed class WorldBuildMaterialsTests : IDisposable
 
     public void Dispose()
     {
-        WorkerBody.Loaded = null;
-        WorkerBody.Died = null;
-        WorkerBody.ErrorLog = null;
+        ForemanFixtures.ResetBodies();
     }
 
     private WorldBuildMaterials Materials() => new(_custody, new WorkerKey("foreman", "thorstein"), () => _supply, _log.Add);

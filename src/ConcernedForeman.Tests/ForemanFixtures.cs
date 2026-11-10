@@ -9,6 +9,7 @@ using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -153,9 +154,9 @@ internal static class ForemanFixtures
         return wagon;
     }
 
-    /// <summary>A worker body: the real <see cref="WorkerBody"/> on a stub
+    /// <summary>A worker body: the real <see cref="NpcBody"/> on a stub
     /// creature, loaded exactly as Unity would load it.</summary>
-    internal static WorkerBody Body(string key = "foreman/thorstein", bool owner = true, ZDO? zdo = null)
+    internal static NpcBody Body(string key = "foreman/thorstein", bool owner = true, ZDO? zdo = null)
     {
         var creature = new GameObject("CF_SettlementWorker");
         ZNetView view = creature.Add(new ZNetView());
@@ -163,24 +164,63 @@ internal static class ForemanFixtures
         view.Owner = owner;
         Humanoid humanoid = creature.Add(new Humanoid());
         humanoid.Bag = new Inventory("worker", null, 8, 4);
-        var body = creature.Add(new WorkerBody());
+        var body = creature.Add(new NpcBody());
 
         if (key.Length > 0 && zdo == null)
         {
-            Assert.True(WorkerBody.TryStamp(creature, key));
+            Assert.True(ForemanFixtures.Stamp(creature, key));
         }
 
         Start(body);
         return body;
     }
 
-    /// <summary>Unity calls <c>Start</c>; a test has to.</summary>
-    internal static void Start(WorkerBody body) =>
-        typeof(WorkerBody).GetMethod("Start", BindingFlags.Instance | BindingFlags.NonPublic)!
+    /// <summary>Unity calls <c>Start</c>; a test has to. His keys are
+    /// registered first, as the prefab build does before any world loads.
+    /// </summary>
+    internal static void Start(NpcBody body)
+    {
+        RegisterHisBody();
+        typeof(NpcBody).GetMethod("Start", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(body, Array.Empty<object>());
+    }
 
-    internal static void Death(WorkerBody body) =>
-        typeof(WorkerBody).GetMethod("OnDeath", BindingFlags.Instance | BindingFlags.NonPublic)!
+    /// <summary>What the prefab build does (#372): tells Concerned NPC what
+    /// bodies of his prefab store. Idempotent.</summary>
+    internal static void RegisterHisBody() =>
+        Assert.True(ForemanWorkerBodies.TryRegister(out string reason), reason);
+
+    /// <summary>The library's own stamp, as the gated build runs it on a new
+    /// body: <paramref name="key"/> must be an identity.</summary>
+    internal static bool Stamp(GameObject creature, string key)
+    {
+        RegisterHisBody();
+        Assert.True(NpcBodyContracts.TryFind(
+            TheConcernedCat.ConcernedForeman.Domain.Npc.ForemanNpcRole.Contract.PrefabName, out NpcBodySetup setup));
+        return TheConcernedCat.ConcernedNPC.Roles.NpcIdentity.TryParse(key, out var identity)
+            && NpcBody.TryStamp(creature, setup, identity);
+    }
+
+    /// <summary>Forgets every live body and detaches every handler from the
+    /// library body's shared events. By reflection rather than through a
+    /// member of the shipped type, as the library's own suite does: a public
+    /// "forget everything" would be a method whose only correct number of
+    /// production callers is zero.</summary>
+    internal static void ResetBodies()
+    {
+        ((List<NpcBody>)typeof(NpcBody)
+            .GetField("LiveBodies", BindingFlags.Static | BindingFlags.NonPublic)!
+            .GetValue(null)!).Clear();
+        foreach (string name in new[] { "Loaded", "Died", "ErrorLog" })
+        {
+            (typeof(NpcBody).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("NpcBody." + name + " is not a field-like event any more"))
+                .SetValue(null, null);
+        }
+    }
+
+    internal static void Death(NpcBody body) =>
+        typeof(NpcBody).GetMethod("OnDeath", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(body, Array.Empty<object>());
 
     // ------------------------------------------------------------------

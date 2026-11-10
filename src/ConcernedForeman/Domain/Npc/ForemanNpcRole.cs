@@ -52,7 +52,7 @@ internal sealed class ForemanDataPaths : INpcDataPaths
 /// passes across the capability boundary. The prefab name is
 /// <see cref="ForemanRole.BodyPrefabName"/>, which every saved worker body is
 /// found by. The key prefix is <see cref="ForemanRole.BodyKeyPrefix"/>, which
-/// composes exactly the three keys <c>WorkerBody</c> already reads and writes.
+/// composes exactly the three keys his body (<c>WorkerBody</c>, since #372 Concerned NPC's <c>NpcBody</c>) has always read and written.
 ///
 /// <b>Nothing here changes a byte.</b> This type states durable facts that
 /// already exist; it introduces none. That is the whole shape of the adoption

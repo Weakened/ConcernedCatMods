@@ -2,7 +2,7 @@
 
 ## 0.5.0
 
-Ten additive changes share this version:
+Eleven additive changes share this version:
 * a worker can rest as a presentation figure (#295, #298, Concerned Foreman's Thorstein);
 * a job can say that doing a target leaves the NPC carrying something (#381, Concerned Teamster's Gunnar);
 * that figure can be dressed by the one dresser, lifted here from Foreman (#295) so Sunniva and Gunnar share it;
@@ -13,6 +13,7 @@ Ten additive changes share this version:
 * a presentation figure can sit on the ground (#295 S5);
 * a role can keep a camp and ask where it is, through a public facade (#461, #295 S5);
 * a role whose worker prefab predates the factory spawns it through the factory's gated build (#372);
+* a role whose worker prefab predates the factory can carry this library's own body component (#372);
 * a role can keep its material in the library's conservation ledger and record what it measured moving (#376,
   Concerned Teamster's Gunnar).
 
@@ -30,6 +31,21 @@ Ten additive changes share this version:
 * `NpcCustodyOutcome` gains `Unspecified` as its zero, so a defaulted answer never reads as `Applied`. It was internal
   until now and nothing persists it.
 * Nothing is read or written on disk. Concerned Teamster's collection account adopts it in the same change.
+
+### A role's own prefab carries the library's own body (#372, the body-inventory move)
+
+* `NpcBody.TryRegister(contract, keeps, out reason)` is new: a role that builds its own worker prefab and puts
+  `NpcBody` on it says what its bodies store, before any world loads. It is the registration `TryFor` already made
+  for a prefab this library builds; idempotent, and a second registration of one prefab with other facts is refused.
+* `NpcWorkerPrefabFactory.TrySpawnRoleBody(lease, contract, rolePrefab, position, rotation, out failure)` is new:
+  the same gated build with the library's own identity write - the lease's identity under the contract's key
+  field, revision zero - so the role writes nothing into the network object. Refused before anything is counted
+  when the contract was never registered; a new body without `NpcBody` is destroyed again, as a failed stamp is.
+* Concerned Foreman's Thorstein is the first role: his own `WorkerBody` is gone and his prefab carries `NpcBody`,
+  which was derived from it, under the same three keys. Nothing on disk changes and no migration exists.
+* `tools/validate_repo.py`'s NPC figure-parts audit now also pins `NpcBody`'s death drop, equipment restore and
+  four own-object writes by exact spelling in `Body/NpcBody.cs` (they were Foreman `#400` pins while they lived in
+  Foreman); any other `.DropItem(`, `.EquipItem(` or `.Set(` in the library is refused.
 
 ### A role's own worker prefab is built through the gated build (#372)
 
