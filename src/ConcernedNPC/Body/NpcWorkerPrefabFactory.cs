@@ -393,6 +393,12 @@ public sealed class NpcWorkerPrefabFactory
     /// the next load with everything it holds, so a prefab that is missing,
     /// misnamed or unregistered is a refusal rather than a body.
     ///
+    /// <b>The contract must be the lease's own role's.</b> The lease names an
+    /// identity and the arbiter that granted it remembers the contract that
+    /// identity registered; a contract that differs in kind, prefab name, key
+    /// prefix or figure admission is refused before anything is counted, so one
+    /// role's lease never builds another role's body (#372 review).
+    ///
     /// <b>Stamped in the same call.</b> <paramref name="stamp"/> is the role's own
     /// identity write, run on the new object before anything else can read it.
     /// When it fails or throws, the body is destroyed again rather than left
@@ -417,6 +423,17 @@ public sealed class NpcWorkerPrefabFactory
         Func<GameObject, bool> stamp,
         out string failure)
     {
+        if (lease != null && !lease.IsContractedFor(contract))
+        {
+            // Before the census, so nothing is counted for a contract this
+            // lease's role never registered: one role's lease never builds
+            // another role's prefab (#372 review). Every other refusal,
+            // the lease's own liveness last, is still the gate's.
+            failure = "the lease is for " + lease.Identity + ", whose registered body contract is not "
+                + contract + ", so it does not permit this body";
+            return null;
+        }
+
         string? prefabFailure = DescribeUnregistered(contract, rolePrefab);
         NpcBodyTally tally = lease == null
             ? NpcBodyTally.NotYetRun(default)

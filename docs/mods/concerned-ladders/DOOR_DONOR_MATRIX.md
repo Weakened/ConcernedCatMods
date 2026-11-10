@@ -342,8 +342,12 @@ fall-back, and frame-only aiming.
 3. Ladder integration: **code-complete in slice 4**, behind the same setting. Hatch anchor in `LadderSnapAlignment`;
    door Use while attached does not dismount; top exit, exit routes and descending entries need a passage; the landing
    search refuses a lid that is not a landing; the closed lid's collision blocks ascent (section 6).
-4. Asset sources and export notes; CL-005 cellar doors reusing this matrix (#486 slice 1, the game-free model, is
-   recorded in `CELLAR_DOORS.md`).
+4. Asset sources and export notes: **recorded** in `DOOR_ASSET_SOURCES.md`, shared with CL-005. The hatch is built from
+   code, with no `.blend` or bundle. The record gives the object names, pivots, rest transforms, colliders, the curve,
+   materials and the rebuild steps, and `DoorAssetSourcesTests` holds it to the code. The owner's items are in that
+   record's section 11. The 1.1.0 candidate provenance template is in `STATUS.md`. CL-005 cellar doors reuse
+   this matrix: #486 slices 1 to 4 (the model, the piece adapter, the leaf runtime and the ladder integration) are
+   recorded in `CELLAR_DOORS.md`.
 
 ## 9. In-game rows (all OWNER GO-AROUND PENDING, #470)
 

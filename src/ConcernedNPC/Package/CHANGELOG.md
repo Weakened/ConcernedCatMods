@@ -45,14 +45,17 @@ Ten additive changes share this version:
 * The prefab must be the one the network scene knows by the contract's prefab name. A missing, misnamed or
   unregistered prefab is a refusal, because a body built from a prefab the scene cannot name is destroyed by the next
   load with everything it holds.
+* The contract handed in must be exactly the one the lease's identity registered: the same kind, prefab name, key
+  prefix and figure admission, as the arbiter that granted the lease recorded it. Anything else is refused before
+  anything is counted, so one role's lease never builds another role's body.
 * `TrySpawn` and `TrySpawnRoleBody` share the library's one instantiation of a saved body, written immediately after
   the gate's refusal. Nothing that `TrySpawn` refused or allowed has changed.
 * Nothing changes on disk and nothing about how a prefab is built or registered changes: the role still builds and
   registers its own prefab, under the same name, at the same moment.
 * `tools/validate_repo.py`'s `#372 body factory audit` refuses the engine's instantiation anywhere in a product that
-  consumes this library, and pins that the factory's one instantiation follows the gate and that the gate asks the
-  lease last. It also refuses putting a network view on an object in any spelling it can see, because that makes a saved object without the gate. Concerned Foreman and Concerned Steward adopt it in the same change. Concerned Teamster's prefab is the
-  one stated, pinned pending site until its own adoption.
+  consumes this library, and pins that the factory's one instantiation follows the gate, that the gate is asked with
+  the build's own six facts, and that the gate asks the lease last. It also refuses putting a network view on an object in any spelling it can see, because that makes a saved object without the gate. Concerned Foreman and Concerned Steward adopt it in the same change, and
+  Concerned Teamster in its own follow-up, so no product that consumes this library has an exception left.
 
 ### A worker may rest as a presentation figure (#295, #298)
 

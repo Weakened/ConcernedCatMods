@@ -285,6 +285,28 @@ public class BodyArbiterTests
     }
 
     [Fact]
+    public void A_lease_is_contracted_only_for_its_own_roles_exact_contract()
+    {
+        // #372 review: what the gated build of a role's own prefab asks.
+        var arbiter = new NpcBodyArbiter();
+        NpcBodyContract own = NpcBodyContract.ForWorker("CT_TeamsterWorker", "tcc.worker.");
+        Assert.True(arbiter.Track(Identities.Gunnar, own));
+        Assert.True(arbiter.Track(Identities.Thorstein, NpcBodyKind.Worker));
+        NpcWorldEpoch world = Identities.AWorld();
+        BodyLease gunnar = arbiter.TryClaim(Identities.Gunnar, NpcBodyKind.Worker, "job-1", world).Lease!;
+        BodyLease thorstein = arbiter.TryClaim(Identities.Thorstein, NpcBodyKind.Worker, "job-1", world).Lease!;
+
+        Assert.True(gunnar.IsContractedFor(NpcBodyContract.ForWorker("CT_TeamsterWorker", "tcc.worker.")));
+        Assert.False(gunnar.IsContractedFor(NpcBodyContract.ForWorker("CF_SettlementWorker", "tcc.worker.")));
+        Assert.False(gunnar.IsContractedFor(NpcBodyContract.ForWorker("CT_TeamsterWorker", "tcc.steward.")));
+        Assert.False(gunnar.IsContractedFor(NpcBodyContract.ForWorkerWithPresentation("CT_TeamsterWorker", "tcc.worker.")));
+        Assert.False(gunnar.IsContractedFor(NpcBodyContract.ForPresentation()));
+        Assert.False(gunnar.IsContractedFor(default));
+        // Tracked from a kind alone, an identity has no contract to match.
+        Assert.False(thorstein.IsContractedFor(NpcBodyContract.ForWorker("CF_SettlementWorker", "tcc.worker.")));
+    }
+
+    [Fact]
     public void Two_identities_do_not_interfere()
     {
         NpcRoleRegistry registry = Identities.EmptyRegistry();

@@ -22,6 +22,11 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// kinematic body, and hides the ghost) in Auto or Top: hung in the hatch's own anchor inside the opening,
 /// facing the hinge, in the hatch's rotation (<see cref="HatchLadder"/>); Auto only when there is room below, as on a
 /// floor edge. Bottom and the side modes treat a trapdoor as the 2 m floor tile it is. Only while trapdoors exist;</item>
+/// <item>aimed at a cellar door's frame (CL-005 #486, slice 4; its leaves carry kinematic bodies, so the game's ray skips
+/// them as it skips a trapdoor's lid) in Auto or Top: hung in the cover's own anchor inside the opening, facing the rear
+/// header, in the cover's rotation (<see cref="CellarLadder"/>); Auto only when there is room below. A cellar door is
+/// never a floor: every other mode, and Auto without room below, is refused (the ghost is marked invalid), never put on
+/// its edge. Only while cellar doors exist;</item>
 /// <item>aimed at a floor or a wall (<see cref="LadderEdgeSnap"/>): on the floor edge nearest the aim, hanging below it
 /// (Auto, Top, side modes; Auto and the side modes stand on it when there is no room below) or standing on it
 /// (Bottom); or on the wall face toward the player, standing on its bottom edge or hanging from its top edge (Top).
@@ -303,6 +308,35 @@ internal sealed class LadderSnapAlignment : IDisposable
             return Place(g, Quaternion.LookRotation(hatchFacing.normalized, Vector3.up), h.TransformPoint(LadderSegment.Vector(anchor.Origin)), out aligned);
         }
 
+        // 3b. Aimed at a cellar door (CL-005 #486, slice 4): never a floor. Auto (with room below) and Top hang the ladder
+        // in the cover's own anchor; anything else is refused rather than put on the edge of a frame that rises 0.3 to
+        // 1.4 m above the floor the snap would read.
+        CellarLeaves? cellar = CellarLeaves.Any ? aimed.GetComponent<CellarLeaves>() : null;
+        if (cellar != null)
+        {
+            Transform c = aimed.transform;
+            if (!CellarLadder.UsesAnchor(mode) || (mode != LadderSnapMode.Top && !RoomBelowCellar(c)))
+            {
+                _refused = player;
+                Decide("refused: " + mode + " on the cellar door " + aimed.name);
+                return false;
+            }
+
+            LadderEdgePlacement anchor = CellarLadder.Anchor;
+            if (!LadderSnap.WithinPlacementReach(eye, LadderSegment.Point(c.TransformPoint(LadderSegment.Vector(anchor.Joint))), reach))
+            {
+                _refused = player;
+                Decide("refused: " + aimed.name + " cellar door out of reach");
+                return false;
+            }
+
+            Vector3 cellarFacing = c.TransformDirection(new Vector3(anchor.FacingX, 0f, anchor.FacingZ));
+            cellarFacing.y = 0f;
+            if (cellarFacing.sqrMagnitude < 0.0001f) { _refused = player; return false; }
+            Decide(mode + " in the cellar door " + aimed.name);
+            return Place(g, Quaternion.LookRotation(cellarFacing.normalized, Vector3.up), c.TransformPoint(LadderSegment.Vector(anchor.Origin)), out aligned);
+        }
+
         // 3. Aimed at a floor or a wall.
         Transform t = aimed.transform;
         TargetPoints.Clear();
@@ -447,15 +481,23 @@ internal sealed class LadderSnapAlignment : IDisposable
     /// <summary>Nothing solid but the hatch itself under the anchored ladder's footprint for most of a section's height
     /// (<see cref="HatchLadder.RoomProbe"/>): the room test Auto applies under a floor edge, from below the frame. A
     /// saturated buffer counts as no room.</summary>
-    private static bool RoomBelowHatch(Transform hatch)
+    private static bool RoomBelowHatch(Transform hatch) => RoomBelow(hatch, HatchLadder.RoomProbe, HatchLadder.RoomProbeDepth);
+
+    /// <summary>The same test under a cellar door's anchored ladder (<see cref="CellarLadder.RoomProbe"/>, CL-005 #486
+    /// slice 4).</summary>
+    private static bool RoomBelowCellar(Transform cover) => RoomBelow(cover, CellarLadder.RoomProbe, CellarLadder.RoomProbeDepth);
+
+    /// <summary>Nothing solid but the piece itself for <paramref name="depth"/> under its local <paramref name="probe"/>.
+    /// A saturated buffer counts as no room.</summary>
+    private static bool RoomBelow(Transform piece, ClimbPoint probe, float depth)
     {
-        Vector3 from = hatch.TransformPoint(LadderSegment.Vector(HatchLadder.RoomProbe));
-        int count = Physics.RaycastNonAlloc(from, Vector3.down, Under, HatchLadder.RoomProbeDepth, _placeMask, QueryTriggerInteraction.Ignore);
+        Vector3 from = piece.TransformPoint(LadderSegment.Vector(probe));
+        int count = Physics.RaycastNonAlloc(from, Vector3.down, Under, depth, _placeMask, QueryTriggerInteraction.Ignore);
         if (count >= Under.Length) { return false; }
         for (int index = 0; index < count; index++)
         {
             Collider collider = Under[index].collider;
-            if (collider != null && !collider.transform.IsChildOf(hatch)) { return false; }
+            if (collider != null && !collider.transform.IsChildOf(piece)) { return false; }
         }
 
         return true;

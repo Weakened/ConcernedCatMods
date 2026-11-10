@@ -127,8 +127,12 @@ public sealed class CellarDoorsTests
     public void TheLocalizationNamesEveryCellarDoorAndCollidesWithNoTrapdoorToken()
     {
         Dictionary<string, string> english = CellarDoors.English();
-        Assert.Equal(CellarDoors.All.Count + 1, english.Count);
+        Assert.Equal(CellarDoors.All.Count + 2, english.Count);
         Assert.Contains(CellarDoors.DescriptionToken, english.Keys);
+        // The climber's notice (slice 4), registered with the cellar doors so it exists exactly when they do.
+        Assert.StartsWith("cl_msg_", CellarDoors.CellarClosedToken, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(english[CellarDoors.CellarClosedToken]));
+        Assert.Contains("cellar door is not open", english[CellarDoors.CellarClosedToken], StringComparison.Ordinal);
         foreach (CellarDoorFamily cellar in CellarDoors.All) { Assert.Equal(cellar.English, english[cellar.Token]); }
         Assert.Empty(english.Keys.Intersect(TrapdoorBlueprint.English().Keys));
         Assert.All(english.Keys, key => Assert.False(key.StartsWith("$", StringComparison.Ordinal)));

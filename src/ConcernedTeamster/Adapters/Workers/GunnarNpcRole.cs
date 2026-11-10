@@ -70,6 +70,13 @@ internal sealed class GunnarNpcRole : INpcRole
 
     public NpcBodyContract Body { get; }
 
+    /// <summary>The same contract, for the one call that hands his prefab to
+    /// Concerned NPC's gated build (#372). Built from the same game-free
+    /// <c>GunnarBodyContract</c> as <see cref="Body"/>, and the library refuses
+    /// any contract that is not exactly the one this role registered, so the
+    /// two cannot drift apart into a body.</summary>
+    internal static NpcBodyContract Contract { get; } = Domain.Companions.GunnarBodyContract.Create();
+
     public INpcDataPaths Paths { get; }
 
     /// <summary>Where Teamster keeps its own files. The shared runtime never

@@ -70,6 +70,12 @@ public sealed class BodyLease : IDisposable
     /// start.</summary>
     public bool IsActive => _arbiter.IsHeldBy(this);
 
+    /// <summary>Whether <paramref name="contract"/> is exactly the one this
+    /// lease's identity was registered with, by the arbiter that granted it.
+    /// Asked by the gated build of a role's own prefab, so one role's lease can
+    /// never build another role's body (#372 review).</summary>
+    internal bool IsContractedFor(NpcBodyContract contract) => _arbiter.IsContractOf(Identity, contract);
+
     /// <summary>Gives the body up. Idempotent, and a no-op once the world it
     /// belonged to has gone.</summary>
     public void Dispose()

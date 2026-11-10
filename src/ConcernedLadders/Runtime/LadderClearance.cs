@@ -235,6 +235,14 @@ internal sealed class LadderClearance
                 return false;
             }
 
+            // CL-005 #486 slice 4: the same for a cellar door's leaf, including an open leaf's upright top edge, whose
+            // face passes the slope test too. The fixed frame stays an ordinary piece.
+            if (CellarLeaves.Any && Solid(hit.collider) && !CellarLeaves.MayLandOn(hit.collider))
+            {
+                floor = default;
+                return false;
+            }
+
             if (!Solid(hit.collider) || hit.normal.y < 0.65f || hit.collider.GetComponentInParent<LadderSegment>() != null ||
                 hit.collider.GetComponentInParent<Character>() != null)
             {

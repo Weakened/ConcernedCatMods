@@ -83,18 +83,41 @@ internal sealed class NpcBodyArbiter
         Track(
             identity,
             contract.Kind,
-            alsoPresentation: contract.Kind == NpcBodyKind.Worker && contract.Admits(NpcBodyKind.Presentation));
+            alsoPresentation: contract.Kind == NpcBodyKind.Worker && contract.Admits(NpcBodyKind.Presentation),
+            contract);
 
-    private bool Track(NpcIdentity identity, NpcBodyKind contractedKind, bool alsoPresentation)
+    private bool Track(NpcIdentity identity, NpcBodyKind contractedKind, bool alsoPresentation,
+        NpcBodyContract? contract = null)
     {
         if (identity.IsEmpty || _records.ContainsKey(identity.Value))
         {
             return false;
         }
 
-        _records.Add(identity.Value, new Record(identity, contractedKind, alsoPresentation));
+        _records.Add(identity.Value, new Record(identity, contractedKind, alsoPresentation, contract));
         return true;
     }
+
+    /// <summary>Whether <paramref name="contract"/> is exactly the contract
+    /// <paramref name="identity"/> was registered with: the same kind, the same
+    /// prefab name, the same key prefix and the same admission of a figure
+    /// (#372 review).
+    ///
+    /// <b>Why the gated build asks this.</b> A lease names an identity; a role's
+    /// own prefab is built under a contract the caller hands in. Without this,
+    /// one role's lease could build another role's prefab - the census would
+    /// count the wrong prefab's bodies and the stamp would write this identity
+    /// into an object whose prefab says it is somebody else. An identity tracked
+    /// from a kind alone has no contract to match, so it matches nothing: a
+    /// refusal, never a grant.</summary>
+    internal bool IsContractOf(NpcIdentity identity, NpcBodyContract contract) =>
+        TryGet(identity, out Record record)
+        && record.HasContract
+        && record.ContractedKind == contract.Kind
+        && record.AlsoPresentation == contract.Admits(NpcBodyKind.Presentation)
+        && record.PrefabName.Length != 0
+        && string.Equals(record.PrefabName, contract.PrefabName, StringComparison.Ordinal)
+        && string.Equals(record.ZdoKeyPrefix, contract.ZdoKeyPrefix, StringComparison.Ordinal);
 
     internal bool IsTracked(NpcIdentity identity) =>
         !identity.IsEmpty && _records.ContainsKey(identity.Value);
@@ -324,11 +347,15 @@ internal sealed class NpcBodyArbiter
     /// </summary>
     private sealed class Record
     {
-        internal Record(NpcIdentity identity, NpcBodyKind contractedKind, bool alsoPresentation)
+        internal Record(NpcIdentity identity, NpcBodyKind contractedKind, bool alsoPresentation,
+            NpcBodyContract? contract)
         {
             Identity = identity;
             ContractedKind = contractedKind;
             AlsoPresentation = alsoPresentation && contractedKind == NpcBodyKind.Worker;
+            HasContract = contract.HasValue;
+            PrefabName = contract?.PrefabName ?? string.Empty;
+            ZdoKeyPrefix = contract?.ZdoKeyPrefix ?? string.Empty;
             Mode = new ActorModeOwner(identity);
             BodyHolder = string.Empty;
         }
@@ -336,6 +363,19 @@ internal sealed class NpcBodyArbiter
         internal NpcIdentity Identity { get; }
 
         internal NpcBodyKind ContractedKind { get; }
+
+        /// <summary>The identity was registered from a whole contract rather
+        /// than a kind alone, so <see cref="PrefabName"/> and
+        /// <see cref="ZdoKeyPrefix"/> are its own.</summary>
+        internal bool HasContract { get; }
+
+        /// <summary>The registered contract's prefab name; empty when there is
+        /// none.</summary>
+        internal string PrefabName { get; }
+
+        /// <summary>The registered contract's key prefix; empty when there is
+        /// none.</summary>
+        internal string ZdoKeyPrefix { get; }
 
         /// <summary>A worker identity that rests as a presentation figure. The
         /// two kinds are still never held at once; this only says which kinds
