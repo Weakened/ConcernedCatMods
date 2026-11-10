@@ -449,8 +449,12 @@ Done: slice 1 (model, PR #534), slice 2 (piece adapter, PR #535, this record's s
 integration, section 2c).
 
 1. Done in slice 4: the ladder integration (section 2c). With it, #486's code scope is complete.
-2. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
-   provenance.
+2. Editable asset sources and export notes: **recorded** in `DOOR_ASSET_SOURCES.md`. The geometry, colliders and
+   motion are code, with no `.blend` or bundle. The record gives every object name, pivot, rest transform, collider
+   and prism mesh, the shared curve and each family's swing time and materials. `DoorAssetSourcesTests` holds it to
+   the code. Still the owner's: whether the code counts as the editable source or the doors should be modelled in
+   Blender, and per-leaf motion against the pair rule (`DOOR_ASSET_SOURCES.md` section 11). Candidate provenance: the
+   template is in `STATUS.md` ("1.1.0 candidate provenance"). No candidate is built yet.
 
 ## 10. In-game rows (all OWNER GO-AROUND PENDING, #470)
 
