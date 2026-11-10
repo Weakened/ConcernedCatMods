@@ -46,11 +46,22 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
     private readonly GunnarDepositPort _deposit = new GunnarDepositPort();
     private readonly CollectionLimits _limits = CollectionLimits.Default.Validate();
 
-    /// <summary>What he has taken and where it has gone, this session. The
-    /// ledger never subtracts, so "was anything invented" is one comparison and
-    /// a deposit that measured more than is there leaves the discrepancy
-    /// visible instead of balancing itself.</summary>
+    /// <summary>What he has taken and where it has gone, in this world load.
+    /// The ledger never subtracts, so "was anything invented" is one comparison
+    /// and a deposit that measured more than is there leaves the discrepancy
+    /// visible instead of balancing itself. Closed when its world goes down
+    /// (<see cref="CloseAccountForWorld"/>, #376), so the next world starts a
+    /// fresh one.</summary>
     private readonly CollectionAccount _account = new CollectionAccount();
+
+    /// <summary>The account's world and his body record's trust, latched while
+    /// the world is up, because neither can be read at the down edge.</summary>
+    private readonly CollectionWorldWatch _worldWatch = new CollectionWorldWatch();
+
+    /// <summary>The durable record of what the account still held, unvouched
+    /// for, when its world went down (#376).</summary>
+    private readonly GunnarWorldDownRecordStore _worldDowns = new GunnarWorldDownRecordStore();
+    private bool _worldWatchFaulted;
 
     /// <summary>The durable record of what he carried when he died (D16).
     /// </summary>
@@ -172,6 +183,20 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
     {
         if (_faulted)
         {
+            // A faulted runtime records nothing new, but the world its account
+            // belongs to still ends, and the account still closes with it.
+            try
+            {
+                if (ZNetScene.instance == null)
+                {
+                    CloseAccountForWorld("the world went away");
+                }
+            }
+            catch
+            {
+                // The runtime is already off; nothing more may escape.
+            }
+
             return;
         }
 
@@ -182,6 +207,10 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         catch (Exception exception)
         {
             _faulted = true;
+
+            // A faulted runtime no longer watches his body, so nothing it saw
+            // before may vouch for what he carries when this world goes down.
+            _worldWatch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);
             _log?.LogError("Gunnar's collection runtime faulted and is now off for this session: " + SafeFailure.Describe(exception));
             try
             {
@@ -201,6 +230,37 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
     private void OnDestroy()
     {
         TearDown("the plugin is shutting down");
+    }
+
+    /// <summary>After every Update of the frame, so a pick, a take or a deposit
+    /// recorded anywhere this frame - and his record's answer to it - is what
+    /// the account's world watch last saw before a down edge (#376).</summary>
+    private void LateUpdate()
+    {
+        if (_faulted)
+        {
+            return;
+        }
+
+        try
+        {
+            if (ZNetScene.instance != null && ZNet.instance != null && ZDOMan.instance != null
+                && !(Game.instance != null && Game.instance.IsShuttingDown()))
+            {
+                WatchAccountWorld();
+            }
+        }
+        catch (Exception exception)
+        {
+            // Never latched as current: an unanswerable question is no trust.
+            _worldWatch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);
+            if (!_worldWatchFaulted)
+            {
+                _worldWatchFaulted = true;
+                _log?.LogError("Gunnar's collection could not ask whether his body's record is current; what he " +
+                    "carries is recorded as unresolved when this world goes down: " + SafeFailure.Describe(exception));
+            }
+        }
     }
 
     private void FrameTick()
@@ -227,6 +287,9 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             _log?.LogInfo(
                 "Gunnar's collection: the world went away, so the pick in flight and every " +
                 "unconfirmed source went with it.");
+
+            // Last, once nothing above can still record into it.
+            CloseAccountForWorld("the world went away");
         }
 
         if (worldUp)
@@ -349,14 +412,112 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
         _ordered = false;
         _orderedSource = string.Empty;
-        DropTourForWorld();
-        DropHaulForWorld();
-        if (_lifecycle != null)
+        try
         {
-            try { _lifecycle.Shutdown(); }
-            finally { _lease.Release(); }
-            _log?.LogInfo("Gunnar's collection: stood down because " + why + ".");
+            DropTourForWorld();
+            DropHaulForWorld();
+            if (_lifecycle != null)
+            {
+                try { _lifecycle.Shutdown(); }
+                finally { _lease.Release(); }
+                _log?.LogInfo("Gunnar's collection: stood down because " + why + ".");
+            }
         }
+        finally
+        {
+            // A teardown with a world still up never reached the down edge, so
+            // the account would otherwise end with the process, unrecorded -
+            // and so would it if anything above threw.
+            try
+            {
+                _worldWatch.ObserveWorld(CurrentWorldUid());
+            }
+            catch
+            {
+                // No world id: the record says so instead.
+            }
+
+            CloseAccountForWorld(why);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // #376: the account is one world load's
+    // ------------------------------------------------------------------
+
+    /// <summary>A frame with the world up, after every Update. The world id is
+    /// read until it can be; the body record's trust only while the account
+    /// has something on his back. An idle frame allocates nothing and calls
+    /// none of the body delegates: it checks the id and loops over the items
+    /// this world's account has acquired, one dictionary lookup each.</summary>
+    private void WatchAccountWorld()
+    {
+        if (_worldWatch.WorldUid == null)
+        {
+            _worldWatch.ObserveWorld(CurrentWorldUid());
+        }
+
+        if (_account.HoldsOnHisBack)
+        {
+            _worldWatch.ObserveBody(_worker() != null, _recordUnwritable(), _recordUnreadable());
+        }
+    }
+
+    /// <summary>Its world went down, or the process is tearing down: the
+    /// account closes and the next world starts a fresh one. What it still
+    /// held is evidence, kept the way this product already keeps it - his
+    /// body's own record and the cart save with the world, and what neither is
+    /// shown to hold is appended to that world's world-down record, or said at
+    /// warning level where that write fails (lead default 8, pending owner
+    /// confirmation). Nothing in any world is moved, written off or recreated.
+    /// Never throws.</summary>
+    private void CloseAccountForWorld(string why)
+    {
+        if (_account.IsFresh && _worldWatch.WorldUid == null)
+        {
+            return;
+        }
+
+        WorldDownCustody closed;
+        long? world;
+        _worldWatchFaulted = false;
+        try
+        {
+            closed = _worldWatch.Close(_account, out world);
+        }
+        catch (Exception exception)
+        {
+            _log?.LogError("Gunnar's collection account could not be closed with its world: " +
+                SafeFailure.Describe(exception));
+            return;
+        }
+
+        if (closed.IsSettled)
+        {
+            return;
+        }
+
+        if (closed.Unresolved == 0)
+        {
+            _log?.LogInfo("Gunnar's collection: " + why + "; " + closed.Describe() +
+                ". It stays where it is in that world; the account is closed and the next world starts a fresh one.");
+            return;
+        }
+
+        string rows = WorldDownRows.Serialize(DateTime.UtcNow, WorkerKey.Gunnar.Value, closed, why);
+        string kept;
+        try
+        {
+            _worldDowns.TryAppend(world, rows, out kept);
+        }
+        catch (Exception exception)
+        {
+            kept = "the world-down record could not be written, so this one is in the log only: " +
+                SafeFailure.Brief(exception);
+        }
+
+        _log?.LogWarning("Gunnar's collection: " + why + ", and " + closed.Describe() + "; " + kept +
+            ". Nothing was written off, moved or recreated." + Environment.NewLine + rows.TrimEnd('\n'));
     }
 
     private bool OptedIn()
@@ -764,7 +925,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 ? " - it is checked once nothing stands in the way, and now " + TourPlanWaitingFor()
                 : "") +
             "; the ledger records " + _account.Ledger.Acquired.ToString(
-                System.Globalization.CultureInfo.InvariantCulture) + " unit(s) taken this session" +
+                System.Globalization.CultureInfo.InvariantCulture) + " unit(s) taken in this world load" +
             (_account.Ledger.IsConserved ? "" : "; THE LEDGER DOES NOT BALANCE - see the log") + ".";
     }
 

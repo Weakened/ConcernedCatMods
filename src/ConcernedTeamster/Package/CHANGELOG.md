@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+* **Gunnar's collection account is one world's (#376).** It used to last the whole game session, so stone he took in
+  one world was still counted as his in the next. It now closes when the world goes down and the next world starts a
+  fresh one. Nothing in any world moves: what he carries stays in his body, which saves its own inventory, and what is
+  in his cart stays in the cart. If something is on his back and his body's record was not seen to hold it, it is
+  written to `teamster_worker_world_down_<world>.tsv` beside the death record, and to the log at warning level; if
+  that file cannot be written, the log says so. **Not yet observed in game.**
 * **Gunnar can fell a small tree (#381).** A new `Workers/GunnarFellsSmallTrees` setting, **off by default** and
   needing `Workers/GunnarCollectionEnabled` too, lets `ct_collect fell` land one hit with an axe he carries (have him
   take one from a chest you marked for taking) on the small beech or small fir nearest him inside the area you set

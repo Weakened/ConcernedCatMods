@@ -90,11 +90,11 @@ internal enum FuelPlace
 /// <b>Nothing here is written to disk, apart from the loss</b>, which the
 /// runtime saves in the Steward's own record (see <see cref="RestoreLoss"/>).
 /// Every place is named in the library's unknown load, because nothing in this
-/// domain type knows which world it is in. <b>That is not the same as one world
-/// load:</b> the loop, and this ledger with it, lives as long as the runtime, so
-/// a run left unsettled in one world is still this ledger's in the next. That
-/// was as true of the four counters before #376 and is accounting only; it is
-/// listed as still needed in docs/mods/concerned-npc/ARCHITECTURE.md section 10.
+/// domain type knows which world it is in. <b>It is bounded by one world load
+/// all the same</b> (#376, third slice): when her world goes down the run is
+/// closed with it (<see cref="CloseForWorld"/>) and the next world starts a
+/// fresh ledger. Before that slice the ledger lived as long as the runtime, so
+/// fuel she carried in one world became a loss in the next.
 /// </summary>
 internal sealed class FuelCustody
 {
@@ -269,11 +269,9 @@ internal sealed class FuelCustody
     /// ledger that still held it, the next save wrote the doubled number, and
     /// every reload doubled it again. A loss already recorded here is never
     /// lowered by a smaller number on disk either: a record that could not be
-    /// written after a loss is behind this ledger, not ahead of it. Across two
-    /// worlds in one session the restored loss is now the larger of the two
-    /// rather than their sum; either way a world's own recorded loss is never
-    /// under-reported, and the attribution across worlds is the pre-existing
-    /// limit the type summary states.
+    /// written after a loss is behind this ledger, not ahead of it. Since the
+    /// ledger closes with its world (<see cref="CloseForWorld"/>), a restore is
+    /// only ever its own world's.
     ///
     /// What is restored is acquired straight into the library's lost place, so
     /// the invariant still holds: those units really did leave the depot, and
@@ -311,6 +309,26 @@ internal sealed class FuelCustody
         _acknowledged = 0;
         Revision++;
         return true;
+    }
+
+    /// <summary>Her world went down (#376, third slice). Returns where the run
+    /// stood and replaces the ledger with a fresh one in the same call,
+    /// <b>unconditionally</b>: unlike <see cref="TryReset"/>, which refuses an
+    /// unsettled run, this is not a new run beginning in the same world but the
+    /// world the run described having gone. Nothing moves in any world. What
+    /// was in her pack is still in her pack, in that world, and is counted
+    /// again by measurement when it loads (<see cref="RestateCarried"/>); a
+    /// loss nobody acknowledged is the runtime's to make sure of in that
+    /// world's record before calling this, which the returned snapshot is for.
+    /// Never carried into the next world's ledger, where it would be counted
+    /// against a depot it never came out of.</summary>
+    internal FuelRunAtWorldDown CloseForWorld()
+    {
+        var closed = new FuelRunAtWorldDown(Withdrawn, Carried, Burned, Returned, Unaccounted, Balances);
+        _ledger = NewRun();
+        _acknowledged = 0;
+        Revision++;
+        return closed;
     }
 
     /// <summary>Clears a recorded loss, once a person has been told about it.
@@ -414,4 +432,42 @@ internal sealed class FuelCustody
                 parameterName, units, "A custody movement is at least one unit.");
         }
     }
+}
+
+/// <summary>Where one run stood when her world went down, in her words.
+/// </summary>
+internal readonly struct FuelRunAtWorldDown
+{
+    public FuelRunAtWorldDown(int withdrawn, int carried, int burned, int returned, int unaccounted, bool balanced)
+    {
+        Withdrawn = withdrawn;
+        Carried = carried;
+        Burned = burned;
+        Returned = returned;
+        Unaccounted = unaccounted;
+        Balanced = balanced;
+    }
+
+    public int Withdrawn { get; }
+
+    /// <summary>Still in her pack, in the world that went down.</summary>
+    public int Carried { get; }
+
+    public int Burned { get; }
+
+    public int Returned { get; }
+
+    /// <summary>A loss nobody has acknowledged.</summary>
+    public int Unaccounted { get; }
+
+    public bool Balanced { get; }
+
+    /// <summary>Nothing in her pack and nothing unaccounted: nothing of the run
+    /// can still matter.</summary>
+    public bool IsSettled => Carried == 0 && Unaccounted == 0;
+
+    public string Describe() => string.Format(
+        CultureInfo.InvariantCulture,
+        "withdrew {0}; carrying {1}, burned {2}, returned {3}, unaccounted {4}",
+        Withdrawn, Carried, Burned, Returned, Unaccounted);
 }

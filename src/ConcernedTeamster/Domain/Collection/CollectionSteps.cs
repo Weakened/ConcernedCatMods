@@ -158,7 +158,9 @@ internal enum CollectionAttention
 /// <see cref="CargoLedger.IsConserved"/> can be asked after every one.</summary>
 internal sealed class CollectionAccount
 {
-    private readonly CargoLedger _ledger = new CargoLedger();
+    /// <summary>Replaced, never cleared, when its world goes down
+    /// (<see cref="CloseForWorld"/>): the account is one world load's.</summary>
+    private CargoLedger _ledger = new CargoLedger();
 
     /// <summary>The ledger. Handed out so a test and a status line can ask it
     /// questions; nothing outside this type writes to it during a job.</summary>
@@ -167,6 +169,51 @@ internal sealed class CollectionAccount
     public int Serviced { get; private set; }
 
     public int Skipped { get; private set; }
+
+    /// <summary>Something this world's account saw him take is still on his
+    /// back. Allocation-free, because the runtime asks it every frame.</summary>
+    public bool HoldsOnHisBack => _ledger.Holds(CargoPlace.Carried);
+
+    /// <summary>Nothing has been recorded since the account was opened.
+    /// </summary>
+    public bool IsFresh => Serviced == 0 && Skipped == 0 && _ledger.Acquired == 0;
+
+    /// <summary>Its world went down (#376, third slice). Takes what is still
+    /// unsettled - on his back, in the cart - classified by
+    /// <see cref="WorldDownPolicy"/>, and replaces the ledger with a fresh one
+    /// in the same call, so nothing this world's account recorded is ever
+    /// accounted as his in the next.
+    ///
+    /// <b>Accounting only.</b> Nothing in any world moves: what is on his back
+    /// stays in his body, what is in the cart stays in the cart. The terminal
+    /// places - delivered, spilled, dropped, lost - are history and are not
+    /// carried anywhere. Unconditional, unlike a fresh run in the Steward: the
+    /// world it was about has gone whether or not it was settled, and the
+    /// answer to unsettled is the evidence returned here, never keeping the
+    /// account alive into a world it does not describe.</summary>
+    public WorldDownCustody CloseForWorld(BodyRecordTrust trust)
+    {
+        var holdings = new List<WorldDownHolding>();
+        IReadOnlyList<KeyValuePair<string, int>> back = _ledger.Holding(CargoPlace.Carried);
+        for (int index = 0; index < back.Count; index++)
+        {
+            holdings.Add(new WorldDownHolding(
+                back[index].Key, back[index].Value, CargoPlace.Carried, WorldDownPolicy.ForCarried(trust)));
+        }
+
+        IReadOnlyList<KeyValuePair<string, int>> cart = _ledger.Holding(CargoPlace.InCart);
+        for (int index = 0; index < cart.Count; index++)
+        {
+            holdings.Add(new WorldDownHolding(
+                cart[index].Key, cart[index].Value, CargoPlace.InCart, WorldDownPolicy.ForCart()));
+        }
+
+        var closed = new WorldDownCustody(holdings, _ledger.Acquired, _ledger.IsConserved, trust);
+        _ledger = new CargoLedger();
+        Serviced = 0;
+        Skipped = 0;
+        return closed;
+    }
 
     /// <summary>Records what became of one step.</summary>
     /// <param name="step">The driver's own name for this step, which is unique
@@ -276,7 +323,7 @@ internal sealed class CollectionAccount
     /// (`DECISIONS.md` D22): off his back and into the cart, by what was
     /// <b>measured arriving</b>. A refusal and an unmeasurable answer move
     /// nothing. Bounded by what the ledger holds on his back, so a load that
-    /// measured more than this session saw him take moves what it can and leaves
+    /// measured more than this world's ledger saw him take moves what it can and leaves
     /// the difference visible, never acquired on paper to make it balance.</summary>
     /// <returns>How many units the ledger moved into the cart.</returns>
     public int RecordCartLoad(string step, DepositResult result)
@@ -351,9 +398,10 @@ internal sealed class CollectionAccount
     /// everything in it, exactly as the game left it, so nothing recorded
     /// <see cref="CargoPlace.InCart"/> moves here.
     ///
-    /// <b>Bounded by what this session's ledger saw him take, never by what he
-    /// held.</b> The ledger starts empty every session, and a stone he picked up
-    /// last night is in him and not in it. Units the ledger never acquired are
+    /// <b>Bounded by what this world's ledger saw him take, never by what he
+    /// held.</b> The ledger starts empty every session and every world load
+    /// (<see cref="CloseForWorld"/>), and a stone he picked up last night is in
+    /// him and not in it. Units the ledger never acquired are
     /// reported by the death record and stay out of the ledger, rather than being
     /// acquired here to make the totals agree - which would be minting on paper.
     /// So <see cref="CargoLedger.IsConserved"/> holds after this whatever the

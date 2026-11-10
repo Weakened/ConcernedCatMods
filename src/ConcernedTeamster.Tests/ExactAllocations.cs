@@ -198,6 +198,7 @@ public class ExactAllocationsTests
             {
                 "AllocationProbeTests.cs",
                 "Companions/GunnarCampTests.cs",
+                "GunnarWorldDownTests.cs",
                 "PerformanceBudgetTests.cs",
                 "TelemetrySamplerTests.cs",
                 "TripPersistenceTests.cs",
@@ -212,6 +213,7 @@ public class ExactAllocationsTests
             typeof(TripPersistenceTests),
             typeof(ExactAllocationsTests),
             typeof(TheConcernedCat.ConcernedTeamster.Tests.Companions.GunnarCampTests),
+            typeof(GunnarWorldDownAllocationTests),
         })
         {
             CustomAttributeData membership = Assert.Single(

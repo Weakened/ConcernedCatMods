@@ -147,7 +147,20 @@ Since #376 the units are kept in Concerned NPC's `NpcCustodyLedger`, not in a co
 names Gunnar's places in the library's words (his back is *carried*, the assigned cart *stored*, a spilled cart and a
 death drop *released*, lost and unresolved-at-death *lost*) and records each measured movement through
 `RecordMeasuredMove`. The library refuses to move material out of a terminal place again, so delivered, lost, spilled
-or dropped material is never moved as his. The ledger is still in-session only and writes nothing to disk.
+or dropped material is never moved as his. The ledger itself writes nothing to disk.
+
+**The account is one world load's** (#376, third slice; lead default 8 in `docs/mods/concerned-npc/ARCHITECTURE.md`
+section 10, pending owner confirmation). When a world goes down - or the plugin tears down with one still up - the
+runtime closes it and the next world starts a fresh one; before that slice it lasted the game session, so units he
+took in one world were still his in the next. Closing moves nothing anywhere. What the account still held is
+classified, failing closed: carried material his body's own record (`tcc.worker.inventory`) was **seen** holding - a
+bound body, record loaded, last change persisted, in the last world-up frame (checked after every Update, because
+none of it can be read at the down edge), with no record unread or behind seen earlier in that world - is already
+durable and is only logged; material in the assigned cart is in a vanilla container that saves with the world and is
+only logged; carried material nothing shows his record holds (a record unread or behind at any point in that world,
+which a zone reload does not clear, or no body of his bound - unloaded with its zone or retired) is **unresolved** and is appended to `teamster_worker_world_down_<world>.tsv` beside
+the death record, the D16 way, with the same rows in the log at warning level - or, where that file cannot be
+written, the log says so. Delivered, spilled, dropped and lost units are history and are not carried anywhere.
 
 Every movement carries the name of the step that caused it, so a retry after an interruption re-states what it
 already did and is told so. **Re-using a name for something else is refused outright**, because a name that means
@@ -1192,7 +1205,7 @@ be refused by the new rules and to pass a validator without them.
 - A reload ends the cart's lease (D6), so an interrupted cart tour is never continued as a cart tour; what he holds
   then goes to a chest through `ct_collect deposit` or a chest tour.
 - `CollectionAccount.RecordDeposit` takes a chest deposit off his back first and then out of `InCart`; a later chest
-  deposit that measured more than this session's ledger had on his back would move the difference out of `InCart` on
+  deposit that measured more than this world's ledger had on his back would move the difference out of `InCart` on
   paper. The totals stay conserved; it is the session record's misattribution, not a material movement (D22, lead
   default 11).
 

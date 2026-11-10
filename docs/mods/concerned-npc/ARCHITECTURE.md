@@ -340,11 +340,10 @@ library's words, not a world grant; none changes what any NPC does in the world)
    delivered, lost, spilled or dropped material; nothing called it, and it is now refused (`CargoOutcome.Malformed`).
 3. **A ledger that is never written down may name every place in the unknown load.** `RecordMeasuredMove` requires
    both places in one load and refuses a mixture. Gunnar's account uses the unknown load for every place, because
-   handing it a world would mean changing `Adapters/Workers`. **That account is not bounded by one world load**: the
-   runtime keeps one for the whole game session, so units recorded in one world stay recorded in the next. This was
-   equally true of Teamster's own ledger before #376 and is accounting only, but it is open: replacing the account
-   when a world goes down is listed below. The executor's own intents, which are written down and read back, still
-   require a known load.
+   handing it a world would mean changing `Adapters/Workers`. The account used to last the whole game session, so
+   units recorded in one world stayed recorded in the next; **since the third slice it is bounded by one world load**
+   all the same - the runtime closes it when its world goes down (lead default 8). The executor's own intents, which
+   are written down and read back, still require a known load.
 4. **Gunnar's names stay one name space.** The library keeps acquisitions and movements apart; `CargoLedger` keeps a
    name used for a take, a move or a cart spill from being used for either of the others, as it always has.
 5. **Fuel Sunniva puts back in the supply chest is `Handed`, a terminal place** (second slice). It is back in the
@@ -353,31 +352,62 @@ library's words, not a world grant; none changes what any NPC does in the world)
    count the same wood once in the chest and again in her hands. A burn is `Delivered` at the fire, and unaccounted
    fuel is `Lost`. The library is told one material for her run - she counts one fuel per run and never knew which
    item it was by name.
-6. **Sunniva's ledger is also in the unknown load and is not bounded by one world load.** The upkeep loop lives as
-   long as her runtime, so a run left unsettled in one world - fuel in her pack or a loss not yet acknowledged - is
-   still this ledger's when the next world loads. That was true of her four counters before #376 and is accounting
-   only; it is listed below with Gunnar's.
+6. **Sunniva's ledger is also in the unknown load.** It used to live as long as her runtime, so a run left unsettled
+   in one world was still the ledger's when the next world loaded - and the next world's first count of her pack then
+   recorded the fuel she carried in the last one as a loss against a depot it never came out of (or, with no body of
+   hers in the new world, stopped her there for a person). **Since the third slice the run ends with its world**
+   (lead default 8).
 7. **A restored loss is reconciled, never added** (second slice; a behaviour fix). Her record saves the loss the
    ledger knows, and every world load hands it back. Restoring used to add it, so leaving a world and loading it again
    in one session doubled the loss, the next save wrote the doubled number, and each reload doubled it again. Restoring
    now raises the loss *to* the recorded number and never lowers it: a record that could not be written after a loss
-   is behind the ledger, not ahead of it. Across two worlds in one session the restored loss is now the larger of the
-   two rather than their sum; a world's own recorded loss is never under-reported, and the attribution across worlds is
-   lead default 6's limit, unchanged. A loss acknowledged in memory whose acknowledgement did not reach the record
+   is behind the ledger, not ahead of it. (Before the third slice, across two worlds in one session the restored loss
+   was the larger of the two; since lead default 8 each world loads into a fresh ledger, so a restore is only ever its
+   own world's.) A loss acknowledged in memory whose acknowledgement did not reach the record
    comes back once on the next load, which is the safe direction. Proved by `FuelCustodyLedgerTests`; nothing about it
    has been observed in game.
+8. **What an unsettled run becomes when its world goes down** (third slice; the owner's open question, answered here
+   with the most conservative reading). **The run ends with its world, unconditionally**: both ledgers are replaced at
+   the down edge (and at a plugin teardown with a world still up), so nothing recorded in one world is ever counted in
+   another. Nothing in any world moves, nothing is written off, re-acquired or recreated, and nothing is asserted that
+   was not measured. What the closed run still held is kept the way each product already keeps unresolved material:
+   - **Gunnar** (`CollectionAccount.CloseForWorld`, `WorldDownPolicy`, `CollectionWorldWatch`). Material in the
+     assigned cart is in a vanilla container that saves with the world: logged. Material on his back is kept by his
+     body's own record (`tcc.worker.inventory`) **only when a body of his was bound, with that record loaded and its
+     last change persisted, in the last world-up frame, and no record unread or behind was seen earlier in that
+     world** - watched after every Update while the world is up, because at the down edge the body is gone and the
+     record flags read "no body", which is not "current"; that is logged. Anything else on his back - a record
+     unread or behind at any point (a zone reload re-creates a record that reads current from a package that may
+     lack the change), or no body bound (unloaded with its zone, or retired) - is **unresolved**: the closed account was the only evidence of it, so
+     it is appended to `teamster_worker_world_down_<world>.tsv` beside the D16 death record and logged at warning
+     level, or, where the file cannot be written, the warning says it is in the log only.
+   - **Sunniva** (`FuelCustody.CloseForWorld`, `FuelWorldDownCarry`). Fuel in her pack stays in her pack in that
+     world: her body's inventory saves with it and her durable plan has it suspended, so the next load of that world
+     counts her pack and corrects the record by measurement (her pre-existing reload recovery); it is **not** called
+     lost, which nothing measured. A loss nobody acknowledged is her loss ledger's - that world's record: if the record
+     was not last written with it, it is written once more, to the world the run belonged to, before the ledger closes.
+     If that write fails, the log says so, and the loss is kept in memory against that world for the rest of the
+     session and restored the next time it loads (where she stops until `cs_steward resolve`). It is never written
+     into another world's record and never written off; across a game exit only the log has it.
+
+   **Pending owner confirmation, and easy to flip**: each product's reading is one small game-free type
+   (`WorldDownPolicy` for Gunnar, `FuelWorldDownCarry` for Sunniva) with tests that pin it. The alternatives the owner
+   may prefer: treat fuel in her pack at world-down as lost (stops her on return; it would be counted twice once her
+   pack is measured); stop her in **every** world while any world's loss could not be recorded; write every unsettled
+   Gunnar holding to the world-down record, not only the unresolved ones. Proved by `GunnarWorldDownTests` and
+   `FuelWorldDownTests` (game-free, including a control showing the cross-world loss without the close); nothing about
+   it has been observed in game.
 
 **A person's acknowledgement of a loss moves nothing.** The library has no way to take units away and Sunniva's ledger
 does not need one: the acknowledged units stay `Lost` in the library, and her run stops counting them in what she
 withdrew and what is unaccounted. A fresh run (`TryReset`, refused while she holds anything or a loss is open) is a
 fresh library ledger.
 
-**What #376 still needs:** Gunnar's account replaced when a world goes down (a runtime change in
-`Adapters/Workers`, left out of both slices while #530 and #533 are open there), and Sunniva's bounded the same way
-(lead default 6; what an unsettled run should become when its world goes is an owner question, because her pack
-stays in that world while the loss evidence is only in memory if her record could not be written); an owner decision on whether Foreman's journal-first executor is absorbed by moving
-`src/Shared/Settlement/Custody` behind this library, or by recording the library copy as the absorption and leaving
-the shipped one where it is; and the executor's first role.
+**What #376 still needs:** the owner's confirmation (or another choice) of lead default 8, what an unsettled run
+becomes when its world goes down - built in the third slice for both Gunnar and Sunniva; an owner decision on whether
+Foreman's journal-first executor is absorbed by moving `src/Shared/Settlement/Custody` behind this library, or by
+recording the library copy as the absorption and leaving the shipped one where it is; the executor's first role; and
+a role for the material reservation book.
 
 Nothing in this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND
 PENDING. That includes the two adoptions above: the dependency wiring is proved by the validator, not by watching an

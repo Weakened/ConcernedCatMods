@@ -113,14 +113,12 @@ internal enum CargoOutcome
 ///
 /// <b>Nothing here is written to disk.</b> No row tag, no schema, no path, no
 /// file. Every place is named in the library's unknown load, because nothing in
-/// this domain type knows which world it is in. <b>That is not the same as one
-/// world load:</b> the runtime keeps one account for the life of the game
-/// session, which can span several worlds, so units recorded in one world are
-/// still recorded after the next is loaded. That was as true of this type's own
-/// copy of the invariant before #376, it is accounting only - nothing here
-/// moves or creates anything in a world - and replacing the account when a world
-/// goes down is a runtime change listed as still needed in
-/// docs/mods/concerned-npc/ARCHITECTURE.md section 10.
+/// this domain type knows which world it is in. <b>It is bounded by one world
+/// load all the same</b> (#376, third slice): when a world goes down the
+/// runtime closes the account (<see cref="CollectionAccount.CloseForWorld"/>),
+/// which takes what is still unsettled as evidence and replaces this ledger
+/// with a fresh one, so units recorded in one world are never this ledger's in
+/// the next. Before that slice the account spanned the game session.
 /// </summary>
 internal sealed class CargoLedger
 {
@@ -343,6 +341,28 @@ internal sealed class CargoLedger
         }
 
         return result;
+    }
+
+    /// <summary>Whether anything is held in one place. Allocation-free, unlike
+    /// <see cref="Holding"/>, because the runtime asks it every frame.</summary>
+    public bool Holds(CargoPlace place)
+    {
+        if (!TryLocate(place, out NpcCustodyLocation location))
+        {
+            return false;
+        }
+
+        // Per item this account has ever acquired, rather than through the
+        // library's Holdings view, which builds a list on every read.
+        for (int index = 0; index < _items.Count; index++)
+        {
+            if (_custody.HoldingAt(Job, location, NpcMaterial.Of(_items[index])) > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>What he is still holding, per item, in a deterministic order.
