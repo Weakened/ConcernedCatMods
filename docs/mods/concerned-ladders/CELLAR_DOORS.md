@@ -453,8 +453,9 @@ integration, section 2c).
    motion are code, with no `.blend` or bundle. The record gives every object name, pivot, rest transform, collider
    and prism mesh, the shared curve and each family's swing time and materials. `DoorAssetSourcesTests` holds it to
    the code. Still the owner's: whether the code counts as the editable source or the doors should be modelled in
-   Blender, and per-leaf motion against the pair rule (`DOOR_ASSET_SOURCES.md` section 11). Candidate provenance: the
-   template is in `STATUS.md` ("1.1.0 candidate provenance"). No candidate is built yet.
+   Blender, and per-leaf motion against the pair rule (`DOOR_ASSET_SOURCES.md` section 11). Candidate provenance: a
+   1.1.0 candidate ZIP is built and recorded in `STATUS.md` ("1.1.0 candidate provenance", PR #544); install and smoke
+   are OWNER GO-AROUND PENDING.
 
 ## 10. In-game rows (all OWNER GO-AROUND PENDING, #470)
 
