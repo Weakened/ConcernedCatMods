@@ -1231,9 +1231,9 @@ class CollectionTourIsBounded(CarveOutFixture):
         # chest the player never pointed at.
         self.swap_in(
             TOUR_RUNTIME,
-            "            Vector3 chest = _destination!.transform.position;",
-            "            _destination = _destination;\n"
-            "            Vector3 chest = _destination!.transform.position;")
+            "        Vector3 chest = _destination!.transform.position;",
+            "        _destination = _destination;\n"
+            "        Vector3 chest = _destination!.transform.position;")
         self.assert_refused("the tour assigned the destination", marker="#381 destination audit",
                             contains="assigns the runtime's _destination")
 
