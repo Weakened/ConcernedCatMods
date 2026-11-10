@@ -63,7 +63,7 @@ internal static class ForemanRole
     /// written — <c>tcc.worker.key</c>, <c>tcc.worker.inventory</c>,
     /// <c>tcc.worker.revision</c>. Since #372 the body that writes them is
     /// Concerned NPC's <c>NpcBody</c>, which composes them from this prefix; the
-    /// three stay spelled out in <c>ForemanWorkerBodies</c>, where this product
+    /// three stay spelled out in <c>ForemanSavedBodies</c>, where this product
     /// reads a saved body without loading it. A saved body is read by them, so
     /// both sides are pinned as literals - <c>ForemanNpcAdoptionTests</c> here
     /// and <c>BodyGoldenFixtureTests</c> in the library - and a change to either

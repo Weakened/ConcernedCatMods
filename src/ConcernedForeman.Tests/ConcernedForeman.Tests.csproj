@@ -25,7 +25,7 @@
          stubs. Only the body and the game-free types it needs are linked, by
          name: the rest of Body/ names Jotunn and the library suite's own
          stand-ins (the library glob below still excludes Body/). -->
-    <Compile Include="..\ConcernedForeman\Runtime\Custody\ForemanWorkerBodies.cs" Link="Product/ForemanWorkerBodies.cs" />
+    <Compile Include="..\ConcernedForeman\Runtime\Custody\ForemanSavedBodies.cs" Link="Product/ForemanSavedBodies.cs" />
     <Compile Include="..\ConcernedNPC\Body\NpcBody.cs" Link="ConcernedNPC/Body/NpcBody.cs" />
     <Compile Include="..\ConcernedNPC\Body\NpcBodyContracts.cs" Link="ConcernedNPC/Body/NpcBodyContracts.cs" />
     <Compile Include="..\ConcernedNPC\Body\NpcBodySetup.cs" Link="ConcernedNPC/Body/NpcBodySetup.cs" />

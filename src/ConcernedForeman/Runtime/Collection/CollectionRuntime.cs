@@ -340,7 +340,7 @@ internal sealed class CollectionRuntime
             // dressed from `_custody.View`'s ledger — a worker visibly holding
             // stone that belongs to somebody else's record.
             _carried ??= new CarriedVisual(
-                () => ForemanWorkerBodies.FindLive(Modes.Worker.Value),
+                () => ForemanSavedBodies.FindLive(Modes.Worker.Value),
                 message => _log(message));
 
             CollectionOrderDefinition? order = world.Loop?.Order;

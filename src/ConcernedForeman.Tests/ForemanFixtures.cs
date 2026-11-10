@@ -188,7 +188,7 @@ internal static class ForemanFixtures
     /// <summary>What the prefab build does (#372): tells Concerned NPC what
     /// bodies of his prefab store. Idempotent.</summary>
     internal static void RegisterHisBody() =>
-        Assert.True(ForemanWorkerBodies.TryRegister(out string reason), reason);
+        Assert.True(ForemanSavedBodies.TryRegister(out string reason), reason);
 
     /// <summary>The library's own stamp, as the gated build runs it on a new
     /// body: <paramref name="key"/> must be an identity.</summary>

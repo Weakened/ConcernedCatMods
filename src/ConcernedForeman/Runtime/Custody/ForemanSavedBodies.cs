@@ -24,7 +24,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 /// disagree. And the lookup by key, filtered to Thorstein's own prefab, because
 /// the library's lists and events are shared by every product that loads
 /// it.</summary>
-internal static class ForemanWorkerBodies
+internal static class ForemanSavedBodies
 {
     /// <summary>The saved identity, exactly as shipped.</summary>
     internal const string KeyField = "tcc.worker.key";

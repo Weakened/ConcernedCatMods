@@ -45,8 +45,8 @@ public sealed class WorkerBodyTests : IDisposable
         // inventory's own change callback, exactly as a Container does it.
         Assert.True(body.LastChangePersisted);
         Assert.True(body.Revision > revision);
-        Assert.NotNull(zdo.GetByteArray(ForemanWorkerBodies.InventoryField, null));
-        Assert.Equal(body.Revision, zdo.GetInt(ForemanWorkerBodies.RevisionField, -1));
+        Assert.NotNull(zdo.GetByteArray(ForemanSavedBodies.InventoryField, null));
+        Assert.Equal(body.Revision, zdo.GetInt(ForemanSavedBodies.RevisionField, -1));
     }
 
     [Fact]
@@ -57,14 +57,14 @@ public sealed class WorkerBodyTests : IDisposable
         NpcBody first = Body();
         first.Inventory!.AddItem(Stack(Stone, 4));
         ZDO zdo = first.View!.Zdo;
-        int revisionOnDisk = zdo.GetInt(ForemanWorkerBodies.RevisionField, -1);
+        int revisionOnDisk = zdo.GetInt(ForemanSavedBodies.RevisionField, -1);
         zdo.Written.Clear();
 
         NpcBody second = Body(key: string.Empty, zdo: zdo);
 
         Assert.True(second.IsLoaded);
         Assert.Empty(zdo.Written);
-        Assert.Equal(revisionOnDisk, zdo.GetInt(ForemanWorkerBodies.RevisionField, -1));
+        Assert.Equal(revisionOnDisk, zdo.GetInt(ForemanSavedBodies.RevisionField, -1));
         Assert.Equal(4, EngineInventoryPort.CountIn(second.Inventory!, Stone));
     }
 
@@ -97,7 +97,7 @@ public sealed class WorkerBodyTests : IDisposable
 
         // The stored package is unreadable: the body must not come up empty and
         // then write that emptiness over what it was carrying.
-        zdo.Set(ForemanWorkerBodies.InventoryField, new byte[] { 1, 2, 3 });
+        zdo.Set(ForemanSavedBodies.InventoryField, new byte[] { 1, 2, 3 });
         zdo.Written.Clear();
         NpcBody broken = Body(key: string.Empty, zdo: zdo);
 
@@ -120,7 +120,7 @@ public sealed class WorkerBodyTests : IDisposable
 
         foreach (string key in body.View!.Zdo.Written)
         {
-            Assert.Contains(key, new[] { ForemanWorkerBodies.KeyField, ForemanWorkerBodies.InventoryField, ForemanWorkerBodies.RevisionField });
+            Assert.Contains(key, new[] { ForemanSavedBodies.KeyField, ForemanSavedBodies.InventoryField, ForemanSavedBodies.RevisionField });
         }
     }
 
@@ -205,7 +205,7 @@ public sealed class WorkerBodyTests : IDisposable
 
         Assert.True(body.IsLoaded);
         Assert.Equal(string.Empty, body.StoredKey);
-        Assert.Null(ForemanWorkerBodies.FindLive("foreman/thorstein"));
+        Assert.Null(ForemanSavedBodies.FindLive("foreman/thorstein"));
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class WorkerBodyTests : IDisposable
 
         view.Valid = true;
         Assert.True(ForemanFixtures.Stamp(creature, "foreman/thorstein"));
-        Assert.Equal("foreman/thorstein", view.Zdo.GetString(ForemanWorkerBodies.KeyField, string.Empty));
+        Assert.Equal("foreman/thorstein", view.Zdo.GetString(ForemanSavedBodies.KeyField, string.Empty));
     }
 
     // --- #372: the move onto Concerned NPC's body ------------------------------
@@ -237,7 +237,7 @@ public sealed class WorkerBodyTests : IDisposable
         // package. No migration exists, so none can run.
         NpcBody source = Body();
         source.Inventory!.AddItem(Stack(Stone, 9));
-        byte[] package = source.View!.Zdo.GetByteArray(ForemanWorkerBodies.InventoryField, null)!;
+        byte[] package = source.View!.Zdo.GetByteArray(ForemanSavedBodies.InventoryField, null)!;
         ResetBodies();
 
         var saved = new ZDO();
@@ -254,7 +254,7 @@ public sealed class WorkerBodyTests : IDisposable
         Assert.Equal(7, loaded.Revision);
         Assert.Equal(9, EngineInventoryPort.CountIn(loaded.Inventory!, Stone));
         Assert.Empty(saved.Written);
-        Assert.Same(loaded, ForemanWorkerBodies.FindLive("foreman/thorstein"));
+        Assert.Same(loaded, ForemanSavedBodies.FindLive("foreman/thorstein"));
     }
 
     [Fact]
@@ -273,13 +273,13 @@ public sealed class WorkerBodyTests : IDisposable
         Start(stranger);
 
         Assert.True(stranger.IsLoaded);
-        Assert.False(ForemanWorkerBodies.IsForeman(stranger));
-        Assert.Null(ForemanWorkerBodies.FindLive("foreman/thorstein"));
+        Assert.False(ForemanSavedBodies.IsForeman(stranger));
+        Assert.Null(ForemanSavedBodies.FindLive("foreman/thorstein"));
 
         NpcBody his = Body();
-        Assert.True(ForemanWorkerBodies.IsForeman(his));
-        Assert.Same(his, ForemanWorkerBodies.FindLive("foreman/thorstein"));
-        Assert.Null(ForemanWorkerBodies.FindLive("not a key"));
-        Assert.Null(ForemanWorkerBodies.FindLive(string.Empty));
+        Assert.True(ForemanSavedBodies.IsForeman(his));
+        Assert.Same(his, ForemanSavedBodies.FindLive("foreman/thorstein"));
+        Assert.Null(ForemanSavedBodies.FindLive("not a key"));
+        Assert.Null(ForemanSavedBodies.FindLive(string.Empty));
     }
 }

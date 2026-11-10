@@ -451,7 +451,7 @@ internal sealed class CustodyTools
 
         // Tools are not part of the material matrix, but a tool the record says
         // he holds and his inventory does not have is the same kind of finding.
-        NpcBody? body = ForemanWorkerBodies.FindLive(_custody.WorkerKey.Value);
+        NpcBody? body = ForemanSavedBodies.FindLive(_custody.WorkerKey.Value);
         if (body != null && body.Humanoid != null && _records.TryOpen(out _, out SettlementJournal journal))
         {
             foreach (ToolHolding holding in journal.Replay().Tools.HeldBy(_custody.ToolWorker))

@@ -83,14 +83,14 @@ internal sealed class SettlementRuntime
         NpcBody.ErrorLog -= s_onError;
         s_onLoaded = body =>
         {
-            if (ForemanWorkerBodies.IsForeman(body))
+            if (ForemanSavedBodies.IsForeman(body))
             {
                 OnWorkerBodyLoaded(body);
             }
         };
         s_onDied = (body, dropped, where) =>
         {
-            if (!ForemanWorkerBodies.IsForeman(body))
+            if (!ForemanSavedBodies.IsForeman(body))
             {
                 return;
             }
@@ -330,7 +330,7 @@ internal sealed class SettlementRuntime
         {
             if (_worker == null)
             {
-                NpcBody? body = ForemanWorkerBodies.FindLive(_custody.WorkerKey.Value);
+                NpcBody? body = ForemanSavedBodies.FindLive(_custody.WorkerKey.Value);
                 if (body != null)
                 {
                     Bind(body.GetComponent<ForemanWorkerAI>());
@@ -419,7 +419,7 @@ internal sealed class SettlementRuntime
             return census.IsDuplicated
                 ? "Refused: this world already holds two bodies for Thorstein. Nothing is created or removed automatically."
                 : "Thorstein already has a body in this world" +
-                    (ForemanWorkerBodies.FindLive(key) == null ? ", in ground that is not loaded. Go there." : ".");
+                    (ForemanSavedBodies.FindLive(key) == null ? ", in ground that is not loaded. Go there." : ".");
         }
 
         Player player = Player.m_localPlayer;

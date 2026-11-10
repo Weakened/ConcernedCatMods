@@ -188,7 +188,7 @@ internal sealed class ShelterConstructionRuntime
             new WorkerBuildWalk(motion, () => _job),
             loopMaterials,
             _placer,
-            pose ?? new BuildPose(() => ForemanWorkerBodies.FindLive(worker.Value), _log),
+            pose ?? new BuildPose(() => ForemanSavedBodies.FindLive(worker.Value), _log),
             _log,
             () => _orders.Journal?.Current?.Order.Value);
 

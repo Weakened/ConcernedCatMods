@@ -100,23 +100,23 @@ public sealed class ForemanNpcAdoptionTests
     public void TheThreeSavedKeysStillComposeFromThePrefixAndAreUnchanged()
     {
         // The three literals his body has always written, spelled out here and
-        // in ForemanWorkerBodies, where the census reads a saved body unloaded.
+        // in ForemanSavedBodies, where the census reads a saved body unloaded.
         // A saved body is READ by them. Since #372 the body that writes them is
         // Concerned NPC's NpcBody, which composes them from his contract's
         // prefix, so the last three lines pin what the library actually writes
         // against the literals: a drift on either side fails here.
-        Assert.Equal("tcc.worker.key", ForemanWorkerBodies.KeyField);
-        Assert.Equal("tcc.worker.inventory", ForemanWorkerBodies.InventoryField);
-        Assert.Equal("tcc.worker.revision", ForemanWorkerBodies.RevisionField);
+        Assert.Equal("tcc.worker.key", ForemanSavedBodies.KeyField);
+        Assert.Equal("tcc.worker.inventory", ForemanSavedBodies.InventoryField);
+        Assert.Equal("tcc.worker.revision", ForemanSavedBodies.RevisionField);
 
-        Assert.Equal(ForemanRole.BodyKeyPrefix + "key", ForemanWorkerBodies.KeyField);
-        Assert.Equal(ForemanRole.BodyKeyPrefix + "inventory", ForemanWorkerBodies.InventoryField);
-        Assert.Equal(ForemanRole.BodyKeyPrefix + "revision", ForemanWorkerBodies.RevisionField);
+        Assert.Equal(ForemanRole.BodyKeyPrefix + "key", ForemanSavedBodies.KeyField);
+        Assert.Equal(ForemanRole.BodyKeyPrefix + "inventory", ForemanSavedBodies.InventoryField);
+        Assert.Equal(ForemanRole.BodyKeyPrefix + "revision", ForemanSavedBodies.RevisionField);
 
         Assert.True(NpcBodyFields.TryFor(ForemanNpcRole.Contract, out NpcBodyFields written, out string reason), reason);
-        Assert.Equal(ForemanWorkerBodies.KeyField, written.Key);
-        Assert.Equal(ForemanWorkerBodies.InventoryField, written.Inventory);
-        Assert.Equal(ForemanWorkerBodies.RevisionField, written.Revision);
+        Assert.Equal(ForemanSavedBodies.KeyField, written.Key);
+        Assert.Equal(ForemanSavedBodies.InventoryField, written.Inventory);
+        Assert.Equal(ForemanSavedBodies.RevisionField, written.Revision);
     }
 
     [Fact]

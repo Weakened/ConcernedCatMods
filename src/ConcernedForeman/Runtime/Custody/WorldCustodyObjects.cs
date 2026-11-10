@@ -132,7 +132,7 @@ internal static class WorldCustodyObjects
                 continue;
             }
 
-            string stored = zdo.GetString(ForemanWorkerBodies.KeyField, string.Empty);
+            string stored = zdo.GetString(ForemanSavedBodies.KeyField, string.Empty);
             if (stored.Length == 0)
             {
                 unidentified++;
@@ -153,7 +153,7 @@ internal static class WorldCustodyObjects
     {
         try
         {
-            byte[]? stored = body.GetByteArray(ForemanWorkerBodies.InventoryField, null);
+            byte[]? stored = body.GetByteArray(ForemanSavedBodies.InventoryField, null);
             if (stored == null || stored.Length == 0)
             {
                 return 0;

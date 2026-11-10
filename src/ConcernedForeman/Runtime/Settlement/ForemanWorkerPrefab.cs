@@ -131,7 +131,7 @@ internal static class ForemanWorkerPrefab
         // built: without it every saved body would be destroyed by the next
         // load, while a body with no keys only goes inert and keeps what it
         // stores. The gated build refuses a new body until this succeeds.
-        if (!ForemanWorkerBodies.TryRegister(out string unregistered))
+        if (!ForemanSavedBodies.TryRegister(out string unregistered))
         {
             LastFailure = "Concerned NPC did not accept his body's keys: " + unregistered;
             log?.Invoke("Worker body keys not registered (" + unregistered + "); saved bodies will stay inert "
