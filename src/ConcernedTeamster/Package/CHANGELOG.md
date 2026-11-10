@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* **Gunnar can haul from one chest to another (#381).** A new `Workers/GunnarChestHaulEnabled` setting, **off by
+  default** and needing `Workers/GunnarCollectionEnabled` and `Workers/GunnarChestTakeEnabled` too, lets him carry
+  what you name from the chest you chose to take from (`ct_collect source`, marked for taking) to the chest you chose
+  to put things in (`ct_collect destination`, marked for putting in), on foot. `ct_collect haul plan Stone:200 Wood`
+  says how many trips it takes and what goes in each without moving anything; `ct_collect haul Stone:200 Wood` does
+  it: he takes a load at the first chest, walks it to the second, puts it in, counts what he still carries, and goes
+  back for the next. Up to four items, each named exactly, with an optional count. He stops with the rest on him if
+  the second chest is full, either chest refuses, or anything cannot be counted; he never uses a cart for it or picks a
+  chest himself. Single player or a host with nobody else connected. **Not yet observed in game.**
 * **Gunnar's body is created by Concerned NPC (#372).** `ct_haul spawn` now hands his prefab to Concerned NPC's gated
   build instead of creating the body itself. The library checks that the worker lease is his and still held right
   before the body appears, counts his saved bodies itself, refuses unloaded ground, and writes his identity in the same

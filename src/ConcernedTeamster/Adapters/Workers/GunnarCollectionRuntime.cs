@@ -187,7 +187,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             {
                 // A faulted runtime is an order that has ended, not a world that
                 // has gone: the sources it touched still exist.
-                CancelTour("the collection runtime faulted");
+                try { CancelTour("the collection runtime faulted"); }
+                finally { CancelHaul("the collection runtime faulted"); }
                 EndOrder("the collection runtime faulted");
             }
             catch
@@ -219,6 +220,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         if (_lifecycle.ObserveWorld(worldUp) == PickForget.World)
         {
             DropTourForWorld();
+            DropHaulForWorld();
             _lease.Release();
             _ordered = false;
             _orderedSource = string.Empty;
@@ -235,6 +237,13 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         if (worldUp && _tour != null)
         {
             WatchTourFromFrame();
+        }
+
+        if (worldUp && _haul != null)
+        {
+            // #381 item 4: the haul's switches, authority, lease, cart and body,
+            // re-asked every frame as the tour's are.
+            WatchHaulFromFrame();
         }
 
         if (worldUp && _tour != null)
@@ -341,6 +350,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         _ordered = false;
         _orderedSource = string.Empty;
         DropTourForWorld();
+        DropHaulForWorld();
         if (_lifecycle != null)
         {
             try { _lifecycle.Shutdown(); }
@@ -399,7 +409,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             }
         }
 
-        if (_tour != null)
+        if (TourRunning)
         {
             return;
         }
@@ -625,6 +635,11 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             {
                 CancelTour("Gunnar died");
             }
+
+            if (_haul != null)
+            {
+                CancelHaul("Gunnar died, so what he carried went the way his death record says, not with him");
+            }
         }
         catch (Exception exception)
         {
@@ -677,6 +692,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 return DesignateSource();
             case "take":
                 return TakeFromSource(args);
+            case "haul":
+                return Haul(args);
             case "area":
                 return SetArea(args);
             case "start":
@@ -703,6 +720,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 return "ct_collect: status, pick (the thing you are pointing at), cancel, "
                     + "destination (the chest you are pointing at), deposit [item], "
                     + "source (the chest you are pointing at, to take from), take <item> [count], "
+                    + "haul [plan] <item>[:count] ... (from the source chest to the destination chest), "
                     + "area [radius] (around where you stand), start (a tour of the area), "
                     + "start cart (a tour into the cart assigned to him), stop, "
                     + "resolve (after you have looked at a tour stopped for you), "
@@ -734,6 +752,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             "; chest " + (_destination == null ? "NOT CHOSEN - he never looks for the nearest one"
                 : "chosen") +
             "; taking from a chest is " + (TakeOptedIn() ? "on" : "OFF (the default)") +
+            "; hauling from chest to chest is " + (HaulOptedIn() ? "on" : "OFF (the default)") +
             "; filling his assigned cart is " + (CartTourOptedIn() ? "on" : "OFF (the default)") +
             ", source chest " + (_source == null ? "not chosen" : "chosen") +
             "; tour plan: " + _tourPlan.Describe() +
@@ -747,7 +766,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
     private string Cancel()
     {
-        if (_tour != null)
+        if (_tour != null || _haul != null)
         {
             return StopTour();
         }
