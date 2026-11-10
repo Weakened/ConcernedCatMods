@@ -412,6 +412,9 @@ class StewardRetireIsTheOnlyRemoval(unittest.TestCase):
 
     def test_rebinding_the_body_through_a_typed_out_is_refused(self):
         # The by-reference rule listed its types, and the list said StewardBody.
+        # Not compilable as written (a second `body` in the parameter's scope);
+        # what it proves is that the type list no longer gates the rule, as the
+        # old StewardBody variant could not either.
         self.swap_in(PORT, PORT_VIEW,
                      "        StewardSavedBodies.TryRebind(out NpcBody? body);\n" + PORT_VIEW)
         self.assert_refused("`out NpcBody? body` swapped the body after the guard read it")

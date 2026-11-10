@@ -201,9 +201,10 @@ public sealed class ForbiddenWriteTests
         // #372 her own body component (StewardBody) wrote her identity and pack
         // into her OWN prefab's object, dropped what she carried on death, and
         // was the one file allowed to. Since #372 (F2e) that body is Concerned
-        // NPC's NpcBody, so nothing in this product writes to any network
-        // object, drops an item or equips one. One appearing here again is a
-        // second body implementation, and fails this test.
+        // NPC's NpcBody, so nothing in this product writes a ZDO field, drops
+        // an item or equips one directly (her look reaches her own object
+        // through vanilla's VisEquipment). One appearing here again is a second
+        // body implementation, and fails this test.
         Assert.Empty(writes);
         Assert.False(
             File.Exists(Path.Combine(ProductSources.Product, "Runtime", "StewardBody.cs")),

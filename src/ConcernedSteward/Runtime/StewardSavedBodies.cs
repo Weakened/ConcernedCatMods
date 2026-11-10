@@ -14,8 +14,10 @@ namespace TheConcernedCat.ConcernedSteward.Runtime;
 /// callback, and vanilla's own drop of exactly what she carried on a genuine
 /// death. The library's <see cref="NpcBody"/> does the same under the same
 /// three keys, so a body saved by an older build loads unchanged, with no
-/// migration code, and a body saved by this build loads in an older one
-/// (<c>CensusAndBodyTests</c> loads a hand-written pre-#372 object). The one
+/// migration code (<c>CensusAndBodyTests</c> loads a hand-written pre-#372
+/// object). The other direction - a body saved by this build loading in an
+/// older one - rests on the same keys, package and revision count, and is not
+/// separately tested. The one
 /// thing the library adds is putting an item saved as equipped back in her
 /// hands on load; she never equips anything, so for her that changes nothing.
 ///
@@ -64,7 +66,12 @@ internal static class StewardSavedBodies
     /// body any more.</b> Vanilla's removal resets the object at once, while
     /// Unity only destroys the component at the end of the frame. Without this
     /// the census could adopt a just-retired Sunniva for the rest of the frame
-    /// and a round could be opened against a body that is gone (S1).</summary>
+    /// and a round could be opened against a body that is gone (S1).
+    ///
+    /// Unlike the copy's loop, this does not go on to a second body with the
+    /// same identity: two loaded bodies under one identity make the census
+    /// answer <c>Duplicated</c> before this is asked, and she does not work.
+    /// </summary>
     internal static NpcBody? FindLive(string? key)
     {
         if (string.IsNullOrEmpty(key))

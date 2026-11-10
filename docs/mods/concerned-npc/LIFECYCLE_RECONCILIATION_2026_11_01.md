@@ -214,8 +214,10 @@ What the move had to keep that the type used to give:
 
 Differences, stated: the library restores an item saved as equipped on load (she never equips one, so nothing for
 her); a throwing `Loaded` subscriber leaves the body loaded rather than inert; messages say "NPC body"; her error
-handler hears every product's body errors, as Foreman's does. Concerned Steward now writes to no network object at
-all, and `SourceAuditTests` fails if a write, a drop or an equip reappears in it (it used to allow one file).
+handler hears every product's body errors, as Foreman's does. No Concerned Steward source now writes a ZDO field,
+drops an item or equips one directly (her look still reaches her own object through vanilla's `VisEquipment`), and
+`SourceAuditTests` fails if a direct write, drop or equip reappears in it (it used to allow one file). The library
+body's own null-unsafe read of a dropped stack's shared name, which her copy guarded, is a library follow-up.
 
 **Not moved: Gunnar's `TeamsterWorkerRecord`.** It is not a near-copy, and moving it changes behaviour that an owner
 decision governs:
