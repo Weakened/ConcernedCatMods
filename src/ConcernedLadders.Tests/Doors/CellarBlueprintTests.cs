@@ -55,10 +55,14 @@ public sealed class CellarBlueprintTests
     }
 
     [Fact]
-    public void TheSettingSaysTheLeavesDoNotOpenYet()
+    public void TheSettingSaysTheLeavesOpenButTheLaddersDoNotKnowThemYet()
     {
         Assert.False(CellarDoorSettings.EnabledByDefault);
-        Assert.Contains("Their leaves do not open yet", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.Contains("UNFINISHED", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.Contains("Both leaves open and close together", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.Contains("Ladders do not work with them yet", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.Contains("Leave this off", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain("do not open yet", CellarDoorSettings.Description, StringComparison.Ordinal);
     }
 
     // ---- The adapter's order and the shared helper -----------------------------------------------------------------
@@ -117,7 +121,7 @@ public sealed class CellarBlueprintTests
     }
 
     [Fact]
-    public void TheCellarDoorAddsNoNetworkStateNoRuntimeAndNoTrapdoorLid()
+    public void TheCellarDoorAddsNoNetworkStateAndNoTrapdoorLid()
     {
         foreach (string relative in new[] { Adapter, Kit, "Pieces/CellarDoorLocalization.cs" })
         {
@@ -126,9 +130,9 @@ public sealed class CellarBlueprintTests
             Assert.DoesNotMatch(new Regex(@"AddComponent\s*<\s*TrapdoorLid\s*>"), text);
         }
 
-        // The adapter adds only the frame's mesh parts; the kit only the leaves' bodies and box colliders. No
-        // MonoBehaviour: the leaves stay at their closed pose until the leaf runtime slice.
-        Assert.Equal(new[] { "MeshCollider", "MeshFilter", "MeshRenderer" },
+        // The adapter adds only the frame's mesh parts and the leaf runtime (slice 3, pinned in CellarLeavesTests); the
+        // kit only the leaves' bodies and box colliders.
+        Assert.Equal(new[] { "CellarLeaves", "MeshCollider", "MeshFilter", "MeshRenderer" },
             Regex.Matches(Code(Source(Adapter)), @"AddComponent\s*<\s*(\w+)\s*>").Select(m => m.Groups[1].Value).Distinct().OrderBy(n => n, StringComparer.Ordinal));
         Assert.Equal(new[] { "BoxCollider", "Rigidbody" },
             Regex.Matches(Code(Source(Kit)), @"AddComponent\s*<\s*(?:UnityEngine\s*\.\s*)?(\w+)\s*>").Select(m => m.Groups[1].Value).Distinct().OrderBy(n => n, StringComparer.Ordinal));

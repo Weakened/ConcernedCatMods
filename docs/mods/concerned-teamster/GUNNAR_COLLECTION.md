@@ -865,7 +865,7 @@ ct_collect stop           (or cancel)
 | keeps going at a full chest | a deposit that moved some and left some stops the tour, the rest on him: walking another load to a full chest is the one-stone-per-trip loop by another route |
 | retries an uncertain deposit | stopped, nothing assumed, a person decides (§6e) |
 | reverses a deposit, mints a partial stack, takes from a chest | the deposit port's pins are unchanged; a plan step that would take from a chest is refused by the pump and ends the tour |
-| walks him away from a cart | a tour refuses to start, and stops, while any cart is assigned to him or hitched to him. Moving material into a cart's container is not an authorized call, and the container permissions refuse a container that moves, so the tour is on foot and a load is what **he** carries |
+| walks him away from a cart | a chest tour refuses to start, and stops, while any cart is assigned to him or hitched to him, so it is on foot and a load is what **he** carries. Since D22 a separate cart tour (§6j) may load into his assigned cart while it stands parked; neither kind ever hitches or pulls one |
 | teleports, portals | every movement is his own body walking through the vanilla motor - the pathfinding of his own body the Teamster carve-out allows. A walk that stops getting closer for 12 s is given up: a source is reported failed (still owed - the driver decides), an unreachable chest stops the tour with the load still on him |
 | runs two jobs | one tour at a time; the identity lease refuses a haul and a tour together; the ordered pick and deposit refuse while a tour runs, and so do choosing another chest or another area |
 | keeps picking into a body it cannot trust | the §6c containment holds for a tour too: a body whose last change did not reach its record, or that never read it, ends the tour at once (checked by name, every tick and every frame), and he is handed nothing more |
@@ -1106,6 +1106,97 @@ destination audit's pin on the hovered-object lookup still counts one.
 
 Nothing here has been observed in a running game; §10 has the rows. Taking as part of a tour, or a manifest of
 chest-to-chest trips, is not built here.
+
+## 6j. He can fill the cart you assigned him (`DECISIONS.md` D22)
+
+The owner's decision of 2026-10-31: his collection tour may move his own picked items into his explicitly assigned
+cart's container, measured, and then unload at the chosen chest. **The first half is built here**; the unload is not,
+and nothing in this product takes anything out of a cart.
+
+### What a player does
+
+Turn on `Workers/GunnarCartTourEnabled` (off by default; it also needs `Workers/GunnarCollectionEnabled` and
+`Workers/GunnarHaulingEnabled`). Park a cart inside the area you want worked, unhitched. Assign it to him the usual way
+(point at it, `ct_haul assign`, `ct_haul confirm`), set the area around where you stand (`ct_collect area [radius]`)
+and run `ct_collect start cart`. He surveys and plans exactly as the on-foot tour does (§6f) - loads of 225 units, at
+most 24 sources a trip - and takes every load to the cart's handle instead of to a chest, putting it into the cart.
+When the tour ends the cart holds what he collected. Hauling it is the existing `ct_haul go <x> <z>`; emptying it is
+yours.
+
+### What it never does
+
+- choose a cart: the only cart is the one the hauling runtime's lease names, resolved by the lease's own key, and the
+  container is that cart's own `m_container`, riding that cart (`AssignedCartContainer.BedOf`);
+- hitch, pull or detach the cart: he loads only into a cart standing unhitched with the hauling executor doing nothing
+  with it, and a tour stops the moment anybody hitches it, the executor starts anything, the assignment ends or names
+  another cart, the cart stops resolving, or it is more than 1 m from where it stood when the tour began;
+- walk into the cart: he stands where a puller stands at the handle, within reach (2.2 m) of it - the point D21's idle
+  hammer walks him to, for the same reason: walking into an unbraked cart shoves it;
+- put in anything this tour did not pick: a cart tour refuses to start while he carries any stone or wood, and every
+  load offers, per material, at most what this tour measured picking and has not loaded yet;
+- take anything out of the cart: the permit is minted for `Deposit`, the hauling runtime's allowance answers `Deposit`
+  or `Off` and never `Take`, and the cart-load port spells no other use;
+- keep going at a full cart: a load that moved some and left some stops the tour with the rest still on him;
+- take ownership of the cart, load into one somebody has open, or pass a ward or a privacy setting.
+
+### Every gate is re-asked in the frame of the move
+
+`CartTourGate` (game-free, `CartTourGateTests`) decides the start, the watch and each load. The start: the four
+switches, the world, the work-authority rule (host, not dedicated, **no peers connected**), the start-up probe, a body
+whose inventory record can be written and read, nothing else in flight, an assigned cart that resolves, idle, with
+nobody holding his identity, unhitched and closed, an area set this world load with the cart inside it, what he carries
+readable and holding no collected yield, and capacity. The watch, every frame and every worker tick: the same lease
+key, resolved, idle, unhitched, within 1 m. Each load: the switches, the world, the authority, the probe, his body and
+record, nothing else in flight, the watch, and something this tour picked. Then the pinned port mints a permit for
+`Deposit` against `AssignedCartContainer` - the cart's id matching the lease's, its container riding it, the cart
+where it stood, this client owning the cart and its container, nobody having it open or hitched, the ward, privacy and
+reach - in the same call that moves anything. The hauling runtime hands the tour his body beside an assigned cart only
+while its executor is idle; a haul, a leg, a joint, a hold or a pending stop always goes to the executor.
+
+### Measured on both sides, and the remainder stays in him
+
+Exactly the deposit's discipline (§6e). Both inventories are counted before and after; `ContainerMoveResult.Record`
+classifies from those deltas alone; only what **arrived** in the cart is removed from his stack (the partial-stack
+case), and only what was measured arriving moves, in his ledger, from his back to `InCart`
+(`CollectionAccount.RecordCartLoad`, `CartLoadAccountTests`). A fault halfway is `Uncertain`: nothing credited,
+nothing retried, nothing compensated, nothing minted, and the tour's plan (#379) stops for a person exactly as an
+uncertain trip to a chest does. Vanilla recomputes the cart's mass from its contents, as it does for a player's load;
+nothing here writes a mass.
+
+### The pin, and what it refuses
+
+`Adapters/Workers/GunnarCartLoadPort.cs` alone may spell the three calls, each verbatim and once:
+`cart.MoveItemToThis(gunnar, stack)`, `cart.AddItem(part)` and `gunnar.RemoveItem(stack, arrived)`. The
+`#381 cart-load audit` pins what a call pin cannot see: the clone of his own stack, assigned once; one item lookup, in
+SafeRoom; no instantiation; the mover taking the worker and the cart and deriving `gunnar` from the worker and `cart`
+from the assigned cart's own container, twice each, with the shared role audit refusing every exchange of the two found
+so far; one permit, for `Deposit`, and no other use spelled in the port; the subject built once, by the port, refusing
+a cart whose id is not the lease's, one that moved, one not owned here and one open or hitched; a cart's `m_container`
+read nowhere new; the hauling runtime's allowance answering `Deposit` only for the leased cart while idle and spelling
+no `Take` or `Both`; one port, built and called once, in `GunnarCollectionRuntime.CartTour.cs`; the opt-in reading
+all four switches; the start refusing with a return before the tour begins, and refusing a tour he would begin
+carrying a load; the one trip that loads asking the load gate (every input pinned, the cart's watch included),
+refusing with a return, offering only what this tour picked and writing the trip down first; `CartLoadLegs` called
+nowhere else; the worker tick's hand-over pinned; and the switch off by default and bound to that default.
+`tools/tests/test_teamster_cart_load_audit.py` plants each escape - among them the load **reversed into an unload**, a
+remove of the count **asked for**, a mint for `Take`, an allowance for any cart or for a busy one, a bed not riding the
+cart, a cart that moved, a load not written down first, and the tick handing the tour a busy cart - and requires it to
+be refused by the new rules and to pass a validator without them.
+
+### Known limits, stated
+
+- The unload at the chosen chest is not built; the grant leaves its mechanism open (`DECISIONS.md` D22, lead default
+  3).
+- A reload ends the cart's lease (D6), so an interrupted cart tour is never continued as a cart tour; what he holds
+  then goes to a chest through `ct_collect deposit` or a chest tour.
+- `CollectionAccount.RecordDeposit` takes a chest deposit off his back first and then out of `InCart`; a later chest
+  deposit that measured more than this session's ledger had on his back would move the difference out of `InCart` on
+  paper. The totals stay conserved; it is the session record's misattribution, not a material movement (D22, lead
+  default 11).
+
+### Not claimed
+
+Nothing here has been observed in a running game; §10 has the rows.
 
 ## 7. No portals
 
@@ -1422,6 +1513,28 @@ None has been run. Disposable world, `GunnarCollectionEnabled` on, single player
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.
+
+### The cart-assisted tour (§6j, D22) - OWNER GO-AROUND PENDING
+
+None has been run. Disposable world, `GunnarCollectionEnabled` and `GunnarHaulingEnabled` on, single player.
+
+56. **Off by default.** With `GunnarCartTourEnabled` off, assign a parked cart, set an area around it and run
+    `ct_collect start cart`: refused with the switch sentence, nothing moves.
+57. **A cart tour.** Turn it on. Park an empty cart inside an area with loose stones and branches, assign it, set the
+    area, `ct_collect start cart`. He walks each load to the cart's handle (not into its body) and loads it; the cart
+    does not move, including when his walk back comes from behind or beside the cart; `ct_collect status` and the
+    cart's contents agree with what he picked.
+58. **Only what he picked.** Give him some stone first: `start cart` refuses with the "put that in a chest first"
+    sentence. Deposit it, start again: nothing he did not pick this tour goes in.
+59. **A full cart.** Fill the cart nearly full first: he loads what fits, the tour stops, the rest stays in him.
+60. **The cart is taken.** Mid-tour, hitch the cart yourself, push it more than a metre, or `ct_haul release`: each
+    stops the tour at once with what he holds still on him. Open the cart and leave it open: the tour stops at his next
+    load, refused as in use. Nothing more goes into the cart either way.
+61. **The cart is elsewhere.** Park the cart outside the area: `start cart` refuses. No cart assigned: refused, and he
+    never picks one himself.
+62. **A haul is refused under a tour.** Mid-tour, `ct_haul go <x> <z>`: refused, the identity is the tour's; after
+    `ct_collect stop`, the same command hauls the loaded cart as before.
+63. **A peer connects.** With a second player connected, the tour stops with the authority sentence.
 
 ### The idle hammer (§8, D21) - OWNER GO-AROUND PENDING
 

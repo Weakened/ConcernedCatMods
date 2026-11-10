@@ -73,9 +73,8 @@ internal sealed class CellarMesh
 /// each holding one visual per prism; and <see cref="SlopeRoot"/>, the slope frame, holding the two hinge pivots, each
 /// on a kinematic body with its leaf's collider, visual and hinge marks.</para>
 ///
-/// <para><b>This slice moves nothing.</b> No leaf runtime is added: both pivots stay at their closed pose whatever the
-/// native door state says, so the cover is a closed, solid lid and Use changes only the native state and plays the
-/// donor's sound. The leaf runtime (the next slice) turns the pivots.</para></summary>
+/// <para>The leaf runtime (slice 3, <c>Runtime/CellarLeaves</c>) turns the two pivots from the native door state; its
+/// queries ignore exactly <see cref="QueryIgnores"/>, the piece's own colliders.</para></summary>
 internal static class CellarBlueprint
 {
     /// <summary>The slope frame: a child of the root at <see cref="CellarGeometry.SlopeOrigin"/>, turned by
@@ -121,6 +120,14 @@ internal static class CellarBlueprint
     internal static ClimbPoint HingePosition(CellarLeaf leaf) => CellarGeometry.HingeInSlope(leaf);
 
     internal static CellarPart LeafCollider(CellarLeaf leaf) => Leaf(leaf, "_collider");
+
+    /// <summary>Every collider the adapter builds, as a path from the piece root that <c>Transform.Find</c> resolves:
+    /// the four frame prisms and the two leaf boxes. The leaf runtime resolves these once to the colliders themselves
+    /// and each leaf's occupancy query ignores exactly those six by identity: its own box, the other leaf and the frame,
+    /// which the model keeps 1 cm or more (the frame gaps) and 5.7 mm or more (the other leaf, a few degrees open) away, margins
+    /// as thin as the query's skin. Nothing else is ignored, so anything another mod or the game parents under the piece
+    /// is checked.</summary>
+    internal static readonly IReadOnlyList<string> QueryIgnores = BuildQueryIgnores();
 
     internal static CellarPart LeafVisual(CellarLeaf leaf) => Leaf(leaf, string.Empty);
 
@@ -229,6 +236,14 @@ internal static class CellarBlueprint
     }
 
     private static float Distance2(float a, float b) => (float)Math.Sqrt(a * a + b * b);
+
+    private static IReadOnlyList<string> BuildQueryIgnores()
+    {
+        var paths = new List<string>(CellarGeometry.Frame.Count + Leaves.Count);
+        foreach (CellarPrism prism in CellarGeometry.Frame) { paths.Add(prism.Name); }
+        foreach (CellarLeaf leaf in Leaves) { paths.Add(SlopeRoot + "/" + Hinge(leaf) + "/" + LeafCollider(leaf).Name); }
+        return paths.ToArray();
+    }
 
     private static IReadOnlyList<CellarMesh> BuildMeshes()
     {

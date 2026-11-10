@@ -21,4 +21,11 @@ internal static class GunnarCollectionDefaults
     /// put stones in a chest has not thereby let him take anything out of one.
     /// It also needs <see cref="CollectionEnabled"/>.</summary>
     public const bool ChestTakeEnabled = false;
+
+    /// <summary><c>Workers/GunnarCartTourEnabled</c> (`DECISIONS.md` D22). Off
+    /// until a person turns it on, and a switch of its own: a player who let him
+    /// pick stones up, or pull a cart, has not thereby let him fill one. It also
+    /// needs <see cref="CollectionEnabled"/> and hauling's own switch, because
+    /// the cart is assigned through the hauling runtime.</summary>
+    public const bool CartTourEnabled = false;
 }
