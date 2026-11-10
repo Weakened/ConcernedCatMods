@@ -46,6 +46,7 @@ internal sealed class TeamsterSettings
         ConfigEntry<bool> gunnarChestTakeEnabled,
         ConfigEntry<bool> gunnarCartTourEnabled,
         ConfigEntry<bool> gunnarChestHaulEnabled,
+        ConfigEntry<bool> gunnarFellsSmallTrees,
         ConfigEntry<bool> gunnarIdleHammerEnabled,
         ConfigEntry<KeyboardShortcut> containerPermissionShortcut,
         ConfigEntry<GunnarPullStrength> gunnarPullStrength,
@@ -56,6 +57,7 @@ internal sealed class TeamsterSettings
         GunnarChestTakeEnabled = gunnarChestTakeEnabled;
         GunnarCartTourEnabled = gunnarCartTourEnabled;
         GunnarChestHaulEnabled = gunnarChestHaulEnabled;
+        GunnarFellsSmallTrees = gunnarFellsSmallTrees;
         GunnarIdleHammerEnabled = gunnarIdleHammerEnabled;
         ContainerPermissionShortcut = containerPermissionShortcut;
         GunnarPullStrength = gunnarPullStrength;
@@ -164,6 +166,13 @@ internal sealed class TeamsterSettings
     /// its own switch, and it needs <see cref="GunnarCollectionEnabled"/> and
     /// <see cref="GunnarChestTakeEnabled"/> as well.</summary>
     public ConfigEntry<bool> GunnarChestHaulEnabled { get; }
+
+    /// <summary>Workers (#381 item 5, Gunnar's half of `DECISIONS.md` D19):
+    /// whether Gunnar may fell a small beech or a small fir inside the area you
+    /// set, one hit per <c>ct_collect fell</c>, with an axe he carries, taking
+    /// only the Wood his own hit dropped. Off by default, its own switch, and it
+    /// needs <see cref="GunnarCollectionEnabled"/> as well.</summary>
+    public ConfigEntry<bool> GunnarFellsSmallTrees { get; }
 
     /// <summary>Workers (#381, owner decision 2026-10-31, D21): while Gunnar is
     /// idle beside the cart assigned to him, he now and then walks over, faces it
@@ -327,6 +336,14 @@ internal sealed class TeamsterSettings
                 "Both chests must carry your mark (Take or Both, Deposit or Both); he never chooses a chest, never " +
                 "uses a cart for it, and stops with the rest on him when the second chest is full. Single player or " +
                 "the host with nobody else connected."),
+            config.Bind("Workers", "GunnarFellsSmallTrees", GunnarCollectionDefaults.FellingEnabled,
+                "Let Gunnar fell a small beech or a small fir inside the area you set ('ct_collect area'), one hit " +
+                "each time you run 'ct_collect fell', with an axe he carries (have him take one from a chest you " +
+                "marked for taking). He takes only the wood his own hit dropped, and only what he can carry; resin, " +
+                "cones and the rest lie on the ground. OFF by default, and it also needs GunnarCollectionEnabled. " +
+                "Never a full-size tree, never within 15 m of you, anyone else or anything you built, never where a " +
+                "ward denies you, and only while he stands at the tree - nothing here walks him. Single player or the host " +
+                "with nobody else connected."),
             config.Bind("Workers", "GunnarIdleHammerEnabled", GunnarHaulingDefaults.IdleHammerEnabled,
                 "While Gunnar is idle near the cart you assigned him, he now and then walks over to it, faces it " +
                 "and plays the game's own hammer swing. Scenery only: it repairs nothing, uses nothing and changes " +

@@ -694,6 +694,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                 return TakeFromSource(args);
             case "haul":
                 return Haul(args);
+            case "fell":
+                return Fell();
             case "area":
                 return SetArea(args);
             case "start":
@@ -721,6 +723,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
                     + "destination (the chest you are pointing at), deposit [item], "
                     + "source (the chest you are pointing at, to take from), take <item> [count], "
                     + "haul [plan] <item>[:count] ... (from the source chest to the destination chest), "
+                    + "fell (one hit on the small tree nearest him in the area; needs Workers/GunnarFellsSmallTrees), "
                     + "area [radius] (around where you stand), start (a tour of the area), "
                     + "start cart (a tour into the cart assigned to him), stop, "
                     + "resolve (after you have looked at a tour stopped for you), "
@@ -754,6 +757,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             "; taking from a chest is " + (TakeOptedIn() ? "on" : "OFF (the default)") +
             "; hauling from chest to chest is " + (HaulOptedIn() ? "on" : "OFF (the default)") +
             "; filling his assigned cart is " + (CartTourOptedIn() ? "on" : "OFF (the default)") +
+            "; felling small trees is " + (FellOptedIn() ? "on" : "OFF (the default)") +
             ", source chest " + (_source == null ? "not chosen" : "chosen") +
             "; tour plan: " + _tourPlan.Describe() +
             (_tourPlan.Standing == TourPlanStanding.Recovered && TourPlanWaitingFor().Length != 0

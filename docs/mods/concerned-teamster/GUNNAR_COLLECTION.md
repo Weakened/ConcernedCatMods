@@ -1251,6 +1251,55 @@ A cart round (no grant loads a D20 take into a cart, and D22's unload is undecid
 is written ahead because nothing resumes); making up a short take with an extra tour. Each is an owner question in the
 lead default. Nothing here has been observed in a running game; §10 has the rows.
 
+## 6l. He can fell a small tree (#381 item 5, D19)
+
+Gunnar's half of `DECISIONS.md` D19. The owner granted felling on #381 without setting Gunnar's scope, so this is
+Thorstein's built scope, unchanged, as the **lead default pending owner confirmation** (the list is in D19).
+
+### What a player does
+
+1. Turn on `Workers/GunnarCollectionEnabled` and `Workers/GunnarFellsSmallTrees` (both **off by default**).
+2. Give him an axe: mark a chest holding one `Take` (or `Both`), look at it, `ct_collect source`, then
+   `ct_collect take AxeStone` (D20; any axe the game has, named exactly). Nothing issues or makes one.
+3. Stand where he should work and run `ct_collect area [radius]`.
+4. With Gunnar standing at a small beech or a small fir inside that area, step back at least 15 m and run
+   `ct_collect fell`. Each run is one hit: a small beech has 20 health and a small fir 40, so it takes a few.
+5. On the hit that fells it he takes the Wood it dropped, up to what he can carry; resin, fir cones and anything he
+   cannot carry lie on the ground. `ct_collect deposit Wood` at a chosen chest puts it away (D15).
+
+### What it checks, in the frame of the hit
+
+`FellOrderGate` (game-free): Teamster's switch, the collection switch, the felling switch, the world, the
+work-authority rule, the probe, his record, nothing else in flight, no open tour plan, and an area set in this world
+load. Then `GunnarFellingPort`: his body and its record; the eligible small tree nearest him inside the area (the four
+allowlisted prefab hashes, judged by the shared `SmallTreeFelling.Classify`); not in a dungeon or a world location;
+and the shared `SmallTreeFelling.CheckSite` over the switch, the authority, the area, ownership by this process, the
+ward (asked with `flash: false` and `wardCheck: true`, so any covering ward that denies you refuses, and only once
+every zone a ward could stand in is loaded), 15 m from every player and every player-built piece, his reach (2.2 m) and an axe he
+carries that is not broken.
+
+### The hit and the take
+
+One `Destructible.Damage`, built from the axe's own damage, tool tier, level and skill with Gunnar as attacker. On a
+tree this process owns, vanilla's handler runs in the same call and, at zero health, destroys the tree and spawns its
+own drops. The drops that appeared beside it during the call are handed, by instance, to the collection port, which
+takes only Wood owned here, whole drops that fit his D17 carry limit, through its one pinned `Humanoid.Pickup`, and
+counts only what arrived in him (`FelledWoodTake`, tested in `FellOrderGateTests`). The ledger records it like a pick.
+
+### The pin
+
+The #313 scope audit admits one `.Damage(` in Teamster, `tree.Damage(hit)` in `Adapters/Workers/GunnarFellingPort.cs`.
+`D19 Gunnar felling audit` pins what it strikes and with what, the site rule above it, its one caller chain
+(`case "fell":` to `Fell()` to `TryFellOne` to `StrikeOnce`), the take, the switch, and the absence of `TreeBase`,
+`TreeLog` and `DestroyNow` across Teamster and every shared tree it compiles in. `tools/tests/
+test_teamster_felling_audit.py` plants each escape.
+
+### Not built, and why
+
+Felling inside a tour, walking him to the tree, and a swing animation: each is past what the owner has set for
+Gunnar, and is an owner question in D19. Full-size trees and logs stay unused. Nothing here has been observed in a
+running game; §10 has the rows.
+
 ## 7. No portals
 
 He walks. There is no branch anywhere in this work that changes where he is standing other than by asking the
@@ -1612,6 +1661,26 @@ None has been run. Disposable world, `GunnarCollectionEnabled` and `GunnarChestT
 71. **A peer, a cart, a reload.** A second player connecting, `ct_haul assign` + `confirm` of a cart, or a reload mid-
     haul each end it; after the reload what he carried is still on him and `ct_collect deposit <item>` at a chosen chest
     puts it down.
+
+### Felling a small tree (§6l, D19) - OWNER GO-AROUND PENDING
+
+None has been run. Disposable world, `GunnarCollectionEnabled` on, single player, Gunnar spawned (`ct_haul spawn`).
+
+72. **Off by default.** With `GunnarFellsSmallTrees` off, set an area and run `ct_collect fell`: refused with the
+    felling-switch sentence, nothing changes.
+73. **No area, no axe.** Turn it on. Without `ct_collect area` in this world load: refused, "none is set". With an
+    area but no axe on him: refused, "carries no usable axe" with the take hint.
+74. **A fell.** Give him an axe through `source` + `take`. With him beside a small beech inside the area and you 15 m
+    or more away, run `ct_collect fell` until it falls: each standing hit says what is left; the falling hit says how
+    much Wood he took and how many items lie on the ground. Wood in his inventory (`ct_collect status` ledger) equals
+    the Wood that vanished from the ground; resin and cones remain on the ground.
+75. **Too close.** Stand within 15 m of the tree, or build a piece within 15 m of it: refused, nothing changes.
+76. **A ward, a location.** A tree under a guard stone that does not admit you (an unpermitted ward placed by another character), or inside a world location: refused.
+77. **Out of reach.** With him more than 2.2 m from every small tree: refused with the distance.
+78. **Full.** Load him near his carry limit first: the fell still happens, he takes only the Wood that fits and the
+    rest lies on the ground; nothing is counted that did not arrive.
+79. **Nothing else is struck.** Full-size trees, logs, stumps, bushes and saplings beside him are never chosen; a peer
+    connecting makes the next `fell` refuse.
 
 ### The idle hammer (§8, D21) - OWNER GO-AROUND PENDING
 

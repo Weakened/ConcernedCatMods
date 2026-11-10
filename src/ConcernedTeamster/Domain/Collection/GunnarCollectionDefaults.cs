@@ -35,4 +35,10 @@ internal static class GunnarCollectionDefaults
     /// at has not thereby let him walk loads between two chests. It also needs
     /// <see cref="CollectionEnabled"/> and <see cref="ChestTakeEnabled"/>.</summary>
     public const bool ChestHaulEnabled = false;
+
+    /// <summary><c>Workers/GunnarFellsSmallTrees</c> (#381 item 5, Gunnar's half
+    /// of `DECISIONS.md` D19). Off until a person turns it on, and a switch of its
+    /// own: a player who let him pick stones up has not thereby let him cut
+    /// anything down. It also needs <see cref="CollectionEnabled"/>.</summary>
+    public const bool FellingEnabled = false;
 }

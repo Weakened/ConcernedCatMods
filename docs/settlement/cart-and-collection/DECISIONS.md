@@ -601,7 +601,7 @@ bytes) was read read-only with UnityPy, and `assembly_valheim.dll` was decompile
 - Taking the wood, and felling as part of a collection order, belong to the next leaf, which will use the same-call
   custody granted above.
 - The eligibility rules are game-free in `src/Shared/Workers/Felling/SmallTreeFelling.cs`, so Teamster's Gunnar can
-  reuse them. **D19 grants felling to Thorstein only:** Gunnar felling anything still needs its own owner decision.
+  reuse them. **When this leaf was built, D19 was recorded for Thorstein only.** The owner's #381 decision of the same day (decision 1 of the 2026-10-31 issue comment) covers Gunnar too, without setting a scope of his own; his half is built below, with Thorstein's scope as the lead default.
 - The felling audit's limit is stated rather than left to be found. It is a text audit with comments stripped, so a
   call reached through a delegate spells none of these tokens and is invisible to it.
   `tools/tests/test_foreman_felling_audit.py` plants each escape (in `Runtime/`, `Ui/`, `Plugin.cs`, `Domain/` and two
@@ -657,6 +657,57 @@ most fail-closed reading of the decision:
 
 **Never observed in game.** OWNER GO-AROUND PENDING (docs/mods/concerned-foreman/COLLECTION.md rows F1-F11).
 
+**Gunnar's half (#381 item 5), built 2026-11-10.** The owner's #381 comment of 2026-10-31 (decision 1: "Felling -
+yes, small trees only ... with the real issued axe, only inside an explicit work area, off by default") covers Gunnar
+and sets no scope of his own. Built with Thorstein's scope as the lead default:
+- **What is built.** `ct_collect fell`: one hit on the eligible small tree nearest Gunnar inside the area the player set
+  with `ct_collect area` in this world load, through `Destructible.Damage`, in
+  `src/ConcernedTeamster/Adapters/Workers/GunnarFellingPort.cs` alone. The hit is built from the axe's own item data
+  with Gunnar as attacker, exactly as Thorstein's. On a fell the item drops that appeared beside the tree during the
+  hit are handed, by instance and in the same call, to `GunnarCollectionPort.TakeFelled`, which takes only Wood owned by
+  this process, whole drops that fit his D17 carry limit, through the collection port's one pinned `Humanoid.Pickup`,
+  and credits only what measurably arrived; the session ledger records it like a pick. Everything else lies on the
+  ground.
+- **The switch.** `Workers/GunnarFellsSmallTrees`, off by default, needing `Workers/GunnarCollectionEnabled` and
+  Teamster's master switch; D3's work-authority rule, the start-up probe and his record are asked by
+  `FellOrderGate`, and every D19 site rule is re-measured by the shared `SmallTreeFelling.CheckSite` in the frame of the
+  hit.
+- **The validator.** The #313 scope audit's pinned-call table admits exactly one `.Damage(` in Teamster:
+  `tree.Damage(hit)` in the felling port. `check_teamster_felling_port` ("D19 Gunnar felling audit") pins that `tree`
+  is the `Destructible` the strike is handed and is never re-bound, that `hit` is built once from his axe with him as
+  attacker, that the finder reads only the four allowlisted hashes and the shared classifier, that the strike is called
+  once, from `TryFellOne`, below the site verdict and a returning refusal with every site fact read there, that
+  `TryFellOne` is called once, from `Fell()`, behind `FellOrderGate` with every input pinned, that `Fell()` is named only
+  by `case "fell":` (so no retire, cancel, unload or teardown verb lands a hit, and no tour does), that the Wood is taken
+  only through `TakeFelled` with the strike's own drops and the one pinned pickup, that the switch is its own and off
+  by default, and that `.Damage(` appears once and TreeBase, TreeLog and DestroyNow never across Teamster and every
+  shared tree its project file compiles in. The IL twin is in `scripts/audit-teamster-hauling-api.ps1`. Planted
+  escapes: `tools/tests/test_teamster_felling_audit.py`, each refused by these rules and passing without them.
+- **Lead defaults pending owner confirmation (2026-11-10)**, Thorstein's scope read for Gunnar:
+  1. *The four prefabs*, tool tier 0, and nothing else. `TreeBase` and `TreeLog` stay unused.
+  2. *The axe is one he carries.* The player puts it in his inventory through D20's take (`ct_collect source`, then
+     `ct_collect take AxeStone`); nothing here issues, mints, clones or equips one. His best usable axe by tool tier;
+     a broken one is refused; its durability is untouched, because vanilla wears only a player's weapon.
+  3. *The explicit area is `ct_collect area`*, set in this world load. Gunnar has no default circle at all.
+  4. *Clearances*: 15 m from every player - the one giving the order included - and every player-built piece; never
+     where any covering ward denies the player (`wardCheck: true`, asked only once every zone a ward reaching the
+     tree could stand in is loaded - Foreman's designation site asks it the same way), in a dungeon or inside a
+     world location (D10's exclusions, as Thorstein's default 6).
+  5. *One hit per command.* Nothing repeats it and nothing walks him: he must be standing at the tree, within
+     `CollectionLimits.PickupReachMetres` (2.2 m).
+  6. *Wood only*, whole drops, up to his D17 carry limit; resin, fir cones and the rest lie on the ground.
+  7. *No swing animation.* D21's trigger stays pinned to the idle hammer; vanilla's own hit effects play.
+  8. *The axe is an ordinary item of his.* `ct_collect deposit <axe>` puts it back (the player's own act, so D20's
+     issued-tool edge does not arise: nothing was issued); `ct_haul retire` refuses while he carries it; on a genuine
+     death D16 drops it with the rest.
+- **Not built, at the authority boundary.** Felling inside a collection tour, as Thorstein's order fells after the
+  branches - D19 does not set Gunnar's scope, so this stops at the explicit command; walking him to the tree (D14.2's
+  own-body pathfinding would cover it, but it is not built); a swing animation (it would need a grant beyond D21);
+  full-size trees and logs.
+- **Owner questions.** Confirm Thorstein's scope for Gunnar, or set his own. May a tour fell, after the branches, as
+  Thorstein's order does? Should `ct_collect fell` walk him to the nearest tree first?
+- **Never observed in game.** `GUNNAR_COLLECTION.md` §10 rows 72-79 are OWNER GO-AROUND PENDING.
+
 ## D20. Gunnar may take from a chest the player marked TAKE or BOTH
 
 Status: **accepted** (owner decision 2026-10-31, #381, asked directly by the completion lead; the issue comment of
@@ -703,7 +754,8 @@ smallest and most fail-closed reading the brief allows:
   he took is not stranded in him. D15's grant already covers any item in his inventory; the default deposit filter
   (what collecting yields) is unchanged. Equipped stacks are never offered. **A known edge:** if Gunnar is ever
   issued a tool (the felling decision would), an unequipped issued tool could be named and deposited; the leaf that
-  issues one must filter issued items out of this path.
+  issues one must filter issued items out of this path. (The felling leaf, #381 item 5, issues none:
+  his axe is one the player had him take, so naming it in a deposit is the player's own act.)
 - *The ledger.* A take is acquired in `CollectionAccount` like a pick, so the session's "taken" total counts what he
   took from chests as well as what he collected; it is a record of where material physically is, not of what was
   collected.
