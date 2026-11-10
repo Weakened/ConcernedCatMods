@@ -57,7 +57,7 @@ following `TEST_PLAN.md` section 10. Nothing here may be filled from memory or e
 |---|---|
 | Source | PENDING: the full 40-character SHA of the frozen source on `main`, after #485/#486's code and these records have merged |
 | Version | `1.1.0` in `Plugin.cs`, `ConcernedLadders.csproj` and `Package/thunderstore.toml` (already set); CHANGELOG's `1.1.0` heading still says Unreleased |
-| Dependencies | pinned in source: BepInExPack_Valheim 5.4.2351, Jötunn 2.30.2 (`thunderstore.toml`, `[BepInDependency]`, `JotunnLib` package reference). Game: Valheim 1.0.21, the version the door census was taken on (`DOOR_DONOR_MATRIX.md` section 1). PENDING: the game version on the candidate's own startup log |
+| Dependencies | pinned in source: BepInExPack_Valheim 5.4.2351 (`thunderstore.toml`), Jötunn 2.30.2 (`thunderstore.toml`, `[BepInDependency]`, the `JotunnLib` package reference). Game: Valheim 1.0.21, the version the door census was taken on (`DOOR_DONOR_MATRIX.md` section 1). PENDING: the game version on the candidate's own startup log |
 | Verify | PENDING: `scripts/verify.ps1` summary block on that SHA, under the build lock (assemblies, passed / failed, validator) and its log path |
 | ZIP | PENDING: `TheConcernedCat-ConcernedLadders-1.1.0.zip`, size, SHA256, from `scripts/package.ps1 -Product ConcernedLadders` under the lock |
 | DLL | PENDING: size, SHA256 and `InformationalVersion` stamp (`1.1.0+<sha>`) of the verified build output and of the packaged DLL. The two must be the same bytes (built = packaged = installed); if they differ, repackage the verified bytes without rebuilding (`TEST_PLAN.md` section 10) |

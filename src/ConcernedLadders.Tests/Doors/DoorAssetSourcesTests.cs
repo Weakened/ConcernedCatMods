@@ -30,7 +30,7 @@ public sealed class DoorAssetSourcesTests
             HatchGeometry.CornerSnapToken,
             CellarBlueprint.SlopeRoot,
         };
-        names.AddRange(TrapdoorBlueprint.FrameVisuals.Select(part => part.Name));
+        names.AddRange(TrapdoorBlueprint.FrameVisuals.Select(part => TrapdoorBlueprint.NewRoot + "/" + part.Name));
         names.AddRange(TrapdoorBlueprint.FrameColliders.Select(part => part.Name));
         names.AddRange(TrapdoorBlueprint.HingeStraps.Select(part => TrapdoorBlueprint.Hinge + "/" + part.Name));
         names.Add(TrapdoorBlueprint.Hinge + "/" + TrapdoorBlueprint.LidCollider.Name);
@@ -42,7 +42,7 @@ public sealed class DoorAssetSourcesTests
             string hinge = CellarBlueprint.SlopeRoot + "/" + CellarBlueprint.Hinge(leaf);
             names.Add(hinge);
             names.Add(hinge + "/" + CellarBlueprint.LeafVisual(leaf).Name);
-            names.AddRange(CellarBlueprint.HingeMarks(leaf).Select(mark => mark.Name));
+            names.AddRange(CellarBlueprint.HingeMarks(leaf).Select(mark => hinge + "/" + mark.Name));
         }
 
         foreach (string name in names.Distinct())
@@ -55,7 +55,7 @@ public sealed class DoorAssetSourcesTests
     public void TheTrapdoorTransformsInTheRecordAreTheBlueprints()
     {
         string doc = Doc();
-        Row(doc, TrapdoorBlueprint.Hinge, Point(TrapdoorBlueprint.HingePosition));
+        Row(doc, TrapdoorBlueprint.Hinge, Point(TrapdoorBlueprint.HingePosition), "`Quaternion.Euler(angle, 0, 0)`", "0° closed to " + Number(HatchGeometry.OpenAngleDegrees) + "° open");
         TrapdoorPart lid = TrapdoorBlueprint.LidCollider;
         Assert.Equal(lid.Centre, TrapdoorBlueprint.LidVisual.Centre);
         Row(doc, TrapdoorBlueprint.Hinge + "/" + lid.Name, Point(lid.Centre), Size(lid.Size));
@@ -103,7 +103,7 @@ public sealed class DoorAssetSourcesTests
         CellarPart leftMark = CellarBlueprint.HingeMarks(CellarLeaf.Left)[0];
         CellarPart leftRear = CellarBlueprint.HingeMarks(CellarLeaf.Left)[1];
         CellarPart rightMark = CellarBlueprint.HingeMarks(CellarLeaf.Right)[0];
-        Row(doc, leftMark.Name,
+        Row(doc, CellarBlueprint.SlopeRoot + "/" + CellarBlueprint.Hinge(CellarLeaf.Left) + "/" + leftMark.Name,
             "x " + Number(leftMark.Centre.X) + " on the left leaf, " + Number(rightMark.Centre.X) + " on the right",
             "y " + Number(leftMark.Centre.Y),
             "z " + Number(leftMark.Centre.Z) + " front, " + Number(leftRear.Centre.Z) + " rear",
@@ -151,6 +151,9 @@ public sealed class DoorAssetSourcesTests
     {
         string doc = Doc();
         Assert.Equal(DoorFamilies.All.Count, CellarDoors.All.Count);
+        // Doc to code as well: the table has exactly one row per family, so a stale extra row fails too.
+        int rows = doc.Split('\n').Count(line => line.StartsWith("| `", StringComparison.Ordinal) && line.Contains(" s | `" + DoorFamilies.TrapdoorPrefix, StringComparison.Ordinal));
+        Assert.Equal(DoorFamilies.All.Count, rows);
         foreach (DoorFamily family in DoorFamilies.All)
         {
             CellarDoorFamily cellar = CellarDoors.All.Single(candidate => candidate.Door.Donor == family.Donor);

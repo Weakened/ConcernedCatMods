@@ -16,8 +16,9 @@ are the sources. Section 8 covers editing and rebuilding, section 9 what ships, 
 
 **The geometry, the colliders and the motion are written in C#.** The door pieces were never modelled in Blender or
 any other tool, so there is no `.blend`, FBX, Unity scene, AssetBundle or texture for them. None was left out of the
-repository, either. When Jötunn reports the game's prefabs ready (`PrefabManager.OnVanillaPrefabsAvailable`), the
-plugin clones each donor door and builds every frame, lid, leaf, collider and snap point from the numbers below.
+repository, either. Only when `Trapdoors/Enabled` or `CellarDoors/Enabled` is on (both are off by default), and once
+Jötunn reports the game's prefabs ready (`PrefabManager.OnVanillaPrefabsAvailable`), the plugin clones each donor door
+and builds every frame, lid, leaf, collider and snap point from the numbers below.
 
 | Source file (under `src/ConcernedLadders/`) | Owns |
 |---|---|
@@ -37,7 +38,8 @@ to C# (see `AnimationSources/README.md`). The doors do not use that pipeline.
 
 ## 2. Units and axes
 
-Metres, degrees and seconds. Piece-local axes are the piece's own: x right, y up, z forward. Unity is left-handed, so a
+Metres, degrees and seconds. Transforms and sizes in the tables are rounded to 4 decimals (0.1 mm; the hinge's y is
+0.096845, shown as 0.0968); extents and profiles are given to 6. Piece-local axes are the piece's own: x right, y up, z forward. Unity is left-handed, so a
 positive rotation about +x turns +z toward −y and −z toward +y. That is why the trapdoor's lid, which hangs toward −z
 from its hinge, lifts for a positive angle. The snap plane is y = 0. A wood floor's top is y = 0.096845 and its bottom
 is y = −0.032905. Both were measured from the installed `wood_floor` (Valheim 1.0.21, `DOOR_DONOR_MATRIX.md`
@@ -46,18 +48,18 @@ section 5).
 ## 3. Trapdoor: hierarchy, pivots and rest transforms
 
 The clone keeps the donor root's `Piece`, `ZNetView`, `WearNTear`, `Door` and `Animator`, and adds `TrapdoorLid`.
-Every object is on the game's `piece` layer. "Rest" is the closed pose. A cube visual is Unity's built-in cube with its
+Every object the adapter builds is on the game's `piece` layer. "Rest" is the closed pose. A cube visual is Unity's built-in cube with its
 collider removed, scaled to the size given. A box collider sits on its own empty child, with its centre and size set
 on the collider itself.
 
 | Path from the root | Kind | Position (parent space) | Rest rotation | Size | Notes |
 |---|---|---|---|---|---|
-| `door` | bare transform | donor's | donor's | none | The donor leaf. The hidden native animator still writes it, which keeps `Door.CanInteract`'s state gate working. Nothing reads it |
+| `door` | bare transform | donor's | donor's | none | The donor leaf, kept as a bare transform (its layer is the donor's). The hidden native animator writes it and nothing reads it (`DOOR_DONOR_MATRIX.md` section 4) |
 | `new` | presentation root | origin | identity | none | `WearNTear.m_new`. Holds the four frame visuals in the donor's frame material |
 | `worn` | presentation root | origin | identity | none | `m_worn` and `m_broken`, in the donor's worn material. Absent where the donor has one root: `new` then serves all three states |
 | `new/frame_front`, `new/frame_rear`, `new/frame_left`, `new/frame_right` (and the same under `worn`) | cube visual | see the frame table | identity | see the frame table | No collider |
 | `frame_front`, `frame_rear`, `frame_left`, `frame_right` | box collider | origin; centre on the collider | identity | see the frame table | Static. `WearNTear` measures support with these |
-| `lid_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0, 0.0968, 0.79) | identity | none | The hinge axis: the lid's top rear edge. Turned by `Quaternion.Euler(angle, 0, 0)`, 0° closed to 90° open |
+| `lid_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0, 0.0968, 0.79) | identity | none | The hinge axis: the lid's top rear edge. Opens by `Quaternion.Euler(angle, 0, 0)`, 0° closed to 90° open |
 | `lid_hinge/lid_collider` | box collider | centre (0, −0.04, −0.79) | identity | 1.58 x 0.08 x 1.58 | Moves with the pivot |
 | `lid_hinge/lid` | cube visual | (0, −0.04, −0.79) | identity | 1.58 x 0.08 x 1.58 | Donor leaf material |
 | `lid_hinge/hinge_strap_left`, `lid_hinge/hinge_strap_right` | cube visual | left (−0.5, 0.006, −0.18), right (0.5, 0.006, −0.18) | identity | 0.08 x 0.012 x 0.36 | Hinge material (section 6). Marks the hinge side on the ghost. No collider |
@@ -78,8 +80,8 @@ offsets and passage are in `DOOR_DONOR_MATRIX.md` sections 5 and 6.
 
 ## 4. Cellar door: hierarchy, pivots and rest transforms
 
-The root keeps the same donor components as the trapdoor and adds `CellarLeaves`. Everything is on the `piece`
-layer. The frame is four convex prisms, each one mesh. A frame part's renderer under `new` (and `worn`) and its
+The root keeps the same donor components as the trapdoor and adds `CellarLeaves`. Everything the adapter builds is on
+the `piece` layer. The frame is four convex prisms, each one mesh. A frame part's renderer under `new` (and `worn`) and its
 `MeshCollider` (static, `convex = true`, directly under the root) use the same mesh.
 
 | Path from the root | Kind | Position (parent space) | Rest rotation | Size | Notes |
@@ -92,7 +94,7 @@ layer. The frame is four convex prisms, each one mesh. A frame part's renderer u
 | `slope/leaf_right_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0.84, 0, 1.0751) | identity | none | Opens by `Quaternion.Euler(0, 0, -angle)`: the left leaf mirrored |
 | `slope/leaf_left_hinge/leaf_left_collider`, `slope/leaf_right_hinge/leaf_right_collider` | box collider | centre left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0): toward the seam | identity | 0.835 x 0.06 x 1.7924 | |
 | `slope/leaf_left_hinge/leaf_left`, `slope/leaf_right_hinge/leaf_right` | cube visual | left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0) | identity | 0.835 x 0.06 x 1.7924 | Donor leaf material |
-| `hinge_mark_left_front`, `hinge_mark_left_rear` (under the left pivot); `hinge_mark_right_front`, `hinge_mark_right_rear` (under the right pivot) | cube visual | x 0.15 on the left leaf, −0.15 on the right (inboard of the hinge); y 0.004; z −0.6 front, 0.6 rear | identity | 0.3 x 0.008 x 0.08 | Hinge material. Thinner than the 1 cm cheek gap. No collider |
+| `slope/leaf_left_hinge/hinge_mark_left_front`, `slope/leaf_left_hinge/hinge_mark_left_rear`, `slope/leaf_right_hinge/hinge_mark_right_front`, `slope/leaf_right_hinge/hinge_mark_right_rear` | cube visual | x 0.15 on the left leaf, −0.15 on the right (inboard of the hinge); y 0.004; z −0.6 front, 0.6 rear | identity | 0.3 x 0.008 x 0.08 | Hinge material. Thinner than the 1 cm cheek gap. No collider |
 | `$hud_snappoint_corner` (four) | snap point | (±1, 0, ±1) | identity | none | Shared with the trapdoor |
 
 The prisms are four-point profiles in the piece's (z, y) plane, extruded along x (`CellarGeometry.Frame`):
@@ -165,7 +167,8 @@ clip would finish while Use is still refused, or still be moving once it is acce
 ## 6. Materials, textures and icons
 
 - **Borrowed, never copied out of the game.** The frame, worn-frame and leaf materials are the installed donor's own,
-  found by name among the donor's renderers before the donor's children are stripped (`DoorPieceKit.DonorMaterial`).
+  found by name among the native donor prefab's renderers (`DoorPieceKit.DonorMaterial`); the native prefab is only
+  read, and only the clone is stripped.
   They are assigned as shared materials and never changed. If one is missing, that family is refused with a log line
   rather than drawn with a substitute.
 - **The hinge material** is the one material the mod creates. It is a runtime copy of the leaf material, named
@@ -201,8 +204,11 @@ There is no export step. To change a door:
 1. Edit the constant in the source file from section 1. For example: the frame width is `HatchGeometry.FrameWidth`,
    the cellar's front height is `CellarGeometry.FrontHeight`, the curve is `HatchMotion.Ease`, a family's swing time
    is its `DoorFamilies` entry, and a mark's size is in `CellarBlueprint`.
-2. Run the door tests, under the build lock (`LANE_RULES.md`). The test project builds the product it references:
-   `dotnet test src/ConcernedLadders.Tests/ConcernedLadders.Tests.csproj -c Release --filter "FullyQualifiedName~Doors"`.
+2. Run the door tests: `dotnet test src/ConcernedLadders.Tests/ConcernedLadders.Tests.csproj -c Release --filter
+   "FullyQualifiedName~Doors"` (in this repository's lanes, under the machine's build lock). **The test project does
+   not build the product.** It compiles only the game-free sources (`Domain/**`, `Capabilities/WorkerLadderLinks.cs`
+   and `src/Shared/Ladders/**`) on net10.0. A change under `Pieces/` or `Runtime/` is compiled only by
+   `scripts/verify.ps1` (step 4); the tests read those files only as text.
    Many tests pin geometry by design. Clearance, hinge-side containment, sweep envelopes, the leaves' separation and
    the ladder margins are in `HatchGeometryTests`, `CellarGeometryTests`, `HatchLadderTests` and `CellarLadderTests`.
    Build plans and meshes are in `TrapdoorBlueprintTests` and `CellarBlueprintTests`. The curve and sub-steps are in
@@ -212,8 +218,8 @@ There is no export step. To change a door:
    updated on purpose. Update a pin only once the new value has been shown to keep its property.
 3. Update this file, `DOOR_DONOR_MATRIX.md` and `CELLAR_DOORS.md` where the change shows.
 4. The gate is `scripts/verify.ps1`, under the build lock. The package is built by `scripts/package.ps1 -Product
-   ConcernedLadders` (the lead runs it, under the lock). It contains the DLL only, and that DLL rebuilds every door at
-   load. Nothing else needs regenerating or exporting.
+   ConcernedLadders` (the lead runs it, under the lock). The DLL is its only built output, and that DLL rebuilds every
+   door at load. Nothing else needs regenerating or exporting.
 5. Changes to geometry or motion need the in-game rows again (`DOOR_DONOR_MATRIX.md` section 9, `CELLAR_DOORS.md`
    section 10).
 
@@ -240,14 +246,15 @@ bundle or game binary is redistributed: the materials come from the player's own
 | Frame, worn-frame and leaf materials | The installed game's own, borrowed at run time. Not redistributed |
 | Hinge material | A runtime copy of the leaf material, darkened. Not stored |
 | Icons | Rendered at load from the clone by Jötunn |
-| Design references | The owner's three photographs `floor-trapdoor-open.png`, `cellar-wood-closed.png`, `cellar-metal-open.png`, with their own README. They are kept, byte for byte, at commit `b4dd194` on branch `docs/concerned-ladders-expansion-references-c18fbae0bf9e`, not on `main`. That README records that ownership and licensing were not established. They informed only the concept: a flush hatch with an edge hinge, and paired sloped leaves hinged at the outer edges. Nothing derived from them ships |
+| Design references | The three photographs the owner supplied, `floor-trapdoor-open.png`, `cellar-wood-closed.png`, `cellar-metal-open.png`, with their own README. They are kept, byte for byte, at commit `b4dd194` on branch `docs/concerned-ladders-expansion-references-c18fbae0bf9e`, not on `main`. That README records that ownership and licensing were not established. They informed only the concept: a flush hatch with an edge hinge, and paired sloped leaves hinged at the outer edges. Nothing derived from them ships |
 
 No purchased, stock or extracted mesh, texture or animation is used for the doors.
 
 ## 11. What still needs the owner
 
-1. **Is the code the editable source?** Nothing was authored in Blender, so the "`.blend` files for authored Blender
-   assets" criterion is met by having nothing Blender-authored. If the owner wants the doors modelled in Blender
+1. **Is the code the editable source?** Nothing was authored in Blender. The lead's reading, for the owner to accept
+   or reject, is that the "`.blend` files for authored Blender assets" criterion therefore asks for no file, and that
+   the C# sources of section 1 are the editable sources. If the owner wants the doors modelled in Blender
    instead (shaped edges, planks, hardware), that is a new design job with an import path to choose. One option is a
    Unity AssetBundle, which needs a Unity editor matching the game's version; the repository has no bundle pipeline for
    Concerned Ladders. The other is a `.blend` → mesh-data → C# generator like the climbing animation's. Either way the
