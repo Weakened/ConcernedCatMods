@@ -60,7 +60,9 @@ public sealed class CellarBlueprintTests
         Assert.False(CellarDoorSettings.EnabledByDefault);
         Assert.Contains("UNFINISHED", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("Both leaves open and close together", CellarDoorSettings.Description, StringComparison.Ordinal);
-        Assert.Contains("Ladders do not work with them yet", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.Contains("hangs inside its opening and climbs through it only while both leaves are open", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.Contains("never treat one as a floor", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ladders do not work with them yet", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("Leave this off", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.DoesNotContain("do not open yet", CellarDoorSettings.Description, StringComparison.Ordinal);
     }

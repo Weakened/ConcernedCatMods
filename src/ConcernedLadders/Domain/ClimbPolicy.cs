@@ -37,6 +37,9 @@ internal enum ClimbRefusal
 
     /// <summary>The route would cross a trapdoor whose lid is not a passage (CL-004 #485, slice 4).</summary>
     HatchClosed,
+
+    /// <summary>The route would cross a cellar door whose pair of leaves is not a passage (CL-005 #486, slice 4).</summary>
+    CellarClosed,
 }
 
 /// <summary>The kind of collider a clearance query hit, as the engine adapter classified it.</summary>

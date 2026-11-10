@@ -1,14 +1,17 @@
 # Concerned Ladders: sloped cellar doors (CL-005 #486): design record and game-free model
 
-**Status: slices 1, 2 and 3 of #486, the game-free model, the piece adapter and the leaf runtime.** Slice 1 is the
+**Status: slices 1 to 4 of #486, the game-free model, the piece adapter, the leaf runtime and the ladder
+integration.** Slice 1 is the
 model, `src/ConcernedLadders/Domain/Doors/CellarGeometry.cs` and `CellarDoors.cs`. Slice 2 adds the build plan
 (`Domain/Doors/CellarBlueprint.cs`) and the piece adapter (`Pieces/CellarDoorPieceRegistration.cs`, through the door
 helper `Pieces/DoorPieceKit.cs` it shares with the trapdoors). It registers the nine pieces behind `[CellarDoors]
 Enabled`, **off by default**: with it off the adapter is never constructed and the game is unchanged. Slice 3 adds the
 leaf runtime (`Runtime/CellarLeaves.cs`): both leaves now open and close together from the native door state, and hold
-instead of moving into anything (section 4). **The ladders do not know cellar doors yet**: that is the next slice. The
-tests are `src/ConcernedLadders.Tests/Doors/CellarGeometryTests.cs`, `CellarDoorsTests.cs`, `CellarBlueprintTests.cs`
-and `CellarLeavesTests.cs`. Every number below is a design default measured against the installed game's `wood_floor`
+instead of moving into anything (section 4). Slice 4 teaches the ladders the cellar door (section 2c,
+`Domain/Doors/CellarLadder.cs`): a ladder hangs in its opening, a climber passes through only while both leaves are
+open, a leaf is never a landing unless the pair is closed and staying closed, and the top exit and the descending entry
+carry the climber over the front panel. The tests are `src/ConcernedLadders.Tests/Doors/CellarGeometryTests.cs`,
+`CellarDoorsTests.cs`, `CellarBlueprintTests.cs`, `CellarLeavesTests.cs` and `CellarLadderTests.cs`. Every number below is a design default measured against the installed game's `wood_floor`
 and walls (Valheim 1.0.21, CL-004's census and section 2a's wall read), **not an in-game observation**. Every
 placed-piece, interaction, ladder and multiplayer row is `OWNER GO-AROUND PENDING` (owner playtest checklist #470).
 
@@ -127,16 +130,75 @@ skinned closed pose first meets a wall reaching about 0.223 m toward the door. S
 
 - **Open passage** (`PassageMargins`): a capsule of radius 0.4 m has 0.38 m to each open leaf and 0.85 m of free
   travel along the opening.
-- **Planned ladder** (`PlannedLadderOrigin`, `ClimberMargins`, not wired to placement): hung inside the opening from
+- **Planned ladder** (`PlannedLadderOrigin`, `ClimberMargins`; since slice 4 the placement anchor, section 2c): hung inside the opening from
   the front panel's inner face, climbing side facing the rear, its top level with the snap plane, exactly as the
   trapdoor's ladder hangs from its front band. A front-lane climber of radius 0.4 m clears the front panel by 0.23 m
   (equal to the trapdoor's, tested), the rear header by 0.62 m and each open leaf by 0.38 m.
 - **Closed leaves** are solid sloped boxes at 26.57°. Whether a player can stand on them without sliding is the
   game's ground-angle rule, which this record has not read; it is OWNER GO-AROUND PENDING, and the cover is not
   offered as a stair.
-- **Not decided yet, for the ladder slice:** the ladder's top exit. A climber leaving the planned ladder forward meets
-  the front panel, whose top is 0.40 to 0.47 m above the snap plane, before the floor in front of it. Whether the
-  existing exit search finds a landing over it, or the anchor must move, is that slice's question.
+- **The ladder's top exit** (decided in slice 4, section 2c): a climber leaving the planned ladder forward meets the
+  front panel, whose top is 0.40 to 0.47 m above the snap plane, before the floor in front of it. The anchor does not
+  move; the exit route rises over the panel instead.
+
+### 2c. Ladder integration (slice 4)
+
+The ladder side of the cover, mirroring the trapdoor's (`DOOR_DONOR_MATRIX.md` section 5, `HatchLadder`). The rules are
+game-free in `Domain/Doors/CellarLadder.cs`; the trapdoor's `HatchLadder.AllowsRoute`, `LegSpan` and
+`IsLandingSurface` are reused, not copied. The ladder adapters recognise a cellar door by its `CellarLeaves` runtime,
+which keeps its own registry of woken covers (`CellarLeaves.Any`), never the trapdoor lid's. **Every ladder consult is
+gated by `CellarLeaves.Any`**, which is false for the whole session with `[CellarDoors] Enabled` off because no cellar
+door prefab exists, so with the setting off every ladder path is exactly main's (pinned by source). Nothing on the
+network is added: the passage and landing questions read the native door state through the piece's own `ZNetView`,
+after `IsValid()`, as the leaves already do; no RPC, ZDO field, ownership claim or write.
+
+- **Never a floor (placement).** A cellar door's four corner snaps are the wood floor's, so the floor-edge snap would
+  read it as a 2 m floor tile and hang or stand a ladder at the outside of a frame that rises 0.3 to 1.4 m. Aimed at a
+  cellar door's frame (a cheek, the front panel or the rear header), Auto and Top hang the ladder in the cover's own
+  anchor: `PlannedLadderOrigin`, from the front panel's inner face, climbing side toward the rear header, in the
+  cover's rotation whatever the hammer's. Auto only when there is room below (the trapdoor's room test, under the
+  cover's own probe). **Bottom, Left side, Right side, and Auto with no room below are refused**: the ghost is marked
+  invalid and cannot be built, never put on the cover's edge. Out of the game's placement reach is refused too. Aiming
+  at a leaf hides the ghost, because the game's own placement ray skips a collider with a body (each leaf has a
+  kinematic one), as on the trapdoor's lid.
+- **Passage.** A route that crosses the opening is committed only while the pair is a passage: both leaves fully open
+  and not asked to close (`HatchMotion.IsPassage` on the one progress). The opening is widened by the capsule's radius
+  on every side; the cover's depth runs from the frame's bottom up to the slope's top at the capsule's centre, clamped
+  to the opening (`CellarLadder.Crosses`), so a capsule standing on the closed leaves, or on the floor clear of the
+  module, does not cross it. Each leg of a route is tested at both ends over its own height span, as for the trapdoor.
+  This gates the top exit (a lane under a pair that is not a passage has no top exit at all; the closed leaves' own
+  collision also stops the ascent), every exit route, and a descending entry from the floor in front. A climber is
+  told **"The cellar door is not open. Open it from the ladder, or climb down."** (`cl_msg_cellarclosed`, registered
+  with the cellar doors' own localization, so it exists exactly when they do).
+- **Landing.** The landing search may stand a climber on a leaf only while the pair is closed and staying closed. A
+  moving, held or open leaf is never a landing, including an open leaf's upright top edge, whose face, like a closed
+  leaf's top, faces up the slope's normal (y 0.89) and so passes the search's slope test (y 0.65 or more); a ray that
+  meets one finds no landing at that point at all. The four frame prisms are an ordinary piece. A cover whose hinge
+  pivots cannot be found is never a landing. The search's own footprint test (nine points at 0.9 of the radius, 0.15
+  m of step) is expected to refuse the 26.57 degree leaves anyway, since the slope rises about 0.22 m across the
+  footprint, so in practice no ladder exit stands a climber on the cover.
+- **Over the front panel.** The anchored ladder's top is the snap plane; the front panel's top is 0.40 to 0.47 m above
+  it, and the floor in front is at 0.097 m. The exit search's standard lifts (6 cm, then a 0.30 m step over the higher
+  end) leave the feet at about 0.42 m, below the panel's 0.47 m inner edge. The clearance query's capsule floats 5 cm
+  over the feet and is swept 2 cm thinner, so on the exit (from the floor's top plus the 2 cm landing skin) the 0.30 m
+  step would **pass** the query while the real body's bottom met the panel's inner edge about 5.5 cm deep; on the
+  descending entry (from the floor's top) the query would meet the panel and refuse the entry outright. So a route with one end in a cover's opening and the other outside the
+  opening at the floor's level (`CellarLadder.LeavesOverFrame`) tries only lifts that carry the feet at least to
+  `CellarLadder.OverPanelY`, 5 cm over the panel's inner top edge (0.52 m above the snap plane, about 0.40 m over the
+  floor in front): the standard lifts, each raised to that height, duplicates dropped (`CellarLadder.Lifts`). A route
+  to a landing inside the opening, or down in the dig below the frame, keeps the standard lifts. The first top-exit
+  candidates (0.94 and 1.34 m in front of the ladder's top at the game's 0.49 m radius) stand clear of the widened
+  opening and of the panel's outer face, so the settle onto the floor is not a crossing. Every leg is still swept with
+  the capsule.
+- **Descending entry.** From the floor in front, the hands' aim (a line from the chest to the ladder) goes to the
+  floor-lip height, 0.2 m over the run's top; in front of a cellar door that line passes through the front panel, so
+  the entry would always be refused. Over a cover's frame the aim rises to `OverPanelY`, and the route takes the panel
+  lifts above. It also needs the passage.
+- **Use while climbing.** The cover is a native `Door`, so a hovered cover takes Use (the trapdoor's rule, unchanged):
+  a climber opens and closes the leaves from the ladder without letting go, and the frame in which Use asked for a
+  dismount is held back from interaction once either door family exists.
+
+Not covered: Foreman's worker climbing (`Capabilities/WorkerLadderLinks.cs`) is unchanged, as it is for trapdoors.
 
 ## 3. Collision and frame shape
 
@@ -174,8 +236,8 @@ trapdoor's strip (`DoorPieceKit.Strip`, the same code, not a copy). Under the ro
 `Verify` refuses the clone if any collider or renderer survived that the adapter did not build, if a wear state points
 outside the piece's own roots, or if the donor leaf is more than a transform (`DoorPieceKit.VerifyStripped`, shared). It
 also refuses a frame collider that is not a static convex mesh with its mesh, a pivot without its kinematic body or leaf
-collider, and a clone that carries the trapdoor's lid runtime. The ladders recognise a trapdoor by that runtime, so a
-cellar door is an ordinary piece to the ladder code until the ladder slice. Since slice 3 it also refuses a clone
+collider, and a clone that carries the trapdoor's lid runtime. The ladders recognise a trapdoor by that runtime and a
+cellar door by its `CellarLeaves` (slice 4), so a clone with both would be read as both. Since slice 3 it also refuses a clone
 without exactly one `CellarLeaves` on its root with an accepted swing time. It refuses one where a collider the leaves'
 queries ignore (`CellarBlueprint.QueryIgnores`) is missing, or whose collider count is not exactly those six.
 
@@ -219,10 +281,11 @@ queries ignore (`CellarBlueprint.QueryIgnores`) is missing, or whose collider co
   they hold and retry. A 5° turn moves a leaf's free edge at most 0.073 m (the lid's 0.14 m), so the trapdoor's
   check-spacing guarantee holds with room to spare. Nothing is launched, pushed through a wall or shut in.
 - **Passage and landing** are the trapdoor's rules on the one progress: a passage only fully open and staying open
-  (`HatchMotion.IsPassage`), a landing only closed and staying closed (`IsLanding`). **Nothing asks them yet.**
-  `CellarLeaves` is not in the trapdoor lid's registry, so the ladder code (`TrapdoorLid.Any`, `RouteShut`,
-  `MayLandOn`, the hatch anchor) is unchanged and still sees each leaf as an ordinary piece collider at its current
-  pose (lead default 18). The ladder slice wires these rules.
+  (`HatchMotion.IsPassage`), a landing only closed and staying closed (`IsLanding`). Since slice 4 the ladder code asks
+  them (section 2c) through `CellarLeaves`' own registry, `Any`, `RouteShut`, `MayLandOn` and `OverPanel`, which read
+  the native state now, not as of the last frame, through one guarded helper (a cover that has not settled, has
+  stopped on a fault, lacks its parts or has no ZDO is neither). `CellarLeaves` is still not in the trapdoor lid's
+  registry, so the trapdoor's own ladder paths are unchanged.
 
 ## 5. Families, prefab IDs, names and costs (`CellarDoors`)
 
@@ -299,8 +362,8 @@ Added by slice 2 (L6, 2026-11-09):
    lands, the leaves stay shut whatever the native state says (section 4). The setting's text and
    the README say so. This is the narrowest option that still registers the pieces: no leaf moves without the
    occupancy checks.
-10. The cellar door carries no trapdoor lid runtime, so the ladders treat it as an ordinary piece until the ladder slice.
-    The clone is refused if it carries one.
+10. The cellar door carries no trapdoor lid runtime; the clone is refused if it carries one. The second half, "the
+    ladders treat it as an ordinary piece until the ladder slice", is superseded by slice 4 (items 21-30).
 11. The rear header stays 0.20 m after the wall census (section 2a). The 0.47 m, 0.50 m and thicker walls, and a stone
     wall snapped over the module's rear metre, are expected to hold the leaves shut rather than be cleared.
 12. Hinge marks: two darkened 8 mm plates per leaf at its hinge edge, visual only. A texture repeats once per 2 m of
@@ -335,32 +398,72 @@ Added by slice 3 (L7, 2026-11-09):
     including anything another mod parents under the piece. A cover that cannot resolve all six stays shut.
 17. The query layers and the blocking rule are the trapdoor lid's (shared code). Terrain and static rock are not
     queried, as for the lid.
-18. The ladder code does not know cellar doors in this slice. It sees each leaf as an ordinary piece collider at its
-    current pose: the snap treats the cover as a floor (corner snaps), and a ladder's landing search may stand a climber
-    on a closed leaf (normal 0.89, inside its 0.65 limit) or on an upright leaf's top edge. The leaves never move into a
-    climber, because characters block. This stays until the ladder slice wires passage and landing.
+18. Superseded by slice 4 (items 21-30). As recorded for slice 3: the ladder code did not know cellar doors, saw each
+    leaf as an ordinary piece collider at its current pose, and the snap treated the cover as a floor. The leaves never
+    move into a climber, because characters block; that is unchanged.
 19. One fault message per session for all cellar doors. A faulted cover stops where it is.
 20. The swing time is the donor's (`DoorFamily.SwingSeconds`), the same as the family's trapdoor.
+
+Added by slice 4 (L8, 2026-11-09), section 2c:
+
+21. The ladders recognise a cellar door by its `CellarLeaves`, in that runtime's own registry, and ask nothing of
+    cellar doors while none exists (`CellarLeaves.Any`), so with the setting off they behave exactly as on main.
+22. **Never a floor.** Aimed at a cellar door, only Auto (with room below) and Top place a ladder, in the cover's anchor.
+    Bottom, Left side, Right side and Auto without room below are **refused** (red ghost), rather than standing or
+    hanging a ladder on the cover's edge as the floor-edge snap would. This is the narrowest choice; the trapdoor's
+    Auto instead falls back to its floor edge, because a trapdoor is a flat tile.
+23. The anchor is slice 1's planned ladder, unchanged: hung from the front panel's inner face, its top on the snap
+    plane, climbing side toward the rear header, in the cover's rotation. Placement aims at the frame only; aiming at a
+    leaf hides the ghost (the game's own ray), as on the trapdoor.
+24. Passage: a route that crosses the widened opening, from the frame's bottom to the slope's top at the capsule's
+    centre, is committed only while both leaves are fully open and not asked to close. A route already under way
+    finishes (the leaves hold against a climber they would touch); no new one starts.
+25. Landing: a leaf only while the pair is closed and staying closed; never while it moves, is held or is open,
+    including an upright leaf's top edge; the frame is an ordinary piece; a cover whose pivots are missing, never.
+26. **Over the front panel** (the open question of section 2b): the anchor stays, and a route between the opening and
+    the floor's level outside it uses only lifts that carry the feet 5 cm over the panel's inner top edge, 0.52 m above
+    the snap plane. Moving the anchor up instead would leave a 2 m ladder's foot 0.47 m above a 2 m dig's floor.
+27. A descending entry over the frame aims the hands over the panel, at the same height, instead of the floor-lip rule
+    that would aim through it.
+28. Its own notice, `cl_msg_cellarclosed`, registered with the cellar doors.
+29. Use while climbing is the trapdoor's rule: a hovered cover takes it; the dismount frame is held back once either
+    door family exists.
+30. Several covers: a route is refused if any cover it crosses is not a passage; over several frames it rises to the
+    highest of their panel heights.
+
+Owner questions (slice 4):
+
+- Bottom and the side modes aimed at a cellar door are refused. Should they instead stand or hang a ladder on the floor
+  beside the cover?
+- Auto aimed at a cellar door with no room below is refused rather than standing the ladder on the frame. Is that right?
+- The exit and the entry rise about 0.5 m above the ladder's top to clear the panel. Does that look right in game?
+  The panel lift also needs about 2.42 m of headroom over the floor in front (the standard step about 2.30 m), so under a
+  low ceiling in front of the cover both the exit and the entry are refused.
+- Still open from slice 1: whether a player can stand on the 26.57 degree leaves (the game's ground-angle rule was not
+  read). The ladders do not stand a climber there in practice (item 25 and section 2c).
 
 ## 9. Remaining #486 slices (each its own PR)
 
 Done: slice 1 (model, PR #534), slice 2 (piece adapter, PR #535, this record's section 3; the wall depths in section
-2a) and slice 3 (leaf runtime, section 4; what it does with each wall in section 2a).
+2a), slice 3 (leaf runtime, PR #537, section 4; what it does with each wall in section 2a) and slice 4 (ladder
+integration, section 2c).
 
-1. **Ladder integration**: anchor, top exit over the front panel (section 2b), passage and landing. Recognise a cellar
-   door by its `CellarLeaves`: stop the snap treating the cover as a floor, refuse a landing on a leaf that is not
-   closed and staying closed (including an upright leaf's top edge), and route a climb through the opening only while
-   the pair is a passage (lead default 18).
-2. Editable asset sources (`.blend`, materials, collider definitions, animation curves) and export notes; candidate
-   provenance.
+1. Done in slice 4: the ladder integration (section 2c). With it, #486's code scope is complete.
+2. Editable asset sources and export notes: **recorded** in `DOOR_ASSET_SOURCES.md`. The geometry, colliders and
+   motion are code, with no `.blend` or bundle. The record gives every object name, pivot, rest transform, collider
+   and prism mesh, the shared curve and each family's swing time and materials. `DoorAssetSourcesTests` holds it to
+   the code. Still the owner's: whether the code counts as the editable source or the doors should be modelled in
+   Blender, and per-leaf motion against the pair rule (`DOOR_ASSET_SOURCES.md` section 11). Candidate provenance: a
+   1.1.0 candidate ZIP is built and recorded in `STATUS.md` ("1.1.0 candidate provenance", PR #544); install and smoke
+   are OWNER GO-AROUND PENDING.
 
 ## 10. In-game rows (all OWNER GO-AROUND PENDING, #470)
 
 None of these has been observed. Slices 2 and 3 register the pieces and drive their leaves behind the setting; nothing
 has been placed in game. Slice 2 added these rows: the hammer icons; the frame meshes' faces, shading and texture
 scale; the hinge marks on the ghost; a wall from section 2a's table on the rear edge; and a ladder
-aimed at a cellar door, which the ladder snap treats as an ordinary floor (its corner snaps) until the ladder slice, so
-it may hang from or stand at the frame's outer edge. Placement in a wood floor and beside stone
+aimed at a cellar door (superseded by slice 4's rows below: it hangs in the opening or is refused, never on the
+frame's outer edge). Placement in a wood floor and beside stone
 flooring, against a wood wall and a stone wall on the rear edge, every family; the ghost showing the high and low
 ends and the hinge sides at every rotation; snaps not sinking the threshold or leaving floating edges; standing on the
 closed leaves; Use from outside, from inside the entrance and from the ladder, keyboard and controller, remapped;
@@ -382,3 +485,16 @@ wall built while the cover was open (section 2a), which the clients present see 
 or launch of a player, creature or cart at any point. The ghost and the hammer icon stay closed. A ladder near a cellar
 door, which still treats it as an ordinary piece (lead default 18). The trapdoors unchanged with the cellar doors on,
 and the setting off leaving everything as on main.
+
+Slice 4 adds these rows, and replaces slice 2's and 3's "a ladder near a cellar door treats it as an ordinary piece".
+A ladder aimed at a cellar door's frame, every rotation: in Auto over a dig and in Top it hangs in the opening from the
+front panel, facing the rear header; in Bottom, Left side and Right side, and in Auto over solid ground, the ghost is
+red and cannot be built; aimed at a leaf, the ghost is hidden. Climbing up under a closed cover: the climber stops
+under the leaves with the cellar-door notice; Use from the ladder (keyboard, controller, remapped) opens the pair
+without letting go; once open, the climber climbs out over the front panel onto the floor in front without catching on
+or sticking to the panel, and the rise of about 0.5 m above the ladder's top looks right. While the pair opens or
+closes: no exit, the climber holds. From the floor in front: getting onto the ladder needs the pair open, the hands
+reach over the panel and the climber lowers onto the rungs; with the pair closed, the notice. No ladder exit stands a
+climber on the leaves, open or closed, nor on an open leaf's top edge. Two cellar doors side by side, and one beside a
+trapdoor. A roof about 2.4 m over the floor in front: the exit and entry are refused, not squeezed. Another player opening or closing the pair while someone climbs. Trapdoors on with cellar doors off, and both
+off: ladders as on main.

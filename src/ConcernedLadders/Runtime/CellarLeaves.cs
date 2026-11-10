@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
@@ -32,9 +33,13 @@ namespace TheConcernedCat.ConcernedLadders.Runtime;
 /// than loading it open. Otherwise the trapdoor's <see cref="HatchMotion.Settle{TProbe}"/>: the stored end when clear,
 /// and never a pose inside someone.</para>
 ///
-/// <para>Not a trapdoor: it is not in <see cref="TrapdoorLid"/>'s registry, so the ladder code still treats a cellar door
-/// as an ordinary piece (the ladder integration is the next slice). Ghost and icon: no ZDO, so nothing is read and the
-/// leaves stay closed. Idle cost per cellar door per frame is one ZDO integer read; nothing allocates per frame.</para></summary>
+/// <para>Ladders (slice 4): every woken cover is in its own registry (<see cref="Any"/>), not the trapdoor lid's, and
+/// answers the ladder code's three questions from the one progress and the native state, as the lid does:
+/// <see cref="RouteShut"/> (a route through the opening needs the pair to be a passage), <see cref="MayLandOn"/> (a leaf
+/// is a landing only closed and staying closed) and <see cref="OverPanel"/> (how high a route over the frame rises), by
+/// <see cref="CellarLadder"/>'s rules. With <c>CellarDoors/Enabled</c> off no cover exists and nothing asks. Ghost and
+/// icon: no ZDO, so nothing is read, the leaves stay closed and no ladder question counts them. Idle cost per cellar
+/// door per frame is one ZDO integer read; nothing allocates per frame.</para></summary>
 internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
 {
     /// <summary>The donor's swing time, seconds. A serialized field, so it is copied from the inactive prefab clone to
@@ -60,9 +65,16 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
 
     private static readonly string[] MoverLayers = { "character", "character_net", "character_ghost", "character_noenv", "hitbox", "item", "vehicle" };
 
+    /// <summary>Every cover that has woken in this session and not been destroyed: placed pieces, and also the placement
+    /// ghost and icon renders, which have no ZDO and are skipped by every ladder question (slice 4). Empty for the whole
+    /// session when <c>CellarDoors/Enabled</c> is off, because then no cellar door prefab exists.</summary>
+    private static readonly List<CellarLeaves> Live = new List<CellarLeaves>();
+
     private ZNetView? _view;
     private Pivot? _left;
     private Pivot? _right;
+    private Transform? _leftPart;
+    private Transform? _rightPart;
     private Collider[]? _own;
     private CellarPairOccupancy<CellarLeaves> _pair;
     private CellarPairOccupancy<Movers> _movers;
@@ -118,10 +130,13 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
 
     private void Awake()
     {
+        Live.Add(this);
         _view = GetComponent<ZNetView>();
         Transform? slope = transform.Find(CellarBlueprint.SlopeRoot);
         Transform? leftHinge = slope != null ? slope.Find(CellarBlueprint.Hinge(CellarLeaf.Left)) : null;
         Transform? rightHinge = slope != null ? slope.Find(CellarBlueprint.Hinge(CellarLeaf.Right)) : null;
+        _leftPart = leftHinge;
+        _rightPart = rightHinge;
         BoxCollider? leftBox = LeafBox(leftHinge, CellarLeaf.Left);
         BoxCollider? rightBox = LeafBox(rightHinge, CellarLeaf.Right);
         Collider[]? own = OwnColliders();
@@ -221,6 +236,88 @@ internal sealed class CellarLeaves : MonoBehaviour, ICellarLeafOccupancy
         _settled = true;
         _progress = CellarSettle.First(open, _pair, _movers);
         Apply();
+    }
+
+    private void OnDestroy() => Live.Remove(this);
+
+    /// <summary>True while any cellar door exists in this session (slice 4). The ladder adapters ask nothing of cellar
+    /// doors while it is false, which it always is with <c>CellarDoors/Enabled</c> off, so they behave exactly as
+    /// before.</summary>
+    internal static bool Any => Live.Count > 0;
+
+    /// <summary>The opening is a passage (<see cref="HatchMotion.IsPassage"/>): both leaves fully open and not asked to
+    /// close. A cover that has not settled, has stopped on a fault, lacks its parts or has no ZDO is neither a passage nor
+    /// a landing.</summary>
+    internal bool Passage => TryReadOpen(out bool open) && HatchMotion.IsPassage(_progress, open);
+
+    /// <summary>The leaves are a floor (<see cref="HatchMotion.IsLanding"/>): closed and not asked to open.</summary>
+    internal bool Landing => TryReadOpen(out bool open) && HatchMotion.IsLanding(_progress, open);
+
+    /// <summary>The native door state now, not as of this cover's last update: a Use this frame already counts.</summary>
+    private bool TryReadOpen(out bool open)
+    {
+        open = false;
+        ZNetView? view = _view;
+        if (!enabled || !_settled || view == null || !view.IsValid() || _left == null) { return false; }
+        open = HatchMotion.IsOpenState(view.GetZDO().GetInt(ZDOVars.s_state));
+        return true;
+    }
+
+    /// <summary>Would a climber's capsule of <paramref name="radius"/> at <paramref name="at"/>, occupying world heights
+    /// <paramref name="low"/> to <paramref name="high"/> over one leg of a route, cross the opening of a placed cellar door
+    /// whose pair is not a passage (<see cref="CellarLadder.Crosses"/>, <see cref="HatchLadder.AllowsRoute"/>)? Ghosts and
+    /// icon renders are skipped. No allocation; one pass over the live covers.</summary>
+    internal static bool RouteShut(Vector3 at, float radius, float low, float high)
+    {
+        for (int index = 0; index < Live.Count; index++)
+        {
+            CellarLeaves cover = Live[index];
+            if (cover == null || cover._view == null || !cover._view.IsValid()) { continue; }
+            Transform piece = cover.transform;
+            Vector3 local = piece.InverseTransformPoint(at);
+            float origin = piece.position.y;
+            bool crosses = CellarLadder.Crosses(local.x, local.z, radius, low - origin, high - origin);
+            if (!HatchLadder.AllowsRoute(crosses, crosses && cover.Passage)) { return true; }
+        }
+
+        return false;
+    }
+
+    /// <summary>The world height a route between <paramref name="inside"/> and <paramref name="outside"/> must carry the
+    /// feet to, when it passes over a placed cellar door's frame (<see cref="CellarLadder.LeavesOverFrame"/>): that
+    /// cover's <see cref="CellarLadder.OverPanelY"/>, the highest of any such cover. Negative infinity when the route
+    /// passes over none, so the standard lifts stand. Ghosts and icon renders are skipped. No allocation.</summary>
+    internal static float OverPanel(Vector3 inside, Vector3 outside)
+    {
+        float best = float.NegativeInfinity;
+        for (int index = 0; index < Live.Count; index++)
+        {
+            CellarLeaves cover = Live[index];
+            if (cover == null || cover._view == null || !cover._view.IsValid()) { continue; }
+            Transform piece = cover.transform;
+            Vector3 from = piece.InverseTransformPoint(inside);
+            Vector3 to = piece.InverseTransformPoint(outside);
+            float origin = piece.position.y;
+            if (!CellarLadder.LeavesOverFrame(from.x, inside.y - origin, from.z, to.x, outside.y - origin, to.z)) { continue; }
+            best = Mathf.Max(best, origin + CellarLadder.OverPanelY);
+        }
+
+        return best;
+    }
+
+    /// <summary>May the ladder's landing search stand a climber on this collider (<see cref="HatchLadder.IsLandingSurface"/>)?
+    /// True for anything that is not part of a cellar door, and for its fixed frame. Anything under either hinge pivot (a
+    /// leaf) only while the pair is a landing; any part of a cover whose pivots could not be found, never. This is the
+    /// only hierarchy lookup in this type, and only the ladder code calls it: the leaves' own occupancy queries compare
+    /// colliders by identity.</summary>
+    internal static bool MayLandOn(Collider collider)
+    {
+        CellarLeaves? cover = collider != null ? collider.GetComponentInParent<CellarLeaves>() : null;
+        if (cover == null) { return true; }
+        HatchPart part = cover._leftPart == null || cover._rightPart == null ? HatchPart.Unknown
+            : collider!.transform.IsChildOf(cover._leftPart) || collider.transform.IsChildOf(cover._rightPart) ? HatchPart.Lid
+            : HatchPart.Frame;
+        return HatchLadder.IsLandingSurface(part, part == HatchPart.Lid && cover.Landing);
     }
 
     /// <summary>A fault stops this cover where it is, both leaves at the one angle, logged once per session.</summary>
