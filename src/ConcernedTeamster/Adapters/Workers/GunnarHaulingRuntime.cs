@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Containers;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Adapters.Navigation;
@@ -43,12 +44,15 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 {
     /// <summary>#458: the hand-over from Gunnar's figure at home to his worker
     /// body. Figure down, presentation lease released, worker lease claimed;
-    /// <paramref name="standing"/> is where the figure stood. False refuses the
+    /// <paramref name="standing"/> is where the figure stood, and
+    /// <paramref name="lease"/> is the worker lease the body is created under
+    /// (#372), null exactly when this returns false. False refuses the
     /// spawn.</summary>
-    internal delegate bool WorkerBodyHandOver(out Vector3? standing, out string refusal);
+    internal delegate bool WorkerBodyHandOver(out Vector3? standing, out BodyLease? lease, out string refusal);
 
     /// <summary>#458: asked by <c>ct_haul spawn</c> before the body is created.
-    /// Null (no figure runtime) hands over from nothing.</summary>
+    /// Null (no figure runtime) means nothing can grant a worker lease, so since
+    /// #372 no body is created.</summary>
     internal WorkerBodyHandOver? TakeWorkerBody { get; set; }
 
     /// <summary>#458: the body was not placed after all; the hand-over's worker
@@ -955,9 +959,19 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         // #458: the hand-over, before the body exists. His figure at home comes
         // down and gives up its lease, and the worker lease is claimed; only then
         // may a body be placed, and it is placed where the figure stood.
-        Vector3? standing = null;
+        //
+        // #372: the hand-over also hands back the lease the body is created
+        // under, and Concerned NPC builds it - checking the lease is this role's,
+        // counting his saved bodies itself, re-asking that the lease is still
+        // held immediately before, and stamping his identity in the same call.
+        // No hand-over means no lease, and no lease means no body.
         WorkerBodyHandOver? handOver = TakeWorkerBody;
-        if (handOver != null && !handOver(out standing, out string handOverRefusal))
+        if (handOver == null)
+        {
+            return "Refused: nothing can give Gunnar a worker lease (his figure runtime is not installed), so no body is created.";
+        }
+
+        if (!handOver(out Vector3? standing, out BodyLease? lease, out string handOverRefusal))
         {
             return "Refused: Gunnar's figure at home could not hand over to his worker body (" + handOverRefusal + ").";
         }
@@ -976,11 +990,11 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         Quaternion facing = standing.HasValue && toPlayer.sqrMagnitude > 0.01f
             ? Quaternion.LookRotation(toPlayer.normalized)
             : Quaternion.LookRotation(-player.transform.forward);
-        TeamsterWorkerAI? body = TeamsterWorkerPrefab.Spawn(position, facing, out string failure);
+        TeamsterWorkerAI? body = TeamsterWorkerPrefab.Spawn(lease, position, facing, out string failure);
         if (body == null)
         {
             ReleaseWorkerBody?.Invoke();
-            return "Refused: " + failure + ".";
+            return "Refused: " + (failure.Length == 0 ? "the body could not be created" : failure) + ".";
         }
 
         _persistedBodies.Add(body.GetComponent<ZNetView>().GetZDO().m_uid);

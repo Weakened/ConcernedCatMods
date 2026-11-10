@@ -28,4 +28,11 @@ internal static class GunnarCollectionDefaults
     /// needs <see cref="CollectionEnabled"/> and hauling's own switch, because
     /// the cart is assigned through the hauling runtime.</summary>
     public const bool CartTourEnabled = false;
+
+    /// <summary><c>Workers/GunnarChestHaulEnabled</c> (#381 item 4, the manual
+    /// chest-to-chest haul). Off until a person turns it on, and a switch of its
+    /// own: a player who let him take one named item from a chest he is standing
+    /// at has not thereby let him walk loads between two chests. It also needs
+    /// <see cref="CollectionEnabled"/> and <see cref="ChestTakeEnabled"/>.</summary>
+    public const bool ChestHaulEnabled = false;
 }

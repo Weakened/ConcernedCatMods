@@ -49,7 +49,8 @@ driver already answers.
 | What Gunnar may collect at all | **Teamster** | `GunnarTargetPredicate` |
 | How much he can carry | **Teamster** | `GunnarCarry`, from the game's own numbers |
 | Where every unit of material physically is | **Teamster** names the places; **ConcernedNPC** keeps the invariant (#376) | `CargoLedger`, `CollectionAccount` over `NpcCustodyLedger` |
-| Whether a manual haul may start | **Teamster** | `HaulRequestGate` |
+| Whether a manual haul may start, and its loading order | **Teamster** | `HaulRequestGate` |
+| How a manual chest-to-chest haul splits into tours (one place, divisible cargo; §6k) | **Teamster** | `HaulManifestPlanner`, `ChestHaul` |
 | The idle hammer | **Teamster** | `CartUpkeepIdle`, `CartUpkeepDriver`, `GunnarIdleHammerPort` (§8, D21) |
 
 An earlier draft of this work contained a batch planner, a round loop and a tour partitioner of its own. They were
@@ -1104,8 +1105,8 @@ destination audit's pin on the hovered-object lookup still counts one.
 
 ### Not claimed
 
-Nothing here has been observed in a running game; §10 has the rows. Taking as part of a tour, or a manifest of
-chest-to-chest trips, is not built here.
+Nothing here has been observed in a running game; §10 has the rows. Taking as part of a tour is not built here; the
+manifest of chest-to-chest trips is §6k.
 
 ## 6j. He can fill the cart you assigned him (`DECISIONS.md` D22)
 
@@ -1197,6 +1198,58 @@ be refused by the new rules and to pass a validator without them.
 ### Not claimed
 
 Nothing here has been observed in a running game; §10 has the rows.
+
+## 6k. He can haul from chest to chest (#381 item 4)
+
+The manual mode of #381: an explicit source, an explicit destination, a cargo filter, both chests permitting it. It
+adds **no vanilla call**: every take is D20's port and every unload D15's, each behind its own gate asked again in the
+frame of the move, and he walks his own body between the two chests. The decisions it rests on, and where it stops,
+are the manual-haul lead default at the end of `DECISIONS.md`.
+
+### What a player does
+
+1. Turn on `Workers/GunnarCollectionEnabled`, `Workers/GunnarChestTakeEnabled` and `Workers/GunnarChestHaulEnabled`
+   (all **off by default**).
+2. Mark one chest `Take` (or `Both`), look at it and run `ct_collect source`; mark another `Deposit` (or `Both`), look
+   at it and run `ct_collect destination`.
+3. `ct_collect haul plan Stone:200 Wood` says the manifest - how many units, how many tours, each up to how many
+   kilograms and slots, the loading order, what the first tour takes - and moves nothing.
+4. `ct_collect haul Stone:200 Wood` works it out again and starts. `ct_collect status` shows the tour and what has
+   arrived; `ct_collect stop` ends it with what he holds still on him.
+
+### The manifest (`HaulManifestPlanner`, game-free)
+
+`HaulRequestGate` - the existing "may a manual haul start" answer - admits it (both chests named and different, the
+source marked for taking and the destination for putting in, something matching the filter, room somewhere) and sets
+the loading order, heaviest first, then by name. The planner splits what it admitted into tours under D17's carry
+limit and his free slots, filling each tour in loading order. At most 4 items and 32 tours. The cart figure is
+computed only when a cart is offered, which the runtime never does (on foot only). `HaulManifestTests`.
+
+### Each tour (`ChestHaul`, game-free)
+
+Provision: one take per item, at most the manifest's line and what fits now. Travel: walk to the destination (and, for the
+next tour, back to the source), each walk given up after 12 s without progress. Unload: one unload per item, offering at most what this tour **measured** taking.
+Reconcile: count what he carries of the cargo; it must equal taken less delivered, because a haul starts with none of
+the cargo on him. Anything uncertain, a move measuring more than was asked for or carried (never credited), anything left in him, a
+count that disagrees, or a tour that took nothing stops
+the haul with what he holds still on him. `ChestHaulTests`, `ChestHaulGateTests`.
+
+### The pin
+
+`#381 manifest-haul audit` pins, in `GunnarCollectionRuntime.Haul.cs`: one take, one unload and one start, each inside
+one method whose own gate is decided and refused with a return above the move; every gate input there (the haul's
+opt-in, which needs the take switch; the work-authority rule; the world; the probe; his record; what else is in
+flight; an open tour plan; the carry bound on a take and the measured bound on an unload); the manifest planned with
+no cart and the start refusing with a cart assigned; no `DepositOne`, no port constructed, no cart load, no
+`ChestHaul` built anywhere else; the frame watcher; and the switch off by default. The chest-take audit admits this
+file's one take and no other, and the #379 audit lets this file unload and never pick. `tools/tests/
+test_teamster_haul_audit.py` plants each escape and proves the named rule, and only it, refuses it.
+
+### Not built, and why
+
+A cart round (no grant loads a D20 take into a cart, and D22's unload is undecided); resuming after a reload (nothing
+is written ahead because nothing resumes); making up a short take with an extra tour. Each is an owner question in the
+lead default. Nothing here has been observed in a running game; §10 has the rows.
 
 ## 7. No portals
 
@@ -1535,6 +1588,30 @@ None has been run. Disposable world, `GunnarCollectionEnabled` and `GunnarHaulin
 62. **A haul is refused under a tour.** Mid-tour, `ct_haul go <x> <z>`: refused, the identity is the tour's; after
     `ct_collect stop`, the same command hauls the loaded cart as before.
 63. **A peer connects.** With a second player connected, the tour stops with the authority sentence.
+
+### The manual chest-to-chest haul (§6k) - OWNER GO-AROUND PENDING
+
+None has been run. Disposable world, `GunnarCollectionEnabled` and `GunnarChestTakeEnabled` on, single player.
+
+64. **Off by default.** With `GunnarChestHaulEnabled` off, choose a source and a destination and run
+    `ct_collect haul Stone`: refused with the haul-switch sentence, nothing moves.
+65. **The manifest.** Turn it on. Put 500 Stone and 40 Wood in a chest marked `Take`, `source` at it; `destination` at a
+    second chest marked `Deposit` about 20 m away. `ct_collect haul plan Stone Wood:40`: the sentence gives the units,
+    the tours, the per-tour kilograms and slots and the loading order, and nothing moves.
+66. **A haul.** `ct_collect haul Stone Wood:40`. He walks to the source, takes his load, walks to the destination, puts
+    it in, and goes back for the next; at the end the destination holds 500 Stone and 40 Wood, the source none of the
+    Stone and the rest of its Wood, and `ct_collect status` shows the haul finished with nothing still on him.
+67. **A full destination.** Fill the destination nearly full first: the haul stops at the first unload that does not
+    fit, says so, and what did not fit is on him.
+68. **The marks decide.** Mid-haul, unmark the source or the destination, or open either yourself: the next take or
+    unload is refused and the haul stops with what he holds. Mark the source `Deposit` only: the haul is refused at the
+    start with the "not for taking them out" sentence.
+69. **Already carrying it.** Give him some Stone first: `haul Stone` refuses until it is put down.
+70. **Stuck or stopped.** Wall the destination off: after about 12 s without progress he stops with NEEDS ATTENTION and
+    the reason. `ct_collect stop` mid-walk stops him with what he took still on him.
+71. **A peer, a cart, a reload.** A second player connecting, `ct_haul assign` + `confirm` of a cart, or a reload mid-
+    haul each end it; after the reload what he carried is still on him and `ct_collect deposit <item>` at a chosen chest
+    puts it down.
 
 ### The idle hammer (§8, D21) - OWNER GO-AROUND PENDING
 

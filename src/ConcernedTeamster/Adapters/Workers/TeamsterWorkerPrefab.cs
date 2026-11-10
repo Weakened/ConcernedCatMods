@@ -1,5 +1,7 @@
 using System;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedNPC.Bodies;
+using TheConcernedCat.ConcernedNPC.Body;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
@@ -188,54 +190,60 @@ internal static class TeamsterWorkerPrefab
         return true;
     }
 
-    /// <summary>Creates Gunnar's one body and writes his identity into its own
-    /// network object. The caller has checked authority and that no other body
-    /// exists anywhere in the world.</summary>
-    internal static TeamsterWorkerAI? Spawn(Vector3 position, Quaternion rotation, out string failure)
+    /// <summary>Creates Gunnar's one body through Concerned NPC's gated build
+    /// (#372), and is the only way this product creates a body.
+    ///
+    /// The prefab is still built here, from the same base creature, with the
+    /// same components and under the same name, and registered at the same
+    /// moment; saved bodies load exactly as before. What moved is the
+    /// instantiation: the library requires <paramref name="lease"/>, checks that
+    /// it is for the role registered with this contract, counts his saved
+    /// bodies itself, refuses unloaded ground, re-asks that the lease is still
+    /// held immediately before the body is created, and runs
+    /// <see cref="Stamp"/> on the new object in the same call - destroying it
+    /// again if that write fails, so an identity-less stranger is never left
+    /// standing. <c>tools/validate_repo.py</c> refuses the engine's own
+    /// instantiation anywhere in this product.</summary>
+    internal static TeamsterWorkerAI? Spawn(BodyLease? lease, Vector3 position, Quaternion rotation, out string failure)
     {
-        failure = string.Empty;
         if (Prefab == null)
         {
+            // A refusal only, kept here for the reason it can name.
             failure = "the worker prefab is not registered (" + LastFailure + ")";
             return null;
         }
 
-        ZoneSystem zones = ZoneSystem.instance;
-        if (zones == null || !zones.IsZoneLoaded(position))
+        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(
+            lease, GunnarNpcRole.Contract, Prefab, position, rotation, Stamp, out failure);
+        return instance == null ? null : instance.GetComponent<TeamsterWorkerAI>();
+    }
+
+    /// <summary>Gunnar's identity write, run by the gated build on the body it
+    /// has just created and nowhere else. A static method rather than a lambda,
+    /// so the two writes stay in this type for the IL audit
+    /// (<c>scripts/audit-teamster-hauling-api.ps1</c>) as well as in this file
+    /// for the source one.
+    ///
+    /// D9: the identity lives in the worker body's own network object, and
+    /// (since #381) so does what that body is carrying. Both are fields of a
+    /// MOD-CREATED object; no vanilla object is written to. The keys are
+    /// spelled as literals rather than through their constants because the
+    /// validator's scoped allowance matches the literal - that is the
+    /// boundary working as intended, and GunnarHaulingDefaults carries the
+    /// same strings for everything else to read.</summary>
+    private static bool Stamp(GameObject body)
+    {
+        ZNetView view = body.GetComponent<ZNetView>();
+        TeamsterWorkerAI ai = body.GetComponent<TeamsterWorkerAI>();
+        if (view == null || ai == null)
         {
-            failure = "that ground is not loaded";
-            return null;
+            return false;
         }
 
-        GameObject instance = UnityEngine.Object.Instantiate(Prefab, position, rotation);
-        ZNetView view = instance.GetComponent<ZNetView>();
-        TeamsterWorkerAI ai = instance.GetComponent<TeamsterWorkerAI>();
-        if (view == null || !view.IsValid() || !view.IsOwner() || ai == null)
-        {
-            failure = "the new body did not come up as a valid, owned network object";
-            if (view != null && view.IsValid() && view.IsOwner())
-            {
-                view.Destroy();
-            }
-            else
-            {
-                UnityEngine.Object.Destroy(instance);
-            }
-
-            return null;
-        }
-
-        // D9: the identity lives in the worker body's own network object, and
-        // (since #381) so does what that body is carrying. Both are fields of a
-        // MOD-CREATED object; no vanilla object is written to. The keys are
-        // spelled as literals rather than through their constants because the
-        // validator's scoped allowance matches the literal - that is the
-        // boundary working as intended, and GunnarHaulingDefaults carries the
-        // same strings for everything else to read.
         view.GetZDO().Set("tcc.worker.key", WorkerKey.Gunnar.Value);
         view.GetZDO().Set("tcc.worker.revision", 0);
         ai.RememberIdentity(WorkerKey.Gunnar.Value);
-        return ai;
+        return true;
     }
 
     private static void StripAll<T>(GameObject clone)
