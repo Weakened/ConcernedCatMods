@@ -315,7 +315,7 @@ which read it while counting the roles below.)
 | Part | Roles that use it in shipped code | How |
 |---|---|---|
 | Subject reservations with stable ids (`NpcReservationBook`, `ReservationId`) | **Two:** Steward's Sunniva and Teamster's Gunnar | Through `NpcJobDriver`, which holds every target and container of a round in the library's process-wide `NpcJobBooks` under names derived from identity, job and step; each role constructs the driver in production (`UpkeepLoop.TickDrivenIdle`, `GunnarCollectionRuntime.Tour`). Internal on purpose: a role never holds a book. |
-| The conservation ledger (`NpcCustodyLedger`) | **One:** Teamster's Gunnar | `CargoLedger` keeps every unit of his collection account in it and records each measured movement through `RecordMeasuredMove`. Steward's `FuelCustody` and Foreman's `MaterialCustodyLedger` still keep their own. |
+| The conservation ledger (`NpcCustodyLedger`) | **Two:** Teamster's Gunnar and Steward's Sunniva | Gunnar's `CargoLedger` keeps every unit of his collection account in it and records each measured movement through `RecordMeasuredMove`. Sunniva's `FuelCustody` (#376, second slice) does the same for every unit of fuel she withdraws: a withdrawal is an `Acquire` into her pack, and a burn, a return and a loss are measured moves out of it; what she carries, burned and put back are the library's holdings, and what she withdrew and could not account for are the library's less the losses a person has acknowledged (below). Foreman's `MaterialCustodyLedger` still keeps its own. |
 | The journal-first executor, its journal seam and the marker-rule standings | **None** | Foreman's shipped executor is `src/Shared/Settlement/Custody`, compiled into Foreman, `ConcernedForeman.Tests`, `Shared.Settlement.Tests` and the interop consumer, and the last two do not reference this library; moving it is a change to four projects, not one leaf's slice. Steward's measured move is its own (`UpkeepLoop.Transfer`). |
 | The material reservation book and `INpcSourceAvailability` from it | **None** | Both roles hand in `Availability => null`, each with its cost stated. The driver's container holds already keep two rounds out of one chest. |
 
@@ -347,10 +347,35 @@ library's words, not a world grant; none changes what any NPC does in the world)
    require a known load.
 4. **Gunnar's names stay one name space.** The library keeps acquisitions and movements apart; `CargoLedger` keeps a
    name used for a take, a move or a cart spill from being used for either of the others, as it always has.
+5. **Fuel Sunniva puts back in the supply chest is `Handed`, a terminal place** (second slice). It is back in the
+   player's keeping and is never again the job's; a later withdrawal from the same chest is a fresh, measured
+   acquisition. The alternative was `Stored`, a place the job still holds and may move material out of, which would
+   count the same wood once in the chest and again in her hands. A burn is `Delivered` at the fire, and unaccounted
+   fuel is `Lost`. The library is told one material for her run - she counts one fuel per run and never knew which
+   item it was by name.
+6. **Sunniva's ledger is also in the unknown load and is not bounded by one world load.** The upkeep loop lives as
+   long as her runtime, so a run left unsettled in one world - fuel in her pack or a loss not yet acknowledged - is
+   still this ledger's when the next world loads. That was true of her four counters before #376 and is accounting
+   only; it is listed below with Gunnar's.
+7. **A restored loss is reconciled, never added** (second slice; a behaviour fix). Her record saves the loss the
+   ledger knows, and every world load hands it back. Restoring used to add it, so leaving a world and loading it again
+   in one session doubled the loss, the next save wrote the doubled number, and each reload doubled it again. Restoring
+   now raises the loss *to* the recorded number and never lowers it: a record that could not be written after a loss
+   is behind the ledger, not ahead of it. Across two worlds in one session the restored loss is now the larger of the
+   two rather than their sum; a world's own recorded loss is never under-reported, and the attribution across worlds is
+   lead default 6's limit, unchanged. A loss acknowledged in memory whose acknowledgement did not reach the record
+   comes back once on the next load, which is the safe direction. Proved by `FuelCustodyLedgerTests`; nothing about it
+   has been observed in game.
+
+**A person's acknowledgement of a loss moves nothing.** The library has no way to take units away and Sunniva's ledger
+does not need one: the acknowledged units stay `Lost` in the library, and her run stops counting them in what she
+withdrew and what is unaccounted. A fresh run (`TryReset`, refused while she holds anything or a loss is open) is a
+fresh library ledger.
 
 **What #376 still needs:** Gunnar's account replaced when a world goes down (a runtime change in
-`Adapters/Workers`, left out of this slice while #530 and #533 are open there); a second role on the ledger (Steward's `FuelCustody` is the nearer; Foreman's is behind the
-`src/Shared` boundary above); an owner decision on whether Foreman's journal-first executor is absorbed by moving
+`Adapters/Workers`, left out of both slices while #530 and #533 are open there), and Sunniva's bounded the same way
+(lead default 6; what an unsettled run should become when its world goes is an owner question, because her pack
+stays in that world while the loss evidence is only in memory if her record could not be written); an owner decision on whether Foreman's journal-first executor is absorbed by moving
 `src/Shared/Settlement/Custody` behind this library, or by recording the library copy as the absorption and leaving
 the shipped one where it is; and the executor's first role.
 

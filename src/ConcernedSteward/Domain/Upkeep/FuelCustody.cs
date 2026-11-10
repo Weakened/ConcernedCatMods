@@ -1,5 +1,8 @@
 using System;
 using System.Globalization;
+using TheConcernedCat.ConcernedNPC.Custody;
+using TheConcernedCat.ConcernedNPC.Reservations;
+using TheConcernedCat.ConcernedNPC.Work;
 
 namespace TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 
@@ -44,55 +47,120 @@ internal enum FuelPlace
 /// the tests read. A ledger that cannot state where each unit went is not a
 /// ledger, it is a total.
 ///
+/// <b>The invariant is Concerned NPC's, not this file's</b> (#376). This type
+/// used to keep four counters of its own. Every unit now lives in the
+/// library's <see cref="NpcCustodyLedger"/>, the same ledger Concerned
+/// Teamster's collection account keeps Gunnar's material in, so "acquired
+/// equals the sum over every place" is one rule for every role. What is left
+/// here is only what is the Steward's: which of her words is which library
+/// place, the refusal to clamp, the reload restatement, and the one
+/// acknowledgement a person may give. Each place is a distinct library place:
+///
+/// <list type="bullet">
+/// <item><see cref="FuelPlace.Carried"/> is <see cref="NpcCustodyPlace.Carried"/>,
+/// her pack.</item>
+/// <item><see cref="FuelPlace.Burned"/> is <see cref="NpcCustodyPlace.Delivered"/>
+/// at the fire: where the job was taking it, terminal and credited once.</item>
+/// <item><see cref="FuelPlace.Returned"/> is <see cref="NpcCustodyPlace.Handed"/>
+/// at the depot: back in the player's keeping and <b>terminal</b>, so a unit put
+/// back is never again the job's. A later withdrawal from that chest is a new
+/// acquisition, measured on its own; were the depot a place the job still held,
+/// the same wood could be counted once in the chest and again in her hands. A
+/// lead default pending owner confirmation
+/// (docs/mods/concerned-npc/ARCHITECTURE.md section 10).</item>
+/// <item><see cref="FuelPlace.Unaccounted"/> is <see cref="NpcCustodyPlace.Lost"/>.
+/// The library never moves material out of it, which is the rule this type has
+/// always stated: nothing leaves unaccounted except by a person's
+/// acknowledgement, and that moves nothing (see <see cref="AcknowledgeLoss"/>).
+/// </item>
+/// </list>
+///
 /// <b>Why counts rather than identified items.</b> Wood is fungible and vanilla
 /// merges it into stacks the instant it lands, so an identity per unit would be
 /// a fiction maintained by us and contradicted by the game. Counts are what can
 /// actually be measured on both sides of a move, and the measurement is the
-/// evidence.
+/// evidence. For the same reason the library is told one material, the run's
+/// fuel, whatever item that is: this ledger never knew which item it counted.
 ///
 /// <b>What this does not do.</b> It never decides that something happened. Each
 /// mutator is called by the loop <i>after</i> a measured engine change, with
-/// the measured number. Nothing here predicts, retries or compensates.</summary>
+/// the measured number, and records it as a library acquisition or a measured
+/// move. Nothing here predicts, retries or compensates.
+///
+/// <b>Nothing here is written to disk, apart from the loss</b>, which the
+/// runtime saves in the Steward's own record (see <see cref="RestoreLoss"/>).
+/// Every place is named in the library's unknown load, because nothing in this
+/// domain type knows which world it is in. <b>That is not the same as one world
+/// load:</b> the loop, and this ledger with it, lives as long as the runtime, so
+/// a run left unsettled in one world is still this ledger's in the next. That
+/// was as true of the four counters before #376 and is accounting only; it is
+/// listed as still needed in docs/mods/concerned-npc/ARCHITECTURE.md section 10.
+/// </summary>
 internal sealed class FuelCustody
 {
-    private int _carried;
-    private int _burned;
-    private int _returned;
-    private int _unaccounted;
+    /// <summary>The one job this ledger keeps custody for. A constant, because
+    /// a fresh run is a fresh library ledger (<see cref="TryReset"/>) and
+    /// nothing else writes to it.</summary>
+    internal const string Job = "steward-fuel-run";
+
+    internal static readonly NpcMaterial Fuel = NpcMaterial.Of("steward-fuel");
+    private static readonly NpcCustodyLocation InHerPack = Place(NpcCustodyPlace.Carried, "pack");
+    private static readonly NpcCustodyLocation BurnedInAFire = Place(NpcCustodyPlace.Delivered, "fire");
+    private static readonly NpcCustodyLocation BackInTheDepot = Place(NpcCustodyPlace.Handed, "depot");
+    private static readonly NpcCustodyLocation NotFound = Place(NpcCustodyPlace.Lost, "unaccounted");
+
+    private NpcCustodyLedger _ledger = NewRun();
+    private int _nextStep;
+
+    /// <summary>Units the library still holds as lost that a person has
+    /// acknowledged. They stay where the library put them - nothing in that
+    /// ledger is ever taken away - and this run stops counting them in
+    /// <see cref="Withdrawn"/> and <see cref="Unaccounted"/>. Only
+    /// <see cref="AcknowledgeLoss"/> raises it and only a fresh run clears it.
+    /// </summary>
+    private int _acknowledged;
 
     /// <summary>Total units taken out of the depot during this run.</summary>
-    public int Withdrawn { get; private set; }
+    public int Withdrawn => _ledger.Acquired(Job, Fuel) - _acknowledged;
 
-    public int Carried => _carried;
+    public int Carried => _ledger.HoldingAt(Job, InHerPack, Fuel);
 
-    public int Burned => _burned;
+    public int Burned => _ledger.HoldingAt(Job, BurnedInAFire, Fuel);
 
-    public int Returned => _returned;
+    public int Returned => _ledger.HoldingAt(Job, BackInTheDepot, Fuel);
 
-    public int Unaccounted => _unaccounted;
+    public int Unaccounted => _ledger.HoldingAt(Job, NotFound, Fuel) - _acknowledged;
 
     /// <summary>Increments on every change, so a caller can tell a view it read
     /// is stale. Same idea as <c>ActorModeOwner.Revision</c>.</summary>
     public int Revision { get; private set; }
 
-    /// <summary>True when the invariant holds. The tests read this after every
-    /// operation; the loop reads it before recording a receipt.</summary>
-    public bool Balances => Withdrawn == _carried + _burned + _returned + _unaccounted;
+    /// <summary>The library ledger this run's units are kept in. Read-only use:
+    /// a test asks it whether the invariant holds in the library's own terms.
+    /// </summary>
+    internal NpcCustodyLedger Ledger => _ledger;
+
+    /// <summary>True when the invariant holds, asked of the library and in the
+    /// Steward's own words both. The tests read this after every operation.
+    /// </summary>
+    public bool Balances =>
+        _ledger.IsConserved(Job, Fuel)
+        && Withdrawn == Carried + Burned + Returned + Unaccounted;
 
     /// <summary>True when something left the depot and could not be accounted
     /// for. New work refuses while this is set: the Steward has already lost
     /// track of a player's materials once, and the answer to that is to stop
     /// and say so, not to carry on and hope.</summary>
-    public bool HasLoss => _unaccounted > 0;
+    public bool HasLoss => Unaccounted > 0;
 
     public int CountAt(FuelPlace place)
     {
         switch (place)
         {
-            case FuelPlace.Carried: return _carried;
-            case FuelPlace.Burned: return _burned;
-            case FuelPlace.Returned: return _returned;
-            case FuelPlace.Unaccounted: return _unaccounted;
+            case FuelPlace.Carried: return Carried;
+            case FuelPlace.Burned: return Burned;
+            case FuelPlace.Returned: return Returned;
+            case FuelPlace.Unaccounted: return Unaccounted;
             default: return 0;
         }
     }
@@ -102,8 +170,7 @@ internal sealed class FuelCustody
     public void RecordWithdrawn(int units)
     {
         Require(units, nameof(units));
-        Withdrawn += units;
-        _carried += units;
+        Acquire(InHerPack, units);
         Revision++;
     }
 
@@ -112,8 +179,7 @@ internal sealed class FuelCustody
     public void RecordBurned(int units)
     {
         Require(units, nameof(units));
-        TakeFromHands(units);
-        _burned += units;
+        TakeFromHands(units, BurnedInAFire);
         Revision++;
     }
 
@@ -121,8 +187,7 @@ internal sealed class FuelCustody
     public void RecordReturned(int units)
     {
         Require(units, nameof(units));
-        TakeFromHands(units);
-        _returned += units;
+        TakeFromHands(units, BackInTheDepot);
         Revision++;
     }
 
@@ -131,8 +196,7 @@ internal sealed class FuelCustody
     public void RecordLost(int units)
     {
         Require(units, nameof(units));
-        TakeFromHands(units);
-        _unaccounted += units;
+        TakeFromHands(units, NotFound);
         Revision++;
     }
 
@@ -168,7 +232,7 @@ internal sealed class FuelCustody
                 "A measured count cannot be negative. Use a failed measurement's own path.");
         }
 
-        int difference = actuallyCarried - _carried;
+        int difference = actuallyCarried - Carried;
         if (difference == 0)
         {
             return 0;
@@ -176,13 +240,11 @@ internal sealed class FuelCustody
 
         if (difference > 0)
         {
-            Withdrawn += difference;
-            _carried = actuallyCarried;
+            Acquire(InHerPack, difference);
         }
         else
         {
-            _unaccounted += -difference;
-            _carried = actuallyCarried;
+            TakeFromHands(-difference, NotFound);
         }
 
         Revision++;
@@ -199,9 +261,23 @@ internal sealed class FuelCustody
     /// wood the moment they reloaded and would carry on as though nothing had
     /// happened.
     ///
-    /// The withdrawn total is raised with it so the invariant still holds: those
-    /// units really did leave the depot, and saying so is the honest shape of
-    /// the record.</summary>
+    /// <b>Reconciled, never replayed</b> (#376). The number on disk is the loss
+    /// this ledger knew when the record was written, not a new one, so restoring
+    /// it raises <see cref="Unaccounted"/> <i>to</i> that number and never adds
+    /// it on top. It used to add: the loop lives as long as the runtime, so
+    /// leaving a world and loading it again restored the same loss into a
+    /// ledger that still held it, the next save wrote the doubled number, and
+    /// every reload doubled it again. A loss already recorded here is never
+    /// lowered by a smaller number on disk either: a record that could not be
+    /// written after a loss is behind this ledger, not ahead of it. Across two
+    /// worlds in one session the restored loss is now the larger of the two
+    /// rather than their sum; either way a world's own recorded loss is never
+    /// under-reported, and the attribution across worlds is the pre-existing
+    /// limit the type summary states.
+    ///
+    /// What is restored is acquired straight into the library's lost place, so
+    /// the invariant still holds: those units really did leave the depot, and
+    /// saying so is the honest shape of the record.</summary>
     internal void RestoreLoss(int units)
     {
         if (units < 1)
@@ -209,24 +285,30 @@ internal sealed class FuelCustody
             return;
         }
 
-        Withdrawn += units;
-        _unaccounted += units;
+        int missing = units - Unaccounted;
+        if (missing < 1)
+        {
+            return;
+        }
+
+        Acquire(NotFound, missing);
         Revision++;
     }
 
     /// <summary>Starts a fresh run. Refused while anything is still in his
     /// hands or unaccounted for, because a new run that inherited either would
-    /// make the old units unattributable to the job that moved them.</summary>
+    /// make the old units unattributable to the job that moved them. A fresh
+    /// run is a fresh library ledger: the old one holds nothing that can still
+    /// move, and nothing of it is carried over.</summary>
     public bool TryReset()
     {
-        if (_carried != 0 || _unaccounted != 0)
+        if (Carried != 0 || Unaccounted != 0)
         {
             return false;
         }
 
-        Withdrawn = 0;
-        _burned = 0;
-        _returned = 0;
+        _ledger = NewRun();
+        _acknowledged = 0;
         Revision++;
         return true;
     }
@@ -234,19 +316,20 @@ internal sealed class FuelCustody
     /// <summary>Clears a recorded loss, once a person has been told about it.
     ///
     /// The only way out of <see cref="HasLoss"/>, and it is explicitly an
-    /// acknowledgement rather than a correction: the units stay counted in
-    /// <see cref="Withdrawn"/> so the run's history still adds up, and what
-    /// changes is only that the Steward is allowed to work again. Nothing is
-    /// recreated and nothing is written back to any chest.</summary>
+    /// acknowledgement rather than a correction. Nothing moves in the library
+    /// ledger - the units stay lost there, which is where they went - and this
+    /// run stops counting them in <see cref="Withdrawn"/> and
+    /// <see cref="Unaccounted"/>, so the Steward is allowed to work again.
+    /// Nothing is recreated and nothing is written back to any chest.</summary>
     public void AcknowledgeLoss()
     {
-        if (_unaccounted == 0)
+        int unaccounted = Unaccounted;
+        if (unaccounted == 0)
         {
             return;
         }
 
-        Withdrawn -= _unaccounted;
-        _unaccounted = 0;
+        _acknowledged += unaccounted;
         Revision++;
     }
 
@@ -257,25 +340,70 @@ internal sealed class FuelCustody
         return string.Format(
             CultureInfo.InvariantCulture,
             "withdrew {0}; carrying {1}, burned {2}, returned {3}, unaccounted {4}",
-            Withdrawn, _carried, _burned, _returned, _unaccounted);
+            Withdrawn, Carried, Burned, Returned, Unaccounted);
     }
 
     public override string ToString() => Describe();
 
-    private void TakeFromHands(int units)
+    private static NpcCustodyLedger NewRun()
     {
-        if (units > _carried)
+        var ledger = new NpcCustodyLedger();
+        ledger.OpenJob(Job);
+        return ledger;
+    }
+
+    private static NpcCustodyLocation Place(NpcCustodyPlace place, string key) =>
+        new NpcCustodyLocation(place, key, NpcWorldEpoch.Unknown);
+
+    private ReservationId Mint() => ReservationId.For(Job, _nextStep++);
+
+    /// <summary>Units entered the run: measured out of the depot, or a loss a
+    /// previous session recorded.</summary>
+    private void Acquire(NpcCustodyLocation at, int units)
+    {
+        NpcCustodyOutcome acquired = _ledger.Acquire(Mint(), at, Fuel, units);
+        if (acquired != NpcCustodyOutcome.Applied)
+        {
+            // The job is opened with the ledger and every name is fresh, so this
+            // is the library refusing for a reason of its own. Nothing was
+            // recorded, and a caller that measured a withdrawal must not be told
+            // it was: this is as loud as a move the record cannot account for.
+            throw new InvalidOperationException(
+                "The conservation ledger refused to record " +
+                units.ToString(CultureInfo.InvariantCulture) + " units entering the Steward's custody (" +
+                acquired + "). Nothing was recorded.");
+        }
+    }
+
+    private void TakeFromHands(int units, NpcCustodyLocation to)
+    {
+        int carried = Carried;
+        if (units > carried)
         {
             throw new InvalidOperationException(
                 "The ledger was asked to move " + units.ToString(CultureInfo.InvariantCulture) +
                 " units out of the Steward's hands, which hold " +
-                _carried.ToString(CultureInfo.InvariantCulture) + ". " +
+                carried.ToString(CultureInfo.InvariantCulture) + ". " +
                 "Every unit must come from somewhere: the caller measured a move that " +
                 "the record cannot account for, and silently allowing it would make the " +
                 "conservation invariant meaningless.");
         }
 
-        _carried -= units;
+        NpcCustodyOutcome moved = _ledger.RecordMeasuredMove(Mint(), InHerPack, to, Fuel, units);
+        if (moved != NpcCustodyOutcome.Applied)
+        {
+            // Unreachable after the check above: her pack is not a terminal
+            // place, every destination is named in the same load, and no
+            // transfer of this run ever waits on a person. If it is reached,
+            // nothing moved, and saying so loudly is the only honest answer.
+            // Should the library ever refuse after opening the transfer, that
+            // open record would refuse every later move of this run too, so
+            // she stops with it rather than carrying on half recorded.
+            throw new InvalidOperationException(
+                "The conservation ledger refused to record " +
+                units.ToString(CultureInfo.InvariantCulture) + " units leaving the Steward's hands (" +
+                moved + "). Nothing was recorded.");
+        }
     }
 
     private static void Require(int units, string parameterName)

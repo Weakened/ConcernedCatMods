@@ -79,6 +79,10 @@ the mod and says why.
 
 ### Notes
 
+- **Her fuel ledger is Concerned NPC's (#376).** Every unit she withdraws is kept in Concerned NPC's conservation
+  ledger, the one Gunnar's collection account uses; what she carries, burned, put back and could not account for are
+  read from it. A loss her record saved is restored once per load and never added on top of the one she already
+  knows, so leaving a world and loading it again no longer doubles it. Not observed in game (OWNER GO-AROUND PENDING).
 - **Her body is created through Concerned NPC's gated build (#372).** `cs_steward recruit` takes her worker lease
   before her body exists, and Concerned NPC asks again that it is still held immediately before it creates her,
   counts her saved bodies itself and stamps her identity in the same call; a body whose identity could not be
