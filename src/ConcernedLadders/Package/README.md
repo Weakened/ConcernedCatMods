@@ -146,8 +146,8 @@ Tested 2026-10-27 on a disposable world and character:
 - **Climbing skill:** a character loaded without the mod loses the skill, and it is back at 0 after reinstalling.
 - **Everything else:** floors and walls built around the ladders, and every other skill, were unaffected.
 
-If you turned on the 1.1.0 experimental settings: placed trapdoors and cellar doors are deleted the same way, and
-crafted Iron Shovels are discarded when their inventory or chest loads (not yet tested). Holes already dug are the
+If you turned on the 1.1.0 experimental settings (not yet tested): placed trapdoors and cellar doors are deleted the
+same way, and crafted Iron Shovels are discarded when their inventory or chest loads. Holes already dug are the
 game's own terrain edits; the mod has no way to undo them.
 
 To keep everything, deconstruct the ladders with the hammer before removing the mod. Turning off
