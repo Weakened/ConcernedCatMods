@@ -53,8 +53,8 @@ internal sealed class GunnarFellReport
 /// axe's plain damage, built from its own item data with Gunnar as attacker and
 /// no skill factor, multiplier or status effect; inside an explicit work area
 /// (his only one is the area set with <c>ct_collect area</c>); never within 15 m
-/// of a player or a player-built piece; never under a ward, in a dungeon or in a
-/// world location; owned by this process, so vanilla's handler runs in this call
+/// of a player or a player-built piece; never where a ward denies the player, in a dungeon or in a
+/// world location, or where any covering ward denies the player; owned by this process, so vanilla's handler runs in this call
 /// and spawns its own drops in it. TreeBase and TreeLog stay unused.
 ///
 /// <b>The axe is his.</b> It is read from his own inventory - put there by the
@@ -75,6 +75,11 @@ internal sealed class GunnarFellingPort
     /// <summary>How far from the tree a drop may land and still be the hit's.
     /// Foreman's figure.</summary>
     internal const float DropSearchMetres = 3f;
+
+    /// <summary>How far from the tree a ward could stand and still cover it: a
+    /// vanilla guard stone reaches 32 m. Every zone within this of the tree must
+    /// be loaded before the ward is asked, or the answer is a refusal.</summary>
+    private const float WardReachMetres = 32f;
 
     private static readonly int[] AllowlistedHashes = BuildHashes();
 
@@ -327,10 +332,10 @@ internal sealed class GunnarFellingPort
         return false;
     }
 
-    private static SmallTreeFacts ReadFacts(ZNetView view, out Destructible? destructible, out SmallTreeKind? kind)
+    private static SmallTreeFacts ReadFacts(ZNetView view, out Destructible? destructible, out SmallTreeKind? listed)
     {
         string prefab = Utils.GetPrefabName(view.gameObject);
-        SmallTreeFelling.TryFind(prefab, out kind);
+        SmallTreeFelling.TryFind(prefab, out listed);
         Destructible[] parts = view.GetComponentsInChildren<Destructible>(true);
         destructible = parts.Length == 1 ? parts[0] : null;
         return new SmallTreeFacts(
@@ -419,12 +424,36 @@ internal sealed class GunnarFellingPort
         return made;
     }
 
+    /// <summary>Whether no ward that covers the tree denies the local player,
+    /// asked the way Foreman's designation site asks it for Thorstein:
+    /// <c>wardCheck: true</c> refuses when ANY enabled ward covering the point
+    /// denies access (vanilla's default, <c>wardCheck: false</c>, would allow
+    /// it as soon as one covering ward grants access), and the question is not
+    /// asked at all - it refuses - unless every zone a ward reaching the tree
+    /// could stand in is loaded. <c>flash: false</c>: asking must not light a
+    /// guard stone up.</summary>
     private static bool WardAllows(Vector3 at)
     {
         try
         {
-            // flash: false - asking must not light a guard stone up.
-            return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: false);
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(at))
+            {
+                return false;
+            }
+
+            for (int step = 0; step < 8; step++)
+            {
+                double angle = step * Math.PI / 4d;
+                var edge = new Vector3(
+                    at.x + (float)(Math.Cos(angle) * WardReachMetres), at.y, at.z + (float)(Math.Sin(angle) * WardReachMetres));
+                if (!zones.IsZoneLoaded(edge))
+                {
+                    return false;
+                }
+            }
+
+            return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: true);
         }
         catch (Exception)
         {

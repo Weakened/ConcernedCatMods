@@ -5794,6 +5794,12 @@ TEAMSTER_FELLING_PINS = (
      "the hit is built once, from the axe the strike is handed"),
     (TEAMSTER_FELLING_PORT_FILE, "made.m_damage.Add(axe.GetDamage());", 1, "the hit carries the axe's own damage"),
     (TEAMSTER_FELLING_PORT_FILE, "made.SetAttacker(worker);", 1, "the attacker is Gunnar"),
+    (TEAMSTER_FELLING_PORT_FILE, "return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: true);", 1,
+     "the ward is asked the way Foreman asks it: any covering ward that denies the player refuses"),
+    (TEAMSTER_FELLING_PORT_FILE, "Inventory? inventory = worker.GetInventory();", 1,
+     "the axe is looked for in his own inventory"),
+    (TEAMSTER_FELLING_PORT_FILE, "foreach (ItemDrop.ItemData item in inventory.GetAllItems())", 1,
+     "the axe is one of the items he holds"),
     (TEAMSTER_FELLING_PORT_FILE,
      "FellOutcome outcome = StrikeOnce(target, view, kind, axe!, worker, workerAt, _spawned,", 1,
      "the one call of the strike, with the tree the finder resolved"),
@@ -5859,6 +5865,24 @@ TEAMSTER_FELLING_POPULATIONS = (
     # Teamster" is true of the whole assembly's source.
     (".Damage(", re.compile(r"\.\s*Damage\s*\("), {TEAMSTER_FELLING_PORT_FILE: 1},
      "the one hit in the whole of Teamster's source is the felling port's"),
+    # Review of #381 item 5: a second finder call after the site guard would
+    # strike a tree the site rule never measured, and a second set of facts
+    # (positional, so no named-argument pin counts it) would answer the rule
+    # with made-up values.
+    ("TryFindTree(", re.compile(r"\bTryFindTree\s*\("), {TEAMSTER_FELLING_PORT_FILE: 2},
+     "the finder is declared once and asked once, above the site rule"),
+    ("new FellSiteFacts(", re.compile(r"\bnew\s+FellSiteFacts\s*\("), {TEAMSTER_FELLING_PORT_FILE: 1},
+     "the site facts are built once, every one measured there"),
+    # ...and `Execute(new[] { "fell" })` reaches `case "fell":` with every
+    # literal the audit reads blanked. The command dispatchers are pinned by
+    # population: these are today's declarations and callers, and a new one is a
+    # new route to a hit (and to every other subcommand) that a person decides.
+    ("Execute(", re.compile(r"\bExecute\s*\("),
+     {"Adapters/Workers/GunnarCollectionRuntime.cs": 1, "Adapters/Workers/CollectConsoleCommand.cs": 1,
+      "Adapters/Workers/GunnarHaulingRuntime.cs": 1, "Adapters/Workers/HaulConsoleCommand.cs": 1,
+      "Adapters/Interop/HaulPanelBridge.cs": 1, "Domain/Hauling/Navigation/CartRouteEvaluator.cs": 2,
+      "Plugin.cs": 1},
+     "a command dispatcher is declared or called only where it is today; a new caller could dispatch `fell`"),
 )
 # In the port: the identifiers whose provenance the pins above establish may
 # not be re-bound anywhere else in it.
@@ -5869,6 +5893,12 @@ TEAMSTER_FELLING_PORT_NEVER = (
     ("`tree` assigned", re.compile(r"\btree\s*(?:[-+*/%&|^]|\?\?)?=(?!=)")),
     ("`tree` re-bound through out/ref", re.compile(r"\b(?:out|ref)\s+(?:var\s+)?tree\b")),
     ("`hit` re-bound through out/ref", re.compile(r"\b(?:out|ref)\s+(?:var\s+)?hit\b")),
+    ("what is struck, or what the rule is told, re-bound through an untyped out/ref",
+     re.compile(r"\b(?:out|ref)\s+(?:var\s+)?(?:target|view|kind|axe|site|reachMetres|worker|area|areaChosen)\b")),
+    ("what the rule is told, re-assigned",
+     re.compile(r"\b(?:reachMetres|areaChosen|area|worker|view)\s*(?:[-+*/%&|^]|\?\?)?=(?!=)")),
+    ("an axe, an item or a hit made rather than read from his inventory",
+     re.compile(r"\bObjectDB\b|\.\s*Clone\s*\(|\bnew\s+ItemDrop\s*\.\s*ItemData\b")),
     ("a damage multiplier or a resistance applied by the product",
      re.compile(r"\.\s*(?:Modify|ApplyArmor|ApplyResistance|ApplyModifier)\s*\(")),
 )
@@ -5877,6 +5907,8 @@ TEAMSTER_FELLING_PORT_COUNTED = (
     ("`hit` assigned", re.compile(r"\bhit\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 1),
     ("the hit's damage reached", re.compile(r"\b(?:made|hit)\s*\.\s*m_damage\b"), 1),
     ("`target` assigned (null, then the eligible tree)", re.compile(r"\btarget\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 2),
+    ("`site` assigned", re.compile(r"\bsite\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 1),
+    ("`axe` assigned", re.compile(r"\baxe\s*(?:[-+*/%&|^]|\?\?)?=(?!=)"), 1),
 )
 # What the strike's one caller must decide and refuse above it, in its method.
 TEAMSTER_FELLING_SITE_EVALUATE = "FellSiteRefusal refusal = SmallTreeFelling.CheckSite(site, reachMetres);"
@@ -5909,6 +5941,7 @@ TEAMSTER_FELLING_ORDER_INPUTS = (
     ("transferInFlight: _ordered || TourRunning || _port.Phase == PickPhase.Gathering",
      "the gate is told what else is in flight"),
     ("interruptedTourOpen: _tourPlan.BlocksOrders", "an open tour plan refuses a hit (#379)"),
+    ("workerPresent: worker != null && !worker.IsDead()", "the gate is told whether he is here and alive"),
     ("areaChosen: areaThisWorld", "the gate is told whether the area was set in this world load"),
     ("bool areaThisWorld = _area != null && !world.IsUnknown && world.Matches(_areaEpoch);",
      "the area counts only in the world load it was set in"),
@@ -6065,7 +6098,8 @@ def check_teamster_felling_port(errors: list[str]) -> list[str]:
         "axe's damage and Gunnar as attacker, no multiplier; the strike is called once, from TryFellOne, on the "
         "tree the allowlist and the shared classifier chose, below SmallTreeFelling.CheckSite's verdict and a "
         "returning refusal with every D19 site fact read there; TryFellOne is called once, from Fell(), behind "
-        "FellOrderGate with every gate input pinned; Fell() is named only by `case \"fell\":`; the Wood is taken only "
+        "FellOrderGate with every gate input pinned; Fell() is named only by `case \"fell\":` and the command "
+        "dispatchers (`Execute(`) are pinned to today's declarations and callers; the Wood is taken only "
         "through TakeFelled, handed the strike's own drops, choosing through FelledWoodTake and taking through the "
         "one pinned pickup's helper; the switch is its own and off by default; and TreeBase, TreeLog and DestroyNow "
         f"are refused across Teamster and the {len(linked)} shared tree(s) its project file compiles in "

@@ -690,7 +690,9 @@ and sets no scope of his own. Built with Thorstein's scope as the lead default:
      a broken one is refused; its durability is untouched, because vanilla wears only a player's weapon.
   3. *The explicit area is `ct_collect area`*, set in this world load. Gunnar has no default circle at all.
   4. *Clearances*: 15 m from every player - the one giving the order included - and every player-built piece; never
-     under a ward, in a dungeon or inside a world location (D10's exclusions, as Thorstein's default 6).
+     where any covering ward denies the player (`wardCheck: true`, asked only once every zone a ward reaching the
+     tree could stand in is loaded - Foreman's designation site asks it the same way), in a dungeon or inside a
+     world location (D10's exclusions, as Thorstein's default 6).
   5. *One hit per command.* Nothing repeats it and nothing walks him: he must be standing at the tree, within
      `CollectionLimits.PickupReachMetres` (2.2 m).
   6. *Wood only*, whole drops, up to his D17 carry limit; resin, fir cones and the rest lie on the ground.

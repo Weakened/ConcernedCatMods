@@ -1274,7 +1274,8 @@ work-authority rule, the probe, his record, nothing else in flight, no open tour
 load. Then `GunnarFellingPort`: his body and its record; the eligible small tree nearest him inside the area (the four
 allowlisted prefab hashes, judged by the shared `SmallTreeFelling.Classify`); not in a dungeon or a world location;
 and the shared `SmallTreeFelling.CheckSite` over the switch, the authority, the area, ownership by this process, the
-ward (asked with `flash: false`), 15 m from every player and every player-built piece, his reach (2.2 m) and an axe he
+ward (asked with `flash: false` and `wardCheck: true`, so any covering ward that denies you refuses, and only once
+every zone a ward could stand in is loaded), 15 m from every player and every player-built piece, his reach (2.2 m) and an axe he
 carries that is not broken.
 
 ### The hit and the take
@@ -1674,7 +1675,7 @@ None has been run. Disposable world, `GunnarCollectionEnabled` on, single player
     much Wood he took and how many items lie on the ground. Wood in his inventory (`ct_collect status` ledger) equals
     the Wood that vanished from the ground; resin and cones remain on the ground.
 75. **Too close.** Stand within 15 m of the tree, or build a piece within 15 m of it: refused, nothing changes.
-76. **A ward, a location.** A tree under your guard stone, or inside a world location: refused.
+76. **A ward, a location.** A tree under a guard stone that does not admit you (an unpermitted ward placed by another character), or inside a world location: refused.
 77. **Out of reach.** With him more than 2.2 m from every small tree: refused with the distance.
 78. **Full.** Load him near his carry limit first: the fell still happens, he takes only the Wood that fits and the
     rest lies on the ground; nothing is counted that did not arrive.

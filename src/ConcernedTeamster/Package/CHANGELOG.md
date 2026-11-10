@@ -7,7 +7,7 @@
   take one from a chest you marked for taking) on the small beech or small fir nearest him inside the area you set
   with `ct_collect area`. On the hit that fells it he takes only the Wood it dropped, and only what he can carry;
   resin, cones and the rest lie on the ground. Never a full-size tree, never within 15 m of you, anyone else or
-  anything you built, never under a ward, one hit per command, and only while he stands at the tree. Single player or
+  anything you built, never where a ward denies you, one hit per command, and only while he stands at the tree. Single player or
   a host with nobody else connected. **Not yet observed in game.**
 * **Gunnar can haul from one chest to another (#381).** A new `Workers/GunnarChestHaulEnabled` setting, **off by
   default** and needing `Workers/GunnarCollectionEnabled` and `Workers/GunnarChestTakeEnabled` too, lets him carry

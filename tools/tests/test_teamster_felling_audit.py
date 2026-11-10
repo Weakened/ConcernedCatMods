@@ -145,6 +145,33 @@ class FellingIsNarrow(unittest.TestCase):
                      "candidate.GetZDO().GetPrefab() == 0")
         self.assert_refused("the finder stopped reading the four allowlisted prefabs")
 
+    def test_a_second_finder_call_may_not_pick_an_unmeasured_tree(self):
+        # Review of 373cef8: after the site guard, a second look re-binds what
+        # is struck to a tree the site rule never measured.
+        self.swap_in(PORT, "        _spawned.Clear();\n        try\n",
+                     "        TryFindTree(area, workerAt, out target, out view, out kind, out none);\n"
+                     "        _spawned.Clear();\n        try\n")
+        self.assert_refused("a second finder call after the site rule passed")
+
+    def test_the_site_facts_may_not_be_replaced(self):
+        # Positional, so no named-argument pin counts it.
+        self.swap_in(PORT, "        FellSiteRefusal refusal = SmallTreeFelling.CheckSite(site, reachMetres);\n",
+                     "        site = new FellSiteFacts(true, true, true, true, true, true, 99f, 99f, 0f, true, 9, 0);\n"
+                     "        FellSiteRefusal refusal = SmallTreeFelling.CheckSite(site, reachMetres);\n")
+        self.assert_refused("made-up site facts answered the rule")
+
+    def test_the_ward_may_not_be_asked_the_lenient_way(self):
+        # Vanilla's default lets one granting ward outvote a denying one.
+        self.swap_in(PORT, "            return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: true);\n",
+                     "            return PrivateArea.CheckAccess(at, 0f, flash: false, wardCheck: false);\n")
+        self.assert_refused("the lenient ward question passed")
+
+    def test_an_axe_may_not_be_made(self):
+        self.swap_in(PORT, "        return best;\n    }\n",
+                     "        return best ?? ObjectDB.instance.GetItemPrefab(\"AxeStone\").GetComponent<ItemDrop>()"
+                     ".m_itemData.Clone();\n    }\n")
+        self.assert_refused("an axe minted from the item database passed")
+
     # --- with what hit --------------------------------------------------------------------------
 
     def test_the_hit_may_not_be_made_up(self):
@@ -208,6 +235,14 @@ class FellingIsNarrow(unittest.TestCase):
                      "    private void Chop() { _felling.TryFellOne(null, null, true, FellOptedIn, FellAuthority, 0f, "
                      "_port, WoodRoom, _ => { }); }\n")
         self.assert_refused("a tour reached the felling")
+
+    def test_the_dispatcher_may_not_be_called_from_a_tour(self):
+        # Review of 373cef8: every literal is blanked, so `Execute(new[] { "fell" })`
+        # reached `case "fell":` unseen.
+        self.swap_in(TOUR, "    private bool TourRunning => _tour != null || _haul != null;\n",
+                     "    private bool TourRunning => _tour != null || _haul != null;\n"
+                     "    private void Chop() { Execute(new[] { \"fell\" }); }\n")
+        self.assert_refused("a tour dispatched ct_collect fell")
 
     def test_a_cancel_may_not_reach_a_hit(self):
         # No retire, cancel, unload or teardown verb may land a hit.

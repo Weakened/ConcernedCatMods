@@ -341,8 +341,8 @@ internal sealed class TeamsterSettings
                 "each time you run 'ct_collect fell', with an axe he carries (have him take one from a chest you " +
                 "marked for taking). He takes only the wood his own hit dropped, and only what he can carry; resin, " +
                 "cones and the rest lie on the ground. OFF by default, and it also needs GunnarCollectionEnabled. " +
-                "Never a full-size tree, never within 15 m of you, anyone else or anything you built, never under a " +
-                "ward, and only while he stands at the tree - nothing here walks him. Single player or the host " +
+                "Never a full-size tree, never within 15 m of you, anyone else or anything you built, never where a " +
+                "ward denies you, and only while he stands at the tree - nothing here walks him. Single player or the host " +
                 "with nobody else connected."),
             config.Bind("Workers", "GunnarIdleHammerEnabled", GunnarHaulingDefaults.IdleHammerEnabled,
                 "While Gunnar is idle near the cart you assigned him, he now and then walks over to it, faces it " +
