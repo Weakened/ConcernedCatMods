@@ -21,8 +21,12 @@ Not published. In progress on `main`; 1.0.0 is the latest published build.
   off by default: with it off this build adds nothing to the hammer menu. With
   it on, both leaves open and close together with the door's own Use, over
   the matching door's swing time, and wait instead of moving into a player, a
-  creature, an item, a cart or another building piece. Ladders do not work
-  with cellar doors yet. None of it has been tried in game, so leave it off.
+  creature, an item, a cart or another building piece. A ladder aimed at a
+  cellar door's frame in Auto or Top hangs inside its opening; a climber can
+  open and close the leaves from the ladder without letting go, climbs out over
+  the front panel or down into the opening only while both leaves are open, and
+  is held below a closed or moving pair. Ladders never treat a cellar door as a
+  floor. None of it has been tried in game, so leave it off.
 
 ## 1.0.0
 

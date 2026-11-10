@@ -89,6 +89,8 @@ internal sealed class LadderRuntime : IDisposable
     /// <summary>The last top or dismount attempt was refused by a trapdoor lid that is not a passage (slice 4), so the
     /// climber is told the trapdoor is closed rather than that there is no landing.</summary>
     private bool _hatchShut;
+    /// <summary>The same for a cellar door whose pair of leaves is not a passage (CL-005 #486 slice 4).</summary>
+    private bool _cellarShut;
     private int _runRevision = -1;
     private Vector3 _commanded;
 
@@ -203,7 +205,7 @@ internal sealed class LadderRuntime : IDisposable
                 ClimbControls.UseAsksDismount(Time.frameCount == _mountFrame, HoversInteractable(_player)))
             {
                 _dismountUseFrame = Time.frameCount;
-                if (!TrySafeDismount()) { Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_nolanding"); }
+                if (!TrySafeDismount()) { Notice(_hatchShut ? HatchClosedNotice : _cellarShut ? CellarClosedNotice : "$cl_msg_nolanding"); }
             }
 
             // UpdateMotion no longer runs, so nothing else resets the locomotion floats: under the custom IK
@@ -307,7 +309,7 @@ internal sealed class LadderRuntime : IDisposable
     /// before the physics tick that departs, and the departure wins (Jump &gt; Drop &gt; Use).</summary>
     internal bool SuppressInteract()
     {
-        if (ClimbControls.HoldsBackInteract(Time.frameCount, _departFrame, _dismountUseFrame, TrapdoorLid.Any)) { return true; }
+        if (ClimbControls.HoldsBackInteract(Time.frameCount, _departFrame, _dismountUseFrame, TrapdoorLid.Any || CellarLeaves.Any)) { return true; }
         if (!IsClimbing || _player == null || !GameplayFocus(_player)) { return false; }
         return JumpPressed() || (CrouchPressed() && (_drop.Armed || _drop.Pending));
     }
@@ -374,7 +376,7 @@ internal sealed class LadderRuntime : IDisposable
             if (!_motor.TakesInput(player)) { return false; }
             if (IsClimbing)
             {
-                if (Time.frameCount != _mountFrame && !JumpPressed() && !TrySafeDismount()) { Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_nolanding"); }
+                if (Time.frameCount != _mountFrame && !JumpPressed() && !TrySafeDismount()) { Notice(_hatchShut ? HatchClosedNotice : _cellarShut ? CellarClosedNotice : "$cl_msg_nolanding"); }
                 return true;
             }
 
@@ -506,11 +508,23 @@ internal sealed class LadderRuntime : IDisposable
                 continue;
             }
 
+            // CL-005 #486 slice 4: the same for a ladder hung in a cellar door's opening, whose pair must be a passage.
+            if (topEntry && CellarLeaves.Any && CellarLeaves.RouteShut(line, clearance.Radius, Mathf.Min(entryLow, line.y),
+                    Mathf.Max(feet.y, line.y) + LadderRules.StepLift + clearance.Height + RouteTopMargin))
+            {
+                first = ClimbRefusal.CellarClosed;
+                continue;
+            }
+
             // The hands must reach the rungs without passing through a wall or floor.
             // From a floor at the top the hands go to the lip, not a rung under it: in game 2026-10-27 the line from a
             // chest a step back from the edge down to the top rung passed through the floor and refused the mount,
             // while a step closer it cleared the edge.
-            float sightY = topEntry ? run.Top.Y + TopEntrySightAbove : Mathf.Clamp(chest.y, run.Bottom.Y + firstRung, run.Top.Y - firstRung);
+            // CL-005 #486 slice 4: lowering into a cellar door's opening from the floor in front passes over its frame, so
+            // the hands reach over the front panel (CellarLadder.OverPanelY) rather than to the run's top, and the route
+            // carries the feet over it (below). Without a cellar door overPanel is negative infinity and nothing changes.
+            float overPanel = topEntry && CellarLeaves.Any ? CellarLeaves.OverPanel(line, feet) : float.NegativeInfinity;
+            float sightY = topEntry ? Mathf.Max(run.Top.Y + TopEntrySightAbove, overPanel) : Mathf.Clamp(chest.y, run.Bottom.Y + firstRung, run.Top.Y - firstRung);
             Vector3 rung = LanePoint(run, (segment.BackFaceDepth + segment.FrontFaceDepth) * 0.5f, sightY);
             if (!clearance.HasLineOfSight(chest, rung)) { first = Keep(first, FromBlocker(clearance.LastBlocker)); continue; }
 
@@ -529,7 +543,11 @@ internal sealed class LadderRuntime : IDisposable
             {
                 // Observed in game: an off-centre approach over ground that rises toward the wall blocked the 6 cm
                 // lateral leg. A step-height lift is tried next; every leg is still swept with the real capsule.
-                foreach (float lift in new[] { LadderRules.RouteLift, LadderRules.StepLift })
+                // Over a cellar door's frame, only lifts that carry the feet over its front panel (CL-005 #486 slice 4).
+                float[] lifts = Domain.Doors.CellarLadder.TryPanelLift(Mathf.Max(feet.y, line.y), overPanel, out float panel)
+                    ? Domain.Doors.CellarLadder.Lifts(panel)
+                    : new[] { LadderRules.RouteLift, LadderRules.StepLift };
+                foreach (float lift in lifts)
                 {
                     float raised = Mathf.Max(feet.y, line.y) + lift;
                     Vector3[] direct =
@@ -653,6 +671,7 @@ internal sealed class LadderRuntime : IDisposable
         _mountFromTop = plan.TopEntry;
         _endHint = ClimbEnd.None;
         _hatchShut = false;
+        _cellarShut = false;
         BeginRoute(body.position);
         _ledger.Discard();
         if (plan.Airborne)
@@ -792,7 +811,7 @@ internal sealed class LadderRuntime : IDisposable
                 }
 
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
-                Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_notop");
+                Notice(_hatchShut ? HatchClosedNotice : _cellarShut ? CellarClosedNotice : "$cl_msg_notop");
                 Present(true);
                 return true;
             }
@@ -800,7 +819,7 @@ internal sealed class LadderRuntime : IDisposable
             if (velocity > 0f && body.position.y >= _run.Top.Y - 0.03f)
             {
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
-                Notice(_hatchShut ? HatchClosedNotice : "$cl_msg_notop");
+                Notice(_hatchShut ? HatchClosedNotice : _cellarShut ? CellarClosedNotice : "$cl_msg_notop");
                 Present(true);
                 return true;
             }
@@ -848,6 +867,7 @@ internal sealed class LadderRuntime : IDisposable
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
                 // A closed trapdoor overhead is a building piece in the way; say which (CL-004 #485 slice 4).
                 if (velocity > 0f && _hatchShut && body.position.y >= _run.Top.Y - TopBlockedBand) { Notice(HatchClosedNotice); }
+                else if (velocity > 0f && _cellarShut && body.position.y >= _run.Top.Y - TopBlockedBand) { Notice(CellarClosedNotice); }
                 else { Refuse(FromBlocker(blocker), blocker, name); }
                 Present(true);
                 return true;
@@ -1106,6 +1126,7 @@ internal sealed class LadderRuntime : IDisposable
     private bool TryExitTop()
     {
         _hatchShut = false;
+        _cellarShut = false;
         // CL-004 #485 slice 4: every top exit rises out of the climb lane, so a lane under a trapdoor whose lid is not a
         // passage has no top exit at all; the closed lid's collision also stops the ascent itself.
         if (TrapdoorLid.Any && _body != null && TrapdoorLid.RouteShut(LanePoint(_run, _laneDepth, _body.position.y), _clearance!.Radius,
@@ -1113,6 +1134,15 @@ internal sealed class LadderRuntime : IDisposable
         {
             _hatchShut = true;
             Landing("top", LadderSegment.Vector(_run.Top), "refused: a trapdoor over the lane is not open");
+            return false;
+        }
+
+        // CL-005 #486 slice 4: the same for a ladder hung in a cellar door's opening; its closed leaves stop the ascent.
+        if (CellarLeaves.Any && _body != null && CellarLeaves.RouteShut(LanePoint(_run, _laneDepth, _body.position.y), _clearance!.Radius,
+                _body.position.y, _run.Top.Y + TopSurfaceAbove + LadderRules.StepLift + _clearance.Height))
+        {
+            _cellarShut = true;
+            Landing("top", LadderSegment.Vector(_run.Top), "refused: a cellar door over the lane is not open");
             return false;
         }
 
@@ -1179,6 +1209,7 @@ internal sealed class LadderRuntime : IDisposable
     private bool TrySafeDismount()
     {
         _hatchShut = false;
+        _cellarShut = false;
         if (_player != null) { SettlePending(_player, _body!.position.y, Time.fixedDeltaTime); }
         Vector3 feet = _body!.position;
         if (_clearance!.Supported(feet) && _clearance.HasRoom(feet)) { Release(Departure.Controlled); return true; }
@@ -1252,8 +1283,15 @@ internal sealed class LadderRuntime : IDisposable
         }
         Vector3 feet = _body!.position;
         Vector3 away = Away();
+        // CL-005 #486 slice 4: leaving a cellar door's opening over its frame, only lifts that carry the feet over its
+        // front panel, 0.40 to 0.47 m above the anchored ladder's top; the standard lifts would let the body graze it.
+        // Without a cellar door overPanel is negative infinity and the lifts are exactly the standard two.
+        float overPanel = CellarLeaves.Any ? CellarLeaves.OverPanel(feet, floor) : float.NegativeInfinity;
+        float[] lifts = Domain.Doors.CellarLadder.TryPanelLift(Mathf.Max(feet.y, floor.y), overPanel, out float panel)
+            ? Domain.Doors.CellarLadder.Lifts(panel)
+            : new[] { LadderRules.RouteLift, LadderRules.StepLift };
         foreach (float back in new[] { 0f, 0.25f, 0.5f })
-        foreach (float lift in new[] { LadderRules.RouteLift, LadderRules.StepLift })
+        foreach (float lift in lifts)
         {
             float raised = Mathf.Max(feet.y, floor.y) + lift;
             Vector3 clear = feet + away * back;
@@ -1265,6 +1303,14 @@ internal sealed class LadderRuntime : IDisposable
             {
                 _hatchShut = true;
                 if (LogLandings) { Landing(kind, floor, "refused: the route crosses a trapdoor that is not open (lift " + lift.ToString("F2") + ")"); }
+                continue;
+            }
+
+            // CL-005 #486 slice 4: nor through a cellar door whose pair of leaves is not a passage.
+            if (CellarLeaves.Any && CrossesShutCellar(feet, path))
+            {
+                _cellarShut = true;
+                if (LogLandings) { Landing(kind, floor, "refused: the route crosses a cellar door that is not open (lift " + lift.ToString("F2") + ")"); }
                 continue;
             }
 
@@ -1298,6 +1344,24 @@ internal sealed class LadderRuntime : IDisposable
         {
             Domain.Doors.HatchLadder.LegSpan(from.y, to.y, height, out float low, out float top);
             if (TrapdoorLid.RouteShut(from, radius, low, top) || TrapdoorLid.RouteShut(to, radius, low, top)) { return true; }
+            from = to;
+        }
+
+        return false;
+    }
+
+    /// <summary>Would this route's capsule cross the opening of a cellar door whose pair of leaves is not a passage
+    /// (CL-005 #486 slice 4)? The trapdoor's test (<see cref="CrossesShutHatch"/>), leg by leg over each leg's own span,
+    /// against the cellar doors (<see cref="CellarLeaves.RouteShut"/>).</summary>
+    private bool CrossesShutCellar(Vector3 start, Vector3[] path)
+    {
+        float radius = _clearance!.Radius;
+        float height = _clearance.Height + RouteTopMargin;
+        Vector3 from = start;
+        foreach (Vector3 to in path)
+        {
+            Domain.Doors.HatchLadder.LegSpan(from.y, to.y, height, out float low, out float top);
+            if (CellarLeaves.RouteShut(from, radius, low, top) || CellarLeaves.RouteShut(to, radius, low, top)) { return true; }
             from = to;
         }
 
@@ -1354,6 +1418,9 @@ internal sealed class LadderRuntime : IDisposable
 
     /// <summary>Registered with the trapdoors, so it exists only when they do (CL-004 #485 slice 4).</summary>
     private const string HatchClosedNotice = "$" + Domain.Doors.TrapdoorBlueprint.HatchClosedToken;
+
+    /// <summary>Registered with the cellar doors, so it exists only when they do (CL-005 #486 slice 4).</summary>
+    private const string CellarClosedNotice = "$" + Domain.Doors.CellarDoors.CellarClosedToken;
 
     /// <summary>Remembers where an accepted mount/exit move started and its full length, for transition progress.</summary>
     private void BeginRoute(Vector3 start)
@@ -1700,6 +1767,7 @@ internal sealed class LadderRuntime : IDisposable
             case ClimbRefusal.Unchecked: Notice("$cl_msg_unchecked"); break;
             case ClimbRefusal.NoLanding: Notice("$cl_msg_nolanding"); break;
             case ClimbRefusal.HatchClosed: Notice(HatchClosedNotice); break;
+            case ClimbRefusal.CellarClosed: Notice(CellarClosedNotice); break;
             default: Notice("$cl_msg_obstacle"); break;
         }
     }
