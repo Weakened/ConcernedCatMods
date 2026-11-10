@@ -90,6 +90,7 @@ internal sealed partial class GunnarCollectionRuntime
             return "The chest to put things in was chosen in a different world load, so the name no longer means " +
                 "the same object. Choose it again (ct_collect destination).";
         }
+
         var named = new HashSet<string>(StringComparer.Ordinal);
         for (int index = 0; index < lines.Count; index++)
         {

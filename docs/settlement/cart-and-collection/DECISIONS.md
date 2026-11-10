@@ -970,8 +970,9 @@ the haul may start and its loading order. Pinned by `#381 manifest-haul audit`; 
    most the manifest's line and what fits now; walk to the destination; one unload per item, offering at most what
    this tour **measured** taking; then a fresh count of what he carries of the cargo, which must equal what the
    measured moves add up to. He starts a haul holding none of the cargo (it refuses otherwise), so the count is exact.
-6. *It stops, and what he holds stays in him,* on: an uncertain take or unload (nothing more is attempted); a
-   destination that took less than he brought (full, or refusing); a count that does not agree, or could not be made;
+6. *It stops, and what he holds stays in him,* on: an uncertain take or unload (nothing more is attempted); a take
+   or an unload measuring more than was asked for or carried (never credited); a destination that took less than he
+   brought (full, or refusing); a count that does not agree, or could not be made;
    a tour that took nothing; a walk with no progress for 12 s (NEEDS ATTENTION, with the reason); the switches, the
    authority, his record, his body or his job changing; a cart being assigned; the world going. Nothing is retried,
    compensated, minted or moved back. A take shorter than planned is not made up later; the haul ends with what was
