@@ -178,10 +178,6 @@ internal sealed class CollectionAccount
     /// </summary>
     public bool IsFresh => Serviced == 0 && Skipped == 0 && _ledger.Acquired == 0;
 
-    /// <summary>Something is still on his back or in the assigned cart.
-    /// </summary>
-    public bool HoldsAnything => _ledger.Holds(CargoPlace.Carried) || _ledger.Holds(CargoPlace.InCart);
-
     /// <summary>Its world went down (#376, third slice). Takes what is still
     /// unsettled - on his back, in the cart - classified by
     /// <see cref="WorldDownPolicy"/>, and replaces the ledger with a fresh one

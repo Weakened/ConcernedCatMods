@@ -169,7 +169,7 @@ internal sealed class WorldDownCustody
         {
             case BodyRecordTrust.Trusted: return "his record was last seen current";
             case BodyRecordTrust.Untrusted: return "his record was last seen unread or behind his inventory";
-            default: return "no body of his was seen while he held it";
+            default: return "no body of his was bound when it was last looked at";
         }
     }
 }
@@ -273,9 +273,18 @@ internal static class WorldDownRows
 /// body-record flags answer "no body", which is not "a current record".
 /// Reading them then would be failing open. So the world id is taken the first
 /// time it can be read in a world, and his body record's trust is taken from
-/// the last frame a body of his was seen while he held anything; a world in
-/// which no body was ever seen closes as <see cref="BodyRecordTrust.Unknown"/>,
-/// which <see cref="WorldDownPolicy"/> reads as untrusted.</summary>
+/// the last world-up frame in which he held anything.
+///
+/// <b>Trust is earned every frame and lost for good.</b> A record seen unread
+/// or behind is <see cref="BodyRecordTrust.Untrusted"/> until the account
+/// closes, whatever is seen afterwards: a zone reload re-creates the record
+/// from the last package that was written, so a record that reads current again
+/// may still lack what the account says he took. A frame with no body of his
+/// bound - unloaded with its zone, or removed by a retire - is
+/// <see cref="BodyRecordTrust.Unknown"/>, because nothing then shows that his
+/// record holds it. Only a bound, current body in the latest frame, with
+/// nothing untrusted seen before it, is <see cref="BodyRecordTrust.Trusted"/>.
+/// Unknown is read as untrusted by <see cref="WorldDownPolicy"/>.</summary>
 internal sealed class CollectionWorldWatch
 {
     private long? _worldUid;
@@ -298,19 +307,19 @@ internal sealed class CollectionWorldWatch
         }
     }
 
-    /// <summary>A frame with the world up and something on his back. A record
-    /// that is unread or behind is untrusted whatever came before; a bound body
-    /// with neither is trusted; no body at all changes nothing, because the
-    /// last body seen is still what the world holds of him.</summary>
+    /// <summary>A frame with the world up and something on his back. Untrusted
+    /// is kept until <see cref="Close"/>; otherwise a record that is unread or
+    /// behind is untrusted, a bound current body is trusted, and no body is
+    /// unknown.</summary>
     public void ObserveBody(bool bodyBound, bool recordUnwritable, bool recordUnreadable)
     {
-        if (recordUnwritable || recordUnreadable)
+        if (_trust == BodyRecordTrust.Untrusted || recordUnwritable || recordUnreadable)
         {
             _trust = BodyRecordTrust.Untrusted;
         }
-        else if (bodyBound)
+        else
         {
-            _trust = BodyRecordTrust.Trusted;
+            _trust = bodyBound ? BodyRecordTrust.Trusted : BodyRecordTrust.Unknown;
         }
     }
 

@@ -61,6 +61,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
     /// <summary>The durable record of what the account still held, unvouched
     /// for, when its world went down (#376).</summary>
     private readonly GunnarWorldDownRecordStore _worldDowns = new GunnarWorldDownRecordStore();
+    private bool _worldWatchFaulted;
 
     /// <summary>The durable record of what he carried when he died (D16).
     /// </summary>
@@ -227,6 +228,37 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         TearDown("the plugin is shutting down");
     }
 
+    /// <summary>After every Update of the frame, so a pick, a take or a deposit
+    /// recorded anywhere this frame - and his record's answer to it - is what
+    /// the account's world watch last saw before a down edge (#376).</summary>
+    private void LateUpdate()
+    {
+        if (_faulted)
+        {
+            return;
+        }
+
+        try
+        {
+            if (ZNetScene.instance != null && ZNet.instance != null && ZDOMan.instance != null
+                && !(Game.instance != null && Game.instance.IsShuttingDown()))
+            {
+                WatchAccountWorld();
+            }
+        }
+        catch (Exception exception)
+        {
+            // Never latched as current: an unanswerable question is no trust.
+            _worldWatch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);
+            if (!_worldWatchFaulted)
+            {
+                _worldWatchFaulted = true;
+                _log?.LogError("Gunnar's collection could not ask whether his body's record is current; what he " +
+                    "carries is recorded as unresolved when this world goes down: " + SafeFailure.Describe(exception));
+            }
+        }
+    }
+
     private void FrameTick()
     {
         bool worldUp = ZNetScene.instance != null && ZNet.instance != null && ZDOMan.instance != null;
@@ -258,7 +290,6 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
         if (worldUp)
         {
-            WatchAccountWorld();
             WatchTourPlan();
         }
 
@@ -377,36 +408,44 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
         _ordered = false;
         _orderedSource = string.Empty;
-        DropTourForWorld();
-        DropHaulForWorld();
-        if (_lifecycle != null)
-        {
-            try { _lifecycle.Shutdown(); }
-            finally { _lease.Release(); }
-            _log?.LogInfo("Gunnar's collection: stood down because " + why + ".");
-        }
-
-        // A teardown with a world still up never reached the down edge, so the
-        // account would otherwise end with the process, unrecorded.
         try
         {
-            _worldWatch.ObserveWorld(CurrentWorldUid());
+            DropTourForWorld();
+            DropHaulForWorld();
+            if (_lifecycle != null)
+            {
+                try { _lifecycle.Shutdown(); }
+                finally { _lease.Release(); }
+                _log?.LogInfo("Gunnar's collection: stood down because " + why + ".");
+            }
         }
-        catch
+        finally
         {
-            // No world id: the record says so instead.
-        }
+            // A teardown with a world still up never reached the down edge, so
+            // the account would otherwise end with the process, unrecorded -
+            // and so would it if anything above threw.
+            try
+            {
+                _worldWatch.ObserveWorld(CurrentWorldUid());
+            }
+            catch
+            {
+                // No world id: the record says so instead.
+            }
 
-        CloseAccountForWorld(why);
+            CloseAccountForWorld(why);
+        }
     }
 
     // ------------------------------------------------------------------
     // #376: the account is one world load's
     // ------------------------------------------------------------------
 
-    /// <summary>A frame with the world up. The world id is read until it can
-    /// be; the body record's trust only while the account has something on
-    /// his back, so an idle frame reads two fields and calls nothing.</summary>
+    /// <summary>A frame with the world up, after every Update. The world id is
+    /// read until it can be; the body record's trust only while the account
+    /// has something on his back. An idle frame allocates nothing and calls
+    /// none of the body delegates: it checks the id and loops over the items
+    /// this world's account has acquired, one dictionary lookup each.</summary>
     private void WatchAccountWorld()
     {
         if (_worldWatch.WorldUid == null)

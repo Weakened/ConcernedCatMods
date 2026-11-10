@@ -154,10 +154,11 @@ section 10, pending owner confirmation). When a world goes down - or the plugin 
 runtime closes it and the next world starts a fresh one; before that slice it lasted the game session, so units he
 took in one world were still his in the next. Closing moves nothing anywhere. What the account still held is
 classified, failing closed: carried material his body's own record (`tcc.worker.inventory`) was **seen** holding - a
-bound body, record loaded, last change persisted, latched while the world was up because none of it can be read at
-the down edge - is already durable and is only logged; material in the assigned cart is in a vanilla container that
-saves with the world and is only logged; carried material nothing shows his record holds (a record unread or behind,
-or no body of his seen at all) is **unresolved** and is appended to `teamster_worker_world_down_<world>.tsv` beside
+bound body, record loaded, last change persisted, in the last world-up frame (checked after every Update, because
+none of it can be read at the down edge), with no record unread or behind seen earlier in that world - is already
+durable and is only logged; material in the assigned cart is in a vanilla container that saves with the world and is
+only logged; carried material nothing shows his record holds (a record unread or behind at any point in that world,
+which a zone reload does not clear, or no body of his bound - unloaded with its zone or retired) is **unresolved** and is appended to `teamster_worker_world_down_<world>.tsv` beside
 the death record, the D16 way, with the same rows in the log at warning level - or, where that file cannot be
 written, the log says so. Delivered, spilled, dropped and lost units are history and are not carried anywhere.
 

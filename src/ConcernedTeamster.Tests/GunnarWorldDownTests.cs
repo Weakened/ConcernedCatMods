@@ -44,7 +44,7 @@ public sealed class GunnarWorldDownTests
     public void Closing_takes_what_is_unsettled_and_leaves_a_fresh_account()
     {
         CollectionAccount account = AccountHolding(onHisBack: 5, inCart: 3, delivered: 2);
-        Assert.True(account.HoldsAnything);
+        Assert.True(account.HoldsOnHisBack);
 
         WorldDownCustody closed = account.CloseForWorld(BodyRecordTrust.Trusted);
 
@@ -62,8 +62,8 @@ public sealed class GunnarWorldDownTests
 
         // The account is the next world's now, and holds nothing of this one.
         Assert.True(account.IsFresh);
-        Assert.False(account.HoldsAnything);
         Assert.False(account.HoldsOnHisBack);
+        Assert.False(account.Ledger.Holds(CargoPlace.InCart));
         Assert.Equal(0, account.Ledger.Acquired);
         Assert.Equal(0, account.Ledger.TotalEverywhere);
         Assert.Equal(0, account.Serviced);
@@ -160,15 +160,22 @@ public sealed class GunnarWorldDownTests
         watch.ObserveBody(bodyBound: true, recordUnwritable: false, recordUnreadable: false);
         Assert.Equal(BodyRecordTrust.Trusted, watch.Trust);
 
-        // The body unloading (or the world tearing down, where the flags read
-        // "no body") changes nothing: the last body seen is what the world holds.
+        // No body bound - unloaded with its zone, or removed by a retire - is
+        // no longer shown to hold anything: unknown, and current again only
+        // when a current body is seen.
         watch.ObserveBody(bodyBound: false, recordUnwritable: false, recordUnreadable: false);
+        Assert.Equal(BodyRecordTrust.Unknown, watch.Trust);
+        watch.ObserveBody(bodyBound: true, recordUnwritable: false, recordUnreadable: false);
         Assert.Equal(BodyRecordTrust.Trusted, watch.Trust);
 
-        // A record that fell behind is untrusted whatever came before.
-        watch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);
+        // A record that fell behind is untrusted whatever came before, and for
+        // the rest of this world's account - a zone reload re-creates a record
+        // that reads current from a package that lacks the change.
+        watch.ObserveBody(bodyBound: true, recordUnwritable: true, recordUnreadable: false);
         Assert.Equal(BodyRecordTrust.Untrusted, watch.Trust);
         watch.ObserveBody(bodyBound: false, recordUnwritable: false, recordUnreadable: false);
+        Assert.Equal(BodyRecordTrust.Untrusted, watch.Trust);
+        watch.ObserveBody(bodyBound: true, recordUnwritable: false, recordUnreadable: false);
         Assert.Equal(BodyRecordTrust.Untrusted, watch.Trust);
         watch.ObserveBody(bodyBound: true, recordUnwritable: false, recordUnreadable: true);
         Assert.Equal(BodyRecordTrust.Untrusted, watch.Trust);
@@ -225,7 +232,7 @@ public sealed class GunnarWorldDownTests
         account.RecordDeposit("d#0", new DepositResult(
             DepositOutcome.Deposited, new[] { new System.Collections.Generic.KeyValuePair<string, int>("Stone", 3) }));
         Assert.False(account.HoldsOnHisBack);
-        Assert.True(account.HoldsAnything);
+        Assert.True(account.Ledger.Holds(CargoPlace.InCart));
     }
 
     [Fact]
@@ -236,24 +243,40 @@ public sealed class GunnarWorldDownTests
         string source = File.ReadAllText(Path.Combine(
             RepoRoot(), "src", "ConcernedTeamster", "Adapters", "Workers", "GunnarCollectionRuntime.cs"));
 
+        // At the down edge, after both drops - nothing above may still record
+        // into an account that has already closed.
         string downEdge = Between(source, "if (_lifecycle.ObserveWorld(worldUp) == PickForget.World)", "if (worldUp)");
-        Assert.Contains("CloseAccountForWorld(\"the world went away\");", downEdge);
+        AssertInOrder(downEdge, "DropTourForWorld();", "DropHaulForWorld();", "CloseAccountForWorld(\"the world went away\");");
 
+        // At teardown, in a finally, with the world id read first.
         string teardown = Between(source, "private void TearDown(string why)", "private void WatchAccountWorld()");
-        Assert.Contains("CloseAccountForWorld(why);", teardown);
+        AssertInOrder(teardown, "finally", "_worldWatch.ObserveWorld(CurrentWorldUid());", "CloseAccountForWorld(why);");
 
-        string update = Between(source, "private void Update()", "private void OnDestroy()");
+        string update = Between(source, "private void Update()", "private void LateUpdate()");
         Assert.Contains("CloseAccountForWorld(\"the world went away\");", update);
 
-        string frame = Between(source, "private void FrameTick()", "private void EndOrder(string why)");
-        Assert.Contains("WatchAccountWorld();", frame);
+        // Watched after every Update of a world-up frame, failing to untrusted.
+        string late = Between(source, "private void LateUpdate()", "private void FrameTick()");
+        AssertInOrder(late, "WatchAccountWorld();", "_worldWatch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);");
 
         string watch = Between(source, "private void WatchAccountWorld()", "private void CloseAccountForWorld(string why)");
         Assert.Contains("_worldWatch.ObserveBody(_worker() != null, _recordUnwritable(), _recordUnreadable());", watch);
 
         string close = Between(source, "private void CloseAccountForWorld(string why)", "private bool OptedIn()");
-        Assert.Contains("_worldWatch.Close(_account, out world)", close);
-        Assert.Contains("_worldDowns.TryAppend(world, rows, out kept);", close);
+        AssertInOrder(close, "_worldWatch.Close(_account, out world)", "if (closed.IsSettled)",
+            "if (closed.Unresolved == 0)", "WorldDownRows.Serialize(", "_worldDowns.TryAppend(world, rows, out kept);",
+            "_log?.LogWarning(");
+    }
+
+    private static void AssertInOrder(string text, params string[] parts)
+    {
+        int at = -1;
+        foreach (string part in parts)
+        {
+            int next = text.IndexOf(part, at + 1, StringComparison.Ordinal);
+            Assert.True(next > at, "missing or out of order: " + part);
+            at = next;
+        }
     }
 
     private static string Between(string source, string start, string end)
@@ -292,14 +315,14 @@ public sealed class GunnarWorldDownAllocationTests
         account.Record("pick#1", "Wood", 2, StopResult.Took(CargoPlace.InCart));
         bool held = false;
         _ = account.HoldsOnHisBack;
-        _ = account.HoldsAnything;
+        _ = account.Ledger.Holds(CargoPlace.InCart);
 
         long allocated = ExactAllocations.Measure(() =>
         {
             for (int index = 0; index < 1000; index++)
             {
                 held |= account.HoldsOnHisBack;
-                held |= account.HoldsAnything;
+                held |= account.Ledger.Holds(CargoPlace.InCart);
             }
         });
 

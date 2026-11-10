@@ -258,8 +258,13 @@ public sealed class FuelWorldDownTests
 
         string loaded = Between(source, "internal void OnWorldLoaded()", "internal void OnWorldUnloaded()");
         Assert.Contains("_loadedScope = scope;", loaded);
-        Assert.Contains("_recordedLoss = _worldDown.LossToRestore(scope.Value.WorldId, report.RecordedLoss);", loaded);
         Assert.Contains("_lossOnRecord = report.RecordedLoss;", loaded);
+
+        // The kept loss leaves the carry directly before it reaches the ledger.
+        string restore = Between(loaded, "_recordedLoss = _worldDown.LossToRestore(scope.Value.WorldId, _recordedLoss);",
+            "ScopeSnapshot recoveredScope");
+        Assert.Contains("_loop.Custody.RestoreLoss(_recordedLoss);", restore);
+        Assert.DoesNotContain("Restore(", restore.Replace("RestoreLoss(", string.Empty).Replace("LossToRestore(", string.Empty));
 
         string closeRun = Between(source, "private void CloseRunForWorld()", "private bool SaveRecord(");
         Assert.Contains("_worldDown.Close(", closeRun);

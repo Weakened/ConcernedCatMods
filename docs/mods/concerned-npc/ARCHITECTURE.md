@@ -373,10 +373,12 @@ library's words, not a world grant; none changes what any NPC does in the world)
    was not measured. What the closed run still held is kept the way each product already keeps unresolved material:
    - **Gunnar** (`CollectionAccount.CloseForWorld`, `WorldDownPolicy`, `CollectionWorldWatch`). Material in the
      assigned cart is in a vanilla container that saves with the world: logged. Material on his back is kept by his
-     body's own record (`tcc.worker.inventory`) **only when a body of his was seen with that record loaded and its
-     last change persisted** - latched while the world was up, because at the down edge the body is gone and the
+     body's own record (`tcc.worker.inventory`) **only when a body of his was bound, with that record loaded and its
+     last change persisted, in the last world-up frame, and no record unread or behind was seen earlier in that
+     world** - watched after every Update while the world is up, because at the down edge the body is gone and the
      record flags read "no body", which is not "current"; that is logged. Anything else on his back - a record
-     unread or behind, or no body seen at all - is **unresolved**: the closed account was the only evidence of it, so
+     unread or behind at any point (a zone reload re-creates a record that reads current from a package that may
+     lack the change), or no body bound (unloaded with its zone, or retired) - is **unresolved**: the closed account was the only evidence of it, so
      it is appended to `teamster_worker_world_down_<world>.tsv` beside the D16 death record and logged at warning
      level, or, where the file cannot be written, the warning says it is in the log only.
    - **Sunniva** (`FuelCustody.CloseForWorld`, `FuelWorldDownCarry`). Fuel in her pack stays in her pack in that

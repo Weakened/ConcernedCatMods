@@ -250,10 +250,7 @@ internal sealed class StewardRuntime
         _journal.Writable = report.MayWrite;
         _recordNotice = report.Notice;
         _lossOnRecord = report.RecordedLoss;
-
-        // What this session kept for this world because its record could not
-        // take it at the last world-down, if more than the record says.
-        _recordedLoss = _worldDown.LossToRestore(scope.Value.WorldId, report.RecordedLoss);
+        _recordedLoss = report.RecordedLoss;
         _carryingName = report.FuelItemName;
 
         _introduction.Restore(report.Stage, report.Furthest);
@@ -275,6 +272,11 @@ internal sealed class StewardRuntime
 
         RefreshCensus();
 
+        // What this session kept for this world because its record could not
+        // take it at the last world-down, if more than the record says. Taken
+        // here, next to the restore, so nothing that can throw stands between
+        // the kept loss leaving the carry and reaching the ledger.
+        _recordedLoss = _worldDown.LossToRestore(scope.Value.WorldId, _recordedLoss);
         if (_recordedLoss > 0)
         {
             _loop.Custody.RestoreLoss(_recordedLoss);
