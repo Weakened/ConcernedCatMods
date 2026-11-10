@@ -74,6 +74,20 @@ internal sealed class StewardRuntime
     private bool _installed;
     private bool _recordReadOnly;
     private int _recordedLoss;
+
+    /// <summary>The loss her record was last written with, in the world that
+    /// is loaded - what the world-down close compares her ledger against.
+    /// </summary>
+    private int _lossOnRecord;
+
+    /// <summary>The world her run belongs to, taken at the load, because the
+    /// world id cannot be read once the world has gone (#376).</summary>
+    private SettlementScope? _loadedScope;
+
+    /// <summary>Losses whose world's record could not take them at world-down,
+    /// kept for that world for the rest of the session (lead default 8).
+    /// </summary>
+    private readonly FuelWorldDownCarry _worldDown = new FuelWorldDownCarry();
     private string _carryingName = string.Empty;
     private StewardWorkerAI? _body;
     private StewardCensus _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);
@@ -231,10 +245,15 @@ internal sealed class StewardRuntime
         }
 
         RecordLoadReport report = _records.Load(scope.Value);
+        _loadedScope = scope;
         _recordReadOnly = !report.MayWrite;
         _journal.Writable = report.MayWrite;
         _recordNotice = report.Notice;
-        _recordedLoss = report.RecordedLoss;
+        _lossOnRecord = report.RecordedLoss;
+
+        // What this session kept for this world because its record could not
+        // take it at the last world-down, if more than the record says.
+        _recordedLoss = _worldDown.LossToRestore(scope.Value.WorldId, report.RecordedLoss);
         _carryingName = report.FuelItemName;
 
         _introduction.Restore(report.Stage, report.Furthest);
@@ -293,6 +312,7 @@ internal sealed class StewardRuntime
     internal void OnWorldUnloaded()
     {
         _loop.Stop("The world went away.");
+        CloseRunForWorld();
 
         // The body hold ends with the world it stood in. Left standing it would
         // report a body destroyed with the scene as still there, and no holder
@@ -1070,6 +1090,40 @@ internal sealed class StewardRuntime
 
     private bool Persist() => SaveRecord(_journal.UnresolvedIntents);
 
+    /// <summary>The run ends with its world (#376, third slice; lead default
+    /// 8, pending owner confirmation). After <c>_loop.Stop</c>, so her plan has
+    /// already been suspended or refunded with the ledger still holding the
+    /// run, and before anything else forgets the world. The record is written
+    /// to the world the run belonged to, never to whatever is loaded next.
+    /// Never throws, and a second call - the plugin's teardown after a world
+    /// already went - finds nothing to close.</summary>
+    private void CloseRunForWorld()
+    {
+        SettlementScope? scope = _loadedScope;
+        _loadedScope = null;
+        try
+        {
+            FuelWorldDownResult result = _worldDown.Close(
+                scope?.WorldId ?? 0L,
+                _loop.Custody,
+                _lossOnRecord,
+                () => scope != null && SaveRecord(_journal.UnresolvedIntents, scope: scope));
+            string said = result.Describe();
+            if (said.Length != 0)
+            {
+                _log(said);
+            }
+        }
+        catch (Exception exception)
+        {
+            _log("The Steward's run could not be closed with its world: " + SafeFailure.Brief(exception) +
+                ". Nothing was moved or written off.");
+        }
+
+        _lossOnRecord = 0;
+        _recordedLoss = 0;
+    }
+
     /// <summary>Writes the whole record.
     ///
     /// <paramref name="questStage"/> and <paramref name="questFurthest"/> are
@@ -1082,31 +1136,36 @@ internal sealed class StewardRuntime
     private bool SaveRecord(
         IReadOnlyList<UpkeepIntent> open,
         StewardQuestStage? questStage = null,
-        StewardQuestStage? questFurthest = null)
+        StewardQuestStage? questFurthest = null,
+        SettlementScope? scope = null)
     {
         if (_recordReadOnly)
         {
             return false;
         }
 
-        SettlementScope? scope = CurrentScope();
-        if (scope == null)
+        // The world-down close names the world it is writing for, because by
+        // then none can be read; every other caller writes the loaded world.
+        SettlementScope? target = scope ?? CurrentScope();
+        if (target == null)
         {
             return false;
         }
 
+        int loss = _loop.Custody.Unaccounted;
         Exception? failure = _records.Save(
-            scope.Value,
+            target.Value,
             _introduction.Stage,
             _introduction.FurthestReached,
             _scope.Book.Designations,
             open,
-            _loop.Custody.Unaccounted,
+            loss,
             CarryingName(),
             questStage ?? _quest.Stage,
             questFurthest ?? _quest.FurthestReached);
         if (failure == null)
         {
+            _lossOnRecord = loss;
             return true;
         }
 

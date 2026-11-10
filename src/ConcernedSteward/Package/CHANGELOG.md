@@ -83,6 +83,11 @@ the mod and says why.
   ledger, the one Gunnar's collection account uses; what she carries, burned, put back and could not account for are
   read from it. A loss her record saved is restored once per load and never added on top of the one she already
   knows, so leaving a world and loading it again no longer doubles it. Not observed in game (OWNER GO-AROUND PENDING).
+- **Her run ends with its world (#376).** When a world goes down her fuel ledger closes with it and the next world
+  starts a fresh one, so wood she was carrying in one world is no longer counted as lost in the next. Wood still in her
+  pack stays in her pack in that world and is counted again when it loads. A loss nobody has resolved is written to
+  that world's record before the ledger closes; if that write fails, the log says so and the loss is kept for that
+  world until the game closes, coming back if it loads again. Not observed in game (OWNER GO-AROUND PENDING).
 - **Her body is created through Concerned NPC's gated build (#372).** `cs_steward recruit` takes her worker lease
   before her body exists, and Concerned NPC asks again that it is still held immediately before it creates her,
   counts her saved bodies itself and stamps her identity in the same call; a body whose identity could not be
