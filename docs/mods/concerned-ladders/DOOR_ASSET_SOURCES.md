@@ -269,7 +269,7 @@ No purchased, stock or extracted mesh, texture or animation is used for the door
    need to be seen in game.
 4. **Candidate provenance.** Someone has to freeze the source, build the package under the lock, record the ZIP and
    DLL hashes, show that the packaged DLL is the verified one, install the package and smoke it. That is the lead's or
-   the owner's job, and the template in `STATUS.md` ("1.1.0 candidate provenance") lists every field. No candidate
-   exists yet.
+   the owner's job, and `STATUS.md` ("1.1.0 candidate provenance") lists every field. A 1.1.0 candidate ZIP is built and its hashes
+   recorded there (PR #544); installing and smoking it are still the lead's or the owner's.
 5. **The reference photographs** are on a branch, not `main` (section 10). Whether to merge them, given their
    unestablished licence, is the owner's call. They are never packaged.

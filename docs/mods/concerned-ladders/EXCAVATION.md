@@ -600,4 +600,5 @@ planned from:
 1. **In-game measurement and polish** (owner go-around): the BSM rows above, with screenshots; the preview look; the
    reach. Any finding is a linked bug.
 2. **A tool animation** that cannot reach a stored attack, and a shovel-shaped model, once the owner chooses them (7.4).
-3. **Packaging**: the Ladders release (version, changelog, ZIP provenance) through the trapdoor branch's 1.1.0 (#523).
+3. **Packaging**: the 1.1.0 changelog entry and a candidate ZIP with its provenance are done (PR #544, `STATUS.md`
+   "1.1.0 candidate provenance"); installing and smoking it, and any release, are the owner's.

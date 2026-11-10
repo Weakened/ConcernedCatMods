@@ -5,7 +5,8 @@ Vertical ladders for compact Valheim builds. Three 2 m hammer pieces - **Vertica
 an original climbing animation, quick top exits, grabs from the water and in midair, jump-off, drop,
 side dismounts, a fast slide, and a Climbing skill.
 
-Built and tested against Valheim **1.0.20** with BepInExPack Valheim 5.4.2351 and Jötunn 2.30.2.
+Built against Valheim **1.0.21** with BepInExPack Valheim 5.4.2351 and Jötunn 2.30.2. The ladders, the climb and the
+Climbing skill were tested in game on Valheim 1.0.20 as version 1.0.0; version 1.1.0 has not yet been run in game.
 
 ## In action
 
@@ -102,7 +103,7 @@ fall damage is measured from where you let go.
 pieces that a game without the mod cannot load. The mod also tells Jötunn that every client and the
 server must have it at a matching version, and Jötunn checks that when a player connects.
 
-- **Tested:** single player.
+- **Tested:** single player, with version 1.0.0.
 - **Not tested yet:** dedicated servers, hosting for or joining other players, mixed modded and unmodded players, and mismatched versions.
 - **Other players' view of a climber:** the climbing animation is applied only in the climber's own game. It is not sent to other players, and what they see has not been tested.
 
@@ -113,14 +114,15 @@ server must have it at a matching version, and Jötunn checks that when a player
 | Setting | Default | Meaning |
 |---|---|---|
 | `General` / `ClimbingEnabled` | `true` | Turns climbing on or off. Placed ladders and the Climbing skill stay registered either way. |
-| `Excavation` / `Enabled` | `false` | Experimental and not yet tested in game: adds the Iron Shovel (Forge: 10 Iron, 4 Wood). While held it outlines one measured 2x2x2 m or 4x4x4 m basement hole (secondary attack switches the size) and attack digs the hole shown. Also adds a read-only `cl_excavate` console diagnostic. Turning it off again deletes crafted shovels when their inventory loads. Leave it off. |
-| `Trapdoors` / `Enabled` | `false` | Unfinished. Adds nine floor trapdoors to the hammer. Their lids open and close, and a ladder hangs in one and climbs through it when it is open, but none of it has been tried in game yet. Leave it off. If you turn it on and place trapdoors, turning it off again (or uninstalling) makes the game delete them, with no refund, the next time the world loads. In multiplayer every player and the host or server must use the same value: a host or server with it off deletes the trapdoors other players place, as soon as they are placed. |
-| `CellarDoors` / `Enabled` | `false` | Unfinished. Adds nine sloped 2 m cellar doors to the hammer, at twice the matching door's cost. Both leaves open and close together with the door's Use, and wait instead of moving into a player, a creature, an item, a cart or another building piece. A ladder aimed at one in Auto or Top hangs inside its opening, and a climber gets in or out over its front panel only while both leaves are open; ladders never treat a cellar door as a floor. None of it has been tried in game. Leave it off. Turning it off again (or uninstalling) makes the game delete placed cellar doors, with no refund, the next time the world loads. In multiplayer every player and the host or server must use the same value: a host or server with it off deletes the cellar doors other players place, as soon as they are placed. |
+| `Excavation` / `Enabled` | `false` | Experimental, not yet tried in game. Leave it off. Adds the Iron Shovel (Forge: 10 Iron, 4 Wood, once you have found Iron). While held it outlines one measured basement hole, 2x2x2 m or 4x4x4 m with a level floor and a sloping 1 m border, through the ground; Secondary Attack switches the size and Attack digs the hole shown, for 20 stamina and 4 durability (2x2x2 m) or 40 and 16 (4x4x4 m), before the world's stamina and durability settings, charged only when a dig is placed. It refuses in wards that do not grant you access and over rocks, trees, ore or items, never removing them, and never digs from a ladder. Also adds a read-only `cl_excavate` console diagnostic. Turning it off again removes the shovel, and the game discards crafted shovels when their inventory loads. In multiplayer every player and the host or server must use the same value. |
+| `Trapdoors` / `Enabled` | `false` | Experimental, not yet tried in game. Adds nine floor trapdoors to the hammer. Their lids open and close, and a ladder hangs in one and climbs through it when it is open. Leave it off. If you turn it on and place trapdoors, turning it off again (or uninstalling) makes the game delete them, with no refund, the next time the world loads. In multiplayer every player and the host or server must use the same value: a host or server with it off deletes the trapdoors other players place, as soon as they are placed. |
+| `CellarDoors` / `Enabled` | `false` | Experimental, not yet tried in game. Adds nine sloped 2 m cellar doors to the hammer, at twice the matching door's cost. Both leaves open and close together with the door's Use, and wait instead of moving into a player, a creature, an item, a cart or another building piece. A ladder aimed at one in Auto or Top hangs inside its opening, and a climber gets in or out over its front panel only while both leaves are open; ladders never treat a cellar door as a floor. Leave it off. Turning it off again (or uninstalling) makes the game delete placed cellar doors, with no refund, the next time the world loads. In multiplayer every player and the host or server must use the same value: a host or server with it off deletes the cellar doors other players place, as soon as they are placed. |
 
 ## Known limitations
 
 - Other players do not see the climbing animation (see Multiplayer).
 - Multiplayer, dedicated servers and controllers are untested.
+- The trapdoors, cellar doors and Iron Shovel (1.1.0) are experimental, off by default and not yet tried in game (see Configuration).
 - Uninstalling deletes placed ladders and resets the Climbing skill (see Uninstalling).
 - A free-standing wooden stack taller than about five sections falls apart on reload because of vanilla structural support. Brace it, or use copper or iron.
 - Grabbing from the water: the swimmer bobs, so it can take a second Interact to aim at the ladder.
@@ -143,6 +145,10 @@ Tested 2026-10-27 on a disposable world and character:
 - **Placed ladders:** if the world is loaded without the mod, the game deletes every placed ladder for good and refunds nothing. Reinstalling does not bring them back.
 - **Climbing skill:** a character loaded without the mod loses the skill, and it is back at 0 after reinstalling.
 - **Everything else:** floors and walls built around the ladders, and every other skill, were unaffected.
+
+If you turned on the 1.1.0 experimental settings (not yet tested): placed trapdoors and cellar doors are deleted the
+same way, and crafted Iron Shovels are discarded when their inventory or chest loads. Holes already dug are the
+game's own terrain edits; the mod has no way to undo them.
 
 To keep everything, deconstruct the ladders with the hammer before removing the mod. Turning off
 `ClimbingEnabled` instead keeps both the ladders and the skill.
