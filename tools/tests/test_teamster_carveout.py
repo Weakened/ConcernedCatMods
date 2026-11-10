@@ -181,8 +181,8 @@ class CarveOutIsNarrow(CarveOutFixture):
 
     def test_the_take_may_not_change_its_receiver_inside_the_authorized_file(self):
         self.swap_in_port(
-            "            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))",
-            "            if (Player.m_localPlayer.Pickup(dropped, autoequip: false, autoPickupDelay: false))")
+            "        _worker != null && _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false);",
+            "        _worker != null && Player.m_localPlayer.Pickup(dropped, autoequip: false, autoPickupDelay: false);")
         self.assert_refused(
             "the take was re-pointed at the player and passed inside the authorized file",
             marker="#313")
@@ -195,11 +195,9 @@ class CarveOutIsNarrow(CarveOutFixture):
 
     def test_the_take_is_authorized_once_and_not_twice(self):
         self.swap_in_port(
-            "            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))\n",
-            "            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))\n"
-            "            {\n"
-            "                _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false);\n"
-            "            }\n")
+            "        _worker != null && _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false);\n",
+            "        _worker != null && _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false)\n"
+            "            && _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false);\n")
         self.assert_refused("a second take in the port passed as the authorized one", marker="#313")
 
     def test_a_comment_marker_inside_a_string_does_not_blind_the_line(self):
