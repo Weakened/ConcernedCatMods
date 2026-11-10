@@ -330,7 +330,97 @@ public sealed class RoleBodySpawnTests : IDisposable
         Assert.Empty(_stamped);
     }
 
+    // --- #372 body-inventory move: a role prefab carrying NpcBody ------
+
+    [Fact]
+    public void A_role_prefab_carrying_the_librarys_body_is_stamped_by_the_library_with_the_leases_identity()
+    {
+        BodyFixtures.Register(BodyFixtures.ForemanContract());
+        GameObject prefab = Registered();
+        prefab.Add(new NpcBody());
+        BodyLease lease = Claim(new NpcRoleRegistry());
+
+        GameObject? body = SpawnWithLibraryStamp(lease, prefab, out string failure);
+
+        Assert.NotNull(body);
+        Assert.Equal(string.Empty, failure);
+        ZNetView view = body!.GetComponent<ZNetView>()!;
+        Assert.False(view.DestroyCalled);
+        // The shipped literals, not composed: the keys Foreman always wrote.
+        Assert.Equal("foreman/thorstein", view.GetZDO().GetString("tcc.worker.key", string.Empty));
+        Assert.Equal(0, view.GetZDO().GetInt("tcc.worker.revision", -1));
+    }
+
+    [Fact]
+    public void A_role_prefab_whose_body_was_never_registered_is_refused_before_anything_is_built()
+    {
+        GameObject prefab = Registered();
+        prefab.Add(new NpcBody());
+        BodyLease lease = Claim(new NpcRoleRegistry());
+
+        Assert.Null(SpawnWithLibraryStamp(lease, prefab, out string failure));
+        Assert.Contains("no role registered what bodies of", failure, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, prefab.GetComponent<ZNetView>()!.GetZDO().GetString(BodyFixtures.WorkerKeyField, string.Empty));
+    }
+
+    [Fact]
+    public void A_registration_under_another_key_prefix_does_not_admit_the_contract()
+    {
+        BodyFixtures.Register(NpcBodyContract.ForWorker(BodyFixtures.ForemanPrefab, BodyFixtures.StewardKeyPrefix));
+        GameObject prefab = Registered();
+        prefab.Add(new NpcBody());
+        BodyLease lease = Claim(new NpcRoleRegistry());
+
+        Assert.Null(SpawnWithLibraryStamp(lease, prefab, out string failure));
+        Assert.Contains("no role registered what bodies of", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_role_prefab_without_the_librarys_body_is_destroyed_again_rather_than_left_unidentified()
+    {
+        BodyFixtures.Register(BodyFixtures.ForemanContract());
+        GameObject prefab = Registered();
+        BodyLease lease = Claim(new NpcRoleRegistry());
+
+        Assert.Null(SpawnWithLibraryStamp(lease, prefab, out string failure));
+        Assert.Contains("could not be given its identity", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_librarys_stamp_still_needs_a_live_lease()
+    {
+        BodyFixtures.Register(BodyFixtures.ForemanContract());
+        GameObject prefab = Registered();
+        prefab.Add(new NpcBody());
+        BodyLease lease = Claim(new NpcRoleRegistry());
+        lease.Dispose();
+
+        Assert.Null(SpawnWithLibraryStamp(lease, prefab, out string failure));
+        Assert.Contains("no longer held", failure, StringComparison.Ordinal);
+        Assert.Null(SpawnWithLibraryStamp(null, prefab, out failure));
+        Assert.Contains("no lease", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Registering_a_role_built_body_is_idempotent_and_refuses_a_second_set_of_facts()
+    {
+        NpcBodyContract foreman = BodyFixtures.ForemanContract();
+
+        Assert.True(NpcBody.TryRegister(foreman, NpcBodyKeeps.IdentityAndInventory, out string reason), reason);
+        Assert.True(NpcBody.TryRegister(foreman, NpcBodyKeeps.IdentityAndInventory, out reason), reason);
+        Assert.False(NpcBody.TryRegister(foreman, NpcBodyKeeps.IdentityOnly, out reason));
+        Assert.False(NpcBody.TryRegister(
+            NpcBodyContract.ForWorker(BodyFixtures.ForemanPrefab, BodyFixtures.StewardKeyPrefix),
+            NpcBodyKeeps.IdentityAndInventory, out reason));
+        Assert.False(NpcBody.TryRegister(foreman, NpcBodyKeeps.Unspecified, out reason));
+        Assert.False(NpcBody.TryRegister(NpcBodyContract.ForPresentation(), NpcBodyKeeps.IdentityOnly, out reason));
+    }
+
     // -----------------------------------------------------------------
+
+    private static GameObject? SpawnWithLibraryStamp(BodyLease? lease, GameObject prefab, out string failure) =>
+        NpcWorkerPrefabFactory.TrySpawnRoleBody(
+            lease, BodyFixtures.ForemanContract(), prefab, Vector3.zero, Quaternion.identity, out failure);
 
     private GameObject? SpawnUnder(BodyLease? lease, NpcBodyContract contract, GameObject? prefab, out string failure) =>
         NpcWorkerPrefabFactory.TrySpawnRoleBody(

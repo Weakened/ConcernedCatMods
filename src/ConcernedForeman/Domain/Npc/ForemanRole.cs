@@ -12,7 +12,7 @@ namespace TheConcernedCat.ConcernedForeman.Domain.Npc;
 /// <c>WorkerKey</c> the settlement journal rows carry, the prefab name is the
 /// one <c>ForemanWorkerPrefab</c> registers and every saved body is found by,
 /// and the key prefix is the common head of the three literals
-/// <c>WorkerBody</c> has always stored itself under. They are gathered here so
+/// his body (<c>WorkerBody</c>, <c>NpcBody</c> since #372) has always stored itself under. They are gathered here so
 /// that handing them to Concerned NPC as an <c>NpcBodyContract</c> does not
 /// require a second spelling of any of them to appear anywhere.
 ///
@@ -59,14 +59,15 @@ internal static class ForemanRole
     /// <summary>The prefix of every key his body stores itself under in its own
     /// network object, trailing dot included.
     ///
-    /// It is the common head of the three literals <c>WorkerBody</c> has always
+    /// It is the common head of the three literals his body has always
     /// written — <c>tcc.worker.key</c>, <c>tcc.worker.inventory</c>,
-    /// <c>tcc.worker.revision</c>. Those three are deliberately left spelled out
-    /// where they are rather than recomposed from this prefix: a saved body is
-    /// read by them, and a refactor that rebuilt them from parts would be a
-    /// change to a player's save file wearing the clothes of a tidy-up.
-    /// <c>ForemanNpcAdoptionTests</c> asserts that they still compose from this
-    /// prefix, so the two cannot drift apart unnoticed.</summary>
+    /// <c>tcc.worker.revision</c>. Since #372 the body that writes them is
+    /// Concerned NPC's <c>NpcBody</c>, which composes them from this prefix; the
+    /// three stay spelled out in <c>ForemanSavedBodies</c>, where this product
+    /// reads a saved body without loading it. A saved body is read by them, so
+    /// both sides are pinned as literals - <c>ForemanNpcAdoptionTests</c> here
+    /// and <c>BodyGoldenFixtureTests</c> in the library - and a change to either
+    /// is a failing test rather than a change to a player's save file.</summary>
     public const string BodyKeyPrefix = "tcc.worker.";
 
     /// <summary>Validates that a key an adapter read back out of a save is

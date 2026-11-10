@@ -3731,7 +3731,8 @@ FOREMAN_AUDITED_CAPABILITIES = (
     )),
     ("Humanoid.EquipItem", re.compile(r"\.\s*EquipItem\s*\("), (
         ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\bhumanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
-        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        # #372: the body's equipment restore left with WorkerBody.cs, into
+        # Concerned NPC's NpcBody (pinned by the NPC engine-write census there).
         ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bfrom\s*\.\s*EquipItem\s*\(\s*selected\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
         ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bto\s*\.\s*EquipItem\s*\(\s*selected\s*\)"), 1),
     )),
@@ -3761,9 +3762,10 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("Inventory.MoveItemToThis", re.compile(r"\.\s*MoveItemToThis\s*\("), (
         ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bdestination\s*\.\s*MoveItemToThis\s*\(\s*sourceInventory\s*,\s*stack\s*\)"), 1),
     )),
-    ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), (
-        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"), 1),
-    )),
+    # #372: his death drop is Concerned NPC's NpcBody's own now (the same
+    # vanilla call, pinned in the library), so no drop is pinned here and any
+    # DropItem in Foreman or a tree it compiles in is unpinned.
+    ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), ()),
     # #372: Thorstein's body is instantiated by Concerned NPC's gated build,
     # which requires his worker lease and re-checks it last. No instantiation
     # is pinned here any more, so every one in Foreman is unpinned.
@@ -3782,12 +3784,10 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Ui/ResidentPanel.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*_panel\s*\)"), 1),
         ("Ui/ResidentPanel.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*_button\s*\)"), 1),
     )),
-    ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
-        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
-        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*RevisionField\s*,\s*0\s*\)"), 1),
-        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*InventoryField\s*,\s*package\s*\.\s*GetArray\s*\(\s*\)\s*\)"), 1),
-        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*RevisionField\s*,\s*Revision\s*\)"), 1),
-    )),
+    # #372: his identity, inventory and revision writes are Concerned NPC's
+    # NpcBody's own now (pinned in the library), so Foreman writes no worker
+    # ZDO field and none is pinned here.
+    ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), ()),
     ("BaseAI.MoveTo", re.compile(r"(?<![A-Za-z0-9_])MoveTo\s*\("), (
         ("Runtime/Settlement/ForemanWorkerAI.cs", _foreman_exact(r"(?<![A-Za-z0-9_])MoveTo\s*\(\s*dt\s*,\s*goal\s*,\s*_planner\s*\.\s*Goal\s*\.\s*ArrivalTolerance\s*,\s*run\s*:\s*false\s*\)"), 1),
         # #497: not BaseAI - the shared climb model's own method of the same
@@ -4071,6 +4071,31 @@ NPC_ENGINE_WRITES = (
     )),
 )
 
+# #372 (the body-inventory move, F2d): Thorstein's saved body is Concerned NPC's
+# NpcBody now, so the four writes into its own network object, its equipment
+# restore and its death drop - pinned in Foreman's #400 audit while they lived in
+# Foreman's WorkerBody.cs - are pinned here instead, in the one file that makes
+# them, with the same argument names: `_inventory` and `count` are the dying
+# body's own inventory and the stack's own size, and every ZDO field written is
+# one of the body's own three. Any other `.DropItem(`, `.EquipItem(` or `.Set(`
+# anywhere in the library is unpinned. Kept as its own table, added to the
+# census below, so a plant can prove these rows on their own.
+NPC_BODY_FILE = "Body/NpcBody.cs"
+NPC_BODY_PERSISTENCE_WRITES = (
+    ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), (
+        (NPC_BODY_FILE, _npc_exact(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"), 1),
+    )),
+    ("Humanoid.EquipItem", re.compile(r"\.\s*EquipItem\s*\("), (
+        (NPC_BODY_FILE, _npc_exact(r"\b_humanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+    )),
+    ("ZDO.Set", re.compile(r"\.\s*Set\s*\("), (
+        (NPC_BODY_FILE, _npc_exact(r"\bzdo\s*\.\s*Set\s*\(\s*setup\s*\.\s*Fields\s*\.\s*Key\s*,\s*identity\s*\.\s*Value\s*\)"), 1),
+        (NPC_BODY_FILE, _npc_exact(r"\bzdo\s*\.\s*Set\s*\(\s*setup\s*\.\s*Fields\s*\.\s*Revision\s*,\s*0\s*\)"), 1),
+        (NPC_BODY_FILE, _npc_exact(r"\bzdo\s*\.\s*Set\s*\(\s*_setup\s*\.\s*Fields\s*\.\s*Inventory\s*,\s*package\s*\.\s*GetArray\s*\(\s*\)\s*\)"), 1),
+        (NPC_BODY_FILE, _npc_exact(r"\bzdo\s*\.\s*Set\s*\(\s*_setup\s*\.\s*Fields\s*\.\s*Revision\s*,\s*Revision\s*\)"), 1),
+    )),
+)
+
 # The ONLY parameter types a public member of the dresser may take. An allowlist
 # rather than a list of engine types to refuse, because a denylist misses the
 # array, the generic, `object`, and every game type it did not think to name
@@ -4169,7 +4194,7 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
 
     # 1. The census.
     pinned = 0
-    for what, broad, allowances in NPC_ENGINE_WRITES:
+    for what, broad, allowances in NPC_ENGINE_WRITES + NPC_BODY_PERSISTENCE_WRITES:
         allowed_spans: dict[str, list[tuple[int, int]]] = {}
         for rel, exact, expected in allowances:
             code = sources.get(rel)
@@ -4356,6 +4381,7 @@ def check_npc_figure_parts_confined(errors: list[str]) -> list[str]:
 
     return [
         f"{label}: {len(sources)} library source(s); {pinned} engine creation, destruction, parenting, "
+        "body drop, equip and own-object field write (#372: NpcBody.cs alone), "
         "position/rotation/scale and mesh-swap site(s) pinned by path and exact spelling, and no velocity, "
         "gravity, force or direct-movement call anywhere; the dresser's "
         f"{len({key[1] for key in NPC_FIGURE_PARTS_USES})} helpers are "

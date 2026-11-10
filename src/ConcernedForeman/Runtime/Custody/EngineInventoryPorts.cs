@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Tools;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 
@@ -273,18 +274,18 @@ internal abstract class EngineInventoryPort : IInventoryPort, IInventoryMoveTarg
 /// <summary>The worker body's persisted inventory (D9).</summary>
 internal sealed class WorkerInventoryPort : EngineInventoryPort
 {
-    private readonly WorkerBody _body;
+    private readonly NpcBody _body;
     private readonly Func<float> _carryWeight;
 
-    public WorkerInventoryPort(WorkerBody body, Func<float> carryWeight)
+    public WorkerInventoryPort(NpcBody body, Func<float> carryWeight)
     {
         _body = body;
         _carryWeight = carryWeight;
     }
 
-    internal WorkerBody Body => _body;
+    internal NpcBody Body => _body;
 
-    public override string Describe => _body == null ? "the worker" : "the worker (" + _body.Key + ")";
+    public override string Describe => _body == null ? "the worker" : "the worker (" + _body.StoredKey + ")";
 
     public override bool IsAvailable =>
         _body != null

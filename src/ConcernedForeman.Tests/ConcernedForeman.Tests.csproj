@@ -20,7 +20,18 @@
          VanillaStubs.cs. The stubs are the GAME; the logic under test is the
          real shipped file, never a copy of it. -->
     <Compile Include="..\ConcernedForeman\Runtime\Custody\EngineInventoryPorts.cs" Link="Product/EngineInventoryPorts.cs" />
-    <Compile Include="..\ConcernedForeman\Runtime\Custody\WorkerBody.cs" Link="Product/WorkerBody.cs" />
+    <!-- #372: his body is Concerned NPC's NpcBody now, so the body tests run
+         the library's component - the one that ships - against THIS project's
+         stubs. Only the body and the game-free types it needs are linked, by
+         name: the rest of Body/ names Jotunn and the library suite's own
+         stand-ins (the library glob below still excludes Body/). -->
+    <Compile Include="..\ConcernedForeman\Runtime\Custody\ForemanSavedBodies.cs" Link="Product/ForemanSavedBodies.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBody.cs" Link="ConcernedNPC/Body/NpcBody.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodyContracts.cs" Link="ConcernedNPC/Body/NpcBodyContracts.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodySetup.cs" Link="ConcernedNPC/Body/NpcBodySetup.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodyFields.cs" Link="ConcernedNPC/Body/NpcBodyFields.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodyKeeps.cs" Link="ConcernedNPC/Body/NpcBodyKeeps.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcDroppedItem.cs" Link="ConcernedNPC/Body/NpcDroppedItem.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\Settlement\ToolClassifier.cs" Link="Product/ToolClassifier.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\Settlement\SettlementTargets.cs" Link="Product/SettlementTargets.cs" />
     <!-- #286: the housing adapter. It had no coverage at all, which is why two

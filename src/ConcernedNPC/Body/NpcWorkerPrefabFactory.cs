@@ -443,6 +443,49 @@ public sealed class NpcWorkerPrefabFactory
             stamp, out failure);
     }
 
+    /// <summary>The same gated build, for a role whose prefab carries this
+    /// library's <see cref="NpcBody"/> (#372, the body-inventory move): the
+    /// identity write is the library's own, of the lease's identity under the
+    /// contract's key field, so the role writes nothing into the network object
+    /// at all.
+    ///
+    /// Refused, before anything is counted or built, unless the contract was
+    /// registered with <see cref="NpcBody.TryRegister"/> (or by
+    /// <see cref="TryFor"/>) under exactly that key prefix. A new body without
+    /// <see cref="NpcBody"/> on it is destroyed again by the build, as a failed
+    /// stamp is. Every other refusal is the overload's above, in its
+    /// order.</summary>
+    /// <param name="lease">The permission the arbiter granted. Null is a
+    /// refusal.</param>
+    /// <param name="contract">The role's body contract.</param>
+    /// <param name="rolePrefab">The prefab the role built and registered under
+    /// <see cref="NpcBodyContract.PrefabName"/>, with an <see cref="NpcBody"/>
+    /// on it.</param>
+    /// <param name="position">Where the body stands.</param>
+    /// <param name="rotation">Which way it faces.</param>
+    /// <param name="failure">Why nothing was built. Empty on success.</param>
+    public static GameObject? TrySpawnRoleBody(
+        BodyLease? lease,
+        NpcBodyContract contract,
+        GameObject? rolePrefab,
+        Vector3 position,
+        Quaternion rotation,
+        out string failure)
+    {
+        if (!NpcBodyContracts.IsRegistered(contract)
+            || !NpcBodyContracts.TryFind(contract.PrefabName, out NpcBodySetup setup))
+        {
+            failure = "no role registered what bodies of " + contract
+                + " store, so a body built now would have no keys of its own";
+            return null;
+        }
+
+        return TrySpawnRoleBody(
+            lease, contract, rolePrefab, position, rotation,
+            built => built.GetComponent<NpcBody>() != null && NpcBody.TryStamp(built, setup, lease!.Identity),
+            out failure);
+    }
+
     /// <summary>The one instantiation of a saved body in this library, and the
     /// gate immediately in front of it. Nothing may be added between the two:
     /// the lease is the last thing the gate asks, and it has to be the freshest

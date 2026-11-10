@@ -12,6 +12,7 @@ using TheConcernedCat.Diagnostics;
 using TheConcernedCat.ConcernedForeman.Domain.Npc;
 using TheConcernedCat.ConcernedNPC.Interruption;
 using TheConcernedCat.ConcernedNPC.Work;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -187,7 +188,7 @@ internal sealed class ShelterConstructionRuntime
             new WorkerBuildWalk(motion, () => _job),
             loopMaterials,
             _placer,
-            pose ?? new BuildPose(() => WorkerBody.FindLive(worker.Value), _log),
+            pose ?? new BuildPose(() => ForemanSavedBodies.FindLive(worker.Value), _log),
             _log,
             () => _orders.Journal?.Current?.Order.Value);
 

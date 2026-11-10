@@ -541,5 +541,6 @@ public sealed class Plugin : BaseUnityPlugin
         _climbSounds?.Remove();
         _climbPose?.Remove();
         LadderInteraction.Remove();
+        SettlementRuntime.DetachBodyEvents();
     }
 }

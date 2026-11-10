@@ -13,6 +13,7 @@ using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Workers;
 using UnityEngine;
 using TheConcernedCat.Diagnostics;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 
@@ -417,7 +418,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
             return false;
         }
 
-        WorkerBody? body = WorkerBody.FindLive(worker.Value);
+        NpcBody? body = ForemanSavedBodies.FindLive(worker.Value);
         if (body == null)
         {
             // A body whose ground is not loaded is not lost: work simply cannot
@@ -673,7 +674,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
             && _core.Ledger.TryGetTransfer(receipt.Request, out TransferRecord transfer)
             && (transfer.Intent.To.Place == CustodyPlace.Worker || transfer.Intent.From.Place == CustodyPlace.Worker))
         {
-            WorkerBody? body = WorkerBody.FindLive(WorkerKey.Value);
+            NpcBody? body = ForemanSavedBodies.FindLive(WorkerKey.Value);
             if (body == null || !body.LastChangePersisted)
             {
                 recorded = new TransferReceipt(
@@ -699,9 +700,9 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     /// is recorded as moved to Lost at that place, with the place as evidence,
     /// for the player to recover; its tools as returns in flight, for a person
     /// to settle once they have picked them up.</summary>
-    internal void OnWorkerDied(WorkerBody body, IReadOnlyList<DroppedItem> dropped, Vector3 where)
+    internal void OnWorkerDied(NpcBody body, IReadOnlyList<NpcDroppedItem> dropped, Vector3 where)
     {
-        if (_core == null || body == null || !string.Equals(body.Key, WorkerKey.Value, StringComparison.Ordinal))
+        if (_core == null || !ForemanSavedBodies.IsForeman(body) || !string.Equals(body.StoredKey, WorkerKey.Value, StringComparison.Ordinal))
         {
             return;
         }
@@ -709,7 +710,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
         string place = string.Format(CultureInfo.InvariantCulture, "died at ({0:0}, {1:0}, {2:0})", where.x, where.y, where.z);
         var lost = new CustodyLocation(CustodyPlace.Lost, place, _epoch);
 
-        foreach (DroppedItem item in dropped)
+        foreach (NpcDroppedItem item in dropped)
         {
             if (string.IsNullOrEmpty(item.PrefabName))
             {
@@ -758,7 +759,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     /// it fell: the replay reports it and a person answers "mine" once they
     /// have it. Never settled by the machine — it is on the ground, in nobody's
     /// hands.</summary>
-    private void RecordDroppedTools(IReadOnlyList<DroppedItem> dropped, string place)
+    private void RecordDroppedTools(IReadOnlyList<NpcDroppedItem> dropped, string place)
     {
         if (!_records.TryOpen(out SettlementRegister _, out SettlementJournal journal) || journal.IsReadOnly)
         {
@@ -767,7 +768,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
         TheConcernedCat.Settlement.Tools.ToolLedger tools = journal.Replay().Tools;
         JournalStamp? stamp = Stamp();
-        foreach (DroppedItem item in dropped)
+        foreach (NpcDroppedItem item in dropped)
         {
             if (!ToolClassifier.TryDescribe(item.Item, out TheConcernedCat.Settlement.Tools.ToolSpecimen specimen))
             {
@@ -820,7 +821,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
     internal Vector3? WorkerPosition()
     {
-        WorkerBody? body = WorkerBody.FindLive(WorkerKey.Value);
+        NpcBody? body = ForemanSavedBodies.FindLive(WorkerKey.Value);
         return body == null ? (Vector3?)null : body.transform.position;
     }
 
@@ -900,7 +901,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
             {
                 case CustodyPlace.Worker:
                 {
-                    WorkerBody? body = WorkerBody.FindLive(location.Key);
+                    NpcBody? body = ForemanSavedBodies.FindLive(location.Key);
                     return body == null || body.Inventory == null ? (int?)null : EngineInventoryPort.CountIn(body.Inventory, item);
                 }
 

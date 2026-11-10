@@ -125,8 +125,21 @@ internal static class ForemanWorkerPrefab
             return Fail("Jotunn's prefab manager is not available yet.", log);
         }
 
+        // #372: his body is Concerned NPC's NpcBody, which finds its keys by
+        // its prefab. Told before the prefab exists, so no saved body of it can
+        // start without them. A refusal is reported and the prefab is still
+        // built: without it every saved body would be destroyed by the next
+        // load, while a body with no keys only goes inert and keeps what it
+        // stores. The gated build refuses a new body until this succeeds.
+        if (!ForemanSavedBodies.TryRegister(out string unregistered))
+        {
+            LastFailure = "Concerned NPC did not accept his body's keys: " + unregistered;
+            log?.Invoke("Worker body keys not registered (" + unregistered + "); saved bodies will stay inert "
+                + "and keep what they hold, and no new body can be created.");
+        }
+
         GameObject? existing = prefabs.GetPrefab(PrefabName);
-        if (existing != null && existing.GetComponent<WorkerBody>() != null)
+        if (existing != null && existing.GetComponent<NpcBody>() != null)
         {
             // Built earlier in this process (for instance by a lazy fallback)
             // and still registered with Jotunn.
@@ -194,7 +207,7 @@ internal static class ForemanWorkerPrefab
         clone.GetComponent<ZNetView>().m_persistent = true;
 
         clone.AddComponent<ForemanWorkerAI>();
-        clone.AddComponent<WorkerBody>();
+        clone.AddComponent<NpcBody>();
 
         // Not an enemy of anyone, and not a boss. Faction behaviour is out of
         // scope; what is in scope is not shipping a worker that inherits a
@@ -221,16 +234,26 @@ internal static class ForemanWorkerPrefab
     /// instantiation: the library requires <paramref name="lease"/>, re-asks
     /// whether it is still held immediately before the body is created, counts
     /// Thorstein's saved bodies itself, refuses unloaded ground, and stamps
-    /// <paramref name="key"/> onto the new object in the same call - destroying
-    /// it again if that write fails, so an identity-less stranger is never left
-    /// standing. <c>tools/validate_repo.py</c> refuses the engine's own
+    /// <paramref name="key"/> - which must be the lease's identity - onto the
+    /// new object in the same call, through its own <c>NpcBody</c> since #372,
+    /// destroying it again if that write fails, so an identity-less stranger is
+    /// never left standing. <c>tools/validate_repo.py</c> refuses the engine's own
     /// instantiation anywhere in this product.</summary>
     internal static ForemanWorkerAI? Spawn(
         BodyLease? lease, Vector3 position, Quaternion rotation, string key, out string failure)
     {
+        // #372: the identity is written by Concerned NPC's own body, under his
+        // contract's key field, as the lease's identity - the same value the
+        // copy this replaces wrote. A key that is not the lease's was refused
+        // by the build before; it is refused here now, before anything is built.
+        if (lease != null && !string.Equals(lease.Identity.Value, key, StringComparison.Ordinal))
+        {
+            failure = "the lease is for " + lease.Identity + " and the body was asked for " + key;
+            return null;
+        }
+
         GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(
-            lease, ForemanNpcRole.Contract, _prefab, position, rotation,
-            body => WorkerBody.TryStamp(body, key), out failure);
+            lease, ForemanNpcRole.Contract, _prefab, position, rotation, out failure);
         return instance == null ? null : instance.GetComponent<ForemanWorkerAI>();
     }
 

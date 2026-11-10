@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TheConcernedCat.ConcernedForeman.Runtime.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -31,14 +32,12 @@ public sealed class BuildPoseTests : IDisposable
 
     public void Dispose()
     {
-        WorkerBody.Loaded = null;
-        WorkerBody.Died = null;
-        WorkerBody.ErrorLog = null;
+        ForemanFixtures.ResetBodies();
     }
 
-    private static WorkerBody Body(bool animation = true, bool hammer = true, bool owner = true)
+    private static NpcBody Body(bool animation = true, bool hammer = true, bool owner = true)
     {
-        WorkerBody body = ForemanFixtures.Body(owner: owner);
+        NpcBody body = ForemanFixtures.Body(owner: owner);
         if (animation)
         {
             body.gameObject.Add(new ZSyncAnimation());
@@ -52,12 +51,12 @@ public sealed class BuildPoseTests : IDisposable
         return body;
     }
 
-    private BuildPose Pose(WorkerBody? body) => new BuildPose(() => body, _log.Add);
+    private BuildPose Pose(NpcBody? body) => new BuildPose(() => body, _log.Add);
 
     [Fact]
     public void Working_stands_him_still_on_his_own_animation_component()
     {
-        WorkerBody body = Body();
+        NpcBody body = Body();
         ZSyncAnimation animation = body.GetComponent<ZSyncAnimation>()!;
 
         Pose(body).Working(true);
@@ -70,7 +69,7 @@ public sealed class BuildPoseTests : IDisposable
     [Fact]
     public void Working_puts_the_hammer_he_is_carrying_in_his_hand()
     {
-        WorkerBody body = Body();
+        NpcBody body = Body();
         BuildPose pose = Pose(body);
 
         pose.Working(true);
@@ -83,7 +82,7 @@ public sealed class BuildPoseTests : IDisposable
     [Fact]
     public void Stopping_puts_the_hammer_away_again()
     {
-        WorkerBody body = Body();
+        NpcBody body = Body();
         BuildPose pose = Pose(body);
         pose.Working(true);
 
@@ -96,7 +95,7 @@ public sealed class BuildPoseTests : IDisposable
     [Fact]
     public void Working_twice_does_not_equip_twice()
     {
-        WorkerBody body = Body();
+        NpcBody body = Body();
         BuildPose pose = Pose(body);
 
         pose.Working(true);
@@ -108,7 +107,7 @@ public sealed class BuildPoseTests : IDisposable
     [Fact]
     public void A_worker_with_no_hammer_still_stands_still_and_holds_nothing()
     {
-        WorkerBody body = Body(hammer: false);
+        NpcBody body = Body(hammer: false);
         BuildPose pose = Pose(body);
 
         pose.Working(true);
@@ -121,7 +120,7 @@ public sealed class BuildPoseTests : IDisposable
     [Fact]
     public void A_body_with_no_animation_component_is_not_a_failure()
     {
-        WorkerBody body = Body(animation: false);
+        NpcBody body = Body(animation: false);
         BuildPose pose = Pose(body);
 
         pose.Working(true);
@@ -138,7 +137,7 @@ public sealed class BuildPoseTests : IDisposable
         // was never owned cannot be stamped and so cannot be built at all. This
         // is the shape that matters anyway: a body this process loaded and then
         // lost ownership of, mid-order.
-        WorkerBody body = Body();
+        NpcBody body = Body();
         body.View!.Owner = false;
         BuildPose pose = Pose(body);
 

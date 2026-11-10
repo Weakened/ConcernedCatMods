@@ -250,6 +250,57 @@ public sealed class GunnarBodyTests
     }
 
     [Fact]
+    public void TheArrivalLeaseIsContractedForExactlyTheContractHisBodyIsBuiltUnder()
+    {
+        // #372 F2c leftover: the gated build refuses, before it counts anything,
+        // a contract that is not the one the lease's identity registered with
+        // the arbiter that granted it (BodyLease.IsContractedFor). The library's
+        // own test of that rule uses a plain worker contract; Gunnar's is a
+        // worker contract that also admits a figure, and his body is built under
+        // GunnarNpcRole.Contract (= GunnarBodyContract.Create(), pinned by
+        // GunnarHandOverOrderTests). So this is the real arbiter, the real
+        // hand-over and the real contract: a drift between what the role
+        // registers and what the spawn passes fails here, not in game.
+        var registry = new NpcRoleRegistry();
+        Assert.True(NpcIdentity.TryParse(TheConcernedCat.Workers.WorkerKey.Gunnar.Value, out NpcIdentity gunnar));
+        var role = new GunnarRole(gunnar, GunnarBodyContract.Create());
+        Assert.True(registry.Register(role).IsRegistered);
+        registry.BeginWorldLoad(out _);
+        var leases = new GunnarBodyLeases(registry, gunnar);
+
+        Assert.True(leases.TryTakeWorker(() => { }, out string refusal), refusal);
+        BodyLease lease = leases.WorkerLease!;
+
+        Assert.True(lease.IsContractedFor(GunnarBodyContract.Create()));
+        // The identity the build checks the stamp against is the one
+        // TeamsterWorkerPrefab.Stamp writes (WorkerKey.Gunnar.Value).
+        Assert.Equal(TheConcernedCat.Workers.WorkerKey.Gunnar.Value, lease.Identity.Value);
+        Assert.Equal("tcc.worker.", GunnarBodyContract.Create().ZdoKeyPrefix);
+
+        // Every near miss is refused: no figure admission, another prefab,
+        // another key prefix, another role's real contract, no contract.
+        Assert.False(lease.IsContractedFor(NpcBodyContract.ForWorker("CT_TeamsterWorker", "tcc.worker.")));
+        Assert.False(lease.IsContractedFor(NpcBodyContract.ForWorkerWithPresentation("CF_SettlementWorker", "tcc.worker.")));
+        Assert.False(lease.IsContractedFor(NpcBodyContract.ForWorkerWithPresentation("CT_TeamsterWorker", "tcc.steward.")));
+        Assert.False(lease.IsContractedFor(NpcBodyContract.ForWorker("CS_Steward", "tcc.steward.")));
+        Assert.False(lease.IsContractedFor(NpcBodyContract.ForPresentation()));
+        Assert.False(lease.IsContractedFor(default));
+
+        // A world unload ends the lease; the contract it names does not change,
+        // and the build's last check (the lease is live) is what refuses then.
+        registry.EndWorldLoad();
+        Assert.False(lease.IsActive);
+    }
+
+    private sealed class GunnarRole : INpcRole
+    {
+        public GunnarRole(NpcIdentity identity, NpcBodyContract body) { Identity = identity; Body = body; }
+        public NpcIdentity Identity { get; }
+        public NpcBodyContract Body { get; }
+        public INpcDataPaths Paths { get; } = new Paths();
+    }
+
+    [Fact]
     public void RemovalFailureNeverClaimsWorkerOrReleasesLease()
     {
         var (registry, leases, id) = Setup();

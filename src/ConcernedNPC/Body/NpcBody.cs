@@ -214,6 +214,29 @@ public sealed class NpcBody : MonoBehaviour
     /// <summary>The number of items this body carries, tools included.</summary>
     public int ItemCount => _inventory == null ? 0 : _inventory.NrOfItems();
 
+    /// <summary>Declares what bodies of a role's own prefab store, for a role
+    /// that builds that prefab itself and puts this component on it (#372,
+    /// the body-inventory move). Without it a body of that prefab has no keys
+    /// of its own and goes inert on <c>Start</c>.
+    ///
+    /// <b>Call it before any world loads</b> - with the prefab build, at the
+    /// main menu - because a saved body reads its keys in its first
+    /// <c>Start</c>, which is at world load. Idempotent for the same facts; a
+    /// second registration of one prefab under another key prefix or another
+    /// <see cref="NpcBodyKeeps"/> is refused, because one prefab cannot store
+    /// itself two ways.
+    ///
+    /// <b>What it does not do.</b> It writes nothing, builds nothing and grants
+    /// nothing: a body is still created only through the gated build
+    /// (<c>NpcWorkerPrefabFactory.TrySpawnRoleBody</c>) under a lease. It is the
+    /// same registration <see cref="NpcWorkerPrefabFactory.TryFor"/> makes for a
+    /// prefab the library builds.</summary>
+    /// <param name="contract">The role's worker body contract.</param>
+    /// <param name="keeps">What its bodies store. Must be stated.</param>
+    /// <param name="reason">Why it was refused. Empty on success.</param>
+    public static bool TryRegister(NpcBodyContract contract, NpcBodyKeeps keeps, out string reason) =>
+        NpcBodyContracts.TryRemember(contract, keeps, out reason);
+
     /// <summary>Stamps a freshly built body with its identity, before its first
     /// <c>Start</c>. The one place this library writes into a network object,
     /// and it writes only into the body's own.</summary>
@@ -509,13 +532,17 @@ public sealed class NpcBody : MonoBehaviour
         }
         finally
         {
+            // #372 review: each subscriber on its own, as Loaded is raised, so
+            // one product's throwing handler cannot cost another product the
+            // record of what its NPC lost. A single multicast invoke stopped at
+            // the first throw.
             try
             {
-                Died?.Invoke(this, dropped, where);
+                RaiseDied(this, dropped, where);
             }
             catch (Exception exception)
             {
-                ErrorLog?.Invoke("NPC body \"" + StoredKey
+                RaiseErrorLog("NPC body \"" + StoredKey
                     + "\" died and the loss could not all be recorded: " + SafeFailure.Describe(exception));
             }
         }

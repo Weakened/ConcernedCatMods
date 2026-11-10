@@ -62,7 +62,8 @@ internal static class GunnarHaulingDefaults
     ///
     /// <b>Byte-compatible with Concerned Foreman's worker on purpose.</b> Same
     /// field name, same package, same companion revision field
-    /// (<c>ConcernedForeman/Runtime/Custody/WorkerBody.cs</c>,
+    /// (Foreman's own <c>WorkerBody.cs</c> until #372, Concerned NPC's
+    /// <c>NpcBody</c> since;
     /// <c>SETTLEMENT_AUTHORITY.md</c> §5a). Two products may share a key prefix
     /// because the prefab name is what separates their bodies before a key is
     /// ever read, and a second spelling for the same thing would be a second

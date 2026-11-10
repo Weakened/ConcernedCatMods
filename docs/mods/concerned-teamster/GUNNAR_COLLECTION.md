@@ -429,7 +429,8 @@ re-bound by key and loads its stored inventory"* — was a clause Teamster had n
 | `tcc.worker.inventory` | vanilla's own `Inventory.Save` package, as a byte array — the format a chest stores |
 | `tcc.worker.revision` | a count of writes; zero means it has never written |
 
-Byte-compatible with `ConcernedForeman/Runtime/Custody/WorkerBody.cs` on purpose: same names, same package, same
+Byte-compatible with Concerned Foreman's worker body (its own `WorkerBody.cs` until #372, Concerned NPC's
+`NpcBody` since) on purpose: same names, same package, same
 companion field. Two products may share the `tcc.worker.` prefix because the prefab name is what separates their
 bodies before a key is ever read, and a second spelling for the same thing would be a second format to keep in step
 forever. `WorkerInventoryRecordTests` pins the literals.

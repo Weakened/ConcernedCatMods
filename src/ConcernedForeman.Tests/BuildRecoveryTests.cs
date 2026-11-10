@@ -14,6 +14,7 @@ using TheConcernedCat.Settlement.Register;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace ConcernedForeman.Tests;
 
@@ -25,7 +26,7 @@ public sealed class BuildRecoveryTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "cf-285-" + Guid.NewGuid().ToString("N"));
     private readonly JournalStore _store;
     private readonly SettlementScope _scope = new SettlementScope(285, new SettlementId("home"));
-    private readonly WorkerBody _body;
+    private readonly NpcBody _body;
     private readonly Container _chest;
     private readonly FakeMotion _motion = new FakeMotion(WorkerKey.Thorstein);
     private readonly FakeModes _modes = new FakeModes(WorkerKey.Thorstein);
@@ -795,7 +796,7 @@ public sealed class BuildRecoveryTests : IDisposable
     {
         _runtime.OnWorldUnloaded();
         Piece.s_allPieces.Clear(); Player.m_localPlayer = null;
-        WorkerBody.Loaded = null; WorkerBody.Died = null; WorkerBody.ErrorLog = null;
+        ForemanFixtures.ResetBodies();
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
     }
 }
