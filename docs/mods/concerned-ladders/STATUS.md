@@ -45,6 +45,30 @@ runtime and the presenter in one `try`, so a throw in the runtime's release skip
 only); the 1.0.0 changelog lists a "Fixed" swim-pose bullet that public users never saw; snapping beside another
 building-helper mod that moves the ghost (e.g. Gizmo) is untested.
 
+## 1.1.0 candidate provenance (template, nothing built)
+
+**No 1.1.0 candidate exists.** This table is what #485 criterion 10 and #486 criterion 9 ask for, laid out the way the
+1.0.0 record above was. Each field is filled from the files a real candidate produces, by the lead or the owner,
+following `TEST_PLAN.md` section 10. Nothing here may be filled from memory or estimated. Unfilled fields stay
+`PENDING`. The doors add no file to the package, so the editable sources are the source commit itself
+(`DOOR_ASSET_SOURCES.md`).
+
+| Item | 1.1.0 |
+|---|---|
+| Source | PENDING: the full 40-character SHA of the frozen source on `main`, after #485/#486's code and these records have merged |
+| Version | `1.1.0` in `Plugin.cs`, `ConcernedLadders.csproj` and `Package/thunderstore.toml` (already set); CHANGELOG's `1.1.0` heading still says Unreleased |
+| Dependencies | pinned in source: BepInExPack_Valheim 5.4.2351, Jötunn 2.30.2 (`thunderstore.toml`, `[BepInDependency]`, `JotunnLib` package reference). Game: Valheim 1.0.21, the version the door census was taken on (`DOOR_DONOR_MATRIX.md` section 1). PENDING: the game version on the candidate's own startup log |
+| Verify | PENDING: `scripts/verify.ps1` summary block on that SHA, under the build lock (assemblies, passed / failed, validator) and its log path |
+| ZIP | PENDING: `TheConcernedCat-ConcernedLadders-1.1.0.zip`, size, SHA256, from `scripts/package.ps1 -Product ConcernedLadders` under the lock |
+| DLL | PENDING: size, SHA256 and `InformationalVersion` stamp (`1.1.0+<sha>`) of the verified build output and of the packaged DLL. The two must be the same bytes (built = packaged = installed); if they differ, repackage the verified bytes without rebuilding (`TEST_PLAN.md` section 10) |
+| Contents | PENDING: confirm the six standard files only (`manifest.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, `icon.png`, `plugins/TheConcernedCat.ConcernedLadders.dll`), with no PDB, no other DLL, no local path, no animation sources and no media |
+| Identity check | PENDING: `tools/verify_ladders_candidate.py` result (success is `IDENTITY_MATCH_ONLY`, with `gameplayVerified=false` and `binaryProvenanceVerified=false`) |
+| Install and smoke | PENDING: imported into a dedicated profile, cold-start banner `1.1.0+<sha>`, loaded / skipped / failed counts, prefab registrations with both settings off and then on, 0 exceptions. Then the in-game rows of `DOOR_DONOR_MATRIX.md` section 9 and `CELLAR_DOORS.md` section 10 (#470) |
+| Review | PENDING: an independent review of the frozen head |
+
+Publishing is not authorized by #485 or #486 ("a reinstallable local candidate"). Uploading 1.1.0 needs the owner's
+own approval.
+
 ## 0.2.7 (superseded)
 
 | Item | 0.2.7 |
