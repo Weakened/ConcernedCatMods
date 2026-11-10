@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedNPC.Containers;
+using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Workers;
