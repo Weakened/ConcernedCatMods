@@ -252,8 +252,11 @@ public sealed class GunnarWorldDownTests
         string teardown = Between(source, "private void TearDown(string why)", "private void WatchAccountWorld()");
         AssertInOrder(teardown, "finally", "_worldWatch.ObserveWorld(CurrentWorldUid());", "CloseAccountForWorld(why);");
 
+        // A fault stops the watch, so it latches untrusted first; the faulted
+        // branch still closes the account at the down edge.
         string update = Between(source, "private void Update()", "private void LateUpdate()");
-        Assert.Contains("CloseAccountForWorld(\"the world went away\");", update);
+        AssertInOrder(update, "CloseAccountForWorld(\"the world went away\");", "_faulted = true;",
+            "_worldWatch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);");
 
         // Watched after every Update of a world-up frame, failing to untrusted.
         string late = Between(source, "private void LateUpdate()", "private void FrameTick()");

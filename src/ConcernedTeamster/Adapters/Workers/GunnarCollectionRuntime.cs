@@ -207,6 +207,10 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
         catch (Exception exception)
         {
             _faulted = true;
+
+            // A faulted runtime no longer watches his body, so nothing it saw
+            // before may vouch for what he carries when this world goes down.
+            _worldWatch.ObserveBody(bodyBound: false, recordUnwritable: true, recordUnreadable: false);
             _log?.LogError("Gunnar's collection runtime faulted and is now off for this session: " + SafeFailure.Describe(exception));
             try
             {
@@ -476,6 +480,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
         WorldDownCustody closed;
         long? world;
+        _worldWatchFaulted = false;
         try
         {
             closed = _worldWatch.Close(_account, out world);

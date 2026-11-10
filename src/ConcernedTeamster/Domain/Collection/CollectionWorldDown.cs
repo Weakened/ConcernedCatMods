@@ -10,8 +10,9 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Collection;
 /// carries. Zero is never trust.</summary>
 internal enum BodyRecordTrust
 {
-    /// <summary>No body was seen while he held anything this world, so nobody
-    /// can say. Read as <see cref="Untrusted"/>.</summary>
+    /// <summary>No body of his was bound in the last world-up frame in which he
+    /// held anything, so nobody can say. Read as <see cref="Untrusted"/>.
+    /// </summary>
     Unknown = 0,
 
     /// <summary>A bound body whose record had loaded and whose last change
