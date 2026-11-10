@@ -194,6 +194,8 @@ internal sealed class GunnarCollectionPort : IPickLifecycle
     private int _dropMask;
     private readonly HashSet<int> _before = new HashSet<int>();
     private readonly List<GameObject> _found = new List<GameObject>();
+    private readonly List<FelledDrop> _felledFacts = new List<FelledDrop>();
+    private readonly List<int> _felledChosen = new List<int>();
 
     private readonly PickAccounting _accounting = new PickAccounting();
 
@@ -419,7 +421,7 @@ internal sealed class GunnarCollectionPort : IPickLifecycle
             // accounting has agreed to count it, and uncounted again if the
             // take refuses: counting something still lying there is how a
             // shortfall becomes invisible.
-            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))
+            if (TakeDropped(dropped))
             {
                 _before.Add(dropped.GetInstanceID());
             }
@@ -446,6 +448,121 @@ internal sealed class GunnarCollectionPort : IPickLifecycle
         }
 
         return new PickProgress(PickPhase.Gathering, _accounting.Taken, string.Empty);
+    }
+
+    /// <summary>Vanilla's own take of one dropped item into Gunnar: the one
+    /// pinned <c>Humanoid.Pickup</c>, so weight, stacking and the pickup rules
+    /// are the game's arithmetic and not ours. Reached from exactly two places,
+    /// both in this file: a pick's gather in <see cref="Poll"/>, and the Wood a
+    /// felling hit dropped in <see cref="TakeFelled"/> (`D19 Gunnar felling
+    /// audit` pins the population).</summary>
+    private bool TakeDropped(GameObject dropped) =>
+        _worker != null && _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false);
+
+    /// <summary>D19's second grant, for Gunnar (#381 item 5): takes the Wood one
+    /// felling hit dropped, by instance, in the same call as the hit, through the
+    /// same pinned take a pick uses.
+    ///
+    /// <paramref name="spawned"/> is exactly what the felling port saw appear
+    /// beside the tree during the hit; nothing is searched for here. Of it, only
+    /// Wood owned by this process is taken, whole drops only, while it fits
+    /// <paramref name="room"/> - the units of Wood his carry limit still allows
+    /// (<see cref="FelledWoodTake.Choose"/>). Each take is counted on his own
+    /// inventory before and after, and only what arrived is credited
+    /// (<see cref="FelledWoodTake.Credit"/>); a take that does not add up stops
+    /// the rest. Everything not taken lies on the ground as an ordinary item.
+    ///
+    /// Refused while a pick is gathering: one body takes one thing at a time.
+    /// </summary>
+    internal FelledTake TakeFelled(Humanoid? worker, List<ItemDrop> spawned, int room)
+    {
+        int count = spawned == null ? 0 : spawned.Count;
+        if (Phase == PickPhase.Gathering || worker == null || worker.IsDead() || !HasNetworkRecord(worker) ||
+            spawned == null || room < 1)
+        {
+            return new FelledTake(0, count, uncertain: false);
+        }
+
+        Inventory? inventory = worker.GetInventory();
+        if (inventory == null)
+        {
+            return new FelledTake(0, count, uncertain: false);
+        }
+
+        _felledFacts.Clear();
+        for (int index = 0; index < spawned.Count; index++)
+        {
+            ItemDrop candidate = spawned[index];
+            ZNetView? view = candidate != null ? candidate.GetComponent<ZNetView>() : null;
+            bool wood = candidate != null && view != null && view.IsValid() && candidate.m_itemData != null &&
+                string.Equals(ItemPrefabName(candidate), FelledWoodTake.WoodPrefab, System.StringComparison.Ordinal);
+            _felledFacts.Add(new FelledDrop(wood, wood && view!.IsOwner(), wood ? candidate!.m_itemData.m_stack : 0));
+        }
+
+        FelledWoodTake.Choose(_felledFacts, room, _felledChosen);
+        int taken = 0;
+        int dropsTaken = 0;
+        bool uncertain = false;
+        _worker = worker;
+        try
+        {
+            for (int pick = 0; pick < _felledChosen.Count; pick++)
+            {
+                ItemDrop drop = spawned[_felledChosen[pick]];
+                ZNetView view = drop.GetComponent<ZNetView>();
+                string sharedName = drop.m_itemData.m_shared.m_name;
+                int stack = drop.m_itemData.m_stack;
+                int before = CountOf(inventory, sharedName);
+                bool added = false;
+                bool threw = false;
+                try
+                {
+                    added = TakeDropped(drop.gameObject);
+                }
+                catch (System.Exception)
+                {
+                    threw = true;
+                }
+
+                int after = CountOf(inventory, sharedName);
+                bool gone = drop == null || view == null || !view.IsValid();
+                FelledTakeStep step = FelledWoodTake.Credit(threw, added, before, after, stack, gone);
+                taken += step.Credited;
+                if (step.Uncertain)
+                {
+                    uncertain = true;
+                    break;
+                }
+
+                if (step.Credited > 0)
+                {
+                    dropsTaken++;
+                }
+            }
+        }
+        finally
+        {
+            _worker = null;
+            _felledFacts.Clear();
+            _felledChosen.Clear();
+        }
+
+        return new FelledTake(taken, count - dropsTaken, uncertain);
+    }
+
+    private static int CountOf(Inventory inventory, string sharedName)
+    {
+        int total = 0;
+        foreach (ItemDrop.ItemData item in inventory.GetAllItems())
+        {
+            if (item != null && item.m_shared != null &&
+                string.Equals(item.m_shared.m_name, sharedName, System.StringComparison.Ordinal))
+            {
+                total += item.m_stack;
+            }
+        }
+
+        return total;
     }
 
     /// <summary>Forgets a pick in flight, because <b>the job</b> it belonged to
