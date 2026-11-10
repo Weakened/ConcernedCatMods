@@ -159,7 +159,15 @@ class HaulIsGated(unittest.TestCase):
         self.append_member(HAUL, "\n    private void Again(Humanoid worker)\n    {\n        _take.TakeOne(_source, worker, "
                                  "_sourceKey, \"Stone\", 1, _sourceEpoch, _sourceEpoch, Allowance, WorkerPosition, 1f, "
                                  "out NpcContainerRefusal _);\n    }\n")
-        self.assert_refused("a second, ungated take in the haul's file")
+        # The chest-take audit's site table refuses it too, so both are removed
+        # for the proof; the aliased plant below is the haul rule's alone.
+        self.assert_refused("a second, ungated take in the haul's file", rules=(HAUL_RULE, TAKE_RULE))
+
+    def test_a_second_take_through_an_alias_of_the_port(self):
+        self.append_member(HAUL, "\n    private void Aliased(Humanoid worker)\n    {\n        var port = _take;\n"
+                                 "        port.TakeOne(_source, worker, _sourceKey, \"Stone\", 1, _sourceEpoch, _sourceEpoch, "
+                                 "Allowance, WorkerPosition, 1f, out NpcContainerRefusal _);\n    }\n")
+        self.assert_refused("a second take through an alias, which spells no `_take.TakeOne(`")
 
     def test_a_take_lifted_into_a_helper_with_no_gate(self):
         self.swap_in(HAUL, "TakeResult result = _take.TakeOne(", "TakeResult result = Lifted(")

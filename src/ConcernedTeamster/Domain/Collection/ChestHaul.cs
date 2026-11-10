@@ -240,6 +240,16 @@ internal sealed class ChestHaul
         HaulLoad line = CurrentTour().Loads[_line];
         _orderIssued = false;
         _line++;
+        if (end == HaulLegEnd.Moved && units > line.Units)
+        {
+            // More arrived than was asked for: the port's measurement and the
+            // order disagree, which is not something to credit or balance.
+            Stop("the source measured " + units.ToString(CultureInfo.InvariantCulture) + " " + line.Item +
+                " reaching him where " + line.Units.ToString(CultureInfo.InvariantCulture) +
+                " were asked for; nothing more was attempted - a person decides");
+            return;
+        }
+
         switch (end)
         {
             case HaulLegEnd.Moved when units > 0:
@@ -388,7 +398,7 @@ internal sealed class ChestHaul
         IReadOnlyList<HaulLoad> held = Holding;
         if (held.Count != 0)
         {
-            said.Append("; still on him from this haul: ").Append(Join(held));
+            said.Append("; measured into him by this haul and not out again: ").Append(Join(held));
         }
 
         if (Reason.Length != 0)

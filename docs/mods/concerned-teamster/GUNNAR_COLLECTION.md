@@ -1227,8 +1227,8 @@ computed only when a cart is offered, which the runtime never does (on foot only
 
 ### Each tour (`ChestHaul`, game-free)
 
-Provision: one take per item, at most the manifest's line and what fits now. Travel: walk to the destination, given up
-after 12 s without progress. Unload: one unload per item, offering at most what this tour **measured** taking.
+Provision: one take per item, at most the manifest's line and what fits now. Travel: walk to the destination (and, for the
+next tour, back to the source), each walk given up after 12 s without progress. Unload: one unload per item, offering at most what this tour **measured** taking.
 Reconcile: count what he carries of the cargo; it must equal taken less delivered, because a haul starts with none of
 the cargo on him. Anything uncertain, anything left in him, a count that disagrees, or a tour that took nothing stops
 the haul with what he holds still on him. `ChestHaulTests`, `ChestHaulGateTests`.

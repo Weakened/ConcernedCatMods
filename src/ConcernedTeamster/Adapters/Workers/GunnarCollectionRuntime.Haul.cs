@@ -77,6 +77,19 @@ internal sealed partial class GunnarCollectionRuntime
 
         Humanoid? worker = _worker();
         NpcWorldEpoch world = CurrentEpoch();
+        if (!world.IsUnknown && _source != null && !world.Matches(_sourceEpoch))
+        {
+            ForgetSource("the world has been loaded again since you chose that chest");
+            return "The chest to take from was chosen in a different world load, so the name no longer means the " +
+                "same object. Choose it again (ct_collect source).";
+        }
+
+        if (!world.IsUnknown && _destination != null && !world.Matches(_destinationEpoch))
+        {
+            Forget("the world has been loaded again since you chose that chest");
+            return "The chest to put things in was chosen in a different world load, so the name no longer means " +
+                "the same object. Choose it again (ct_collect destination).";
+        }
         var named = new HashSet<string>(StringComparer.Ordinal);
         for (int index = 0; index < lines.Count; index++)
         {

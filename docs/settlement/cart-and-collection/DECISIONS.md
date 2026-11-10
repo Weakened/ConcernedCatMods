@@ -942,7 +942,7 @@ in-use, ward, privacy and reach at the moment of the move. Walking him between t
 pathfinding, which D20's "where he stands" default already named for this leaf and D17 confirmed covers his walking
 on foot. **No vanilla call is added.** The code is `Adapters/Workers/GunnarCollectionRuntime.Haul.cs` (glue),
 `Domain/Collection/HaulManifest.cs` (manifest), `ChestHaul.cs` (provision, travel, unload, reconcile) and
-`ChestHaulGate.cs` (start gate); `HaulRequestGate` (already there, untested in production until now) decides whether
+`ChestHaulGate.cs` (start gate); `HaulRequestGate` (already there and tested, with no production caller until now) decides whether
 the haul may start and its loading order. Pinned by `#381 manifest-haul audit`; plants in
 `tools/tests/test_teamster_haul_audit.py`.
 

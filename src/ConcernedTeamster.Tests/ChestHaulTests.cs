@@ -197,6 +197,19 @@ public sealed class ChestHaulTests
     }
 
     [Fact]
+    public void MoreReachingHimThanWasAskedForIsNeverCredited()
+    {
+        ChestHaul haul = Start();
+        var world = new World { Take = (_, units) => (HaulLegEnd.Moved, units + 1) };
+        world.RunToEnd(haul);
+
+        Assert.Equal(ChestHaulPhase.Stopped, haul.Phase);
+        Assert.Contains("were asked for", haul.Reason);
+        Assert.Equal(0, haul.TakenOf("Stone"));
+        Assert.DoesNotContain(world.Log, entry => entry.StartsWith("unload", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void AnUncertainUnloadStopsAtOnce()
     {
         ChestHaul haul = Start();

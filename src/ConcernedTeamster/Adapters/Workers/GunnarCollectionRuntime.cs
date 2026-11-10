@@ -187,8 +187,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
             {
                 // A faulted runtime is an order that has ended, not a world that
                 // has gone: the sources it touched still exist.
-                CancelTour("the collection runtime faulted");
-                CancelHaul("the collection runtime faulted");
+                try { CancelTour("the collection runtime faulted"); }
+                finally { CancelHaul("the collection runtime faulted"); }
                 EndOrder("the collection runtime faulted");
             }
             catch
@@ -638,7 +638,7 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour, IGunnarDe
 
             if (_haul != null)
             {
-                CancelHaul("Gunnar died; what he carried is in his death record, not on him");
+                CancelHaul("Gunnar died, so what he carried went the way his death record says, not with him");
             }
         }
         catch (Exception exception)

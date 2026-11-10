@@ -6336,6 +6336,15 @@ def check_teamster_manifest_haul_is_gated(errors: list[str]) -> list[str]:
                  "it - a move the gate did not admit", errors)
             return []
 
+    # Whatever the receiver: an alias of the port (`var t = _take; t.TakeOne(`)
+    # spells no `_take.TakeOne(`, and the chest-take audit's stray check skips
+    # this file, so the bare name is counted here.
+    bare = len(re.findall(r"\bTakeOne\s*\(", code))
+    if bare != 1:
+        fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_HAUL_RUNTIME_FILE} names TakeOne {bare} time(s); exactly one "
+             "call is authorized, the gated `_take.TakeOne(` - a second, through an alias of the port, would sit "
+             "outside its gate", errors)
+        return []
     for token, why in (
             (r"\bDepositOne\s*\(", "a deposit straight through the port skips DepositLegs' world check and ledger"),
             (r"\bnew\s+Gunnar\w*Port\s*\(", "the haul uses the runtime's ports and constructs none"),
