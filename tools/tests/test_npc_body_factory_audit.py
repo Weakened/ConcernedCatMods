@@ -41,9 +41,9 @@ FOREMAN_MARKER = "        WorkerBodyHandOver? handOver = TakeWorkerBody;\n"
 FACTORY = os.path.join(ROOT, "src", "ConcernedNPC", "Body", "NpcWorkerPrefabFactory.cs")
 GATE = os.path.join(ROOT, "src", "ConcernedNPC", "Body", "NpcBodyBuildGate.cs")
 
+# #372 (F2e): her body is Concerned NPC's NpcBody, so the stamp-less overload.
 STEWARD_SPAWN = ("        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(\n"
-                 "            lease, StewardNpcRole.Contract, _prefab, position, rotation,\n"
-                 "            body => StewardBody.TryStamp(body, key), out failure);\n")
+                 "            lease, StewardNpcRole.Contract, _prefab, position, rotation, out failure);\n")
 STEWARD_MARKER = "        // The figure at home goes before her worker body appears: never both.\n"
 TEAMSTER_SPAWN = ("        GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(\n"
                   "            lease, GunnarNpcRole.Contract, Prefab, position, rotation, Stamp, out failure);\n")

@@ -181,10 +181,12 @@ public sealed class ForbiddenWriteTests
     }
 
     [Fact]
-    public void The_only_network_object_the_product_writes_to_is_the_Stewards_own()
+    public void The_product_writes_to_no_network_object_and_drops_or_equips_nothing()
     {
         var writes = new List<string>();
-        var pattern = new Regex(@"\bzdo\.Set\(|\.GetZDO\(\)\.Set\(", RegexOptions.IgnoreCase);
+        var pattern = new Regex(
+            @"\bzdo\s*\.\s*Set\s*\(|\.\s*GetZDO\s*\(\s*\)\s*\.\s*Set\s*\(|\.\s*DropItem\s*\(|\.\s*EquipItem\s*\(",
+            RegexOptions.IgnoreCase);
 
         foreach (string path in ProductSources.Files(ProductSources.Product))
         {
@@ -195,20 +197,18 @@ public sealed class ForbiddenWriteTests
             }
         }
 
-        // CLAUDE.md: mod data is never written into a vanilla object. The body
-        // writes its identity and its pack into its OWN prefab's object, and
-        // nothing else in the product writes to any object at all.
-        string only = Assert.Single(writes);
-        Assert.EndsWith("StewardBody.cs", only);
-
-        string body = ProductSources.WithoutComments(
-            File.ReadAllText(Path.Combine(ProductSources.Product, "Runtime", "StewardBody.cs")));
-        foreach (Match match in Regex.Matches(body, @"zdo\.Set\((\w+),"))
-        {
-            Assert.Contains(
-                match.Groups[1].Value,
-                new[] { "KeyField", "InventoryField", "RevisionField" });
-        }
+        // CLAUDE.md: mod data is never written into a vanilla object. Until
+        // #372 her own body component (StewardBody) wrote her identity and pack
+        // into her OWN prefab's object, dropped what she carried on death, and
+        // was the one file allowed to. Since #372 (F2e) that body is Concerned
+        // NPC's NpcBody, so nothing in this product writes a ZDO field, drops
+        // an item or equips one directly (her look reaches her own object
+        // through vanilla's VisEquipment). One appearing here again is a second
+        // body implementation, and fails this test.
+        Assert.Empty(writes);
+        Assert.False(
+            File.Exists(Path.Combine(ProductSources.Product, "Runtime", "StewardBody.cs")),
+            "the product's own body copy is back; her body is Concerned NPC's NpcBody since #372");
     }
 
     [Fact]

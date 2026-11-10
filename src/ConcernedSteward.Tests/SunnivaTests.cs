@@ -365,7 +365,7 @@ public sealed class StewardNpcAdoptionTests
         Assert.Equal(StewardRole.BodyPrefabName, role.Body.PrefabName);
         Assert.Equal("CS_Steward", role.Body.PrefabName);
 
-        // And the key prefix composes the three keys StewardBody has always
+        // And the key prefix composes the three keys her body has always
         // written, character for character.
         Assert.Equal("tcc.steward.", role.Body.ZdoKeyPrefix);
         Assert.Equal("tcc.steward.key", role.Body.ZdoKeyPrefix + "key");
@@ -376,16 +376,17 @@ public sealed class StewardNpcAdoptionTests
     }
 
     /// <summary>The literals those keys are actually read by, pinned beside the
-    /// prefix so the two cannot drift apart. <c>StewardBody</c> deliberately
-    /// keeps its own literals: a saved body is read by them, and recomposing
-    /// them from parts would be a change to a player's save file dressed as a
-    /// tidy-up.</summary>
+    /// prefix so the two cannot drift apart. <c>StewardSavedBodies</c>
+    /// deliberately keeps its own literals (since #372 the body itself is
+    /// Concerned NPC's, which composes them): this product's census reads a
+    /// saved body by them, and recomposing them from parts would be a change to
+    /// a player's save file dressed as a tidy-up.</summary>
     [Fact]
     public void The_shipped_key_literals_still_compose_from_the_prefix()
     {
-        Assert.Equal(StewardRole.BodyKeyPrefix + "key", StewardBody.KeyField);
-        Assert.Equal(StewardRole.BodyKeyPrefix + "inventory", StewardBody.InventoryField);
-        Assert.Equal(StewardRole.BodyKeyPrefix + "revision", StewardBody.RevisionField);
+        Assert.Equal(StewardRole.BodyKeyPrefix + "key", StewardSavedBodies.KeyField);
+        Assert.Equal(StewardRole.BodyKeyPrefix + "inventory", StewardSavedBodies.InventoryField);
+        Assert.Equal(StewardRole.BodyKeyPrefix + "revision", StewardSavedBodies.RevisionField);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
+using TheConcernedCat.ConcernedNPC.Body;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -237,14 +238,14 @@ internal abstract class WorldItemStore : IItemStorePort
 /// how a worker's hands and his record stop agreeing.</summary>
 internal sealed class StewardPackStore : WorldItemStore
 {
-    private readonly Func<StewardBody?> _body;
+    private readonly Func<NpcBody?> _body;
 
-    internal StewardPackStore(Func<StewardBody?> body)
+    internal StewardPackStore(Func<NpcBody?> body)
     {
         _body = body ?? throw new ArgumentNullException(nameof(body));
     }
 
-    private StewardBody? Body
+    private NpcBody? Body
     {
         get
         {
@@ -265,7 +266,7 @@ internal sealed class StewardPackStore : WorldItemStore
     {
         get
         {
-            StewardBody? body = Body;
+            NpcBody? body = Body;
             return body != null
                 && body.IsLoaded
                 && body.Fault == null
@@ -280,7 +281,7 @@ internal sealed class StewardPackStore : WorldItemStore
 
     internal override void VerifyPersisted()
     {
-        StewardBody? body = Body;
+        NpcBody? body = Body;
         if (body == null || !body.LastChangePersisted)
         {
             throw new InvalidOperationException(

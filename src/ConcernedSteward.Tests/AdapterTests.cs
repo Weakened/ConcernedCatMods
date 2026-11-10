@@ -31,7 +31,7 @@ internal sealed class Scene : IDisposable
         ZDOMan.instance = new ZDOMan();
         PrivateArea.Access = true;
         Piece.s_allPieces.Clear();
-        StewardBody.ForgetAll();
+        StewardBodyFixtures.Forget();
         Epoch = "epoch-" + Guid.NewGuid().ToString("N");
     }
 
@@ -106,7 +106,7 @@ internal sealed class Scene : IDisposable
         var zdo = new ZDO { m_uid = new ZDOID(7L, _nextId++) };
         if (key != null)
         {
-            zdo.Set(StewardBody.KeyField, key);
+            zdo.Set(StewardSavedBodies.KeyField, key);
         }
 
         if (!ZDOMan.instance!.Saved.TryGetValue(StewardRole.BodyPrefabName, out List<ZDO>? all))
@@ -147,7 +147,7 @@ internal sealed class Scene : IDisposable
         ZDOMan.instance = null;
         Player.m_localPlayer = null;
         Piece.s_allPieces.Clear();
-        StewardBody.ForgetAll();
+        StewardBodyFixtures.Forget();
         Inventory.Trace = null;
     }
 }
@@ -381,7 +381,7 @@ public sealed class FireAdapterTests
     }
 
     /// <summary>The Steward's pack, over a stub humanoid, without needing a
-    /// whole <see cref="StewardBody"/>. Counts exactly as
+    /// whole body (Concerned NPC's <c>NpcBody</c>). Counts exactly as
     /// <see cref="WorldItemStore"/> does: the shared name and nothing
     /// else.</summary>
     private sealed class StubPack : IItemStorePort

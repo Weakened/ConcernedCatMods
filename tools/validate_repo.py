@@ -7343,7 +7343,8 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
 # 2. the PORT: Runtime/StewardRetirementPort.cs keeps its one removal inside
 #    `Retire(...)`, below a `StewardRetirement.Decide(` and a refusing
 #    `if (!StewardRetirement.Allows(`, and the removal statement is `view.Destroy();`
-#    on a `view` spelled only at its declaration from `body.View`, its validity
+#    on a `view` spelled only at its declaration from the body handed in
+#    (`body.GetComponent<ZNetView>()`, #372), its validity
 #    check and that statement, in a method with no nested function scope,
 #    `goto` or deconstruction that could rename it or jump past the guard,
 #    whose braces balance, with the guard at its top level and the removal
@@ -7367,13 +7368,26 @@ STEWARD_RETIRE_METHOD = re.compile(
     r"internal\s+static\s+StewardRetireOutcome\s+Retire\s*\((.*?)\n    \}", re.DOTALL)
 STEWARD_RETIRE_DECIDES = "StewardRetirement.Decide("
 STEWARD_RETIRE_REFUSES = re.compile(r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(")
-STEWARD_RETIRE_OWN_VIEW = re.compile(r"ZNetView\?\s+view\s*=\s*body\s*\.\s*View\s*;")
+# #372 (F2e): her body is Concerned NPC's NpcBody, whose own handle on its
+# network object is internal to the library, so the view is read off the very
+# body handed in - the object that handle names - and spelled whole.
+STEWARD_RETIRE_OWN_VIEW = re.compile(
+    r"ZNetView\?\s+view\s*=\s*body\s*\.\s*GetComponent\s*<\s*ZNetView\s*>\s*\(\s*\)\s*;")
+# #372 (F2e): the parameter is the library's NpcBody, a type every role's body
+# shares, so the guarantee the old `StewardBody` type gave - only HER body - is
+# now this check, pinned whole at the top level and above the view.
+STEWARD_RETIRE_HERS = re.compile(
+    r"if\s*\(\s*body\s*==\s*null\s*\|\|\s*!\s*StewardSavedBodies\s*\.\s*IsSteward\s*\(\s*body\s*\)\s*\)"
+    r"\s*\{\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")
 # Any reference, not only a call: a method group (`StewardRetirementPort.Retire` with
 # no parenthesis) handed to a delegate is a second caller the call count cannot see.
 STEWARD_RETIRE_CALL = re.compile(r"StewardRetirementPort\s*\.\s*Retire\b")
 STEWARD_RETIRE_ASSIGNS_VIEW = re.compile(r"(?<![\w.])view\s*(?:\?\?=|=(?![=>]))")
 STEWARD_RETIRE_ASSIGNS_BODY = re.compile(r"(?<![\w.])body\s*(?:\?\?=|=(?![=>]))")
-STEWARD_RETIRE_BY_REFERENCE = re.compile(r"\b(?:ref|out)\s+(?:ZNetView\??\s+|StewardBody\??\s+)?(?:view|body)\b")
+# Any declared type, not a list of them (#372, F2e): the list named
+# `StewardBody`, so `ref NpcBody body` - the parameter's type since #372 - got
+# past it.
+STEWARD_RETIRE_BY_REFERENCE = re.compile(r"\b(?:ref|out)\s+(?:[A-Za-z_][\w.]*\??\s+)?(?:view|body)\b")
 STEWARD_RETIRE_USING = re.compile(r"\busing\b[^;{]*\bStewardRetirementPort\b[^;{]*;")
 # Review of e4f0392: the pins above are positional and blind to scope, so a
 # local function or lambda whose parameter is also called `view`, or a
@@ -7417,7 +7431,8 @@ STEWARD_RETIRE_TOP_LEVEL = (
      re.compile(
         r"if\s*\(\s*!\s*StewardRetirement\s*\.\s*Allows\s*\(\s*verdict\s*\)\s*\)\s*\{"
         r"\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*Refused\s*;\s*\}")),
-    ("`ZNetView? view = body.View;`", STEWARD_RETIRE_OWN_VIEW),
+    ("`if (body == null || !StewardSavedBodies.IsSteward(body)) { answer = ...; return StewardRetireOutcome.NotOurs; }`", STEWARD_RETIRE_HERS),
+    ("`ZNetView? view = body.GetComponent<ZNetView>();`", STEWARD_RETIRE_OWN_VIEW),
     ("the validity check on `view` returning NotOurs", re.compile(
         STEWARD_RETIRE_VIEW_CHECK.pattern
         + r"\s*\{\s*answer\s*=[^;{}]*;\s*return\s+StewardRetireOutcome\s*\.\s*NotOurs\s*;\s*\}")),
@@ -7604,7 +7619,8 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
     own_view = STEWARD_RETIRE_OWN_VIEW.search(body)
     if own_view is None:
         fail(f"{label}: Retire(...) does not take the network object from the body it was handed "
-             "(`ZNetView? view = body.View;`) - the one removal granted is HER body's, never an object "
+             "(`ZNetView? view = body.GetComponent<ZNetView>();`) - the one removal granted is HER body's, "
+             "never an object "
              "looked up or passed in some other way", errors)
     else:
         for removal in removal_offsets:
@@ -7612,6 +7628,17 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
             if removal < own_view.start() or receiver != "view":
                 fail(f"{label}: the removal in Retire(...) is not `view.Destroy()` on the view taken "
                      "from her own body above it", errors)
+
+    # #372 (F2e): the check that the body is hers - by prefab, now that the
+    # parameter's type is the library's shared NpcBody - comes before the view
+    # is taken from it, so no removal is ever prepared on another role's body.
+    hers = STEWARD_RETIRE_HERS.search(masked)
+    if hers is None or own_view is None or not hers.start() < own_view.start():
+        fail(f"{label}: Retire(...) does not refuse a body that is not hers "
+             "(`if (body == null || !StewardSavedBodies.IsSteward(body))` returning NotOurs) before it "
+             "takes the network object from it - her body is Concerned NPC's NpcBody since #372, a type "
+             "every role's body shares, so only this check keeps the one removal on a CS_Steward body",
+             errors)
 
     # The declaration is the ONLY assignment `view` may have, and `body` (the
     # parameter) may not be assigned or passed by reference at all. Without this
@@ -7622,7 +7649,8 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
     view_assignments = len(STEWARD_RETIRE_ASSIGNS_VIEW.findall(masked))
     if view_assignments != 1:
         fail(f"{label}: `view` is assigned {view_assignments} time(s) in Retire(...); only its "
-             "declaration from `body.View` may assign it, or the removal can be pointed at another "
+             "declaration from `body.GetComponent<ZNetView>()` may assign it, or the removal can be "
+             "pointed at another "
              "object", errors)
     if STEWARD_RETIRE_ASSIGNS_BODY.search(masked):
         fail(f"{label}: Retire(...) assigns its `body` parameter - the removal must act on the body "
@@ -7644,7 +7672,7 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
             or len(statements) != 1
             or not own_view.start() < check.start() < statements[0].start()):
         fail(f"{label}: `view` appears {len(view_tokens)} time(s) in Retire(...); it may appear only "
-             f"{STEWARD_RETIRE_VIEW_TOKENS} times - `ZNetView? view = body.View;`, then "
+             f"{STEWARD_RETIRE_VIEW_TOKENS} times - `ZNetView? view = body.GetComponent<ZNetView>();`, then "
              "`if (view == null || !view.IsValid() || !view.IsOwner())`, then the one statement "
              "`view.Destroy();` - so that the object removed is the one taken from her body", errors)
 
@@ -7693,7 +7721,8 @@ def check_steward_retire_is_guarded(errors: list[str]) -> list[str]:
         f"an instance and {total_removals} body removal(s), each at a pinned site; the one removal is "
         "`view.Destroy()` inside StewardRetirementPort.Retire, below a StewardRetirement.Decide and a "
         "refusing `if (!StewardRetirement.Allows(...))`, on a `view` whose only assignment is "
-        "`body.View` and which appears nowhere but that declaration, its validity check and the removal "
+        "`body.GetComponent<ZNetView>()` on a body checked to be hers by prefab above it, and which "
+        "appears nowhere but that declaration, its validity check and the removal "
         "statement, in a method with no lambda, local function, delegate, goto or deconstruction, whose "
         "braces balance, with the guard at its top level and the removal directly in its top-level "
         "`try`, and a `body` "

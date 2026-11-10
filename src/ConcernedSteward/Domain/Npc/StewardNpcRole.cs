@@ -53,8 +53,8 @@ internal sealed class StewardDataPaths : INpcDataPaths
 /// the <c>WorkerKey</c> this product already writes into its record rows. The
 /// prefab name is <see cref="StewardRole.BodyPrefabName"/>, which every saved
 /// Steward body is found by. The key prefix is <c>tcc.steward.</c>, which
-/// composes exactly the three keys <c>StewardBody</c> already
-/// reads and writes: <c>tcc.steward.key</c>, <c>tcc.steward.inventory</c> and
+/// composes exactly the three keys her body (<c>StewardBody</c>, since #372
+/// Concerned NPC's <c>NpcBody</c>) has always read and written: <c>tcc.steward.key</c>, <c>tcc.steward.inventory</c> and
 /// <c>tcc.steward.revision</c>.
 ///
 /// <b>Nothing here changes a byte.</b> This type states durable facts that

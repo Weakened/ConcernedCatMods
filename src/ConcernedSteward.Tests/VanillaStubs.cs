@@ -519,7 +519,20 @@ public class Humanoid : Character
 
     public List<ItemDrop.ItemData> Dropped { get; } = new List<ItemDrop.ItemData>();
 
+    /// <summary>What was put in her hands. #372: her body is Concerned NPC's
+    /// NpcBody, which puts an item saved as equipped back in its holder's
+    /// hands on load; she never equips anything, and a test proves it is never
+    /// called for her.</summary>
+    public List<ItemDrop.ItemData> Equipped { get; } = new List<ItemDrop.ItemData>();
+
     public Inventory GetInventory() => Bag;
+
+    public bool EquipItem(ItemDrop.ItemData item, bool triggerEquipEffects = true)
+    {
+        Equipped.Add(item);
+        item.m_equipped = true;
+        return true;
+    }
 
     /// <summary>Vanilla removes the stack from the inventory and spawns it in
     /// the world. The failure a test can ask for is a throw part way through

@@ -32,7 +32,19 @@
     <Compile Include="..\ConcernedSteward\Runtime\StewardIdentity.cs" Link="Product\Runtime\StewardIdentity.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\WorldFuelTargets.cs" Link="Product\Runtime\WorldFuelTargets.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\WorldItemStores.cs" Link="Product\Runtime\WorldItemStores.cs" />
-    <Compile Include="..\ConcernedSteward\Runtime\StewardBody.cs" Link="Product\Runtime\StewardBody.cs" />
+    <!-- #372 (F2e): her body is Concerned NPC's NpcBody now, so the body tests
+         run the library's component - the one that ships - against THIS
+         project's stubs. Only the body and the game-free types it needs are
+         linked, by name: the rest of Body/ names Jotunn and the library suite's
+         own stand-ins (the library glob below still excludes Body/). The same
+         shape Concerned Foreman's suite drew for his body (F2d). -->
+    <Compile Include="..\ConcernedSteward\Runtime\StewardSavedBodies.cs" Link="Product\Runtime\StewardSavedBodies.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBody.cs" Link="ConcernedNPC\Body\NpcBody.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodyContracts.cs" Link="ConcernedNPC\Body\NpcBodyContracts.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodySetup.cs" Link="ConcernedNPC\Body\NpcBodySetup.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodyFields.cs" Link="ConcernedNPC\Body\NpcBodyFields.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcBodyKeeps.cs" Link="ConcernedNPC\Body\NpcBodyKeeps.cs" />
+    <Compile Include="..\ConcernedNPC\Body\NpcDroppedItem.cs" Link="ConcernedNPC\Body\NpcDroppedItem.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\StewardCensus.cs" Link="Product\Runtime\StewardCensus.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\StewardWorldFacts.cs" Link="Product\Runtime\StewardWorldFacts.cs" />
     <Compile Include="..\ConcernedSteward\Runtime\StewardRetirementPort.cs" Link="Product\Runtime\StewardRetirementPort.cs" />

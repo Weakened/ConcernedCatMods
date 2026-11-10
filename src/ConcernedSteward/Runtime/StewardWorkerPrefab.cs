@@ -116,8 +116,21 @@ internal static class StewardWorkerPrefab
             return Fail("Jötunn's prefab manager is not available yet.", log);
         }
 
+        // #372 (F2e): her body is Concerned NPC's NpcBody, which finds its keys
+        // by its prefab. Told before the prefab exists, so no saved body of it
+        // can start without them. A refusal is reported and the prefab is still
+        // built: without it every saved body would be destroyed by the next
+        // load, while a body with no keys only goes inert and keeps what it
+        // stores. The gated build refuses a new body until this succeeds.
+        if (!StewardSavedBodies.TryRegister(out string unregistered))
+        {
+            LastFailure = "Concerned NPC did not accept her body's keys: " + unregistered;
+            log?.Invoke("The Steward's body keys were not registered (" + unregistered + "); a saved " +
+                "body will stay inert and keep what it holds, and no new body can be created.");
+        }
+
         GameObject? existing = prefabs.GetPrefab(PrefabName);
-        if (existing != null && existing.GetComponent<StewardBody>() != null)
+        if (existing != null && existing.GetComponent<NpcBody>() != null)
         {
             _prefab = existing;
             return true;
@@ -184,7 +197,7 @@ internal static class StewardWorkerPrefab
         clone.GetComponent<ZNetView>().m_persistent = true;
 
         clone.AddComponent<StewardWorkerAI>();
-        clone.AddComponent<StewardBody>();
+        clone.AddComponent<NpcBody>();
 
         // Not an enemy of anyone, and not a boss. Faction behaviour is out of
         // scope; what is in scope is not shipping a Steward who inherits a
@@ -211,23 +224,35 @@ internal static class StewardWorkerPrefab
     /// instantiation: the library requires <paramref name="lease"/>, re-asks
     /// whether it is still held immediately before the body is created, counts
     /// her saved bodies itself, refuses unloaded ground, and stamps
-    /// <paramref name="key"/> onto the new object in the same call - destroying
-    /// it again if that write fails, rather than leaving an identity-less body
-    /// the census would report forever. <c>tools/validate_repo.py</c> refuses the
-    /// engine's own instantiation anywhere in this product.</summary>
+    /// <paramref name="key"/> - which must be the lease's identity - onto the
+    /// new object in the same call, through its own <c>NpcBody</c> since #372,
+    /// destroying it again if that write fails, rather than leaving an
+    /// identity-less body the census would report forever.
+    /// <c>tools/validate_repo.py</c> refuses the engine's own instantiation
+    /// anywhere in this product.</summary>
     internal static StewardWorkerAI? Spawn(
         BodyLease? lease, Vector3 position, Quaternion rotation, string key, out string failure)
     {
+        // #372 (F2e): the identity is written by Concerned NPC's own body,
+        // under her contract's key field, as the lease's identity - the same
+        // value the copy this replaces wrote. A key that is not the lease's was
+        // refused by the build before; it is refused here now, before anything
+        // is built.
+        if (lease != null && !string.Equals(lease.Identity.Value, key, StringComparison.Ordinal))
+        {
+            failure = "the lease is for " + lease.Identity + " and the body was asked for " + key;
+            return null;
+        }
+
         GameObject? instance = NpcWorkerPrefabFactory.TrySpawnRoleBody(
-            lease, StewardNpcRole.Contract, _prefab, position, rotation,
-            body => StewardBody.TryStamp(body, key), out failure);
+            lease, StewardNpcRole.Contract, _prefab, position, rotation, out failure);
         return instance == null ? null : instance.GetComponent<StewardWorkerAI>();
     }
 
     /// <summary>The prefab stays registered across worlds; only the reference
     /// to a scene-bound instance is dropped elsewhere. Present so a test of the
     /// plugin lifecycle has something to call.</summary>
-    internal static void OnWorldUnloaded() => StewardBody.ForgetAll();
+    internal static void OnWorldUnloaded() => NpcBody.ForgetAll(StewardNpcRole.Contract);
 
     private static string? DescribeMissingComponents(GameObject clone)
     {
