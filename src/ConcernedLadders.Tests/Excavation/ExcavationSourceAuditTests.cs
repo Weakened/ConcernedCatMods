@@ -643,14 +643,21 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(SourceText("Excavation/ExcavationRuntime.cs"), @"_history\.Push\s*\("));
     }
 
-    /// <summary>#551: the depth stage borrows the wheel by holding the camera's own distance across its update, and writes
-    /// nothing else of the camera's.</summary>
+    /// <summary>#551: the shovel borrows the wheel by holding the camera's own distance across its update, and writes
+    /// nothing else of the camera's. #580: the held distance is also put back right before the camera is placed from it,
+    /// only while a hold is on, and the hold ends with the update.</summary>
     [Fact]
     public void TheCameraHoldRestoresOnlyTheCamerasOwnDistance()
     {
         string input = SourceText("Excavation/ExcavationShovelInput.cs");
         Assert.Equal(1, Count(input, @"AccessTools\.FieldRefAccess<GameCamera,\s*float>\s*\(\s*""m_distance""\s*\)"));
         Assert.Equal(1, Count(input, @"distance\s*\(\s*__instance\s*\)\s*=\s*__state\s*;"));
+        Assert.Equal(1, Count(input, @"AccessTools\.Method\s*\(\s*typeof\s*\(\s*GameCamera\s*\)\s*,\s*""GetCameraPosition"""));
+        string position = MethodBody(input, @"private\s+static\s+void\s+BeforeCameraPosition\s*\(");
+        Assert.Matches(@"if\s*\(\s*distance\s*!=\s*null\s*&&\s*!float\.IsNaN\s*\(\s*_held\s*\)\s*\)\s*distance\s*\(\s*__instance\s*\)\s*=\s*_held\s*;", position);
+        Assert.Equal(1, Count(input, @"distance\s*\(\s*__instance\s*\)\s*=\s*_held\s*;"));
+        Assert.Matches(@"_held\s*=\s*__state\s*;\s*\}\s*$", MethodBody(input, @"private\s+static\s+void\s+BeforeCameraUpdate\s*\("));
+        Assert.Matches(@"_held\s*=\s*float\.NaN\s*;\s*\}\s*$", MethodBody(input, @"private\s+static\s+void\s+AfterCameraUpdate\s*\("));
         Assert.Equal(1, Count(input, @"if\s*\(\s*distance\s*!=\s*null\s*&&\s*HoldCamera\?\.Invoke\s*\(\s*\)\s*==\s*true\s*\)\s*__state\s*=\s*distance\s*\(\s*__instance\s*\)\s*;"));
         Assert.DoesNotMatch(@"GameCamera\s*\.\s*instance\s*\.\s*m_\w+\s*=", input);
         Assert.Equal(1, Count(SourceText("Plugin.cs"), @"ExcavationShovelInput\.HoldCamera\s*=\s*\(\s*\)\s*=>\s*_preview\?\.UsingWheel\s*==\s*true\s*;"));
