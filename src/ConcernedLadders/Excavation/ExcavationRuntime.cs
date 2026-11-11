@@ -676,8 +676,19 @@ internal sealed class ExcavationRuntime : IDisposable
         Collider collider = hit.collider;
         if (collider == null || collider.GetComponent<Heightmap>() == null)
         {
-            blocker = collider;
-            return ExcavationAim.Blocked;
+            // An earth block is dug into, sideways (#579): the hole goes where the block stands.
+            ZNetView? view = collider != null ? collider.GetComponentInParent<ZNetView>() : null;
+            if (view == null || !EarthFillPlacement.IsFill(view.gameObject))
+            {
+                blocker = collider;
+                return ExcavationAim.Blocked;
+            }
+
+            if (Vector3.Distance(player.m_eye.position, hit.point) > ExcavationLimits.Reach) return ExcavationAim.TooFar;
+            FillBlock block = EarthFillPlacement.Read(view.gameObject);
+            (x, z) = EarthFill.AimVertex(block);
+            groundY = block.Top;
+            return ExcavationAim.Ok;
         }
 
         if (Vector3.Distance(player.m_eye.position, hit.point) > ExcavationLimits.Reach) return ExcavationAim.TooFar;

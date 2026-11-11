@@ -502,17 +502,29 @@ public sealed class ExcavationSourceAuditTests
         Assert.True(refreshes.Count == 1 && refreshes[0].Path == "Excavation/ExcavationPreview.cs" && refreshes[0].N == 1, string.Join(", ", refreshes));
     }
 
-    /// <summary>The targeting rule is the game's build-placement ray: the first thing hit must be terrain, within the reach
-    /// of the player's eyes, triggers ignored; and the shovel does nothing from a ladder.</summary>
+    /// <summary>The targeting rule is the game's build-placement ray: the first thing hit must be terrain (or, since #579, an
+    /// earth block, pinned in <see cref="AnEarthBlockIsTheOnlyNonTerrainAim"/> with the reach rule), triggers ignored; and the
+    /// shovel does nothing from a ladder.</summary>
     [Theory]
     [InlineData(@"_aimMask\s*=\s*LayerMask\.GetMask\s*\(\s*""Default""\s*,\s*""static_solid""\s*,\s*""Default_small""\s*,\s*""piece""\s*,\s*""piece_nonsolid""\s*,\s*""terrain""\s*,\s*""vehicle""\s*\)\s*;")]
     [InlineData(@"Physics\.Raycast\s*\(\s*eye\.position\s*,\s*eye\.forward\s*,\s*out\s+RaycastHit\s+hit\s*,\s*ExcavationLimits\.AimRayLength\s*,\s*_aimMask\s*,\s*QueryTriggerInteraction\.Ignore\s*\)")]
     [InlineData(@"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\.GetComponent<Heightmap>\s*\(\s*\)\s*==\s*null\s*\)")]
-    [InlineData(@"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*ExcavationLimits\.Reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;")]
     [InlineData(@"private\s+static\s+bool\s+OnLadder\s*\(\s*\)\s*=>\s*LadderRuntime\.Current\?\.IsClimbing\s*==\s*true\s*;")]
     public void TheTargetingRuleIsWhereItMustBe(string pattern)
     {
         Assert.Equal(1, Count(SourceText("Excavation/ExcavationRuntime.cs"), pattern));
+    }
+
+    /// <summary>#579: aiming at an earth block digs into it. Only an earth block is let through; anything else that is not
+    /// terrain still blocks; the reach rule applies to it the same; and the aim is the block's own cell.</summary>
+    [Fact]
+    public void AnEarthBlockIsTheOnlyNonTerrainAim()
+    {
+        string aim = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), @"private\s+ExcavationAim\s+Aim\s*\(");
+        Assert.Matches(@"if\s*\(\s*view\s*==\s*null\s*\|\|\s*!EarthFillPlacement\.IsFill\s*\(\s*view\.gameObject\s*\)\s*\)\s*\{\s*blocker\s*=\s*collider\s*;\s*return\s+ExcavationAim\.Blocked\s*;\s*\}", aim);
+        Assert.Equal(2, Count(aim, @"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*ExcavationLimits\.Reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;"));
+        Assert.Matches(@"\(\s*x\s*,\s*z\s*\)\s*=\s*EarthFill\.AimVertex\s*\(\s*block\s*\)\s*;", aim);
+        Assert.Equal(1, Count(aim, @"return\s+ExcavationAim\.Blocked\s*;"));
     }
 
     /// <summary>The preview is a bounded, pooled, local visual: one root, a fixed number of line renderers created only

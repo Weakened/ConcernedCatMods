@@ -8,6 +8,7 @@ using TheConcernedCat.ConcernedLadders.Domain.Excavation;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Ladders;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace TheConcernedCat.ConcernedLadders.Pieces;
 
@@ -15,9 +16,11 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// sloping cells around a hole. Never in a build menu. A 1 m square column standing on its origin, one metre tall before
 /// it is scaled: the dig scales each block to its height, and the game saves and sends that scale with the block
 /// (<c>ZNetView.m_syncInitialScale</c>, read from the installed game). It has no health and no cost: the hammer removes it
-/// through the game's own path for a piece without WearNTear, which drops its (empty) resources and destroys it. It wears
-/// the vanilla mud pile's own material, which is mapped by world position and so does not stretch with the scale. Eight
-/// corner snap points let the game's own walls and floors snap to its faces.
+/// through the game's own path for a piece without WearNTear, which drops its (empty) resources and destroys it. Its body
+/// and its thin top are each drawn in a copy of the vanilla mud pile's material, whose shader maps the texture by world
+/// position and so does not stretch with the scale; once a world is loaded the copies take the terrain's own cliff rock
+/// and cleared dirt (#579, <see cref="ApplyTerrainLook"/>), so the sides read as a dug hole's and the top as flattened
+/// earth. Eight corner snap points let the game's own walls and floors snap to its faces.
 ///
 /// <para>Registered whenever excavation is on, whatever the earth fill setting says, so a player who does not fill still
 /// sees the blocks another player's dig placed. No RPC and no ZDO field of its own; no vanilla prefab is changed. Not
@@ -30,6 +33,10 @@ internal sealed class EarthFillPieceRegistration : IDisposable
     private readonly Action<string> _log;
     private bool _subscribed;
     private bool _attempted;
+    private Material? _side;
+    private Material? _top;
+    private bool _looked;
+    private float _nextLook;
 
     internal EarthFillPieceRegistration(Action<string> log) => _log = log;
 
@@ -53,6 +60,8 @@ internal sealed class EarthFillPieceRegistration : IDisposable
         try
         {
             Material material = FindMaterial();
+            _side = new Material(material) { name = "tcc_earth_fill_side" };
+            _top = new Material(material) { name = "tcc_earth_fill_top" };
             GameObject prefab = PrefabManager.Instance.CreateEmptyPrefab(EarthFill.Prefab, true);
             if (prefab == null || prefab.activeInHierarchy) throw new InvalidOperationException("Expected an inactive-parent empty prefab.");
             int layer = LayerMask.NameToLayer("piece");
@@ -79,9 +88,12 @@ internal sealed class EarthFillPieceRegistration : IDisposable
 
             var centre = new ClimbPoint(0f, 0.5f, 0f);
             var size = new ClimbPoint(1f, 1f, 1f);
+            float body = 1f - EarthFill.TopShare;
             var visual = new GameObject("earth") { layer = layer };
             visual.transform.SetParent(prefab.transform, false);
-            DoorPieceKit.VisualBox(visual.transform, "block", centre, size, material, UvRegion.Tiling, layer);
+            DoorPieceKit.VisualBox(visual.transform, "body", new ClimbPoint(0f, body / 2f, 0f), new ClimbPoint(1f, body, 1f), _side, UvRegion.Tiling, layer);
+            DoorPieceKit.VisualBox(visual.transform, "top", new ClimbPoint(0f, body + EarthFill.TopShare / 2f, 0f), new ClimbPoint(1f, EarthFill.TopShare, 1f),
+                _top, UvRegion.Tiling, layer);
             DoorPieceKit.ColliderBox(prefab.transform, "collision", centre, size, layer);
             for (int x = -1; x <= 1; x += 2)
             {
@@ -106,6 +118,66 @@ internal sealed class EarthFillPieceRegistration : IDisposable
             _log("Concerned Ladders earth fill NOT registered: " + SafeFailure.Brief(exception) +
                  ". Digs leave their sloping sides; placed earth blocks are deleted by the game if a world is loaded in this session.");
         }
+    }
+
+    /// <summary>Gives the blocks the terrain's own look (#579): copies the cliff and cleared-dirt slices of the live terrain
+    /// material's diffuse array (<see cref="EarthFill.TerrainCliffSlice"/>, <see cref="EarthFill.TerrainDirtSlice"/>) into
+    /// plain textures on the GPU, and the terrain's cliff normal map, into the blocks' two materials, which every block
+    /// shares. Asked every frame by the plugin, it looks at most every two seconds until a world with terrain is loaded,
+    /// and succeeds or gives up once; until then, or if the terrain does not match, the blocks keep the mud pile's
+    /// look.</summary>
+    internal void ApplyTerrainLook()
+    {
+        if (_looked || _side == null || _top == null) return;
+        Player player = Player.m_localPlayer;
+        if (player == null || Time.realtimeSinceStartup < _nextLook) return;
+        _nextLook = Time.realtimeSinceStartup + 2f;
+        try
+        {
+            Heightmap? ground = Heightmap.FindHeightmap(player.transform.position);
+            Material? terrain = ground != null ? ground.m_material : null;
+            if (terrain == null) return;
+            _looked = true;
+            if (SystemInfo.copyTextureSupport == UnityEngine.Rendering.CopyTextureSupport.None)
+                throw new InvalidOperationException("this GPU cannot copy textures");
+            if (!(terrain.GetTexture("_DiffuseArrayTex") is Texture2DArray array) || array.depth <= Math.Max(EarthFill.TerrainCliffSlice, EarthFill.TerrainDirtSlice))
+                throw new InvalidOperationException("the terrain has no diffuse array with the expected slices");
+            float scale = terrain.HasProperty("_UVScale") ? terrain.GetFloat("_UVScale") : 0.5f;
+            Dress(_side, Slice(array, EarthFill.TerrainCliffSlice, "tcc_earth_fill_cliff"), terrain.GetTexture("_CliffNormal"), scale);
+            Dress(_top, Slice(array, EarthFill.TerrainDirtSlice, "tcc_earth_fill_dirt"), null, scale);
+            _log("Earth fill wears the terrain's cliff and dirt (slices " + EarthFill.TerrainCliffSlice + " and " + EarthFill.TerrainDirtSlice + " of " +
+                 array.name + ", " + array.width + " px).");
+        }
+        catch (Exception exception)
+        {
+            // Once only: a fault here never reaches the plugin's frame, and the blocks keep the look they have.
+            _looked = true;
+            _log("Earth fill keeps the mud pile's look: " + SafeFailure.Brief(exception) + ".");
+        }
+    }
+
+    private static Texture2D Slice(Texture2DArray array, int slice, string name)
+    {
+        int mips = Math.Max(1, array.mipmapCount);
+        var texture = new Texture2D(array.width, array.height, array.graphicsFormat, mips, mips > 1 ? TextureCreationFlags.MipChain : TextureCreationFlags.None)
+        {
+            name = name,
+            wrapMode = TextureWrapMode.Repeat,
+            filterMode = array.filterMode,
+            anisoLevel = array.anisoLevel,
+        };
+        for (int mip = 0; mip < mips; mip++) Graphics.CopyTexture(array, slice, mip, texture, 0, mip);
+        return texture;
+    }
+
+    private static void Dress(Material material, Texture2D diffuse, Texture? normal, float scale)
+    {
+        material.mainTexture = diffuse;
+        material.mainTextureScale = Vector2.one;
+        material.color = Color.white;
+        if (material.HasProperty("_UVScale")) material.SetFloat("_UVScale", scale);
+        if (normal != null && material.HasProperty("_BumpMap")) material.SetTexture("_BumpMap", normal);
+        if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.1f);
     }
 
     private static Material FindMaterial()

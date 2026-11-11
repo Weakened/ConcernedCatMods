@@ -140,6 +140,7 @@ public sealed class Plugin : BaseUnityPlugin
         _runtime.Enabled = _enabled.Value && _pieces?.IsReady == true;
         _runtime.Update(Time.deltaTime);
         _excavation?.Update();
+        _earthFill?.ApplyTerrainLook();
         _preview?.Update();
     }
 

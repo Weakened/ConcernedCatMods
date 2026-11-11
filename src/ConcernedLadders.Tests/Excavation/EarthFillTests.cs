@@ -120,6 +120,43 @@ public sealed class EarthFillTests
         Assert.False(EarthFill.TakesOut(hole, floor, new FillBlock(new FillCell(-1, 0), floor + EarthFill.MatchTolerance * 0.5f, Ground)));
     }
 
+    [Theory]
+    [InlineData(-1, 0, 2, -2, 0, 0, 2)] // the west side block: a 2x2 flush west
+    [InlineData(2, 1, 2, 2, 0, 4, 2)] // the east side block: a 2x2 flush east, in the same row
+    [InlineData(0, 2, 2, 0, 2, 2, 4)] // the north side block: flush north
+    [InlineData(0, -1, 2, 0, -2, 2, 0)] // the south side block: flush south
+    [InlineData(2, 2, 2, 2, 2, 4, 4)] // a corner block: diagonal
+    [InlineData(-1, 1, 4, -4, 0, 0, 4)] // a 4x4 aimed at the west side: flush west, lined up with the hole's south edge
+    [InlineData(-1, 1, 1, -1, 1, 0, 2)] // a 1x1 takes exactly the block's own cell
+    public void AimingAtABlockDigsSidewaysFlushAgainstItsHoleAndTakesTheBlockOut(int cellX, int cellZ, int side, int minX, int minZ, int maxX, int maxZ)
+    {
+        // #579, owner: "we should dig sideways as well, imagine minecraft". The hole the block belongs to: x 0..2, z 0..2.
+        DigFootprint hole = DigFootprint.FromCorners(0, 0, 2, 2, 2);
+        var block = new FillBlock(new FillCell(cellX, cellZ), Ground - 2f, Ground);
+        (int x, int z) = EarthFill.AimVertex(block);
+        DigFootprint next = DigSnap.Place(x, z, new DigSize(side, 2), new List<DigFootprint> { hole });
+        Assert.Equal((minX, minZ, maxX, maxZ), (next.MinX, next.MinZ, next.MaxX, next.MaxZ));
+        // The new hole never overlaps the old floor, and covers the block's cell, so the dig takes the block out.
+        Assert.False(next.MinX < hole.MaxX && next.MaxX > hole.MinX && next.MinZ < hole.MaxZ && next.MaxZ > hole.MinZ);
+        Assert.True(EarthFill.Inside(next, block.Cell));
+        Assert.True(EarthFill.TakesOut(next, Ground - 2f, block));
+    }
+
+    [Fact]
+    public void TheBlockWearsTheTerrainsCliffAndDirtWithAThinTop()
+    {
+        // From the decoded contact sheet of terrain_d_array (cl-ladders-devtools/out/terrain/terrain_d_array_sheet_579.png).
+        Assert.Equal(4, EarthFill.TerrainCliffSlice);
+        Assert.Equal(3, EarthFill.TerrainDirtSlice);
+        Assert.InRange(EarthFill.TopShare, 0.001f, 0.05f);
+        string registration = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Pieces", "EarthFillPieceRegistration.cs")),
+            @"/\*.*?\*/|//[^\n]*", " ", RegexOptions.Singleline);
+        // The look is copied on the GPU from the live terrain's own material, never written back to it.
+        Assert.Matches(new Regex(@"Graphics\.CopyTexture\s*\(\s*array\s*,\s*slice\s*,\s*mip\s*,\s*texture\s*,\s*0\s*,\s*mip\s*\)"), registration);
+        Assert.DoesNotMatch(new Regex(@"terrain\.Set\w*\s*\(|terrain\.mainTexture\s*=|m_material\s*="), registration);
+        Assert.Matches(new Regex(@"_earthFill\?\.ApplyTerrainLook\s*\(\s*\)\s*;"), File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Plugin.cs")));
+    }
+
     [Fact]
     public void ABlockIsFoundAgainByItsCellFloorAndTop()
     {
