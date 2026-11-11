@@ -31,15 +31,20 @@ public sealed class IronShovelTests
     }
 
     [Fact]
-    public void TheLargeModeCostsMoreThanTheSmallOne()
+    public void TheCostFollowsTheGroundRemovedAndTheOldSizesCostAboutWhatTheyDid()
     {
-        ExcavationCost small = ExcavationCost.For(ExcavationMode.Small);
-        ExcavationCost large = ExcavationCost.For(ExcavationMode.Large);
-        Assert.Equal(20f, small.Stamina);
-        Assert.Equal(4f, small.Durability);
-        Assert.Equal(40f, large.Stamina);
-        Assert.Equal(16f, large.Durability);
-        Assert.Throws<ArgumentOutOfRangeException>(() => ExcavationCost.For((ExcavationMode)7));
+        // About 18 m3 for the old 2x2x2 m hole (9 vertices, 2 m each) and 100 m3 for the old 4x4x4 m one (25 vertices, 4 m).
+        Assert.Equal(15.4f, DigCost.Stamina(18f), 3);
+        Assert.Equal(2.88f, DigCost.Durability(18f), 3);
+        Assert.Equal(40f, DigCost.Stamina(100f), 3);
+        Assert.Equal(16f, DigCost.Durability(100f), 3);
+        // Stamina is capped so any dig can be paid by a fed character; durability is not, so a big dig wears the shovel.
+        Assert.Equal(DigCost.MaximumStamina, DigCost.Stamina(567f), 3);
+        Assert.Equal(90.72f, DigCost.Durability(567f), 2);
+        Assert.True(DigCost.Stamina(5f) < DigCost.Stamina(50f));
+        // Nothing removed, or a volume that is not a number, is never a cost: the gate refuses it.
+        Assert.True(float.IsNaN(DigCost.Stamina(0f)));
+        Assert.True(float.IsNaN(DigCost.Durability(float.NaN)));
     }
 
     private static ExcavationCommitRefusal Pay(bool equipped = true, bool ready = true, bool usesDurability = true,
@@ -77,13 +82,13 @@ public sealed class IronShovelTests
     [Fact]
     public void TheWorldModifiersScaleTheCostOrRefuse()
     {
-        Assert.Equal(4f, IronShovel.DurabilityCost(ExcavationMode.Small, 1f));
-        Assert.Equal(8f, IronShovel.DurabilityCost(ExcavationMode.Large, 0.5f));
-        Assert.Equal(0f, IronShovel.DurabilityCost(ExcavationMode.Small, 0f));
-        Assert.True(float.IsNaN(IronShovel.DurabilityCost(ExcavationMode.Small, -1f)));
-        Assert.True(float.IsNaN(IronShovel.DurabilityCost(ExcavationMode.Small, float.NaN)));
-        Assert.Equal(60f, IronShovel.StaminaNeeded(ExcavationMode.Large, 1.5f));
-        Assert.True(float.IsNaN(IronShovel.StaminaNeeded(ExcavationMode.Small, float.PositiveInfinity)));
+        Assert.Equal(16f, DigCost.DurabilityCost(100f, 1f), 3);
+        Assert.Equal(8f, DigCost.DurabilityCost(100f, 0.5f), 3);
+        Assert.Equal(0f, DigCost.DurabilityCost(100f, 0f), 3);
+        Assert.True(float.IsNaN(DigCost.DurabilityCost(100f, -1f)));
+        Assert.True(float.IsNaN(DigCost.DurabilityCost(100f, float.NaN)));
+        Assert.Equal(60f, DigCost.StaminaNeeded(100f, 1.5f), 3);
+        Assert.True(float.IsNaN(DigCost.StaminaNeeded(100f, float.PositiveInfinity)));
     }
 
     [Fact]
@@ -97,30 +102,17 @@ public sealed class IronShovelTests
     }
 
     [Fact]
-    public void TheDescriptionStatesTheNumbersTheGateCharges()
+    public void TheDescriptionStatesTheFlowAndTheNumbersTheGateUses()
     {
         string text = IronShovel.Description();
-        Assert.Contains("2x2x2 m (20 stamina, 4 durability)", text);
-        Assert.Contains("4x4x4 m (40 stamina, 16 durability)", text);
         Assert.Contains("within 5 m", text);
-        Assert.Contains("Attack: dig the size shown", text);
-        Assert.Contains("Secondary attack: switch between", text);
-        Assert.Contains("outline shows", text);
-        Assert.Contains("Charged once", text);
-        string cost = ExcavationReport.Cost(ExcavationMode.Large);
-        Assert.Contains("40 stamina and 16 durability", cost);
-    }
-
-    [Fact]
-    public void TheCostRefusalsSayWhatToDoAndThatNothingWasCharged()
-    {
-        ExcavationPlan plan = ExcavationPlanner.Plan(new VanillaTerrainModel((_, _) => 50f).Sample(ExcavationMode.Large, 0, 0), 0, 0, null);
-        string worn = ExcavationReport.Commit(ExcavationCommitRefusal.ShovelWorn, ExcavationReadFault.None, plan, null);
-        Assert.Contains("16 durability", worn);
-        Assert.Contains("forge", worn);
-        Assert.Contains("Nothing is changed or charged", worn);
-        string tired = ExcavationReport.Commit(ExcavationCommitRefusal.NotEnoughStamina, ExcavationReadFault.None, plan, null);
-        Assert.Contains("40 stamina", tired);
-        Assert.Contains("Nothing is changed or charged", tired);
+        Assert.Contains("Attack sets one corner, then the opposite one (2 to 8 m a side)", text);
+        Assert.Contains("scroll sets the depth (1 to 7 m)", text);
+        Assert.Contains("press it twice to fill your last hole back in", text);
+        Assert.Contains("Costs 10 stamina", text);
+        Assert.Contains("at most 60", text);
+        Assert.Contains("Filling a hole back in is free", text);
+        Assert.Equal("Set corner / dig", IronShovel.DigHintText);
+        Assert.Equal("Back / fill in (press twice)", IronShovel.SizeHintText);
     }
 }

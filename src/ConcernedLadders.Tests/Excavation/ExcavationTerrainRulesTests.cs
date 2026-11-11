@@ -110,38 +110,38 @@ public sealed class ExcavationTerrainRulesTests
         // Base 50 everywhere, an earlier tool lowered the whole area by 6 m (level delta -6): the surface is 44.
         var world = new VanillaTerrainModel((_, _) => 50f);
         for (int z = -4; z <= 4; z++) for (int x = -4; x <= 4; x++) world.Edit(x, z, -6f);
-        ExcavationSamples read = ReadLikeTheAdapter(world, ExcavationMode.Large, 0, 0);
-        ExcavationPlan plan = ExcavationPlanner.Plan(read, 0, 0, null);
+        DigFootprint footprint = DigFootprint.FromCorners(-2, -2, 2, 2, 4);
+        DigSamples read = ReadLikeTheAdapter(world, footprint);
+        DigPlan plan = DigPlanner.Plan(read, footprint, null);
         Assert.Equal(ExcavationStatus.Refused, plan.Status);
-        Assert.Equal(ExcavationRefusal.DigLimit, plan.Refusal);
+        Assert.Equal(DigRefusal.DigLimit, plan.Refusal);
 
         // Reading the current height as the base (the mistake) lets the plan through, and the engine then stops 2 m
         // short of the floor it promised: a partial floor.
-        ExcavationSamples naive = world.Sample(ExcavationMode.Large, 0, 0);
-        int reach = naive.Reach;
-        for (int dz = -reach; dz <= reach; dz++) for (int dx = -reach; dx <= reach; dx++) naive.Set(dx, dz, naive.Height(dx, dz), naive.Height(dx, dz));
-        ExcavationPlan wrong = ExcavationPlanner.Plan(naive, 0, 0, null);
+        DigSamples naive = world.Sample(footprint);
+        for (int z = -3; z <= 3; z++) for (int x = -3; x <= 3; x++) naive.Set(x, z, naive.Height(x, z), naive.Height(x, z));
+        DigPlan wrong = DigPlanner.Plan(naive, footprint, null);
         Assert.Equal(ExcavationStatus.Ready, wrong.Status);
-        world.Apply(wrong);
+        world.Apply(DigFlightKind.Dig, new DigRecord(footprint, DigPlanner.Lowered(wrong, naive)));
         world.Rebuild();
         Assert.Equal(42f, world.Displayed(0, 0), 3);
         Assert.Equal(40f, wrong.Bottom, 3);
     }
 
     /// <summary>What the adapter writes: the displayed height, and the limit base from the level delta the model keeps.</summary>
-    private static ExcavationSamples ReadLikeTheAdapter(VanillaTerrainModel world, ExcavationMode mode, int cx, int cz)
+    private static DigSamples ReadLikeTheAdapter(VanillaTerrainModel world, DigFootprint footprint)
     {
-        var samples = new ExcavationSamples(mode);
-        int reach = samples.Reach;
-        for (int dz = -reach; dz <= reach; dz++)
+        var samples = new DigSamples();
+        samples.Begin(footprint);
+        for (int z = footprint.MinZ - 1; z <= footprint.MaxZ + 1; z++)
         {
-            for (int dx = -reach; dx <= reach; dx++)
+            for (int x = footprint.MinX - 1; x <= footprint.MaxX + 1; x++)
             {
-                float height = world.Displayed(cx + dx, cz + dz);
-                float level = height - world.Base(cx + dx, cz + dz);
+                float height = world.Displayed(x, z);
+                float level = height - world.Base(x, z);
                 var vertex = new ExcavationVertexRead();
                 vertex.Add(height, ExcavationTerrainRules.LimitBase(height, level, 0f));
-                vertex.WriteTo(samples, dx, dz);
+                vertex.WriteTo(samples, x, z);
             }
         }
         return samples;
@@ -164,7 +164,8 @@ public sealed class ExcavationTerrainRulesTests
     [Fact]
     public void AnEdgeVertexMissingOneOfItsTilesIsUnloadedNotASeam()
     {
-        var samples = new ExcavationSamples(ExcavationMode.Small);
+        var samples = new DigSamples();
+        samples.Begin(DigFootprint.FromCorners(0, 0, 2, 2, 2));
         var vertex = new ExcavationVertexRead();
         vertex.Add(48f, 50f);
         vertex.WriteTo(samples, 1, 0, expectedCopies: 2);
@@ -191,7 +192,8 @@ public sealed class ExcavationTerrainRulesTests
     [Fact]
     public void AVertexNoTileHoldsIsUnloaded()
     {
-        var samples = new ExcavationSamples(ExcavationMode.Small);
+        var samples = new DigSamples();
+        samples.Begin(DigFootprint.FromCorners(0, 0, 2, 2, 2));
         samples.Set(0, 0, 1f, 1f);
         new ExcavationVertexRead().WriteTo(samples, 0, 0);
         Assert.False(samples.IsLoaded(0, 0));
@@ -220,11 +222,13 @@ public sealed class ExcavationTerrainRulesTests
         Assert.True(float.IsNaN(vertex.Height));
         Assert.True(float.IsNaN(vertex.LimitBase));
 
-        var samples = new ExcavationSamples(ExcavationMode.Small);
-        for (int dz = -2; dz <= 2; dz++) for (int dx = -2; dx <= 2; dx++) samples.Set(dx, dz, 50f, 50f);
+        DigFootprint footprint = DigFootprint.FromCorners(-1, -1, 1, 1, 2);
+        var samples = new DigSamples();
+        samples.Begin(footprint);
+        for (int z = -2; z <= 2; z++) for (int x = -2; x <= 2; x++) samples.Set(x, z, 50f, 50f);
         vertex.WriteTo(samples, 1, 0);
-        ExcavationPlan plan = ExcavationPlanner.Plan(samples, 0, 0, null);
+        DigPlan plan = DigPlanner.Plan(samples, footprint, null);
         Assert.Equal(ExcavationStatus.Refused, plan.Status);
-        Assert.Equal(ExcavationRefusal.NotFinite, plan.Refusal);
+        Assert.Equal(DigRefusal.NotFinite, plan.Refusal);
     }
 }

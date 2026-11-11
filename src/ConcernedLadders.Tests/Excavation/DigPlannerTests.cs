@@ -243,14 +243,27 @@ public sealed class DigPlannerTests
         }
 
         foreach (DigRefusal refusal in Enum.GetValues(typeof(DigRefusal)))
-            lines.Add(DigText.Plan(new DigPlan(DigFootprint.FromCorners(0, 0, 2, 2, 2), ExcavationStatus.Refused, refusal, 1, float.NaN, 0, 0, 0f, float.NaN, 0f, 0, 1, 0, 1))!);
-        lines.Add(DigText.Plan(new DigPlan(DigFootprint.FromCorners(0, 0, 2, 2, 2), ExcavationStatus.NothingToDig, DigRefusal.None, 0, Ground, 0, 0, 0f, 2f, 0f, 0, 1, 0, 1))!);
-        foreach (DigWorldRefusal refusal in Enum.GetValues(typeof(DigWorldRefusal)))
+            lines.Add(DigText.Plan(new DigPlan(DigFootprint.FromCorners(0, 0, 2, 2, 2), ExcavationStatus.Refused, refusal, 1, float.NaN, 0, 0f, 0, 0f, float.NaN, 0f, 0, 1, 0, 1))!);
+        lines.Add(DigText.Plan(new DigPlan(DigFootprint.FromCorners(0, 0, 2, 2, 2), ExcavationStatus.NothingToDig, DigRefusal.None, 0, Ground, 0, 0f, 0, 0f, 2f, 0f, 0, 1, 0, 1))!);
+        foreach (ExcavationCommitRefusal refusal in Enum.GetValues(typeof(ExcavationCommitRefusal)))
         {
-            if (refusal == DigWorldRefusal.None) continue;
-            lines.Add(DigText.World(refusal, new string('W', 200)));
-            lines.Add(DigText.World(refusal, null));
+            if (refusal == ExcavationCommitRefusal.None) continue;
+            foreach (ExcavationReadFault fault in Enum.GetValues(typeof(ExcavationReadFault)))
+            {
+                lines.Add(DigText.Refusal(refusal, fault, default, new string('W', 200)));
+                lines.Add(DigText.Refusal(refusal, fault, default, null));
+            }
         }
+
+        foreach (ExcavationAim aim in Enum.GetValues(typeof(ExcavationAim))) lines.Add(DigText.Aim(aim, new string('R', 90)));
+        foreach (ExcavationOutcome outcome in Enum.GetValues(typeof(ExcavationOutcome)))
+        {
+            if (outcome == ExcavationOutcome.Waiting || outcome == ExcavationOutcome.Abandoned) continue;
+            foreach (DigFlightKind kind in Enum.GetValues(typeof(DigFlightKind)))
+                lines.Add(DigText.Outcome(outcome, kind, DigFootprint.FromCorners(0, 0, 8, 8, DigFootprint.MaximumDepth)));
+        }
+
+        lines.Add(DigText.UndoArmed);
 
         foreach (UndoRefusal refusal in Enum.GetValues(typeof(UndoRefusal))) lines.Add(DigText.Undo(refusal));
         Assert.All(lines, line =>

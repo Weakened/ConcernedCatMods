@@ -43,34 +43,37 @@ version and the same values for these settings.
 - Iron Shovel and measured basement excavation (CL-006, #487), behind
   `Excavation` / `Enabled` (off by default). Adds the Iron Shovel, crafted at
   the Forge from 10 Iron and 4 Wood once you have found Iron (Iron Scrap alone
-  does not unlock it) and repaired there. It digs one square basement hole per
-  press, in two sizes: 2x2x2 m (a flat 2 x 2 m floor, 2 m deep) and 4x4x4 m (a
-  flat 4 x 4 m floor, 4 m deep). The depth is measured from the highest ground
-  at the hole's edge, so the floor is level on a slope. The walls cannot be
-  vertical: each side slopes over one more metre, and that whole border is
-  shown.
-  - While the shovel is held, an outline drawn through the ground shows the
-    floor, the depth at each corner, the sloping border and, if the floor
-    would sit below water, the water line. It is green when a press would dig,
-    amber when it would do nothing, and red when it would be refused. Text
-    under the crosshair gives the size, what a press would do and its cost
-    (or why not, and what to do about it), and the controls from your
-    current key bindings.
-  - Attack digs the size shown, where it is shown; Secondary Attack switches
-    the size and never digs. Aiming, switching, menus, the inventory, chat and
-    the console never dig. The ground you aim at must be within 5 m and be the
-    first thing you see, so the shovel never digs through a wall, a floor or a
-    rock; to dig under a floor, look through an opening in it. The square
-    follows the world grid and does not rotate. No digging from a ladder.
-  - A dig costs 20 stamina and 4 durability (2x2x2 m) or 40 stamina and 16
-    durability (4x4x4 m), before the world's stamina and durability
-    settings, charged once and only when the dig is placed. A
-    refused dig, a hole that is already dug, or a cancelled press costs
-    nothing. It is refused inside a ward that does not grant you access, in
-    no-build areas, below the terrain's dig limit, and over rocks, trees, ore,
-    plants, dropped items, carts or ships, which it never removes. Your own
-    building pieces in the square are not protected: their support is the
-    game's, so a piece standing on dug ground can fall.
+  does not unlock it) and repaired there. You size each hole yourself (#551):
+  Attack sets one corner, then the opposite corner (2 to 8 m a side, on the
+  world grid); the mouse wheel sets the depth (1 to 7 m); Attack digs it. The
+  floor is level, measured from the highest ground at the hole's edge, so it
+  stays level on a slope. Ground that is already lower, such as an earlier
+  hole, is left as it is, so a new hole beside or over an old one joins it.
+  The walls cannot be vertical: each side slopes over one more metre, so a
+  wall built on the floor's edge hides the slope.
+  - While the shovel is held, a flat outline shows the hole's top edge, the
+    floor and the walls between them (and the water line if the floor would
+    flood). It is green when Attack would dig, amber when there is nothing to
+    dig, and red when it would be refused. One short line under the crosshair
+    says what to do next, or the one reason it cannot.
+  - Secondary Attack steps back one stage. With nothing to step back to,
+    pressing it twice within 3 seconds fills your last hole back in, exactly
+    as the ground was, newest first. That is free and refunds nothing, and it
+    is refused if the ground has changed since, or anything (a building piece
+    included) now stands in the hole. Up to 10 holes can be filled back in,
+    until you leave the world.
+  - The ground you aim at must be within 5 m and be the first thing you see,
+    so the shovel never digs through a wall, a floor or a rock. No digging
+    from a ladder. Aiming, menus, the inventory, chat and the console never
+    dig.
+  - A dig costs stamina and durability by the ground it removes: 10 stamina
+    plus 0.3 per cubic metre (at most 60) and 0.16 durability per cubic metre,
+    before the world's stamina and durability settings, charged once and only
+    when the dig is placed. It is refused inside a ward that does not grant
+    you access, in no-build areas, below the terrain's dig limit, and over
+    rocks, trees, ore, plants, dropped items, carts or ships, which it never
+    removes. Your own building pieces beside a hole are not protected: their
+    support is the game's, so a piece standing on dug ground can fall.
   - The shovel has its own model, a wooden shaft and T-grip with an iron
     blade (#550). It has no attack and plays no animation yet. It raises no
     skill. A read-only `cl_excavate`

@@ -10,7 +10,7 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// dig happens, because the issue forbids excavation driven by chat, menus or other UI, and the console is UI. The
 /// slice-2 <c>dig</c> verb is gone (a lead default pending owner confirmation, EXCAVATION.md 7.4).
 ///
-/// <c>plan small|large</c> only reads and describes, including what the shovel would be charged. <c>status</c> says
+/// <c>plan</c> only reads and describes the rectangle the held shovel shows now, including what it would be charged. <c>status</c> says
 /// whether the probe, the registration and the switch allow anything, and whether a dig is still unconfirmed.
 ///
 /// Registered through Jötunn: Jötunn 2.30.2's CommandManager reflects for the 13-parameter
@@ -29,7 +29,7 @@ internal sealed class ExcavationCommand : ConsoleCommand
 
     public override string Name => "cl_excavate";
 
-    public override string Help => "Concerned Ladders excavation (experimental, read-only; dig with the Iron Shovel): plan small|large | status";
+    public override string Help => "Concerned Ladders excavation (experimental, read-only; dig with the Iron Shovel): plan | status";
 
     public override void Run(string[] args)
     {
@@ -56,23 +56,8 @@ internal sealed class ExcavationCommand : ConsoleCommand
         ExcavationRuntime? runtime = _current();
         if (runtime == null) return "Excavation is unavailable this session (it stopped during start-up; see the log). Nothing is changed.";
         if (verb == "status") return runtime.Status();
-        if (verb == "dig") return "The console cannot dig. Equip the Iron Shovel, look at the ground until its outline shows, and use its attack; its secondary attack switches the size.";
+        if (verb == "dig") return "The console cannot dig. Equip the Iron Shovel: attack sets the corners, the wheel the depth, and attack digs.";
         if (verb != "plan") return Help;
-        if (args.Length < 2 || !TryMode(args[1], out ExcavationMode mode))
-        {
-            return "Say which size: " + verb + " small (" + ExcavationReport.ModeName(ExcavationMode.Small) + ") or " + verb +
-                   " large (" + ExcavationReport.ModeName(ExcavationMode.Large) + ").";
-        }
-        return runtime.PlanAtAim(mode);
-    }
-
-    private static bool TryMode(string word, out ExcavationMode mode)
-    {
-        switch (word.ToLowerInvariant())
-        {
-            case "small": case "2": mode = ExcavationMode.Small; return true;
-            case "large": case "4": mode = ExcavationMode.Large; return true;
-            default: mode = ExcavationMode.Small; return false;
-        }
+        return runtime.PlanAtAim();
     }
 }

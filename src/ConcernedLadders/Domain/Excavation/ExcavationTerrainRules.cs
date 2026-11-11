@@ -138,10 +138,10 @@ internal struct ExcavationVertexRead
     /// <summary>Writes this vertex into the planner's grid: unloaded when fewer tiles held it than
     /// <paramref name="expectedCopies"/>, otherwise its agreed values (NaN, which the planner refuses, when the copies
     /// disagree).</summary>
-    internal void WriteTo(ExcavationSamples samples, int dx, int dz, int expectedCopies = 1)
+    internal void WriteTo(DigSamples samples, int x, int z, int expectedCopies = 1)
     {
         if (samples == null) throw new ArgumentNullException(nameof(samples));
-        if (_copies == 0 || _copies < expectedCopies) { samples.SetUnloaded(dx, dz); return; }
-        samples.Set(dx, dz, Height, LimitBase);
+        if (_copies == 0 || _copies < expectedCopies) { samples.SetUnloaded(x, z); return; }
+        samples.Set(x, z, Height, LimitBase);
     }
 }

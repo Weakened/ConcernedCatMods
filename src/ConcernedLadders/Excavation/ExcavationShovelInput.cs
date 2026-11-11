@@ -6,11 +6,11 @@ using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedLadders.Excavation;
 
-/// <summary>The Iron Shovel's deliberate action (#487 slices 3 and 4): while the shovel is the local player's equipped
-/// weapon, one press of the game's own Attack binding (keyboard or controller) asks
-/// <see cref="ExcavationRuntime.DigWithShovel"/> to dig the size the preview shows, where it shows it; one press of
-/// Secondary Attack switches the previewed size between 2x2x2 m and 4x4x4 m and never digs. Both in the same step ask
-/// for nothing. A press while any menu, the inventory, the map, chat, the console or the build menu is open is ignored
+/// <summary>The Iron Shovel's deliberate actions (#487 slices 3 and 4; the dig session since #551): while the shovel is
+/// the local player's equipped weapon, one press of the game's own Attack binding (keyboard or controller) asks
+/// <see cref="ExcavationRuntime.Primary"/> to set a corner or dig what the preview shows; one press of Secondary Attack asks
+/// <see cref="ExcavationRuntime.Secondary"/> to step back, or to arm and then confirm an undo of the last dig. Both in the
+/// same step ask for nothing. A press while any menu, the inventory, the map, chat, the console or the build menu is open is ignored
 /// here too, on top of the game withholding it.
 ///
 /// Read from the decompiled installed game (1.0.21): <c>PlayerController.FixedUpdate</c> turns the Attack and
@@ -34,6 +34,11 @@ internal sealed class ExcavationShovelInput : IDisposable
     private static ExcavationRuntime? _runtime;
     private static Action<string>? _log;
     private static bool _faultLogged;
+    private static AccessTools.FieldRef<GameCamera, float>? _cameraDistance;
+
+    /// <summary>True while the wheel sets the dig's depth (#551): the camera's distance is then held, so the same turn of the
+    /// wheel does not also zoom. Set by the plugin from the preview.</summary>
+    internal static Func<bool>? HoldCamera { get; set; }
     private readonly Action<string> _startupLog;
     private Harmony? _harmony;
 
@@ -56,6 +61,7 @@ internal sealed class ExcavationShovelInput : IDisposable
             _faultLogged = false;
             _harmony = new Harmony(harmonyId);
             _harmony.Patch(input, prefix: new HarmonyMethod(typeof(ExcavationShovelInput), nameof(BeforeAttackInput)));
+            InstallCameraHold();
             return true;
         }
         catch (Exception exception)
@@ -64,6 +70,54 @@ internal sealed class ExcavationShovelInput : IDisposable
             Dispose();
             return false;
         }
+    }
+
+    /// <summary>The depth stage borrows the wheel (#551). GameCamera.UpdateCamera subtracts the wheel from its private
+    /// <c>m_distance</c> and clamps it (read from the installed game, 1.0.21); holding that one field across the update while
+    /// <see cref="HoldCamera"/> says so leaves every other camera behaviour alone. If the game does not match, depth still
+    /// works and the camera also zooms; the log says so.</summary>
+    private void InstallCameraHold()
+    {
+        try
+        {
+            MethodInfo? update = AccessTools.Method(typeof(GameCamera), "UpdateCamera", new[] { typeof(float) });
+            FieldInfo? distance = AccessTools.Field(typeof(GameCamera), "m_distance");
+            if (update == null || distance == null || distance.FieldType != typeof(float) || distance.IsStatic)
+            {
+                _startupLog("Iron Shovel camera hold unavailable: the installed game's camera did not match. Setting the depth also zooms.");
+                return;
+            }
+
+            _cameraDistance = AccessTools.FieldRefAccess<GameCamera, float>("m_distance");
+            _harmony!.Patch(update, prefix: new HarmonyMethod(typeof(ExcavationShovelInput), nameof(BeforeCameraUpdate)),
+                postfix: new HarmonyMethod(typeof(ExcavationShovelInput), nameof(AfterCameraUpdate)));
+        }
+        catch (Exception exception)
+        {
+            _cameraDistance = null;
+            _startupLog("Iron Shovel camera hold unavailable (" + SafeFailure.Brief(exception) + "). Setting the depth also zooms.");
+        }
+    }
+
+    private static void BeforeCameraUpdate(GameCamera __instance, out float __state)
+    {
+        __state = float.NaN;
+        try
+        {
+            AccessTools.FieldRef<GameCamera, float>? distance = _cameraDistance;
+            if (distance != null && HoldCamera?.Invoke() == true) __state = distance(__instance);
+        }
+        catch { __state = float.NaN; }
+    }
+
+    private static void AfterCameraUpdate(GameCamera __instance, float __state)
+    {
+        try
+        {
+            AccessTools.FieldRef<GameCamera, float>? distance = _cameraDistance;
+            if (distance != null && !float.IsNaN(__state)) distance(__instance) = __state;
+        }
+        catch { /* The camera keeps whatever it chose. */ }
     }
 
     private static bool IsBool(string name)
@@ -87,12 +141,8 @@ internal sealed class ExcavationShovelInput : IDisposable
             if (weapon == null || weapon.m_shared == null || !IronShovel.IsShovelName(weapon.m_shared.m_name)) return;
             ExcavationPress press = ExcavationPreviewRules.PressFor(attack(__instance), secondary(__instance));
             if (press == ExcavationPress.None || ExcavationPreview.UiOpen()) return;
-            if (press == ExcavationPress.SwitchSize)
-            {
-                runtime.SwitchMode();
-                return;
-            }
-            Show(runtime.DigWithShovel(__instance, weapon));
+            string line = press == ExcavationPress.Primary ? runtime.Primary(__instance, weapon) : runtime.Secondary(__instance, weapon);
+            Show(line);
         }
         catch (Exception exception)
         {
@@ -102,9 +152,11 @@ internal sealed class ExcavationShovelInput : IDisposable
         }
     }
 
-    /// <summary>Shows a result to the player the way the ladders do (the HUD's top-left message), Unity null-safe.</summary>
+    /// <summary>Shows a result to the player the way the ladders do (the HUD's top-left message, one short line), Unity
+    /// null-safe. An empty result shows nothing: the preview's own line already says what happens next.</summary>
     internal static void Show(string text)
     {
+        if (string.IsNullOrEmpty(text)) return;
         try
         {
             MessageHud hud = MessageHud.instance;
@@ -120,6 +172,8 @@ internal sealed class ExcavationShovelInput : IDisposable
         _runtime = null;
         _attack = null;
         _secondaryAttack = null;
+        _cameraDistance = null;
+        HoldCamera = null;
         _log = null;
     }
 }

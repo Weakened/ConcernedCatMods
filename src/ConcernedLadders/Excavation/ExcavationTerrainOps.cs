@@ -6,8 +6,11 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Excavation;
 
-/// <summary>The two excavation terrain operations (#487 slice 2): one native square "lower only" TerrainOp per mode,
-/// with a fixed radius and delta (EXCAVATION.md claims 5 and 7). Only the position varies per dig.
+/// <summary>The two excavation terrain operations (#551): native square TerrainOps of radius 0, each of which changes
+/// exactly one lattice vertex (TerrainComp.RaiseTerrain covers 2*ceil(r)+1 vertices on a side). One lowers only, to the
+/// op's height minus <see cref="Step"/>; the other raises only, to the op's height plus <see cref="Step"/>, by at most that.
+/// Only the position varies per vertex, so a dig of any rectangle is a batch of lowerings and its undo a batch of raises,
+/// each through the pickaxe's own path (EXCAVATION.md section 10). They replace #487's two fixed square ops.
 ///
 /// <b>Registered on every peer, whatever the switch says.</b> The operation's settings travel as the prefab-name hash
 /// and the terrain tile's OWNER looks them up in its own ObjectDB (TerrainOp.Settings.Deserialize). A tile owner that
@@ -31,13 +34,16 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// Whether the registration held is re-checked at every commit (<see cref="IsRegistered"/>), never assumed.</summary>
 internal sealed class ExcavationTerrainOps : IDisposable
 {
-    internal const string SmallPrefabName = "tcc_excavate_small";
-    internal const string LargePrefabName = "tcc_excavate_large";
+    internal const string LowerPrefabName = "tcc_excavate_vertex_lower";
+    internal const string RaisePrefabName = "tcc_excavate_vertex_raise";
+
+    /// <summary>The ops' fixed delta: the engine's own per-edit clamp (<see cref="DigUndo.RaiseStep"/>).</summary>
+    internal const float Step = DigUndo.RaiseStep;
 
     private readonly Action<string> _log;
     private GameObject? _container;
-    private TerrainOp? _small;
-    private TerrainOp? _large;
+    private TerrainOp? _lower;
+    private TerrainOp? _raise;
     private bool _subscribed;
     private bool _failed;
 
@@ -50,14 +56,19 @@ internal sealed class ExcavationTerrainOps : IDisposable
         _subscribed = true;
     }
 
-    /// <summary>The prefab for a mode, or null before the first game scene or after a build failure.</summary>
-    internal TerrainOp? For(ExcavationMode mode) => mode == ExcavationMode.Small ? _small : _large;
+    /// <summary>The op for a batch, or null before the first game scene or after a build failure.</summary>
+    internal TerrainOp? For(DigFlightKind kind) => kind == DigFlightKind.Dig ? _lower : _raise;
 
-    /// <summary>True when this game's live ObjectDB maps the mode's prefab hash to this mod's own op: the lookup the
+    /// <summary>The op's height for a vertex's target: lowering reaches the op's height minus the step, raising its height
+    /// plus it (TerrainComp.RaiseTerrain, square branch, read from the installed game).</summary>
+    internal static float OperationY(DigFlightKind kind, float target) => kind == DigFlightKind.Dig ? target + Step : target - Step;
+
+    /// <summary>True when this game's live ObjectDB maps both ops' prefab hashes to this mod's own ops: the lookup each
     /// tile owner will make.</summary>
-    internal bool IsRegistered(ExcavationMode mode)
+    internal bool IsRegistered() => Registered(_lower) && Registered(_raise);
+
+    private static bool Registered(TerrainOp? op)
     {
-        TerrainOp? op = For(mode);
         ObjectDB? db = ObjectDB.instance;
         if (op == null || db == null) return false;
         return db.m_terrainOpsByHash.TryGetValue(db.GetPrefabHash(op.gameObject), out TerrainOp registered) &&
@@ -76,10 +87,10 @@ internal sealed class ExcavationTerrainOps : IDisposable
                 return;
             }
             if (_container == null) Build();
-            bool small = Add(db, _small!);
-            bool large = Add(db, _large!);
-            _log("Excavation terrain operations " + (small && large ? "registered" : "NOT fully registered") +
-                 " (" + SmallPrefabName + " " + (small ? "ok" : "refused") + ", " + LargePrefabName + " " + (large ? "ok" : "refused") + ").");
+            bool lower = Add(db, _lower!);
+            bool raise = Add(db, _raise!);
+            _log("Excavation terrain operations " + (lower && raise ? "registered" : "NOT fully registered") +
+                 " (" + LowerPrefabName + " " + (lower ? "ok" : "refused") + ", " + RaisePrefabName + " " + (raise ? "ok" : "refused") + ").");
         }
         catch (Exception exception)
         {
@@ -98,33 +109,35 @@ internal sealed class ExcavationTerrainOps : IDisposable
         var container = new GameObject("tcc_excavation_ops");
         container.SetActive(false);
         UnityEngine.Object.DontDestroyOnLoad(container);
-        _small = Make(container.transform, SmallPrefabName, ExcavationGeometry.For(ExcavationMode.Small));
-        _large = Make(container.transform, LargePrefabName, ExcavationGeometry.For(ExcavationMode.Large));
+        _lower = Make(container.transform, LowerPrefabName, -Step);
+        _raise = Make(container.transform, RaisePrefabName, Step);
         _container = container;
         // Attack.SpawnOnHitTerrain finds the op with GetComponentInChildren, which in Unity skips objects that are not
         // active in the hierarchy. If it misses, the game's own ward and no-build re-check is skipped. The commit gate's
         // own checks refuse everything that re-check refuses (the ward at the wider radius in its strict mode, every
         // no-build location at the wider radius), so nothing is lost; the log says which happens.
-        bool vanillaSees = _small.gameObject.GetComponentInChildren<TerrainOp>() != null;
+        bool vanillaSees = _lower.gameObject.GetComponentInChildren<TerrainOp>() != null;
         _log("Excavation terrain operations built; the game's own terrain-tool re-check " +
              (vanillaSees ? "applies" : "is skipped (the mod's stricter ward and no-build checks still run)") + ".");
     }
 
-    private static TerrainOp Make(Transform parent, string name, ExcavationGeometry geometry)
+    private static TerrainOp Make(Transform parent, string name, float delta)
     {
         var prefab = new GameObject(name);
         prefab.transform.SetParent(parent, false);
         TerrainOp op = prefab.AddComponent<TerrainOp>();
         TerrainOp.Settings settings = op.m_settings;
-        // Lower only: the square raise with a negative delta skips every vertex already at or below the target
-        // (TerrainComp.RaiseTerrain), and with m_square every vertex within ceil(radius) gets the same target.
+        // One vertex: a square raise of radius 0 covers 2*ceil(0)+1 = 1 vertex (TerrainComp.RaiseTerrain). With a negative
+        // delta it skips a vertex already at or below the target and otherwise sets it to the target; with a positive one
+        // it skips a vertex already at or above the target and raises by at most the delta.
         settings.m_raise = true;
         settings.m_square = true;
-        settings.m_raiseRadius = geometry.HalfExtent * ExcavationGeometry.VertexSpacing;
-        settings.m_raiseDelta = -geometry.Depth;
+        settings.m_raiseRadius = 0f;
+        settings.m_raiseDelta = delta;
         settings.m_raisePower = 0f;
         // Off: level would also raise deeper ground, smooth would break the flat floor, and paint (on by default,
-        // radius 2) would widen GetRadius(), the ward check and the tiles touched beyond the planned square.
+        // radius 2) would widen GetRadius(), and with it the tiles touched, beyond the one vertex. At radius 0 the tile
+        // search (Heightmap.IsPointInside, inclusive on both sides) still finds both tiles of a vertex on a tile edge.
         settings.m_level = false;
         settings.m_smooth = false;
         settings.m_paintCleared = false;
@@ -132,10 +145,7 @@ internal sealed class ExcavationTerrainOps : IDisposable
         settings.m_levelOffset = 0f;
         // No item is spawned and no effect is played.
         op.m_spawnOnPlaced = null;
-        if (Math.Abs(op.GetRadius() - geometry.HalfExtent * ExcavationGeometry.VertexSpacing) > 0.0001f)
-        {
-            throw new InvalidOperationException("Terrain operation radius is not the planned half extent.");
-        }
+        if (op.GetRadius() != 0f) throw new InvalidOperationException("Terrain operation radius is not zero.");
         return op;
     }
 
@@ -179,8 +189,8 @@ internal sealed class ExcavationTerrainOps : IDisposable
             ObjectDB? db = ObjectDB.instance;
             if (db != null)
             {
-                Remove(db, _small);
-                Remove(db, _large);
+                Remove(db, _lower);
+                Remove(db, _raise);
             }
         }
         catch { /* Teardown only. */ }
@@ -189,7 +199,7 @@ internal sealed class ExcavationTerrainOps : IDisposable
             try { UnityEngine.Object.Destroy(_container); } catch { /* Teardown only. */ }
             _container = null;
         }
-        _small = null;
-        _large = null;
+        _lower = null;
+        _raise = null;
     }
 }

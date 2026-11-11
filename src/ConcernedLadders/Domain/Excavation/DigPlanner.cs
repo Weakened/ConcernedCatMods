@@ -18,6 +18,11 @@ internal enum DigRefusal
     /// <summary>The floor is lower than the engine lets terrain go below its unmodified surface at some vertex that
     /// would be lowered: the engine would clamp it and leave the floor uneven.</summary>
     DigLimit = 3,
+
+    /// <summary>Some vertex would drop more than one raise can bring back (<see cref="DigUndo.RaiseStep"/>, 8 m): only on
+    /// ground an earlier edit raised above its natural surface. Two raises of one vertex in one frame would read the stale
+    /// height and overshoot, so such a dig could not be undone exactly; it is refused instead.</summary>
+    UndoLimit = 4,
 }
 
 /// <summary>One floor vertex the dig lowers, and to what.</summary>
@@ -47,7 +52,7 @@ internal readonly struct DigVertex
 internal readonly struct DigPlan
 {
     internal DigPlan(DigFootprint footprint, ExcavationStatus status, DigRefusal refusal, int refusalVertices, float datum,
-        int loweredVertices, int alreadyLower, float maxLowering, float minWallHeight, float waterDepth,
+        int loweredVertices, float loweredVolume, int alreadyLower, float maxLowering, float minWallHeight, float waterDepth,
         int firstTileX, int tileCountX, int firstTileZ, int tileCountZ)
     {
         Footprint = footprint;
@@ -56,6 +61,7 @@ internal readonly struct DigPlan
         RefusalVertices = refusalVertices;
         Datum = datum;
         LoweredVertices = loweredVertices;
+        LoweredVolume = loweredVolume;
         AlreadyLower = alreadyLower;
         MaxLowering = maxLowering;
         MinWallHeight = minWallHeight;
@@ -83,6 +89,10 @@ internal readonly struct DigPlan
 
     /// <summary>Floor vertices the dig lowers: what it costs.</summary>
     internal int LoweredVertices { get; }
+
+    /// <summary>The ground the dig removes, in cubic metres: each lowered vertex's drop over its one square metre of
+    /// lattice. What the dig costs (<see cref="DigCost"/>).</summary>
+    internal float LoweredVolume { get; }
 
     /// <summary>Floor vertices already below the floor (an earlier hole), left as they are.</summary>
     internal int AlreadyLower { get; }
@@ -142,8 +152,8 @@ internal static class DigPlanner
         if (notFinite > 0) return Refused(footprint, DigRefusal.NotFinite, notFinite, firstTileX, tileCountX, firstTileZ, tileCountZ);
 
         float bottom = datum - footprint.Depth;
-        int lowered = 0, lower = 0, limited = 0;
-        float maxLowering = 0f;
+        int lowered = 0, lower = 0, limited = 0, unrestorable = 0;
+        float maxLowering = 0f, volume = 0f;
         for (int z = footprint.MinZ; z <= footprint.MaxZ; z++)
         {
             for (int x = footprint.MinX; x <= footprint.MaxX; x++)
@@ -152,15 +162,18 @@ internal static class DigPlanner
                 if (height < bottom - ExcavationPlanner.LevelTolerance) { lower++; continue; }
                 if (height <= bottom + ExcavationPlanner.LevelTolerance) continue;
                 if (bottom < samples.LimitBase(x, z) - ExcavationPlanner.MaximumDigBelowBase + ExcavationPlanner.DigLimitMargin) limited++;
+                if (height - bottom > DigUndo.RaiseStep - ExcavationPlanner.DigLimitMargin) unrestorable++;
                 lowered++;
                 maxLowering = Math.Max(maxLowering, height - bottom);
+                volume += height - bottom;
             }
         }
 
         if (limited > 0) return Refused(footprint, DigRefusal.DigLimit, limited, firstTileX, tileCountX, firstTileZ, tileCountZ, datum);
+        if (unrestorable > 0) return Refused(footprint, DigRefusal.UndoLimit, unrestorable, firstTileX, tileCountX, firstTileZ, tileCountZ, datum);
         float waterDepth = waterLevel.HasValue && LadderRules.Finite(waterLevel.Value) ? waterLevel.Value - bottom : 0f;
         return new DigPlan(footprint, lowered == 0 ? ExcavationStatus.NothingToDig : ExcavationStatus.Ready, DigRefusal.None, 0,
-            datum, lowered, lower, maxLowering, lowestRing - bottom, waterDepth, firstTileX, tileCountX, firstTileZ, tileCountZ);
+            datum, lowered, volume, lower, maxLowering, lowestRing - bottom, waterDepth, firstTileX, tileCountX, firstTileZ, tileCountZ);
     }
 
     /// <summary>The vertices a Ready plan lowers, with the height each had before: the dig's batch and its undo record.
@@ -211,6 +224,6 @@ internal static class DigPlanner
 
     private static DigPlan Refused(DigFootprint footprint, DigRefusal refusal, int vertices, int firstTileX, int tileCountX,
         int firstTileZ, int tileCountZ, float datum = float.NaN) =>
-        new DigPlan(footprint, ExcavationStatus.Refused, refusal, vertices, datum, 0, 0, 0f, float.NaN, 0f,
+        new DigPlan(footprint, ExcavationStatus.Refused, refusal, vertices, datum, 0, 0f, 0, 0f, float.NaN, 0f,
             firstTileX, tileCountX, firstTileZ, tileCountZ);
 }

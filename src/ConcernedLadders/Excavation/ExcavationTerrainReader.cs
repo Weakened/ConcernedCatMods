@@ -6,7 +6,8 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Excavation;
 
-/// <summary>Reads the terrain under one plan into <see cref="ExcavationSamples"/> (#487 slice 2). Read-only: it never
+/// <summary>Reads the terrain under a dig's rectangle and its ring into <see cref="DigSamples"/> (#487 slice 2; the
+/// rectangle since #551). Read-only: it never
 /// writes a height, a delta, a ZDO or an RPC, and it never creates a terrain compiler.
 ///
 /// Every number comes from the game's own heightmaps, read from the decompiled installed game:
@@ -55,29 +56,27 @@ internal sealed class ExcavationTerrainReader
     /// <summary>The first member the start-up probe could not find, for the log.</summary>
     internal string? Missing { get; }
 
-    /// <summary>Fills <paramref name="samples"/> for the square centred on (<paramref name="centreX"/>,
-    /// <paramref name="centreZ"/>). Returns a fault the planner cannot express, or None; vertices nobody holds are
-    /// left unloaded and copies that disagree are left NaN, which the planner refuses.</summary>
-    internal ExcavationReadFault Read(ExcavationSamples samples, int centreX, int centreZ)
+    /// <summary>Fills <paramref name="samples"/> for <paramref name="footprint"/>'s floor and the ring one vertex outside
+    /// it. Returns a fault the planner cannot express, or None; vertices nobody holds are left unloaded and copies that
+    /// disagree are left NaN, which the planner refuses.</summary>
+    internal ExcavationReadFault Read(DigSamples samples, DigFootprint footprint)
     {
         if (samples == null) throw new ArgumentNullException(nameof(samples));
-        samples.Clear();
+        samples.Begin(footprint);
         if (!Available) return ExcavationReadFault.CompilerUnreadable;
-        int reach = samples.Reach;
         List<Heightmap> all = Heightmap.GetAllHeightmaps();
 
-        // The tiles under the square, checked once each.
+        // The tiles under the sampled rectangle (floor plus ring), checked once each.
         _tiles.Clear();
         _levels.Clear();
         _smooths.Clear();
         float spacing = ExcavationGeometry.VertexSpacing;
-        var centre = new Vector3(centreX * spacing, 0f, centreZ * spacing);
-        float halfSquare = reach * spacing;
+        int minX = footprint.MinX - 1, maxX = footprint.MaxX + 1, minZ = footprint.MinZ - 1, maxZ = footprint.MaxZ + 1;
         for (int i = 0; i < all.Count; i++)
         {
             Heightmap tile = all[i];
             if (tile == null || !tile.isActiveAndEnabled || tile.IsDistantLod) continue;
-            if (!tile.IsPointInside(centre, halfSquare)) continue;
+            if (!Overlaps(tile, minX * spacing, minZ * spacing, maxX * spacing, maxZ * spacing)) continue;
             ExcavationReadFault fault = CheckTile(tile);
             if (fault != ExcavationReadFault.None) return fault;
             if (!ReadCompiler(tile, out float[]? levels, out float[]? smooths)) return ExcavationReadFault.CompilerUnreadable;
@@ -87,11 +86,11 @@ internal sealed class ExcavationTerrainReader
         }
 
         bool differ = false;
-        for (int dz = -reach; dz <= reach; dz++)
+        for (int z = minZ; z <= maxZ; z++)
         {
-            for (int dx = -reach; dx <= reach; dx++)
+            for (int x = minX; x <= maxX; x++)
             {
-                var point = new Vector3((centreX + dx) * spacing, 0f, (centreZ + dz) * spacing);
+                var point = new Vector3(x * spacing, 0f, z * spacing);
                 var vertex = new ExcavationVertexRead();
                 for (int t = 0; t < _tiles.Count; t++)
                 {
@@ -101,10 +100,18 @@ internal sealed class ExcavationTerrainReader
                     vertex.Add(height, limitBase);
                 }
                 if (vertex.HeightsDiffer) differ = true;
-                vertex.WriteTo(samples, dx, dz, ExcavationTerrainRules.ExpectedCopies(centreX + dx, centreZ + dz));
+                vertex.WriteTo(samples, x, z, ExcavationTerrainRules.ExpectedCopies(x, z));
             }
         }
         return differ ? ExcavationReadFault.TilesDisagree : ExcavationReadFault.None;
+    }
+
+    /// <summary>Whether a tile's square, edges included (as Heightmap.IsPointInside counts them), meets the rectangle.</summary>
+    private static bool Overlaps(Heightmap tile, float minX, float minZ, float maxX, float maxZ)
+    {
+        float half = tile.m_width * tile.m_scale * 0.5f;
+        Vector3 origin = tile.transform.position;
+        return maxX >= origin.x - half && minX <= origin.x + half && maxZ >= origin.z - half && minZ <= origin.z + half;
     }
 
     private static ExcavationReadFault CheckTile(Heightmap tile)
