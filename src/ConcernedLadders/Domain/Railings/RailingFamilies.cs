@@ -17,8 +17,8 @@ internal static class RailingSettings
 
     internal const string Description =
         "UNFINISHED (#556): adds railings to the hammer's Building tab in eight materials (wood, copper, iron, darkwood, " +
-        "ashwood, flametal, dvergr and log): level (2 m and 1 m), for the game's stairs (26.57 degrees), for the step ladder " +
-        "(45 degrees), and a newel post - none of it yet tested in game. " +
+        "ashwood, flametal, dvergr and log): half (1 m) and full (2 m) level railings, 27 for the game's stairs (26.57 degrees), " +
+        "45 for the step ladder (45 degrees), and a newel post - none of it yet tested in game. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed railing the next time a " +
         "world loads, with no refund. In multiplayer every player and the host or server must have the same value. " +
         "Restart after changing it.";
@@ -45,14 +45,28 @@ internal sealed class RailingPiece
 
     internal string Token => "cl_railing_" + Family.Word + "_" + Angle.ToString().ToLower(CultureInfo.InvariantCulture);
 
-    internal string English => Family.Name + Angle switch
+    /// <summary>The build-menu name (#573, owner 2026-11-11: "Half Wood Railing, Wood Railing, 23 Wood Stair Railing, 45 Wood
+    /// Stair Railing and so forth"; the owner then chose 27, the game's stairs' 26.57 degrees rounded, over 23).</summary>
+    internal string English => Angle switch
     {
-        RailingAngle.Level => " Railing",
-        RailingAngle.Short => " Short Railing",
-        RailingAngle.Stair => " Stair Railing",
-        RailingAngle.Steep => " Steep Stair Railing",
-        _ => " Newel Post",
+        RailingAngle.Level => Family.Name + " Railing",
+        RailingAngle.Short => "Half " + Family.Name + " Railing",
+        RailingAngle.Stair or RailingAngle.Steep => DegreesLabel(Angle) + " " + Family.Name + " Stair Railing",
+        _ => Family.Name + " Newel Post",
     };
+
+    /// <summary>The slope a stair railing fits, in whole degrees: 27 for the game's stairs, 45 for the step ladder.</summary>
+    internal static string DegreesLabel(RailingAngle angle) =>
+        ((int)Math.Round(RailingGeometry.Degrees(angle))).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The hammer icon's view (#573, owner: "angled images for stair railing and straight ones for regular"), as
+    /// the rotation given to the piece in front of the icon camera, in degrees. A railing runs along its own z, so a quarter
+    /// turn lays it across the icon. A level railing and a newel post are seen straight from the side, tipped just enough
+    /// to show the handrail's top; a stair railing is seen from a three-quarter angle and from a little above, so its
+    /// slope reads.</summary>
+    internal (float Pitch, float Yaw) IconView => Angle is RailingAngle.Stair or RailingAngle.Steep
+        ? (RailingIcons.AngledPitch, RailingIcons.AngledYaw)
+        : (RailingIcons.StraightPitch, RailingIcons.StraightYaw);
 
     /// <summary>The fixed recipe of the ladders' three families; null for a vanilla family, which costs what its donor
     /// pole costs. Lead default: a 2 m railing about half a 2 m ladder, a little more on a slope or a curve.</summary>
@@ -73,14 +87,27 @@ internal sealed class RailingPiece
     }
 }
 
+/// <summary>The two icon views (#573), in degrees.</summary>
+internal static class RailingIcons
+{
+    internal const float StraightPitch = 8f;
+
+    internal const float StraightYaw = 90f;
+
+    internal const float AngledPitch = 18f;
+
+    internal const float AngledYaw = 55f;
+}
+
 /// <summary>Every railing (#556): every family in every shape.</summary>
 internal static class RailingFamilies
 {
     internal const string DescriptionToken = "cl_railing_description";
 
+    /// <summary>In the build menu's order (#573): half, full, 27, 45, then the newel post.</summary>
     internal static readonly RailingAngle[] Shapes =
     {
-        RailingAngle.Level, RailingAngle.Short, RailingAngle.Stair, RailingAngle.Steep, RailingAngle.Newel,
+        RailingAngle.Short, RailingAngle.Level, RailingAngle.Stair, RailingAngle.Steep, RailingAngle.Newel,
     };
 
     internal static readonly IReadOnlyList<RailingPiece> All = Build();
