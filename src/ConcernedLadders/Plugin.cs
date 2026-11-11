@@ -6,6 +6,7 @@ using Jotunn.Managers;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Excavation;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
+using TheConcernedCat.ConcernedLadders.Domain.Railings;
 using TheConcernedCat.ConcernedLadders.Items;
 using TheConcernedCat.ConcernedLadders.Pieces;
 using TheConcernedCat.ConcernedLadders.Runtime;
@@ -38,6 +39,8 @@ public sealed class Plugin : BaseUnityPlugin
     private TrapdoorPieceRegistration? _trapdoors;
     private ConfigEntry<bool>? _cellarDoorsEnabled;
     private CellarDoorPieceRegistration? _cellarDoors;
+    private ConfigEntry<bool>? _railingsEnabled;
+    private RailingPieceRegistration? _railings;
     private ExcavationShovelInput? _shovelInput;
     private IronShovelItem? _shovel;
     private ExcavationPreview? _preview;
@@ -80,6 +83,20 @@ public sealed class Plugin : BaseUnityPlugin
                 Logger.LogError("Cellar doors unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
                 try { _cellarDoors.Dispose(); } catch { /* Unsubscribe only. */ }
                 _cellarDoors = null;
+            }
+        }
+        // Railings (#556), unfinished and off by default, their own switch: with it off nothing is cloned or localized.
+        _railingsEnabled = Config.Bind(RailingSettings.Section, RailingSettings.Key, RailingSettings.EnabledByDefault,
+            RailingSettings.Description);
+        if (_railingsEnabled.Value)
+        {
+            _railings = new RailingPieceRegistration(message => Logger.LogInfo(message));
+            try { _railings.Install(); }
+            catch (Exception exception)
+            {
+                Logger.LogError("Railings unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
+                try { _railings.Dispose(); } catch { /* Unsubscribe only. */ }
+                _railings = null;
             }
         }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
@@ -196,6 +213,8 @@ public sealed class Plugin : BaseUnityPlugin
         _trapdoors = null;
         _cellarDoors?.Dispose();
         _cellarDoors = null;
+        _railings?.Dispose();
+        _railings = null;
         _snap = null;
         _runtime = null;
         _pieces = null;
