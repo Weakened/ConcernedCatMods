@@ -1,7 +1,8 @@
 # Concerned Ladders: railings (#556)
 
-**Status:** the first slice, nine railings, behind `[Railings] Enabled` (off by default). Nothing here has been seen in
-game. Every placed-piece row is OWNER GO-AROUND PENDING.
+**Status:** 48 railings, behind `[Railings] Enabled` (off by default): eight material families in six shapes. Slice 1
+(PR #561) was wood, copper and iron in three slopes. Slice 2 adds the vanilla families, the spiral stair and the newel post.
+Nothing here has been seen in game. Every placed-piece row is OWNER GO-AROUND PENDING.
 
 ## What the owner asked for (2026-11-10)
 
@@ -26,7 +27,8 @@ Measured from the installed game's stair pieces (Valheim 1.0.21), by their snap 
 | `wood_stair`, `stone_stair`, `ashwood_stair`, `blackmarble_stair` (and corners), `piece_grausten_stonestair`, `dvergrprops_wood_stair` | 1 / 2 m | 26.57° | Stair Railing |
 | `wood_stepladder` | 2 / 2 m | 45° | Steep Stair Railing |
 | (floors, landings) | 0 / 2 m | 0° | Railing |
-| `piece_dvergr_spiralstair` (left and right) | 1 m over a quarter turn | curved | not in this slice |
+| `piece_dvergr_spiralstair`, `_right` | 1 m over a quarter turn, outer edge 1.75 m from the centre | curved | Spiral Railing (Left / Right) |
+| (corners, the ends of a run) | none | none | Newel Post |
 
 No straight stair in the game is 33°, so the railings follow the two slopes the game has.
 
@@ -87,9 +89,46 @@ The ladders' path:
 No RPC, ZDO field or ownership claim is added, and no native prefab is changed. The registration is installed only with
 the switch on.
 
-## Not yet (later slices of #556, and #558)
+## Slice 2: the vanilla families, the spiral and the newel post
 
-- **More materials.** The vanilla material families beyond wood, copper and iron (Darkwood, Ashwood, Flametal, Dvergr),
-  matched to the game's own pieces of those materials.
-- **Curved stairs.** A railing for the spiral stair.
-- **Corners.** Newel posts for corners, and corner snapping.
+**Families** (`Domain/Families/BuildFamilies.cs`, shared with the ladders, #558). Owner, 2026-11-10: "extend the ladders
+and railings in a similar fashion ... beautifully integrate with vanilla assets."
+
+The ladders' wood, copper and iron are joined by each vanilla building family the doors follow (#555). Each is built from
+the game's own pole of that material: its donor, its material, and its recipe, station and health, read from the donor at
+registration so they stay the game's.
+
+| Family | Donor | Material | Texture region | Style |
+|---|---|---|---|---|
+| Wood | `woodwall` | `woodwall` | tiles (seamless planks) | plain |
+| Copper | `woodiron_pole` | `copper` | tiles (a colour, no texture) | decorated |
+| Iron | `woodiron_pole` | `Ironbeam_mat` | u 0.8348-0.9095, v 0.0552-0.4913 (the pole's iron band; the sheet also holds wood) | detailed |
+| Darkwood | `darkwood_pole` | `DarkWood_mat` | u 0.6312-0.7565, v 0.2212-0.5655 | plain |
+| Ashwood | `ashwood_pole_2m` | `AshWood_mat` | u 0.4772-0.9451, v 0.0435-0.9795 | plain |
+| Flametal | `Piece_flametal_beam` | `flametalbeam_mat` | u 0.4119-0.49, v 0.4155-0.8291 | detailed |
+| Dvergr | `piece_dvergr_pole` | `DvergrTownPieces_Mat` | u 0.025-0.4593, v 0.0978-0.8087 | plain |
+| Log | `wood_pole_log` | `logwall` | u 0.0701-0.4945, v 0.0109-0.9266 (the bark) | plain |
+
+Each region is the donor pole's own largest UV island, read by `cl-ladders-devtools/doors/pole_islands.py`. Every one of
+these textures but the plank sheet and copper's plain colour is an atlas (#548's rule), so the railing mesh maps each face
+into the region (`RailingMesh.Build(..., region)`). Since slice 2 that includes iron, whose slice-1 railings stretched the
+whole sheet.
+
+**Spiral** (`RailingAngle.SpiralLeft`, `SpiralRight`):
+
+- The base line is the stair's outer edge: a quarter turn 1.75 m from the centre, rising 1 m evenly.
+- Placed with its bottom snap on the stair's outer bottom snap, its top snap lands exactly on the stair's outer top snap
+  (tested).
+- The handrail and the bottom rail follow the curve in 12 straight pieces, and the colliders are one box per chord.
+- The balusters are spaced along the arc.
+- Scrolls stay on the straight railings, whose plane they lie in; a detailed spiral has twisted bars and finials only.
+
+**Newel post** (`RailingAngle.Newel`): one post, 1.2 m tall and 1.3 times the style's post width, capped (or with a finial
+on the detailed style). It has a bottom snap only, for corners and the ends of a run.
+
+There are 48 pieces: eight families in six shapes. Slice 1's nine IDs are unchanged.
+
+## Not yet
+
+- **Corner snapping.** A railing whose end meets a newel post snaps by the post's base only.
+- **Inner-edge spiral railing.** Not added.
