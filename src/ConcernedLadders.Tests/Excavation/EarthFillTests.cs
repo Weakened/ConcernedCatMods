@@ -143,17 +143,21 @@ public sealed class EarthFillTests
     }
 
     [Fact]
-    public void TheBlockWearsTheTerrainsCliffAndDirtWithAThinTop()
+    public void TheBlockWearsTheTerrainsCliffRockTopIncludedOnAUvMappedTop()
     {
         // From the decoded contact sheet of terrain_d_array (cl-ladders-devtools/out/terrain/terrain_d_array_sheet_579.png).
         Assert.Equal(4, EarthFill.TerrainCliffSlice);
-        Assert.Equal(3, EarthFill.TerrainDirtSlice);
         Assert.InRange(EarthFill.TopShare, 0.001f, 0.05f);
         string registration = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Pieces", "EarthFillPieceRegistration.cs")),
             @"/\*.*?\*/|//[^\n]*", " ", RegexOptions.Singleline);
         // The look is copied on the GPU from the live terrain's own material, never written back to it.
         Assert.Matches(new Regex(@"Graphics\.CopyTexture\s*\(\s*array\s*,\s*slice\s*,\s*mip\s*,\s*texture\s*,\s*0\s*,\s*mip\s*\)"), registration);
         Assert.DoesNotMatch(new Regex(@"terrain\.Set\w*\s*\(|terrain\.mainTexture\s*=|m_material\s*="), registration);
+        // #583: the top, black under the world-mapped rock shader, is drawn in the wood wall's UV-mapped piece material
+        // and gets the same cliff texture and normal map as the sides.
+        Assert.Matches(new Regex(@"_top\s*=\s*new\s+Material\s*\(\s*FindMaterial\s*\(\s*TopMaterialPrefab\s*,\s*TopMaterialName\s*\)\s*\)"), registration);
+        Assert.Matches(new Regex(@"private\s+const\s+string\s+TopMaterialPrefab\s*=\s*""woodwall""\s*;"), registration);
+        Assert.Matches(new Regex(@"Dress\s*\(\s*_side\s*,\s*cliff\s*,\s*normal\s*,\s*scale\s*\)\s*;\s*DressTop\s*\(\s*_top\s*,\s*cliff\s*,\s*normal\s*\)\s*;"), registration);
         Assert.Matches(new Regex(@"_earthFill\?\.ApplyTerrainLook\s*\(\s*\)\s*;"), File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Plugin.cs")));
     }
 

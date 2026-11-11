@@ -17,10 +17,11 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// it is scaled: the dig scales each block to its height, and the game saves and sends that scale with the block
 /// (<c>ZNetView.m_syncInitialScale</c>, read from the installed game). It has no health and no cost: the hammer removes it
 /// through the game's own path for a piece without WearNTear, which drops its (empty) resources and destroys it. Its body
-/// and its thin top are each drawn in a copy of the vanilla mud pile's material, whose shader maps the texture by world
-/// position and so does not stretch with the scale; once a world is loaded the copies take the terrain's own cliff rock
-/// and cleared dirt (#579, <see cref="ApplyTerrainLook"/>), so the sides read as a dug hole's and the top as flattened
-/// earth. Eight corner snap points let the game's own walls and floors snap to its faces.
+/// is drawn in a copy of the vanilla mud pile's material, whose shader maps the texture by world position and so does not
+/// stretch with the scale. That shader draws the generated box's upward faces black (#583, owner playtest), so the thin
+/// top is drawn in a copy of the vanilla wood wall's UV-mapped piece material instead, the one the doors and railings use
+/// on generated meshes. Once a world is loaded both take the terrain's own cliff rock (#579, #583,
+/// <see cref="ApplyTerrainLook"/>), so the block reads as the rock of a dug hole's side, top included. Eight corner snap points let the game's own walls and floors snap to its faces.
 ///
 /// <para>Registered whenever excavation is on, whatever the earth fill setting says, so a player who does not fill still
 /// sees the blocks another player's dig placed. No RPC and no ZDO field of its own; no vanilla prefab is changed. Not
@@ -29,6 +30,10 @@ internal sealed class EarthFillPieceRegistration : IDisposable
 {
     private const string MaterialPrefab = "mudpile";
     private const string MaterialName = "mudpile";
+
+    /// <summary>The top's UV-mapped piece material (#583): the vanilla wood wall's, its texture replaced.</summary>
+    private const string TopMaterialPrefab = "woodwall";
+    private const string TopMaterialName = "woodwall";
 
     private readonly Action<string> _log;
     private bool _subscribed;
@@ -59,9 +64,10 @@ internal sealed class EarthFillPieceRegistration : IDisposable
         Dispose();
         try
         {
-            Material material = FindMaterial();
+            Material material = FindMaterial(MaterialPrefab, MaterialName);
             _side = new Material(material) { name = "tcc_earth_fill_side" };
-            _top = new Material(material) { name = "tcc_earth_fill_top" };
+            _top = new Material(FindMaterial(TopMaterialPrefab, TopMaterialName)) { name = "tcc_earth_fill_top" };
+            DressTop(_top, material.mainTexture, null);
             GameObject prefab = PrefabManager.Instance.CreateEmptyPrefab(EarthFill.Prefab, true);
             if (prefab == null || prefab.activeInHierarchy) throw new InvalidOperationException("Expected an inactive-parent empty prefab.");
             int layer = LayerMask.NameToLayer("piece");
@@ -120,10 +126,9 @@ internal sealed class EarthFillPieceRegistration : IDisposable
         }
     }
 
-    /// <summary>Gives the blocks the terrain's own look (#579): copies the cliff and cleared-dirt slices of the live terrain
-    /// material's diffuse array (<see cref="EarthFill.TerrainCliffSlice"/>, <see cref="EarthFill.TerrainDirtSlice"/>) into
-    /// plain textures on the GPU, and the terrain's cliff normal map, into the blocks' two materials, which every block
-    /// shares. Asked every frame by the plugin, it looks at most every two seconds until a world with terrain is loaded,
+    /// <summary>Gives the blocks the terrain's own look (#579, #583): copies the cliff slice of the live terrain material's
+    /// diffuse array (<see cref="EarthFill.TerrainCliffSlice"/>) into a plain texture on the GPU and gives it, with the
+    /// terrain's cliff normal map, to the blocks' two materials, which every block shares. Asked every frame by the plugin, it looks at most every two seconds until a world with terrain is loaded,
     /// and succeeds or gives up once; until then, or if the terrain does not match, the blocks keep the mud pile's
     /// look.</summary>
     internal void ApplyTerrainLook()
@@ -140,13 +145,14 @@ internal sealed class EarthFillPieceRegistration : IDisposable
             _looked = true;
             if (SystemInfo.copyTextureSupport == UnityEngine.Rendering.CopyTextureSupport.None)
                 throw new InvalidOperationException("this GPU cannot copy textures");
-            if (!(terrain.GetTexture("_DiffuseArrayTex") is Texture2DArray array) || array.depth <= Math.Max(EarthFill.TerrainCliffSlice, EarthFill.TerrainDirtSlice))
-                throw new InvalidOperationException("the terrain has no diffuse array with the expected slices");
+            if (!(terrain.GetTexture("_DiffuseArrayTex") is Texture2DArray array) || array.depth <= EarthFill.TerrainCliffSlice)
+                throw new InvalidOperationException("the terrain has no diffuse array with the expected slice");
             float scale = terrain.HasProperty("_UVScale") ? terrain.GetFloat("_UVScale") : 0.5f;
-            Dress(_side, Slice(array, EarthFill.TerrainCliffSlice, "tcc_earth_fill_cliff"), terrain.GetTexture("_CliffNormal"), scale);
-            Dress(_top, Slice(array, EarthFill.TerrainDirtSlice, "tcc_earth_fill_dirt"), null, scale);
-            _log("Earth fill wears the terrain's cliff and dirt (slices " + EarthFill.TerrainCliffSlice + " and " + EarthFill.TerrainDirtSlice + " of " +
-                 array.name + ", " + array.width + " px).");
+            Texture2D cliff = Slice(array, EarthFill.TerrainCliffSlice, "tcc_earth_fill_cliff");
+            Texture? normal = terrain.GetTexture("_CliffNormal");
+            Dress(_side, cliff, normal, scale);
+            DressTop(_top, cliff, normal);
+            _log("Earth fill wears the terrain's cliff rock (slice " + EarthFill.TerrainCliffSlice + " of " + array.name + ", " + array.width + " px).");
         }
         catch (Exception exception)
         {
@@ -180,13 +186,28 @@ internal sealed class EarthFillPieceRegistration : IDisposable
         if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.1f);
     }
 
-    private static Material FindMaterial()
+    /// <summary>The top's texture on its UV-mapped material: one whole tile per metre, as the generated mesh's UVs run one
+    /// unit per <see cref="UvRegion.UvMetres"/>, so neighbouring tops join without a seam.</summary>
+    private static void DressTop(Material material, Texture? diffuse, Texture? normal)
     {
-        GameObject source = PrefabManager.Instance.GetPrefab(MaterialPrefab) ?? throw new InvalidOperationException("Material donor prefab unavailable: " + MaterialPrefab);
+        material.mainTexture = diffuse;
+        material.mainTextureScale = new Vector2(UvRegion.UvMetres, UvRegion.UvMetres);
+        material.color = Color.white;
+        if (material.HasProperty("_BumpMap"))
+        {
+            material.SetTexture("_BumpMap", normal);
+            if (normal == null) material.DisableKeyword("_NORMALMAP");
+            else material.EnableKeyword("_NORMALMAP");
+        }
+    }
+
+    private static Material FindMaterial(string prefabName, string materialName)
+    {
+        GameObject source = PrefabManager.Instance.GetPrefab(prefabName) ?? throw new InvalidOperationException("Material donor prefab unavailable: " + prefabName);
         Material? found = source.GetComponentsInChildren<Renderer>(true)
             .SelectMany(renderer => renderer.sharedMaterials)
-            .FirstOrDefault(candidate => candidate != null && (candidate.name == MaterialName || candidate.name == MaterialName + " (Instance)"));
-        return found ?? throw new InvalidOperationException("Donor material unavailable: " + MaterialName + " on " + MaterialPrefab);
+            .FirstOrDefault(candidate => candidate != null && (candidate.name == materialName || candidate.name == materialName + " (Instance)"));
+        return found ?? throw new InvalidOperationException("Donor material unavailable: " + materialName + " on " + prefabName);
     }
 
     public void Dispose()
