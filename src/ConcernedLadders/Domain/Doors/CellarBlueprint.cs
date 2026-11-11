@@ -86,9 +86,10 @@ internal static class CellarBlueprint
 
     internal static ClimbPoint SlopePosition => CellarGeometry.SlopeOrigin;
 
-    /// <summary>A texture repeats once per this many metres of a frame face (the module's width), so the frame's
-    /// grain is the same scale on every face. Cosmetic; not compared with the donor's own mapping.</summary>
-    internal const float UvMetres = CellarGeometry.Module;
+    /// <summary>A tiling texture repeats once per this many metres of a face (the module's width), so its grain is the
+    /// same scale on every face (<see cref="UvRegion.UvMetres"/>). An atlas texture is mapped into its family's region
+    /// instead (#548, <see cref="DoorSurfaces"/>).</summary>
+    internal const float UvMetres = UvRegion.UvMetres;
 
     /// <summary>The hinge marks: two thin plates on each leaf's top at its outer (hinge) edge, so the ghost shows
     /// which sides the leaves swing from. Visual only, no collider. Thinner than <see cref="CellarGeometry.LeafGap"/>,
@@ -152,8 +153,13 @@ internal static class CellarBlueprint
         return new ClimbPoint(index < 4 ? prism.MinX : prism.MaxX, point.Y, point.Z);
     }
 
-    /// <summary>The flat-shaded mesh of a prism: the two end caps and the four extruded profile edges.</summary>
-    internal static CellarMesh Mesh(CellarPrism prism)
+    /// <summary>The flat-shaded mesh of a prism with a tiling texture: the two end caps and the four extruded profile
+    /// edges.</summary>
+    internal static CellarMesh Mesh(CellarPrism prism) => Mesh(prism, UvRegion.Tiling);
+
+    /// <summary>The flat-shaded mesh of a prism whose faces sample <paramref name="region"/> (#548): the two end caps,
+    /// mapped by (z, y), and the four extruded profile edges, mapped by (x, distance along the edge).</summary>
+    internal static CellarMesh Mesh(CellarPrism prism, UvRegion region)
     {
         if (prism.Profile.Count != 4) { throw new ArgumentException("A cellar prism has four profile points.", nameof(prism)); }
         ClimbPoint centroid = Centroid(prism);
@@ -163,15 +169,15 @@ internal static class CellarBlueprint
         var triangles = new List<int>(36);
 
         // End caps: the profile at each end, mapped by (z, y).
-        Face(new[] { Corner(prism, 0), Corner(prism, 1), Corner(prism, 2), Corner(prism, 3) }, centroid, vertices, normals, uvs, triangles, UvEnd);
-        Face(new[] { Corner(prism, 4), Corner(prism, 5), Corner(prism, 6), Corner(prism, 7) }, centroid, vertices, normals, uvs, triangles, UvEnd);
+        Face(new[] { Corner(prism, 0), Corner(prism, 1), Corner(prism, 2), Corner(prism, 3) }, centroid, vertices, normals, uvs, triangles, End, region);
+        Face(new[] { Corner(prism, 4), Corner(prism, 5), Corner(prism, 6), Corner(prism, 7) }, centroid, vertices, normals, uvs, triangles, End, region);
         // Sides: each profile edge extruded along x, mapped by (x, distance along the edge).
         for (int edge = 0; edge < 4; ++edge)
         {
             int next = (edge + 1) % 4;
             ClimbPoint a = Corner(prism, edge), b = Corner(prism, next);
-            Func<ClimbPoint, CellarUv> uv = p => new CellarUv(p.X / UvMetres, Distance2(p.Z - a.Z, p.Y - a.Y) / UvMetres);
-            Face(new[] { a, b, Corner(prism, next + 4), Corner(prism, edge + 4) }, centroid, vertices, normals, uvs, triangles, uv);
+            Func<ClimbPoint, (float, float)> along = p => (p.X, Distance2(p.Z - a.Z, p.Y - a.Y));
+            Face(new[] { a, b, Corner(prism, next + 4), Corner(prism, edge + 4) }, centroid, vertices, normals, uvs, triangles, along, region);
         }
 
         return new CellarMesh(prism.Name, vertices.ToArray(), normals.ToArray(), uvs.ToArray(), triangles.ToArray());
@@ -201,12 +207,21 @@ internal static class CellarBlueprint
     private static CellarPart Leaf(CellarLeaf leaf, string suffix) =>
         new CellarPart((leaf == CellarLeaf.Left ? "leaf_left" : "leaf_right") + suffix, CellarGeometry.LeafCentreInHinge(leaf), CellarGeometry.LeafSize);
 
-    private static CellarUv UvEnd(ClimbPoint p) => new CellarUv(p.Z / UvMetres, p.Y / UvMetres);
+    /// <summary>A box as a prism (#548): the rectangle's profile in (z, y), extruded along x, so a box visual is built
+    /// and textured exactly as a frame prism is.</summary>
+    internal static CellarPrism BoxPrism(string name, ClimbPoint centre, ClimbPoint size)
+    {
+        float z0 = centre.Z - size.Z / 2f, z1 = centre.Z + size.Z / 2f, y0 = centre.Y - size.Y / 2f, y1 = centre.Y + size.Y / 2f;
+        return new CellarPrism(name, centre.X - size.X / 2f, centre.X + size.X / 2f,
+            new[] { new ProfilePoint(z0, y0), new ProfilePoint(z1, y0), new ProfilePoint(z1, y1), new ProfilePoint(z0, y1) });
+    }
+
+    private static (float, float) End(ClimbPoint p) => (p.Z, p.Y);
 
     /// <summary>Adds one planar convex quad (corners in order around it) as two triangles facing away from the prism's
     /// centroid, with its unit normal on all four vertices.</summary>
     private static void Face(ClimbPoint[] quad, ClimbPoint centroid, List<ClimbPoint> vertices, List<ClimbPoint> normals,
-        List<CellarUv> uvs, List<int> triangles, Func<ClimbPoint, CellarUv> uv)
+        List<CellarUv> uvs, List<int> triangles, Func<ClimbPoint, (float A, float B)> coordinates, UvRegion region)
     {
         ClimbPoint normal = TriangleNormal(quad[0], quad[1], quad[2]);
         float cx = (quad[0].X + quad[1].X + quad[2].X + quad[3].X) / 4f - centroid.X;
@@ -218,11 +233,20 @@ internal static class CellarBlueprint
         float sign = outward ? 1f : -1f;
         var unit = new ClimbPoint(sign * normal.X / length, sign * normal.Y / length, sign * normal.Z / length);
         int first = vertices.Count;
-        foreach (ClimbPoint corner in quad)
+        var at = new (float A, float B)[quad.Length];
+        float minA = float.MaxValue, maxA = float.MinValue, minB = float.MaxValue, maxB = float.MinValue;
+        for (int index = 0; index < quad.Length; ++index)
         {
-            vertices.Add(corner);
+            at[index] = coordinates(quad[index]);
+            minA = Math.Min(minA, at[index].A); maxA = Math.Max(maxA, at[index].A);
+            minB = Math.Min(minB, at[index].B); maxB = Math.Max(maxB, at[index].B);
+        }
+
+        for (int index = 0; index < quad.Length; ++index)
+        {
+            vertices.Add(quad[index]);
             normals.Add(unit);
-            uvs.Add(uv(corner));
+            uvs.Add(region.Map(at[index].A, at[index].B, minA, maxA, minB, maxB));
         }
 
         if (outward)

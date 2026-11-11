@@ -26,7 +26,6 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
     private readonly Action<string> _log;
     private readonly HashSet<string> _registered = new HashSet<string>(StringComparer.Ordinal);
     private readonly List<string> _refused = new List<string>();
-    private readonly Dictionary<string, Mesh> _meshes = new Dictionary<string, Mesh>(StringComparer.Ordinal);
     private bool _subscribed;
     private bool _attempted;
 
@@ -70,6 +69,8 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
             // The donor's own materials, read before anything is cloned or stripped: the leaf's for the leaves, the
             // frame's for the frame, as the family's trapdoor borrows them.
             TrapdoorMaterials names = TrapdoorBlueprint.MaterialsFor(family);
+            // Where each surface samples those materials' textures, most of which are atlases (#548).
+            DoorSurface surface = DoorSurfaces.For(family);
             Material leafMaterial = DonorMaterial(donor!, names.Lid);
             Material frame = DonorMaterial(donor!, names.Frame);
             Material? frameWorn = names.FrameWorn == null ? null : DonorMaterial(donor!, names.FrameWorn);
@@ -107,8 +108,8 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
             prefab.layer = layer;
             door.m_name = "$" + cellar.Token;
 
-            GameObject fresh = FrameRoot(prefab.transform, TrapdoorBlueprint.NewRoot, frame, layer);
-            GameObject worn = frameWorn == null ? fresh : FrameRoot(prefab.transform, TrapdoorBlueprint.WornRoot, frameWorn, layer);
+            GameObject fresh = FrameRoot(prefab.transform, TrapdoorBlueprint.NewRoot, frame, surface.Frame, layer);
+            GameObject worn = frameWorn == null ? fresh : FrameRoot(prefab.transform, TrapdoorBlueprint.WornRoot, frameWorn, surface.Frame, layer);
             AdoptPresentation(wear, fresh, worn);
 
             // The fixed frame's colliders: one convex mesh collider per prism, from the very mesh its renderers show.
@@ -119,7 +120,7 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
                 holder.transform.SetParent(prefab.transform, false);
                 MeshCollider collider = holder.AddComponent<MeshCollider>();
                 collider.convex = true;
-                collider.sharedMesh = FrameMesh(shape);
+                collider.sharedMesh = ColliderMesh(shape);
             }
 
             var slope = new GameObject(CellarBlueprint.SlopeRoot) { layer = layer };
@@ -138,8 +139,8 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
                 CellarPart box = CellarBlueprint.LeafCollider(leaf);
                 ColliderBox(hinge.transform, box.Name, box.Centre, box.Size, layer);
                 CellarPart visual = CellarBlueprint.LeafVisual(leaf);
-                LeafVisuals(hinge.transform, visual.Name, visual.Centre, visual.Size, LeafPattern.For(family), leafMaterial, frame, layer);
-                foreach (CellarPart mark in CellarBlueprint.HingeMarks(leaf)) VisualBox(hinge.transform, mark.Name, mark.Centre, mark.Size, markMaterial, layer);
+                LeafVisuals(hinge.transform, visual.Name, visual.Centre, visual.Size, LeafPattern.For(family), leafMaterial, frame, surface, layer);
+                foreach (CellarPart mark in CellarBlueprint.HingeMarks(leaf)) VisualBox(hinge.transform, mark.Name, mark.Centre, mark.Size, markMaterial, surface.Leaf, layer);
             }
 
             // The leaf runtime (slice 3): reads the native door state, never writes it. The swing time is the donor's.
@@ -168,31 +169,21 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
              ". Placed " + cellar.English + "s are deleted by the game if a world is loaded in this session; restart after repair.");
     }
 
-    /// <summary>One shared mesh per prism for every family: the frame's shape is the same nine times, only its
-    /// material differs. Kept referenced by the clones, which live under Jötunn's persistent prefab container.</summary>
-    private Mesh FrameMesh(CellarMesh shape)
-    {
-        if (_meshes.TryGetValue(shape.Name, out Mesh? existing) && existing != null) return existing;
-        // Never swept by an unused-asset unload, whatever holds it: four small meshes for the whole session.
-        var mesh = new Mesh { name = "tcc_cellardoor_" + shape.Name, hideFlags = HideFlags.DontUnloadUnusedAsset };
-        mesh.vertices = shape.Vertices.Select(Vector).ToArray();
-        mesh.normals = shape.Normals.Select(Vector).ToArray();
-        mesh.uv = shape.Uvs.Select(uv => new Vector2(uv.U, uv.V)).ToArray();
-        mesh.triangles = shape.Triangles.ToArray();
-        mesh.RecalculateBounds();
-        mesh.RecalculateTangents();
-        _meshes[shape.Name] = mesh;
-        return mesh;
-    }
+    /// <summary>One collider mesh per prism, shared by every family: the frame's shape is the same nine times, and a
+    /// collider reads no texture coordinates.</summary>
+    private static Mesh ColliderMesh(CellarMesh shape) => UnityMesh("cellar_" + shape.Name + "_tile", () => shape);
 
-    private GameObject FrameRoot(Transform parent, string name, Material material, int layer)
+    /// <summary>One presentation root of the frame: each prism's own geometry, its faces sampling only the family's
+    /// frame region of <paramref name="material"/> (#548). The same shape as its collider, so what is seen is what
+    /// collides.</summary>
+    private static GameObject FrameRoot(Transform parent, string name, Material material, UvRegion region, int layer)
     {
         GameObject root = PresentationRoot(parent, name, layer);
-        foreach (CellarMesh shape in CellarBlueprint.FrameMeshes)
+        foreach (CellarPrism prism in CellarGeometry.Frame)
         {
-            var part = new GameObject(shape.Name) { layer = layer };
+            var part = new GameObject(prism.Name) { layer = layer };
             part.transform.SetParent(root.transform, false);
-            part.AddComponent<MeshFilter>().sharedMesh = FrameMesh(shape);
+            part.AddComponent<MeshFilter>().sharedMesh = UnityMesh("cellar_" + prism.Name + "_" + region.Key, () => CellarBlueprint.Mesh(prism, region));
             part.AddComponent<MeshRenderer>().sharedMaterial = material;
         }
 
