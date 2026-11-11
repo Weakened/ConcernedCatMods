@@ -158,7 +158,9 @@ ladder exit over it was measured. Section 2c's numbers are therefore unchanged.
 
 A 45° stair started at the front panel's inner face at floor level reaches the beam's inner face 1.65 m down. There it
 has 2.96 m of headroom under the beam, and 3.16 m at the module's rear edge (`AStairDownFromTheLowEndHasHeadroomUnderTheBeam`).
-The cover generates no stair. The player builds it in their dig with ordinary pieces, as they build the dig's walls.
+The game's own stair pieces are shallower. Measured from their snap points, `wood_stair`, `stone_stair`, `ashwood_stair`,
+the black marble and grausten stairs all rise 1 m over 2 m (26.57°); only `wood_stepladder` is 45°. On the shallow
+stair the head clears the beam's inner face by 2.14 m. The cover generates no stair. The player builds it in their dig with ordinary pieces, as they build the dig's walls.
 
 What did not move:
 

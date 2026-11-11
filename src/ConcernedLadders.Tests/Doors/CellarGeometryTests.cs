@@ -99,6 +99,13 @@ public sealed class CellarGeometryTests
             Assert.True(CellarGeometry.RearBeamBottomY - stair > Player + 0.9f, "headroom at z " + z);
         }
 
+        // The game's own stair pieces are shallower: wood_stair, stone_stair, ashwood_stair, the black marble and grausten
+        // stairs all rise 1 m over 2 m (26.57 degrees, measured from their snap points); only wood_stepladder is 45. On
+        // the shallow one the head still clears the beam at its inner face by 2.14 m.
+        float shallow = CellarGeometry.FloorTopY - 0.5f * (CellarGeometry.ApertureRearZ - CellarGeometry.ApertureFrontZ);
+        Assert.Equal(2.1375f, CellarGeometry.RearBeamBottomY - shallow, 3);
+        Assert.True(CellarGeometry.RearBeamBottomY - shallow > Player);
+
         // And the beam is above a standing player's knees at the top of the stair, so it is never a step to trip on.
         Assert.True(CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY > 1.3f);
     }
