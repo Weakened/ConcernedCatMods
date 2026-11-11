@@ -101,10 +101,12 @@ internal static class CellarGeometry
     internal const float FrameBottomY = HatchGeometry.FrameBottomY;
 
     /// <summary>Height of the cover's top above the floor at the front (low) edge.</summary>
-    internal const float FrontHeight = 0.3f;
+    internal const float FrontHeight = 0.2625f;
 
-    /// <summary>The slope's rise per metre of run: 1 m over the 2 m module (26.57 degrees).</summary>
-    internal const float SlopeTangent = 0.5f;
+    /// <summary>The slope's rise per metre of run: 1.5 m over the 2 m module (36.87 degrees). Raised from 1 m (26.57
+    /// degrees) by #549 (owner playtest 2026-11-10, lead default): the high end stands 1.8 m above the floor, a bulkhead's
+    /// height, so a stair going down from the low end toward the high end has headroom under it.</summary>
+    internal const float SlopeTangent = 0.75f;
 
     /// <summary>The cover's top at the front edge (z = -1).</summary>
     internal const float FrontTopY = FloorTopY + FrontHeight;
@@ -123,6 +125,12 @@ internal static class CellarGeometry
     /// into the leaves' sweep, as long as it is no more than 0.4 m thick (the sweep ends 0.01 m in front of the header).
     /// Native wall depths are not in CL-004's census; a thicker wall holds the leaves.</summary>
     internal const float RearHeaderDepth = 0.2f;
+
+    /// <summary>Height of the rear header, a beam under the slope at the high end (#549). Until #549 the header was solid
+    /// from the floor's bottom up to the slope, a 1.3 m wall across the back that nobody could pass. Now the high end is
+    /// open below the beam, as a bulkhead's is against its house: a stair down from the low end passes under the beam into
+    /// whatever is dug behind. Lead default.</summary>
+    internal const float RearBeamHeight = 0.3f;
 
     /// <summary>Half the opening between the cheeks.</summary>
     internal const float HalfAperture = HalfModule - CheekWidth;
@@ -194,6 +202,10 @@ internal static class CellarGeometry
     internal static ClimbPoint ToPiece(float u, float w, float v) =>
         new ClimbPoint(u, FrontTopY + v * SlopeSin + w * SlopeCos, -HalfModule + v * SlopeCos - w * SlopeSin);
 
+    /// <summary>The rear beam's level underside (#549): <see cref="RearBeamHeight"/> below the slope at the beam's inner
+    /// face. Everything between the cheeks below it, at the high end, is open.</summary>
+    internal static readonly float RearBeamBottomY = TopAt(ApertureRearZ) - RearBeamHeight;
+
     /// <summary>The four fixed frame parts. Their tops lie in the slope plane, flush with the closed leaves.</summary>
     internal static readonly IReadOnlyList<CellarPrism> Frame = new[]
     {
@@ -208,8 +220,8 @@ internal static class CellarGeometry
         }),
         new CellarPrism("rear_header", -HalfAperture, HalfAperture, new[]
         {
-            new ProfilePoint(ApertureRearZ, FrameBottomY),
-            new ProfilePoint(HalfModule, FrameBottomY),
+            new ProfilePoint(ApertureRearZ, RearBeamBottomY),
+            new ProfilePoint(HalfModule, RearBeamBottomY),
             new ProfilePoint(HalfModule, RearTopY),
             new ProfilePoint(ApertureRearZ, TopAt(ApertureRearZ)),
         }),

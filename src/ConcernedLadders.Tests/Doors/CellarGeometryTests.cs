@@ -43,20 +43,64 @@ public sealed class CellarGeometryTests
     public void TheDocumentedDimensionsAreTheModels()
     {
         // DOOR_DONOR_MATRIX.md is CL-004's; CELLAR_DOORS.md section 2 lists these values.
-        Assert.Equal(0.3f, CellarGeometry.FrontTopY - CellarGeometry.FloorTopY, 4);
-        Assert.Equal(1.3f, CellarGeometry.RearTopY - CellarGeometry.FloorTopY, 4);
-        Assert.Equal(26.565, CellarGeometry.SlopeDegrees, 3);
+        // #549: the high end raised to a bulkhead's height and the low end lowered so the front panel's top stays where
+        // the ladder exit over it was measured (0.375 m above the floor top).
+        Assert.Equal(0.2625f, CellarGeometry.FrontTopY - CellarGeometry.FloorTopY, 4);
+        Assert.Equal(1.7625f, CellarGeometry.RearTopY - CellarGeometry.FloorTopY, 4);
+        Assert.Equal(36.870, CellarGeometry.SlopeDegrees, 3);
+        Assert.Equal(0.375f, CellarGeometry.TopAt(CellarGeometry.ApertureFrontZ) - CellarGeometry.FloorTopY, 4);
+        Assert.Equal(1.3125f, CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY, 4);
         Assert.Equal(1.7f, 2f * CellarGeometry.HalfAperture, 4);
         Assert.Equal(1.65f, CellarGeometry.ApertureRearZ - CellarGeometry.ApertureFrontZ, 4);
         Assert.Equal(1.56f, 2f * CellarGeometry.ClearHalfWidth, 4);
         Assert.Equal(0.84f, CellarGeometry.HingeU, 4);
         Assert.Equal(0.835f, CellarGeometry.LeafWidth, 4);
-        Assert.Equal(1.7924, CellarGeometry.LeafLength, 3);
+        Assert.Equal(1.9925, CellarGeometry.LeafLength, 3);
         Assert.Equal(0.8372, CellarGeometry.LeafReach, 3);
         HatchBox sweep = CellarGeometry.SweepInPiece(CellarLeaf.Right);
-        Assert.Equal(-1.2134, sweep.Min.Z, 3);
+        Assert.Equal(-1.341, sweep.Min.Z, 3);
         Assert.Equal(0.79, sweep.Max.Z, 3);
-        Assert.Equal(2.0253, sweep.Max.Y, 3);
+        Assert.Equal(2.3428, sweep.Max.Y, 3);
+    }
+
+    [Fact]
+    public void TheHighEndIsOpenBelowItsBeam()
+    {
+        // #549 (owner playtest 2026-11-10): a bulkhead's high end stands against the house and the stair goes on under
+        // it. Below the beam, between the cheeks, from the floor's bottom down and back to the module's rear edge, no
+        // frame part stands; the beam is RearBeamHeight deep under the slope.
+        CellarPrism beam = CellarGeometry.Frame.Single(p => p.Name == "rear_header");
+        Assert.Equal(CellarGeometry.RearBeamHeight, CellarGeometry.TopAt(CellarGeometry.ApertureRearZ) - beam.Profile.Min(p => p.Y), 5);
+        var passage = new HatchBox(
+            new ClimbPoint(-CellarGeometry.HalfAperture, CellarGeometry.FrameBottomY - 3f, CellarGeometry.ApertureFrontZ),
+            new ClimbPoint(CellarGeometry.HalfAperture, CellarGeometry.RearBeamBottomY, CellarGeometry.HalfModule));
+        foreach (CellarPrism prism in CellarGeometry.Frame)
+        {
+            for (int index = 0; index < 4; ++index)
+            {
+                ProfilePoint p = prism.Profile[index];
+                bool overlapsX = prism.MaxX > passage.Min.X + Epsilon && prism.MinX < passage.Max.X - Epsilon;
+                bool inside = p.Y < passage.Max.Y - Epsilon && p.Z > passage.Min.Z + Epsilon && p.Z <= passage.Max.Z;
+                Assert.False(overlapsX && inside, prism.Name + " stands in the passage under the high end");
+            }
+        }
+    }
+
+    [Fact]
+    public void AStairDownFromTheLowEndHasHeadroomUnderTheBeam()
+    {
+        // A 45-degree stair from the front panel's inner face at floor level, going down toward the high end: where it
+        // passes under the beam (the opening's rear face to the module's rear edge) a player's head (2 m with margin)
+        // clears the beam's underside by far. Before #549 the solid header met the head at ground level.
+        const float Player = 2f;
+        foreach (float z in new[] { CellarGeometry.ApertureRearZ, CellarGeometry.HalfModule })
+        {
+            float stair = CellarGeometry.FloorTopY - (z - CellarGeometry.ApertureFrontZ);
+            Assert.True(CellarGeometry.RearBeamBottomY - stair > Player + 0.9f, "headroom at z " + z);
+        }
+
+        // And the beam is above a standing player's knees at the top of the stair, so it is never a step to trip on.
+        Assert.True(CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY > 1.3f);
     }
 
     [Fact]
@@ -104,7 +148,9 @@ public sealed class CellarGeometryTests
                 Assert.True(a.Y <= CellarGeometry.TopAt(a.Z) + Epsilon, prism.Name + " rises above the slope");
             }
 
-            Assert.Equal(CellarGeometry.FrameBottomY, prism.Profile.Min(p => p.Y), 5);
+            // Every part reaches the floor's bottom but the rear header, a beam under the slope since #549.
+            float bottom = prism.Name == "rear_header" ? CellarGeometry.RearBeamBottomY : CellarGeometry.FrameBottomY;
+            Assert.Equal(bottom, prism.Profile.Min(p => p.Y), 5);
             Assert.Equal(2, prism.Profile.Count(p => Math.Abs(p.Y - CellarGeometry.TopAt(p.Z)) < Epsilon));
         }
 

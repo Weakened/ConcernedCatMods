@@ -110,7 +110,7 @@ internal static class CellarDoors
     {
         var english = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [DescriptionToken] = "A sloped 2 m cellar entrance with two hinged leaves. Opens and closes like its door. Digs nothing.",
+            [DescriptionToken] = "A sloped 2 m cellar entrance with two hinged leaves. Its high end is open below a beam, so a stair can lead down under it. Opens and closes like its door. Digs nothing.",
             [CellarClosedToken] = "The cellar door is not open. Open it from the ladder, or climb down.",
         };
         foreach (CellarDoorFamily cellar in All) { english[cellar.Token] = cellar.English; }

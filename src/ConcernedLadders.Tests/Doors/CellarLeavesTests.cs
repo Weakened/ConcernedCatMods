@@ -56,9 +56,9 @@ public sealed class CellarLeavesTests
     [Fact]
     public void ARoofLowerThanTheOpenLeavesHoldsBothShortOfOpenAndAHigherOneDoesNot()
     {
-        // A roof beam over the right half only, just under the open leaves' top (2.03 m): the right leaf meets it and
-        // the left leaf, which never would, is held at the same angle.
-        var low = new Obstacle(new ClimbPoint(0.05f, 1.9f, -1.3f), new ClimbPoint(1.2f, 2.2f, 1.2f));
+        // A roof beam over the right half only, just under the open leaves' top (2.34 m since #549): the right leaf meets
+        // it and the left leaf, which never would, is held at the same angle.
+        var low = new Obstacle(new ClimbPoint(0.05f, 2.2f, -1.4f), new ClimbPoint(1.2f, 2.5f, 1.2f));
         float progress = Run(low, open: true, from: 0f);
         float held = HatchMotion.Angle(progress);
         Assert.InRange(held, 30f, CellarGeometry.OpenAngleDegrees - 1f);
@@ -66,7 +66,7 @@ public sealed class CellarLeavesTests
         Assert.False(low.Asked.Any(pose => pose.Leaf == CellarLeaf.Left && pose.Occupied), "The left leaf cannot reach the beam.");
         Assert.All(low.Asked.Where(pose => pose.Occupied), pose => Assert.True(pose.Angle > held));
 
-        var high = new Obstacle(new ClimbPoint(0.05f, 2.1f, -1.3f), new ClimbPoint(1.2f, 2.4f, 1.2f));
+        var high = new Obstacle(new ClimbPoint(0.05f, 2.4f, -1.4f), new ClimbPoint(1.2f, 2.7f, 1.2f));
         Assert.True(HatchMotion.IsPassage(Run(high, open: true, from: 0f), true));
     }
 
