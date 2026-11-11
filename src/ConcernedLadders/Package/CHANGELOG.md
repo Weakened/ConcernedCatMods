@@ -2,9 +2,9 @@
 
 ## 1.1.0
 
-Three experimental additions for building basements, each behind its own
-setting that is **off by default**. None of the three has been tried in game
-yet, so leave them off. With all three off, the ladders, the climb and the
+Experimental additions for building basements, each behind its own
+setting that is **off by default**. None of them has been tried in game
+yet, so leave them off. With all of them off, the ladders, the climb and the
 Climbing skill are the same as in 1.0.0, and nothing new appears in the hammer
 or crafting menus. Every player and the host or server must use the same
 version and the same values for these settings.
@@ -60,6 +60,15 @@ version and the same values for these settings.
   materials cost what the game's own pole of that material costs. Turning the setting off again, or uninstalling,
   makes the game delete placed railings, with no refund, the next time the
   world loads. Not yet observed in game.
+- Basement walls (#568), behind `BasementWalls` / `Enabled` (off by default).
+  Adds wooden and stone basement walls, 1 or 2 m wide and 1, 2 or 4 m tall to
+  match the Iron Shovel's cubes, and a corner cap for each. A wall stands on
+  a dug hole's floor edge, and its lip at ground level covers the sloping
+  border out to the untouched ground, so the hole's side reads as a straight
+  wall. They take the vanilla wood wall's and stone wall's health, support and
+  repair. Turning the setting off again, or uninstalling, makes the game
+  delete placed basement walls, with no refund, the next time the world
+  loads. Not yet observed in game.
 - Iron Shovel and measured basement excavation (CL-006, #487), behind
   `Excavation` / `Enabled` (off by default). Adds the Iron Shovel, crafted at
   the Forge from 10 Iron and 4 Wood once you have found Iron (Iron Scrap alone

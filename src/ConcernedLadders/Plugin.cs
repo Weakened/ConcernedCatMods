@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using Jotunn.Managers;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Excavation;
+using TheConcernedCat.ConcernedLadders.Domain.Basement;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.ConcernedLadders.Domain.Families;
 using TheConcernedCat.ConcernedLadders.Domain.Railings;
@@ -42,6 +43,8 @@ public sealed class Plugin : BaseUnityPlugin
     private CellarDoorPieceRegistration? _cellarDoors;
     private ConfigEntry<bool>? _railingsEnabled;
     private RailingPieceRegistration? _railings;
+    private ConfigEntry<bool>? _basementEnabled;
+    private BasementPieceRegistration? _basement;
     private ExcavationShovelInput? _shovelInput;
     private IronShovelItem? _shovel;
     private ExcavationPreview? _preview;
@@ -100,6 +103,20 @@ public sealed class Plugin : BaseUnityPlugin
                 Logger.LogError("Railings unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
                 try { _railings.Dispose(); } catch { /* Unsubscribe only. */ }
                 _railings = null;
+            }
+        }
+        // Basement walls (#568), unfinished and off by default, their own switch: with it off nothing is cloned or localized.
+        _basementEnabled = Config.Bind(BasementSettings.Section, BasementSettings.Key, BasementSettings.EnabledByDefault,
+            BasementSettings.Description);
+        if (_basementEnabled.Value)
+        {
+            _basement = new BasementPieceRegistration(message => Logger.LogInfo(message));
+            try { _basement.Install(); }
+            catch (Exception exception)
+            {
+                Logger.LogError("Basement walls unavailable: " + SafeFailure.Brief(exception) + ". The ladders are unaffected.");
+                try { _basement.Dispose(); } catch { /* Unsubscribe only. */ }
+                _basement = null;
             }
         }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
@@ -218,6 +235,8 @@ public sealed class Plugin : BaseUnityPlugin
         _cellarDoors = null;
         _railings?.Dispose();
         _railings = null;
+        _basement?.Dispose();
+        _basement = null;
         _snap = null;
         _runtime = null;
         _pieces = null;
