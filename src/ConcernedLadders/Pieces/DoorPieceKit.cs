@@ -207,6 +207,15 @@ internal static class DoorPieceKit
         box.GetComponent<Renderer>().sharedMaterial = material;
     }
 
+    /// <summary>A leaf's visual boxes in its look (<see cref="LeafPattern"/>, #547): boards in the donor leaf's material,
+    /// rails in the donor frame's. Visual only; the leaf's collider is built separately and is the same for every look.</summary>
+    internal static void LeafVisuals(Transform parent, string name, ClimbPoint centre, ClimbPoint size, LeafLook look,
+        Material board, Material rail, int layer)
+    {
+        foreach (LeafPiece piece in LeafPattern.Parts(name, centre, size, look))
+            VisualBox(parent, piece.Name, piece.Centre, piece.Size, piece.Role == LeafPieceRole.Rail ? rail : board, layer);
+    }
+
     /// <summary>A box collider on its own child, never on the root: the placement ghost's blocked-by-player test
     /// skips the ghost root's colliders (observed with the ladders).</summary>
     internal static void ColliderBox(Transform parent, string name, ClimbPoint centre, ClimbPoint size, int layer)

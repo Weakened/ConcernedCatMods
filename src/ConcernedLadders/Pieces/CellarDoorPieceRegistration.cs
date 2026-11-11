@@ -138,7 +138,7 @@ internal sealed class CellarDoorPieceRegistration : IDisposable
                 CellarPart box = CellarBlueprint.LeafCollider(leaf);
                 ColliderBox(hinge.transform, box.Name, box.Centre, box.Size, layer);
                 CellarPart visual = CellarBlueprint.LeafVisual(leaf);
-                VisualBox(hinge.transform, visual.Name, visual.Centre, visual.Size, leafMaterial, layer);
+                LeafVisuals(hinge.transform, visual.Name, visual.Centre, visual.Size, LeafPattern.For(family), leafMaterial, frame, layer);
                 foreach (CellarPart mark in CellarBlueprint.HingeMarks(leaf)) VisualBox(hinge.transform, mark.Name, mark.Centre, mark.Size, markMaterial, layer);
             }
 
