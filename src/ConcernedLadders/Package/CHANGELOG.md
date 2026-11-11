@@ -33,7 +33,8 @@ version and the same values for these settings.
   uninstalling, makes the game delete placed cellar doors, with no refund, the
   next time the world loads. Shaped like a house's bulkhead door: the high end
   stands 1.76 m tall with a beam across it and is open below, so a stair built
-  down from the low end passes under it (#549). Each cellar door's leaves read
+  down from the low end passes under it (#549), and the low end is a
+  threshold you walk over, not a ledge (#566). Each cellar door's leaves read
   as its own door, as the trapdoors' lids do (#547, #555). Not yet
   observed in game.
 - Trapdoor and cellar door surfaces take their texture from the matching part

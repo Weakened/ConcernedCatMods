@@ -100,13 +100,15 @@ internal static class CellarGeometry
     /// <summary>Every frame part reaches down to the wood_floor collider's bottom, as the trapdoor's frame does.</summary>
     internal const float FrameBottomY = HatchGeometry.FrameBottomY;
 
-    /// <summary>Height of the cover's top above the floor at the front (low) edge.</summary>
-    internal const float FrontHeight = 0.2625f;
+    /// <summary>Height of the cover's top above the floor at the front (low) edge: low enough that the front panel's inner
+    /// top (<see cref="SlopeTangent"/> further up) is a threshold a player walks over, not a ledge (#566, owner playtest
+    /// 2026-11-11: stairs snapped to the floor left the old 0.375 m sill above their top step).</summary>
+    internal const float FrontHeight = 0.05f;
 
-    /// <summary>The slope's rise per metre of run: 1.5 m over the 2 m module (36.87 degrees). Raised from 1 m (26.57
-    /// degrees) by #549 (owner playtest 2026-11-10, lead default): the high end stands 1.8 m above the floor, a bulkhead's
-    /// height, so a stair going down from the low end toward the high end has headroom under it.</summary>
-    internal const float SlopeTangent = 0.75f;
+    /// <summary>The slope's rise per metre of run: 1.7125 m over the 2 m module (40.57 degrees). #549 raised the high end
+    /// to 1.7625 m above the floor, a bulkhead's height, so a stair going down from the low end has headroom under it; #566
+    /// lowered the front to a walkable threshold and steepened the slope so the high end stays where #549 put it.</summary>
+    internal const float SlopeTangent = 0.85625f;
 
     /// <summary>The cover's top at the front edge (z = -1).</summary>
     internal const float FrontTopY = FloorTopY + FrontHeight;
