@@ -38,6 +38,19 @@ internal static class ExcavationClearing
         return removed;
     }
 
+    /// <summary>Removes earth blocks (#577), the way the rest is removed: those a new hole's floor covers, from the dig's
+    /// commit, and those a dig placed, from its undo. Returns how many were removed.</summary>
+    internal static int RemoveFill(IReadOnlyList<GameObject> blocks)
+    {
+        int removed = 0;
+        foreach (GameObject block in blocks)
+        {
+            if (block != null && EarthFillPlacement.IsFill(block)) removed += Remove(block);
+        }
+
+        return removed;
+    }
+
     private static int Remove(GameObject? target)
     {
         if (target == null) return 0;

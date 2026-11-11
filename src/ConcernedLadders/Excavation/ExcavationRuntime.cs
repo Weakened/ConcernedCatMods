@@ -45,6 +45,10 @@ internal sealed class ExcavationRuntime : IDisposable
     private readonly DigPreviewShape _shape = new DigPreviewShape();
     private readonly List<GameObject> _pick = new List<GameObject>();
     private readonly List<GameObject> _remove = new List<GameObject>();
+    private readonly List<GameObject> _fills = new List<GameObject>();
+    private readonly List<GameObject> _fillsOut = new List<GameObject>();
+    private readonly HashSet<FillCell> _fillOccupied = new HashSet<FillCell>();
+    private readonly List<FillBlock> _fillPlan = new List<FillBlock>();
     private DigSize _lastSize;
     private DigFootprint _lastFootprint;
     private float _lastPreviewRead = float.NaN;
@@ -75,6 +79,12 @@ internal sealed class ExcavationRuntime : IDisposable
     /// <summary>Called once, when a fault stops excavation for the rest of the session, so the plugin can disable the
     /// shovel's recipe (no one should craft a tool that can no longer dig).</summary>
     internal Action? Faulted { get; set; }
+
+    /// <summary>The earth block prefab (#577), once registered; null leaves digs unfilled.</summary>
+    internal Func<GameObject?>? FillPrefab { get; set; }
+
+    /// <summary>Whether this player's digs fill their sloping border with earth (#577; <c>Excavation/EarthFill</c>).</summary>
+    internal bool FillEnabled { get; set; }
 
     /// <summary>The dig flow the presses drive.</summary>
     internal DigSession Session => _session;
@@ -290,6 +300,7 @@ internal sealed class ExcavationRuntime : IDisposable
         cleared = 0;
         _pick.Clear();
         _remove.Clear();
+        _fills.Clear();
         bool registered = _ops.IsRegistered();
         bool readable = Available && registered && !TerrainOp.m_forceDisableTerrainOps && !_inFlight.IsActive;
         if (readable)
@@ -323,7 +334,7 @@ internal sealed class ExcavationRuntime : IDisposable
         // What stands on the ground (#567): pickables and other world objects are cleared by the dig, not refused; only what
         // may never be removed (carts, ships, moving bodies) or cannot be (static props) still blocks it.
         int obstructions = ward && !noBuild
-            ? _world.Survey(footprint, plan.Bottom, Math.Max(HighestGround(samples), plan.Datum), _pick, _remove, out pieces, out overflow, out obstruction)
+            ? _world.Survey(footprint, plan.Bottom, Math.Max(HighestGround(samples), plan.Datum), _pick, _remove, _fills, out pieces, out overflow, out obstruction)
             : 0;
         cleared = _pick.Count + _remove.Count;
         return DigGate.WorldChecks(ward, noBuild, obstructions, overflow);
@@ -389,6 +400,8 @@ internal sealed class ExcavationRuntime : IDisposable
 
         // The ground is cleared only now that the game has placed the dig (#567): what this press's survey found.
         int removed = ExcavationClearing.Clear(player, _pick, _remove);
+        // Earth sides (#577): blocks of earlier holes inside this floor go, and the sloping ring is filled.
+        int filled = Fill(placed);
         // The charge, once (EXCAVATION.md 7.3). The operations have been handed to every tile owner, so whatever the
         // read-back later reports, this dig has been paid for and is never paid for again: the in-flight slot refuses a
         // second commit until it resolves, and a repeat of a completed plan is NothingToDig, which is free.
@@ -398,6 +411,7 @@ internal sealed class ExcavationRuntime : IDisposable
         _lastPreviewRead = float.NaN;
         string text = "Digging " + N(placed.Vertices.Count) + " of " + N(record.Vertices.Count) + " point(s) to " + F(plan.Bottom) + " m.";
         if (removed > 0) text += " Cleared " + N(removed) + " object(s) from the ground.";
+        if (filled > 0) text += " Placed " + N(filled) + " earth block(s), taking out " + N(placed.FillRemoved.Count) + ".";
         if (pieces > 0) text += " " + N(pieces) + " building-piece collider(s) stand on the changed ground; their support is the game's own.";
         _log("Excavation committed: " + text);
         return string.Empty;
@@ -429,18 +443,102 @@ internal sealed class ExcavationRuntime : IDisposable
 
         if (!ExcavationWorldChecks.WardAllows(record.Footprint, top)) return DigText.Refusal(ExcavationCommitRefusal.Protected, ExcavationReadFault.None, default, null);
         if (_world.InNoBuildArea(record.Footprint, top)) return DigText.Refusal(ExcavationCommitRefusal.NoBuildArea, ExcavationReadFault.None, default, null);
-        int obstructions = _world.Survey(record.Footprint, floor, top, _pick, _remove, out int pieces, out bool overflow, out _);
-        bool occupied = overflow || obstructions > 0 || pieces > 0 || _pick.Count > 0 || _remove.Count > 0;
+        int obstructions = _world.Survey(record.Footprint, floor, top, _pick, _remove, _fills, out int pieces, out bool overflow, out _);
+        bool occupied = overflow || obstructions > 0 || pieces > 0 || _pick.Count > 0 || _remove.Count > 0 || FillInside(record.Footprint);
         _pick.Clear();
         _remove.Clear();
         // Raising the ground back would bury whatever stands in the hole now, a building piece as much as anything else.
         if (occupied) return DigText.Undo(UndoRefusal.PieceInside);
         DigRecord? placed = Place(DigFlightKind.Undo, record, out ExcavationCommitRefusal refused);
-        if (placed == null) return DigText.Refusal(refused, ExcavationReadFault.None, default, null);
+        if (placed == null)
+        {
+            _fills.Clear();
+            return DigText.Refusal(refused, ExcavationReadFault.None, default, null);
+        }
+
+        // Earth sides (#577): the blocks this dig placed go, and the blocks it took out of earlier holes come back.
+        Unfill(record);
         _shown.Invalidate();
         _lastPreviewRead = float.NaN;
         _log("Excavation undo committed: raising " + N(placed.Vertices.Count) + " of " + N(record.Vertices.Count) + " point(s) back.");
         return string.Empty;
+    }
+
+    /// <summary>The earth fill of a dig just placed (#577), from this press's survey and terrain read: the blocks whose cell
+    /// the new floor covers, or that stand above the new floor, are taken out (and remembered, so the undo puts them back;
+    /// <see cref="EarthFill.TakesOut"/>); every other block found marks its cell as filled already; the ring's remaining sloping cells get a block each (<see cref="EarthFill.Plan"/>). Returns
+    /// how many blocks were placed. Does nothing with the fill off or its prefab missing.</summary>
+    private int Fill(DigRecord placed)
+    {
+        GameObject? prefab = FillPrefab?.Invoke();
+        if (!FillEnabled || prefab == null)
+        {
+            _fills.Clear();
+            return 0;
+        }
+
+        _fillsOut.Clear();
+        _fillOccupied.Clear();
+        float bottom = float.PositiveInfinity;
+        foreach (DigVertex vertex in placed.Vertices) bottom = Math.Min(bottom, vertex.After);
+        foreach (GameObject block in _fills)
+        {
+            if (block == null) continue;
+            FillBlock found = EarthFillPlacement.Read(block);
+            if (EarthFill.TakesOut(placed.Footprint, bottom, found))
+            {
+                _fillsOut.Add(block);
+                placed.FillRemoved.Add(found);
+            }
+            else
+            {
+                _fillOccupied.Add(found.Cell);
+            }
+        }
+
+        _fills.Clear();
+        ExcavationClearing.RemoveFill(_fillsOut);
+        _fillsOut.Clear();
+        EarthFill.Plan(placed.Footprint, bottom, Read(_samples), _fillOccupied, _fillPlan);
+        return EarthFillPlacement.Place(prefab, _fillPlan, placed.FillPlaced);
+    }
+
+    /// <summary>Whether an earth block stands inside <paramref name="footprint"/>'s floor: raising the ground back would bury
+    /// it, so an undo refuses, as it does for anything else standing in the hole.</summary>
+    private bool FillInside(DigFootprint footprint)
+    {
+        foreach (GameObject block in _fills)
+        {
+            if (block != null && EarthFill.Inside(footprint, EarthFillPlacement.Read(block).Cell)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The earth fill of a dig being undone (#577), from the undo's survey: the blocks the dig placed are removed
+    /// (found by cell, floor and top, so a neighbour's block in a shared cell stays), and the blocks it took out of earlier
+    /// holes are placed again.</summary>
+    private void Unfill(DigRecord record)
+    {
+        _fillsOut.Clear();
+        foreach (GameObject block in _fills)
+        {
+            if (block == null) continue;
+            FillBlock found = EarthFillPlacement.Read(block);
+            foreach (FillBlock mine in record.FillPlaced)
+            {
+                if (!mine.Same(found)) continue;
+                _fillsOut.Add(block);
+                break;
+            }
+        }
+
+        _fills.Clear();
+        ExcavationClearing.RemoveFill(_fillsOut);
+        _fillsOut.Clear();
+        GameObject? prefab = FillPrefab?.Invoke();
+        if (prefab != null && record.FillRemoved.Count > 0) EarthFillPlacement.Place(prefab, record.FillRemoved, _fillPlan);
+        _fillPlan.Clear();
     }
 
     /// <summary>Takes the dig's cost from the shovel and the player. Stamina first, through the game's own UseStamina (which

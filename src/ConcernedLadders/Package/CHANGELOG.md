@@ -78,8 +78,16 @@ version and the same values for these settings.
   floor is level, measured from the highest ground at the hole's edge, so it
   stays level on a slope. Ground that is already lower, such as an earlier
   hole, is left as it is, so a new hole beside or over an old one joins it.
-  The walls cannot be vertical: each side slopes over one more metre, so a
-  wall built on the floor's edge hides the slope.
+  The ground itself cannot be cut vertically: each side slopes over one more
+  metre. With `Excavation` / `EarthFill` (on by default, #577) that sloping
+  border is filled with earth blocks up to the ground beside it, so the hole
+  has straight earth sides, flat ground to its edge, and corner snap points a
+  wall can use. The blocks look like dirt; to blend the edge, make the ground
+  around the hole dirt too (the hoe's path does). The hammer removes a block,
+  free and with no refund. A new hole takes out the blocks on its floor and
+  fills its own border; undo puts both back. Turning `Excavation` off again,
+  or uninstalling, makes the game delete the earth blocks the next time the
+  world loads, leaving sloping sides.
   - While the shovel is held, a flat outline shows the hole's top edge, the
     floor and the walls between them (and the water line if the floor would
     flood). It is green when Attack would dig, amber when there is nothing to
