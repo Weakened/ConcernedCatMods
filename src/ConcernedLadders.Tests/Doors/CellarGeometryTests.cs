@@ -103,7 +103,7 @@ public sealed class CellarGeometryTests
         // stairs all rise 1 m over 2 m (26.57 degrees, measured from their snap points); only wood_stepladder is 45. On
         // the shallow one the head still clears the beam at its inner face by 2.14 m.
         float shallow = CellarGeometry.FloorTopY - 0.5f * (CellarGeometry.ApertureRearZ - CellarGeometry.ApertureFrontZ);
-        Assert.Equal(2.1375f, CellarGeometry.RearBeamBottomY - shallow, 3);
+        Assert.InRange(CellarGeometry.RearBeamBottomY - shallow, 2.137f, 2.138f);
         Assert.True(CellarGeometry.RearBeamBottomY - shallow > Player);
 
         // And the beam is above a standing player's knees at the top of the stair, so it is never a step to trip on.
