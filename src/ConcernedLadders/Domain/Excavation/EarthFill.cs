@@ -161,6 +161,32 @@ internal static class EarthFill
         }
     }
 
+    /// <summary>How far around a vanilla terrain operation it clears earth blocks (#584, owner: "level grounding or raising
+    /// should have them go so we can have one continuous digout area"): the radius of the parts that change height
+    /// (levelling, raising or lowering, smoothing), or 0 when it changes none (painting alone: cultivating, a path, a paved
+    /// road) or is one of the Iron Shovel's own operations (<paramref name="prefab"/> starting <c>tcc_excavate_</c>), which
+    /// fill the blocks themselves.</summary>
+    internal static float ClearRadius(string? prefab, bool level, float levelRadius, bool raise, float raiseRadius, bool smooth, float smoothRadius)
+    {
+        if (prefab != null && prefab.StartsWith(OwnOperationPrefix, StringComparison.Ordinal)) return 0f;
+        float radius = 0f;
+        if (level && LadderRules.Finite(levelRadius)) radius = Math.Max(radius, levelRadius);
+        if (raise && LadderRules.Finite(raiseRadius)) radius = Math.Max(radius, raiseRadius);
+        if (smooth && LadderRules.Finite(smoothRadius)) radius = Math.Max(radius, smoothRadius);
+        return radius;
+    }
+
+    /// <summary>The Iron Shovel's own terrain operations' prefab names begin so.</summary>
+    internal const string OwnOperationPrefix = "tcc_excavate_";
+
+    /// <summary>How far past a terrain operation's radius a block is still cleared: a block is 1 m across, so one whose face
+    /// the operation's edge reaches goes too. Lead default.</summary>
+    internal const float ClearMargin = 0.25f;
+
+    /// <summary>A block's health against the pickaxe (#584, owner: "Pickaxe should also destroy the filling material"): every
+    /// pickaxe breaks it in one hit; nothing but pickaxe damage hurts it.</summary>
+    internal const float PickaxeHealth = 1f;
+
     /// <summary>The lattice vertex a shovel aimed at <paramref name="block"/> aims at (#579, owner: "we should dig sideways
     /// as well, imagine minecraft"): the block's cell's smaller corner. <see cref="DigSnap"/> then places the new hole on the
     /// lattice of the hole the block belongs to, on the block's side of it, so the new hole covers the block's cell and

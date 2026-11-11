@@ -47,6 +47,7 @@ public sealed class Plugin : BaseUnityPlugin
     private IronShovelItem? _shovel;
     private ExcavationPreview? _preview;
     private EarthFillPieceRegistration? _earthFill;
+    private EarthFillTerrainTools? _earthTools;
 
     private void Awake()
     {
@@ -171,6 +172,9 @@ public sealed class Plugin : BaseUnityPlugin
                 _earthFill = new EarthFillPieceRegistration(message => Logger.LogInfo(message));
                 _earthFill.Install();
                 _excavation.FillPrefab = () => _earthFill?.Prefab;
+                // The hoe's level and raise and the pickaxe clear earth blocks (#584), whoever placed them.
+                _earthTools = new EarthFillTerrainTools();
+                if (!_earthTools.Install(PluginGuid + ".earthfill", message => Logger.LogInfo(message))) _earthTools = null;
                 _excavation.FillEnabled = earthFill.Value;
                 CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(() => _excavation));
                 _shovelInput = new ExcavationShovelInput(message => Logger.LogInfo(message));
@@ -188,12 +192,14 @@ public sealed class Plugin : BaseUnityPlugin
             Logger.LogInfo("Excavation unavailable (" + SafeFailure.Brief(exception) + "); ladders are unaffected.");
             try { _preview?.Dispose(); } catch { /* Cleanup only. */ }
             try { _earthFill?.Dispose(); } catch { /* Cleanup only. */ }
+            try { _earthTools?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.DisableRecipe(); } catch { /* Cleanup only. */ }
             try { _shovelInput?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.Dispose(); } catch { /* Cleanup only. */ }
             try { _excavation?.Dispose(); } catch { /* Cleanup only. */ }
             _preview = null;
             _earthFill = null;
+            _earthTools = null;
             _shovelInput = null;
             _shovel = null;
             _excavation = null;
@@ -211,11 +217,13 @@ public sealed class Plugin : BaseUnityPlugin
     {
         try { _preview?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _earthFill?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        try { _earthTools?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovelInput?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovel?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _excavation?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         _preview = null;
         _earthFill = null;
+        _earthTools = null;
         _shovelInput = null;
         _shovel = null;
         _excavation = null;

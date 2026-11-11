@@ -15,8 +15,9 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// <summary>The earth block (#577): one networked piece prefab, <see cref="EarthFill.Prefab"/>, that a dig places in the
 /// sloping cells around a hole. Never in a build menu. A 1 m square column standing on its origin, one metre tall before
 /// it is scaled: the dig scales each block to its height, and the game saves and sends that scale with the block
-/// (<c>ZNetView.m_syncInitialScale</c>, read from the installed game). It has no health and no cost: the hammer removes it
-/// through the game's own path for a piece without WearNTear, which drops its (empty) resources and destroys it. Its body
+/// (<c>ZNetView.m_syncInitialScale</c>, read from the installed game). It has no cost: the hammer removes it through the
+/// game's own path for a piece without WearNTear, which drops its (empty) resources and destroys it, and a pickaxe breaks
+/// it in one hit through the game's own Destructible, which nothing else can hurt (#584). Its body
 /// is drawn in a copy of the vanilla mud pile's material, whose shader maps the texture by world position and so does not
 /// stretch with the scale. That shader draws the generated box's upward faces black (#583, owner playtest), so the thin
 /// top is drawn in a copy of the vanilla wood wall's UV-mapped piece material instead, the one the doors and railings use
@@ -91,6 +92,23 @@ internal sealed class EarthFillPieceRegistration : IDisposable
             piece.m_primaryTarget = false;
             piece.m_randomTarget = false;
             piece.m_targetNonPlayerBuilt = false;
+
+            // A pickaxe breaks it (#584): the game's own Destructible, hurt by pickaxe damage alone, in one hit, with the mud
+            // pile's own hit and break effects; it drops nothing.
+            Destructible destructible = prefab.AddComponent<Destructible>();
+            destructible.m_destructibleType = DestructibleType.Default;
+            destructible.m_health = EarthFill.PickaxeHealth;
+            destructible.m_minToolTier = 0;
+            destructible.m_damages = PickaxeOnly();
+            destructible.m_spawnWhenDestroyed = null;
+            destructible.m_spawnWhenDamaged = null;
+            destructible.m_autoCreateFragments = false;
+            Destructible? mud = PrefabManager.Instance.GetPrefab(MaterialPrefab)?.GetComponent<Destructible>();
+            if (mud != null)
+            {
+                destructible.m_hitEffect = mud.m_hitEffect;
+                destructible.m_destroyedEffect = mud.m_destroyedEffect;
+            }
 
             var centre = new ClimbPoint(0f, 0.5f, 0f);
             var size = new ClimbPoint(1f, 1f, 1f);
@@ -185,6 +203,22 @@ internal sealed class EarthFillPieceRegistration : IDisposable
         if (normal != null && material.HasProperty("_BumpMap")) material.SetTexture("_BumpMap", normal);
         if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.1f);
     }
+
+    /// <summary>Immune to everything but the pickaxe.</summary>
+    private static HitData.DamageModifiers PickaxeOnly() => new HitData.DamageModifiers
+    {
+        m_blunt = HitData.DamageModifier.Immune,
+        m_slash = HitData.DamageModifier.Immune,
+        m_pierce = HitData.DamageModifier.Immune,
+        m_chop = HitData.DamageModifier.Immune,
+        m_pickaxe = HitData.DamageModifier.Normal,
+        m_fire = HitData.DamageModifier.Immune,
+        m_frost = HitData.DamageModifier.Immune,
+        m_lightning = HitData.DamageModifier.Immune,
+        m_poison = HitData.DamageModifier.Immune,
+        m_spirit = HitData.DamageModifier.Immune,
+        m_nonPlayer = HitData.DamageModifier.Immune,
+    };
 
     /// <summary>The top's texture on its UV-mapped material: one whole tile per metre, as the generated mesh's UVs run one
     /// unit per <see cref="UvRegion.UvMetres"/>, so neighbouring tops join without a seam.</summary>

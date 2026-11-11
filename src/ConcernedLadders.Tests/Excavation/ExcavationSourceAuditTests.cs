@@ -139,9 +139,19 @@ public sealed class ExcavationSourceAuditTests
         Assert.True(places.Count == 1 && places[0].Path == "Excavation/ExcavationRuntime.cs" && places[0].N == 2, string.Join(", ", places));
         Assert.Equal(1, Count(MethodBody(runtime, @"private\s+int\s+Fill\s*\("), @"EarthFillPlacement\.Place\s*\("));
         Assert.Equal(1, Count(MethodBody(runtime, @"private\s+void\s+Unfill\s*\("), @"EarthFillPlacement\.Place\s*\("));
-        // Removing blocks: once in each, through the clearing site.
-        var removes = Hits(@"ExcavationClearing\.RemoveFill\s*\(");
-        Assert.True(removes.Count == 1 && removes[0].Path == "Excavation/ExcavationRuntime.cs" && removes[0].N == 2, string.Join(", ", removes));
+        // Removing blocks: once in each, through the clearing site; and (#584) once for a vanilla terrain tool's operation.
+        var removes = Hits(@"ExcavationClearing\.RemoveFill\s*\(").OrderBy(h => h.Path).ToList();
+        Assert.True(removes.Count == 2 && removes[0] == ("Excavation/EarthFillTerrainTools.cs", 1) && removes[1] == ("Excavation/ExcavationRuntime.cs", 2),
+            string.Join(", ", removes));
+        string tools = SourceText("Excavation/EarthFillTerrainTools.cs");
+        string op = MethodBody(tools, @"private\s+static\s+void\s+BeforeTerrainOp\s*\(");
+        int disabled = Regex.Match(op, @"if\s*\(\s*TerrainOp\.m_forceDisableTerrainOps\s*\|\|\s*__instance\s*==\s*null\s*\)\s*return\s*;").Index;
+        int radius = Regex.Match(op, @"if\s*\(\s*!\s*\(\s*radius\s*>\s*0f\s*\)\s*\)\s*return\s*;").Index;
+        int removed = Regex.Match(op, @"if\s*\(\s*Found\.Count\s*>\s*0\s*\)\s*ExcavationClearing\.RemoveFill\s*\(\s*Found\s*\)\s*;").Index;
+        Assert.True(disabled > 0 && radius > disabled && removed > radius, "A terrain tool clears blocks only when terrain ops are on and it changes height.");
+        Assert.Matches(@"EarthFill\.ClearRadius\s*\(\s*Utils\.GetPrefabName\s*\(\s*__instance\.gameObject\s*\)", op);
+        Assert.Matches(@"EarthFillPlacement\.IsFill\s*\(\s*view\.gameObject\s*\)", op);
+        Assert.DoesNotMatch(@"\bInstantiate\s*\(|\bDestroy\w*\s*\(|ClaimOwnership|InvokeRPC|SpawnOnHitTerrain|\.Damage\s*\(|ApplyOperation", tools);
         Assert.Equal(1, Count(MethodBody(runtime, @"private\s+int\s+Fill\s*\("), @"ExcavationClearing\.RemoveFill\s*\("));
         Assert.Equal(1, Count(MethodBody(runtime, @"private\s+void\s+Unfill\s*\("), @"ExcavationClearing\.RemoveFill\s*\("));
         string removeFill = MethodBody(SourceText("Excavation/ExcavationClearing.cs"), @"internal\s+static\s+int\s+RemoveFill\s*\(");
@@ -466,7 +476,10 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(evaluate, @"if\s*\(\s*committing\s*&&\s*refusal\s*==\s*ExcavationCommitRefusal\.NotEnoughStamina\s*\)\s*FlashStamina\s*\(\s*\)\s*;"));
         string checks = SourceText("Excavation/ExcavationWorldChecks.cs");
         Assert.Equal(1, Count(checks, @"WardAllowsQuietly\s*\([^)]*\)\s*=>\s*PrivateArea\.CheckAccess\s*\([^;]*AccessCheckRadius\s*\(\s*footprint\s*\)\s*,\s*flash\s*:\s*false\s*,\s*wardCheck\s*:\s*true\s*\)"));
-        Assert.Equal(2, Hits(@"\bCheckAccess\s*\(").Where(h => ExcavationCode(h.Path)).Sum(h => h.N));
+        // #584: plus one, a pickaxe hit on an earth block, a press of its own, so the ward flashes as for its terrain tools.
+        Assert.Equal(3, Hits(@"\bCheckAccess\s*\(").Where(h => ExcavationCode(h.Path)).Sum(h => h.N));
+        Assert.Equal(1, Count(MethodBody(SourceText("Excavation/EarthFillTerrainTools.cs"), @"private\s+static\s+bool\s+BeforeDamage\s*\("),
+            @"return\s+PrivateArea\.CheckAccess\s*\(\s*__instance\.transform\.position\s*,\s*0f\s*,\s*flash\s*:\s*true\s*,\s*wardCheck\s*:\s*false\s*\)\s*;"));
         Assert.Empty(Hits(@"\bFlashShield\s*\(").Where(h => ExcavationCode(h.Path)));
     }
 

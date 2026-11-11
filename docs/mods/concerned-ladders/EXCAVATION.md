@@ -862,3 +862,25 @@ join without a seam. The cleared-dirt slice is no longer used. Before a world lo
 
 Not observed in game: OWNER GO-AROUND PENDING.
 
+### 13.3 The game's tools clear earth blocks (#584)
+
+Owner playtest, 2026-11-11: "Add a way to get rid of filling material, level grounding or raising should have them go so
+we can have one continuous digout area" and "Pickaxe should also destroy the filling material."
+
+- **Terrain tools** (`Excavation/EarthFillTerrainTools.cs`). A vanilla terrain operation runs `TerrainOp.Awake` on the
+  peer that used the tool, only after the game's own ward and no-build checks let it be placed (read from the installed
+  game). A Harmony prefix there removes, through `ExcavationClearing.RemoveFill`, the earth blocks within the
+  operation's height-changing radius plus 0.25 m (`EarthFill.ClearRadius`: levelling, raising or lowering, smoothing).
+  Painting alone (cultivating, a path, a paved road) clears nothing, and nor do the Iron Shovel's own operations, by
+  prefix `tcc_excavate_`. The hoe's level and raise and the pickaxe's dig on the ground beside a block all clear it.
+- **Pickaxe hits.** The block carries the game's own `Destructible`, immune to every damage type but the pickaxe's, with
+  health 1, so any pickaxe breaks it in one hit, with the mud pile's own hit and break effects, dropping nothing. The
+  game's `Destructible` asks no ward, so a Harmony prefix on `Destructible.Damage` refuses the local player's hit on an
+  earth block inside a ward that does not grant them access, flashing the ward, as the terrain tools are refused.
+- **Pinned** in `ExcavationSourceAuditTests` (the third `RemoveFill` caller, after the terrain-op switch and the radius;
+  the third ward check) and `EarthFillTests` (the rule and the damage modifiers).
+- **Limits.** A block cleared by a tool does not come back on undo: the undo of the dig that placed it is refused anyway
+  once a tool has changed the ground there.
+
+Not observed in game: OWNER GO-AROUND PENDING.
+

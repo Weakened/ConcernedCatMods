@@ -85,7 +85,11 @@ version and the same values for these settings.
   wall can use. The blocks wear the terrain's own grey rock, the rock of a
   steep hole's side, on every face, the top included (#579, #583). Aim the
   shovel at an earth block to dig sideways into it: the new hole lines up
-  flush beside the old one and takes the blocks it covers out. The hammer removes a block,
+  flush beside the old one and takes the blocks it covers out. The game's
+  own tools clear them too (#584): the hoe's level and raise and the
+  pickaxe's dig take out the blocks they reach, so separate holes can be
+  joined into one continuous dug-out area, and a pickaxe breaks a block in
+  one hit (inside a ward only for a player it grants access). The hammer removes a block,
   free and with no refund. A new hole takes out the blocks on its floor and
   fills its own border; undo puts both back. Turning `Excavation` off again,
   or uninstalling, makes the game delete the earth blocks the next time the
