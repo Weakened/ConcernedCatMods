@@ -329,10 +329,18 @@ read from the decompiled installed game (1.0.21) and Jötunn 2.30.2. **None of i
   and hand** (the registration refuses a donor that is not a weapon type, because `Humanoid.GetCurrentWeapon` only
   returns weapons), **weight, durability (`m_maxDurability`) and repair**. The log line at registration states the
   donor's item type, durability and repairability, because none of those values is in code.
-- **Looks:** the donor's iron pickaxe model with every material replaced by a tinted copy (cooler and darker), and an
-  icon rendered from that tinted clone on graphical clients (the donor's icon on a dedicated server or on a render
-  fault). This is a **placeholder**: a shovel-shaped model (for example procedural, like the metal ladders) is an
-  owner question.
+- **Looks (#550, owner playtest 2026-11-10):** its own shovel, `Domain/Excavation/ShovelModel.cs`. It is a wooden
+  shaft (8-sided, 4.4 cm across) with a T-grip, an iron socket and a pointed iron blade (24 cm wide, 32 cm long), 1.2 m
+  overall, built in code along the axis the pickaxe's handle used, so the hand holds it where it held the pickaxe.
+  - It is textured from the donor's own `weapons1` sheet, shared and never edited. The shaft uses the pickaxe handle's
+    wood island (u 0.5455-0.5686, v 0.6726-0.9092). The iron parts use its head's island, trimmed clear of the sheet's
+    white background (u 0.935-0.975, v 0.65-0.95). Both were read by the probe `cl-ladders-devtools/shovel/pickaxe.py`.
+  - The pickaxe's own child under `attach` carries the shovel: its mesh and materials are swapped and its transform
+    reset. Nothing is created or destroyed, so the Items audit's refusal of `Destroy` stands.
+  - If the donor is not as measured (no `attach/pickaxe` drawn with `weapons1`, or another renderer under `attach`),
+    the item falls back to the old tinted pickaxe and logs why.
+  - The icon is rendered from the finished clone, as before. In game, OWNER GO-AROUND PENDING: the grip position and
+    angle in hand, and the look.
 - **No vanilla attack.** Both attack animations are cleared, so `HavePrimaryAttack`/`HaveSecondaryAttack` are false
   and `Humanoid.StartAttack` returns before it charges stamina or durability, swings, hits or spawns. The donor's own
   `m_spawnOnHitTerrain` (the pickaxe's dig) and `m_spawnOnHit` are cleared, damage is zero, `m_buildPieces` is null,
@@ -401,7 +409,7 @@ attack, terrain op, quality and damage; and that `Items/` changes nothing else.
 - **`cl_excavate dig` is removed** (not kept beside the shovel): the issue forbids excavation driven by chat, menus or
   other UI, and the console is UI. `cl_excavate plan` (read-only, now with the shovel's cost) and `status` stay behind
   the switch as diagnostics.
-- The tinted pickaxe model as a placeholder look, and no animation (7.3).
+- No animation (7.3). The tinted pickaxe model remains only as the fallback look (#550).
 - When the shovel cannot dig this session (its input patch or the start-up probe did not match the installed game), the
   item is still registered, so crafted shovels survive, but its recipe is disabled, so no one spends Iron on it.
 - The item exists only while the switch is on. **Risk:** turning the switch off after crafting a shovel removes the item
