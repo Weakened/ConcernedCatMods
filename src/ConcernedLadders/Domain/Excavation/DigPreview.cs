@@ -21,7 +21,8 @@ internal sealed class DigPreviewState
     /// <summary>True when the aim found ground and a footprint was evaluated.</summary>
     internal bool HasTarget { get; private set; }
 
-    internal DigStage Stage { get; private set; }
+    /// <summary>The size chosen when this was shown (#574).</summary>
+    internal DigSize Size { get; private set; }
 
     internal DigFootprint Footprint { get; private set; }
 
@@ -44,17 +45,17 @@ internal sealed class DigPreviewState
 
     internal int LastFrame { get; private set; } = int.MinValue;
 
-    internal void Show(DigStage stage, DigFootprint footprint, bool planned, in DigPlan plan, ExcavationCommitRefusal refusal,
+    internal void Show(DigSize size, DigFootprint footprint, bool planned, in DigPlan plan, ExcavationCommitRefusal refusal,
         string line, int frame, float now)
     {
-        bool same = Visible && HasTarget && Stage == stage && Footprint.Equals(footprint) && Planned == planned &&
+        bool same = Visible && HasTarget && Size.Equals(size) && Footprint.Equals(footprint) && Planned == planned &&
                     Refusal == refusal && SamePlan(Plan, plan) && Line == line;
         Visible = true;
         HasTarget = true;
         Aim = ExcavationAim.Ok;
         LastFrame = frame;
         if (same) return;
-        Stage = stage;
+        Size = size;
         Footprint = footprint;
         Planned = planned;
         Plan = plan;
@@ -64,16 +65,16 @@ internal sealed class DigPreviewState
         Version++;
     }
 
-    internal void ShowNoTarget(DigStage stage, ExcavationAim aim, string line, int frame, float now)
+    internal void ShowNoTarget(DigSize size, ExcavationAim aim, string line, int frame, float now)
     {
-        bool same = Visible && !HasTarget && Stage == stage && Aim == aim && Line == line;
+        bool same = Visible && !HasTarget && Size.Equals(size) && Aim == aim && Line == line;
         Visible = true;
         LastFrame = frame;
         if (same) return;
         HasTarget = false;
         Planned = false;
         Plan = default;
-        Stage = stage;
+        Size = size;
         Aim = aim;
         Refusal = ExcavationCommitRefusal.NotAimed;
         Line = line;

@@ -2,15 +2,6 @@ using System.Globalization;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Excavation;
 
-/// <summary>Where the player is in a dig (#551): aiming for the first corner, stretching to the second, or setting the
-/// depth before digging.</summary>
-internal enum DigStage
-{
-    FirstCorner = 0,
-    SecondCorner = 1,
-    Depth = 2,
-}
-
 /// <summary>Every line the shovel shows (#551, owner playtest 2026-11-10: "a lot of warnings ... littering the screen,
 /// too long error messages"). One short line each, never more than <see cref="MaximumLength"/> characters, saying what
 /// to do next or the one reason it cannot; the detail goes to the log, never the screen. The buttons are on the game's
@@ -20,14 +11,8 @@ internal static class DigText
 {
     internal const int MaximumLength = 64;
 
-    /// <summary>The prompt for a stage, with the size so far.</summary>
-    internal static string Prompt(DigStage stage, DigFootprint footprint, DigPreset preset = DigPreset.Free) => stage switch
-    {
-        DigStage.FirstCorner when preset != DigPreset.Free => Volume(footprint) + " m cube: click to dig, scroll for size.",
-        DigStage.FirstCorner => "Set a corner, or scroll for a 1, 2 or 4 m cube.",
-        DigStage.SecondCorner => Size(footprint) + " m: set the opposite corner.",
-        _ => Volume(footprint) + " m: scroll for depth, then dig.",
-    };
+    /// <summary>The prompt: the size shown and what to do (#574).</summary>
+    internal static string Prompt(DigSize size) => size.Name + " m: click to dig, scroll for size.";
 
     /// <summary>The line for a refused or idle plan, or a ready one that will flood; null when the prompt should show.</summary>
     internal static string? Plan(in DigPlan plan)

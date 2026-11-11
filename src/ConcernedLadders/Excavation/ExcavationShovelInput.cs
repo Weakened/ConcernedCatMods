@@ -8,8 +8,8 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 
 /// <summary>The Iron Shovel's deliberate actions (#487 slices 3 and 4; the dig session since #551): while the shovel is
 /// the local player's equipped weapon, one press of the game's own Attack binding (keyboard or controller) asks
-/// <see cref="ExcavationRuntime.Primary"/> to set a corner or dig what the preview shows; one press of Secondary Attack asks
-/// <see cref="ExcavationRuntime.Secondary"/> to step back, or to arm and then confirm an undo of the last dig. Both in the
+/// <see cref="ExcavationRuntime.Primary"/> to dig what the preview shows; one press of Secondary Attack asks
+/// <see cref="ExcavationRuntime.Secondary"/> to arm and then confirm an undo of the last dig. Both in the
 /// same step ask for nothing. A press while any menu, the inventory, the map, chat, the console or the build menu is open is ignored
 /// here too, on top of the game withholding it.
 ///
@@ -72,10 +72,10 @@ internal sealed class ExcavationShovelInput : IDisposable
         }
     }
 
-    /// <summary>The depth stage borrows the wheel (#551). GameCamera.UpdateCamera subtracts the wheel from its private
+    /// <summary>The shovel borrows the wheel to choose a size (#551; #574). GameCamera.UpdateCamera subtracts the wheel from its private
     /// <c>m_distance</c> and clamps it (read from the installed game, 1.0.21); holding that one field across the update while
-    /// <see cref="HoldCamera"/> says so leaves every other camera behaviour alone. If the game does not match, depth still
-    /// works and the camera also zooms; the log says so.</summary>
+    /// <see cref="HoldCamera"/> says so leaves every other camera behaviour alone. If the game does not match, the size still
+    /// changes and the camera also zooms; the log says so.</summary>
     private void InstallCameraHold()
     {
         try

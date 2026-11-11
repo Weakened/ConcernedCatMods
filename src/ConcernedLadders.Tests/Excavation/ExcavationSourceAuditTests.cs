@@ -249,7 +249,7 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(MethodBody(runtime, SecondarySignature), @"case\s+DigAction\.Undo\s*:\s*return\s+UndoWithShovel\s*\(\s*player\s*,\s*shovel\s*\)"));
         Assert.Empty(Hits(@"\.(DigWithShovel|UndoWithShovel)\s*\("));
         string command = SourceText("Excavation/ExcavationCommand.cs");
-        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bUndoWithShovel\b|\bPrimary\b|\bSecondary\b|\bCommit\s*\(|\bChangeDepth\b|\bRefreshPreview\b|\bPlace\s*\(", command);
+        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bUndoWithShovel\b|\bPrimary\b|\bSecondary\b|\bCommit\s*\(|\bChangeSize\b|\bRefreshPreview\b|\bPlace\s*\(", command);
         Assert.Equal(1, Count(command, @"(?<!\w)runtime\.PlanAtAim\s*\("));
         // Slice 4 (slice 2's follow-up): the command never keeps a runtime of its own, so one disposed by an install
         // fault cannot be reached through it; it asks the plugin for the current one on every use.
@@ -389,7 +389,7 @@ public sealed class ExcavationSourceAuditTests
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
         Assert.Equal(0, Count(MethodBody(runtime, RefreshSignature), pattern));
         Assert.Equal(0, Count(MethodBody(runtime, EvaluateSignature), pattern));
-        Assert.Equal(0, Count(MethodBody(runtime, @"internal\s+void\s+ChangeDepth\s*\("), pattern));
+        Assert.Equal(0, Count(MethodBody(runtime, @"internal\s+void\s+ChangeSize\s*\("), pattern));
         Assert.Equal(0, Count(SourceText("Excavation/ExcavationPreview.cs"), pattern));
     }
 
@@ -439,10 +439,10 @@ public sealed class ExcavationSourceAuditTests
         Assert.Matches(@"Evaluate\s*\(\s*_shown\.Footprint\s*,", dig);
         Assert.DoesNotMatch(@"(?<![.\w])Aim\s*\(", dig);
         Assert.Equal(1, Count(runtime, @"\bCommit\s*\(\s*plan\b"));
-        // The depth change only changes the session's depth (and asks for a fresh read).
-        string depth = MethodBody(runtime, @"internal\s+void\s+ChangeDepth\s*\(");
-        Assert.Matches(@"^\{\s*if\s*\(\s*_session\.ChangeDepth\s*\(\s*steps\s*\)\s*\)\s*_lastPreviewRead\s*=\s*float\.NaN\s*;\s*\}$", depth);
-        var depths = Hits(@"\.ChangeDepth\s*\(");
+        // The size change (#574) only changes the session's size (and asks for a fresh read).
+        string depth = MethodBody(runtime, @"internal\s+void\s+ChangeSize\s*\(");
+        Assert.Matches(@"^\{\s*if\s*\(\s*_session\.ChangeSize\s*\(\s*steps\s*\)\s*\)\s*_lastPreviewRead\s*=\s*float\.NaN\s*;\s*\}$", depth);
+        var depths = Hits(@"\.ChangeSize\s*\(");
         Assert.True(depths.Sum(h => h.N) == 2 && depths.All(h => h.Path == "Excavation/ExcavationRuntime.cs" || h.Path == "Excavation/ExcavationPreview.cs"), string.Join(", ", depths));
         string input = SourceText("Excavation/ExcavationShovelInput.cs");
         Assert.Matches(@"if\s*\(\s*press\s*==\s*ExcavationPress\.None\s*\|\|\s*ExcavationPreview\.UiOpen\s*\(\s*\)\s*\)\s*return\s*;", input);
@@ -458,8 +458,7 @@ public sealed class ExcavationSourceAuditTests
     [InlineData(@"_aimMask\s*=\s*LayerMask\.GetMask\s*\(\s*""Default""\s*,\s*""static_solid""\s*,\s*""Default_small""\s*,\s*""piece""\s*,\s*""piece_nonsolid""\s*,\s*""terrain""\s*,\s*""vehicle""\s*\)\s*;")]
     [InlineData(@"Physics\.Raycast\s*\(\s*eye\.position\s*,\s*eye\.forward\s*,\s*out\s+RaycastHit\s+hit\s*,\s*ExcavationLimits\.AimRayLength\s*,\s*_aimMask\s*,\s*QueryTriggerInteraction\.Ignore\s*\)")]
     [InlineData(@"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\.GetComponent<Heightmap>\s*\(\s*\)\s*==\s*null\s*\)")]
-    [InlineData(@"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;")]
-    [InlineData(@"float\s+reach\s*=\s*_session\.Stage\s*==\s*DigStage\.SecondCorner\s*\?\s*ExcavationLimits\.CornerReach\s*:\s*ExcavationLimits\.Reach\s*;")]
+    [InlineData(@"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*ExcavationLimits\.Reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;")]
     [InlineData(@"private\s+static\s+bool\s+OnLadder\s*\(\s*\)\s*=>\s*LadderRuntime\.Current\?\.IsClimbing\s*==\s*true\s*;")]
     public void TheTargetingRuleIsWhereItMustBe(string pattern)
     {
@@ -592,7 +591,7 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(input, @"distance\s*\(\s*__instance\s*\)\s*=\s*__state\s*;"));
         Assert.Equal(1, Count(input, @"if\s*\(\s*distance\s*!=\s*null\s*&&\s*HoldCamera\?\.Invoke\s*\(\s*\)\s*==\s*true\s*\)\s*__state\s*=\s*distance\s*\(\s*__instance\s*\)\s*;"));
         Assert.DoesNotMatch(@"GameCamera\s*\.\s*instance\s*\.\s*m_\w+\s*=", input);
-        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"ExcavationShovelInput\.HoldCamera\s*=\s*\(\s*\)\s*=>\s*_preview\?\.SettingDepth\s*==\s*true\s*;"));
+        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"ExcavationShovelInput\.HoldCamera\s*=\s*\(\s*\)\s*=>\s*_preview\?\.UsingWheel\s*==\s*true\s*;"));
     }
 
     [Fact]

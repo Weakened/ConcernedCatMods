@@ -55,20 +55,22 @@ internal static class IronShovel
     /// <summary>The English description, built from the same numbers the gate charges so it cannot drift (#551: the
     /// player sizes the hole, and the cost follows the ground it removes).</summary>
     internal static string Description() =>
-        "Digs a level-floored basement hole in ground you can see, within " + F0(ExcavationLimits.Reach) + " m, to the size you set. " +
-        "Attack sets one corner, then the opposite one (" + F0(DigFootprint.MinimumSide) + " to " + F0(DigFootprint.MaximumSide) +
-        " m a side); scroll sets the depth (" + F0(DigFootprint.MinimumDepth) + " to " + F0(DigFootprint.MaximumDepth) + " m); attack digs. " +
-        "Or, before setting a corner, scroll for a ready-made 1, 2 or 4 m cube that snaps to its own grid, and attack to dig it. " +
+        "Digs a level-floored basement hole in ground you can see, within " + F0(ExcavationLimits.Reach) + " m. " +
+        "Scroll to choose its size (" + SizeList() + " m), and attack to dig it. " +
+        "A hole lines up with the last holes you dug beside it, so rows stay straight. " +
         "Ground objects in the way - stones, branches, bushes, rocks, stumps - are picked or cleared. " +
-        "Secondary attack steps back; with nothing to step back to, press it twice to fill your last hole back in. " +
+        "Press secondary attack twice to fill your last hole back in. " +
         "Costs " + F0(DigCost.BaseStamina) + " stamina plus a little per cubic metre (at most " + F0(DigCost.MaximumStamina) + "), and durability by the " +
-        "ground removed, charged once when a dig goes ahead. Filling a hole back in is free. Never removes rocks, trees or anything built.";
+        "ground removed, charged once when a dig goes ahead. Filling a hole back in is free. Never removes anything built.";
 
     /// <summary>Key-hint labels for the game's own key-hint panel (#487 slice 4; the dig session since #551).</summary>
     internal const string DigHintToken = "$cl_hint_shovel_dig";
     internal const string SizeHintToken = "$cl_hint_shovel_size";
-    internal const string DigHintText = "Set corner / dig";
-    internal const string SizeHintText = "Back / fill in (press twice)";
+    internal const string DigHintText = "Dig";
+    internal const string SizeHintText = "Fill in (press twice)";
+
+    /// <summary>The sizes, as the description lists them: "1x1x1, 2x2x1, ... 4x4x4".</summary>
+    private static string SizeList() => string.Join(", ", System.Array.ConvertAll(DigSizes.All, size => size.Name));
 
     private static string F0(float value) => value.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
 }
@@ -76,15 +78,10 @@ internal static class IronShovel
 /// <summary>Bounds shared by the shovel and the read-only console plan.</summary>
 internal static class ExcavationLimits
 {
-    /// <summary>How far from the player's eyes the aimed ground may be (#487 slice 4): the game's own building reach
-    /// (Player.m_maxPlaceDistance, 5 m), the narrowest native rule. Slices 2 and 3 used 10 m from the feet as a harness
-    /// bound. A lead default pending owner confirmation (EXCAVATION.md section 8.6).</summary>
-    internal const float Reach = 5f;
-
-    /// <summary>How far from the player's eyes the opposite corner may be aimed once the first is set (#567, owner playtest:
-    /// "I can't place longer holes than 3 m since it starts to say too far"). The first corner keeps the building reach; the
-    /// second may be across the hole. Lead default.</summary>
-    internal const float CornerReach = 12f;
+    /// <summary>How far from the player's eyes the aimed ground may be. #487 used the game's own building reach (5 m);
+    /// the owner's playtest found it too short ("I can't place longer holes than 3 m since it starts to say too far"), and
+    /// with ready-made sizes (#574) the aim falls anywhere inside a hole up to 4 m across, so it is 8 m. Lead default.</summary>
+    internal const float Reach = 8f;
 
     /// <summary>The aim ray's length, as the game's own placement ray.</summary>
     internal const float AimRayLength = 50f;

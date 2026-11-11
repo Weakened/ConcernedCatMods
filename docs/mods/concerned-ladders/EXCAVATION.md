@@ -765,3 +765,28 @@ object back, and still refuses while anything stands in the hole.
 The free size's minimum side is now 1 m. The outline is drawn as a **perfect box**: the footprint at the ground, the floor
 and four vertical edges. The ground still slopes over one cell outside it (section 3); the basement wall pieces (#568)
 cover that.
+
+## 12. Ready-made sizes and snapping (#574)
+
+Owner playtest, 2026-11-11: "instead of having the step-by-step digging, we should have prefixed sizes ... we should be
+able to autosnap holes to make digging straight holes easier." This replaces section 10's corner, corner, depth flow
+and section 11's cube presets.
+
+- **Sizes** (owner's choice, `DigSizes.All`): 1x1x1, 2x2x1, 2x2x2, 4x4x1, 4x4x2, 4x4x4 m, smallest first. The wheel
+  (or the controller's alternate keys plus zoom) steps through them and wraps; it starts on 2x2x2 (lead default) and
+  keeps the size when the shovel is put away. While the outline is up the camera does not zoom with the same turn.
+- **One press.** Attack digs the hole shown. There is no corner stage, no depth stage and no stepping back.
+- **Undo** is unchanged: Secondary Attack twice within 3 seconds (owner choice: the wheel picks the size, so undo stays
+  on Secondary Attack, the middle mouse button by default).
+- **Snapping** (`DigSnap.Place`): the newest remembered hole whose edges lie within one hole-width of the aimed vertex
+  gives its corner as the origin, and the new hole sits on a grid of its own side from there, so it meets that hole
+  edge to edge and a row stays straight even with mixed sizes. With no hole near, the origin is the world's, so holes
+  of one size tile. Only the holes `DigHistory` remembers (the last 10 this shovel dug since the world loaded) are
+  snapped to; an older hole is not, and its neighbour snaps to the world grid.
+- **Reach** is one value, 8 m from the eyes (lead default): the aim now falls anywhere inside a hole up to 4 m across,
+  and the owner found the 5 m building reach too short. Section 11's 12 m second-corner reach is gone with the corner.
+- **A vertical side** is still impossible (section 3): the heightmap slopes the side across one 1 m cell. The owner
+  asked; the separate basement wall pieces (#568) were dropped by the owner the same day in favour of the game's own
+  walls.
+
+Not observed in game: OWNER GO-AROUND PENDING.

@@ -66,12 +66,12 @@ version and the same values for these settings.
 - Iron Shovel and measured basement excavation (CL-006, #487), behind
   `Excavation` / `Enabled` (off by default). Adds the Iron Shovel, crafted at
   the Forge from 10 Iron and 4 Wood once you have found Iron (Iron Scrap alone
-  does not unlock it) and repaired there. You size each hole yourself (#551):
-  Attack sets one corner, then the opposite corner (1 to 8 m a side, on the
-  world grid, up to 12 m away); the mouse wheel sets the depth (1 to 7 m);
-  Attack digs it. Or, before setting a corner, scroll for a ready-made
-  1x1x1, 2x2x2 or 4x4x4 m cube that snaps to its own grid so cubes tile, and
-  dig it with one Attack (#567). Stones, branches, berries and other
+  does not unlock it) and repaired there. The mouse wheel chooses a
+  ready-made hole (#574): 1x1x1, 2x2x1, 2x2x2, 4x4x1, 4x4x2 or 4x4x4 m, and
+  one Attack digs it. A hole lines up edge to edge with the holes you just
+  dug beside it, so a row of holes stays straight even when the sizes
+  differ; with none beside it, it snaps to the world grid of its own size,
+  so holes of one size tile. Stones, branches, berries and other
   pickables in the way are picked for you, and rocks, stumps, bushes, logs
   and trees are cleared; only carts, ships and fixed scenery still stop a
   dig. The
@@ -85,13 +85,13 @@ version and the same values for these settings.
     flood). It is green when Attack would dig, amber when there is nothing to
     dig, and red when it would be refused. One short line under the crosshair
     says what to do next, or the one reason it cannot.
-  - Secondary Attack steps back one stage. With nothing to step back to,
-    pressing it twice within 3 seconds fills your last hole back in, exactly
+  - Pressing Secondary Attack twice within 3 seconds fills your last hole
+    back in, exactly
     as the ground was, newest first. That is free and refunds nothing, and it
     is refused if the ground has changed since, or anything (a building piece
     included) now stands in the hole. Up to 10 holes can be filled back in,
     until you leave the world.
-  - The ground you aim at must be within 5 m and be the first thing you see,
+  - The ground you aim at must be within 8 m and be the first thing you see,
     so the shovel never digs through a wall, a floor or a rock. No digging
     from a ladder. Aiming, menus, the inventory, chat and the console never
     dig.

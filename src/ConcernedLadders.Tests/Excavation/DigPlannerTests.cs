@@ -236,7 +236,7 @@ public sealed class DigPlannerTests
         var lines = new List<string>();
         foreach (DigFootprint footprint in new[] { DigFootprint.FromCorners(0, 0, 2, 2, 1), DigFootprint.FromCorners(0, 0, 8, 8, DigFootprint.MaximumDepth) })
         {
-            foreach (DigStage stage in Enum.GetValues(typeof(DigStage))) lines.Add(DigText.Prompt(stage, footprint));
+            foreach (DigSize size in DigSizes.All) lines.Add(DigText.Prompt(size));
             lines.Add(DigText.Dug(footprint));
             DigPlan flooded = Plan(footprint, (x, z) => Ground, water: Ground);
             lines.Add(DigText.Plan(flooded)!);

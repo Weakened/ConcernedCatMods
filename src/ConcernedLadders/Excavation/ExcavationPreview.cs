@@ -24,13 +24,13 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// <item>the game's own key-hint panel (through Jötunn's KeyHintManager) for the two buttons, from the player's bindings.</item>
 /// </list>
 ///
-/// <para>In the depth stage the wheel (or the controller's alternate-keys plus zoom buttons) sets the depth, and
+/// <para>While the preview is up the wheel (or the controller's alternate-keys plus zoom buttons) chooses the size (#574), and
 /// <see cref="ExcavationShovelInput"/> holds the camera's distance so it does not zoom at the same time.</para>
 ///
 /// <para><b>Local and bounded.</b> One root object and exactly <see cref="DigPreviewShape.LineCount"/> line renderers, created
 /// once per scene and reused, one shared material, and one HUD text. No network view, no ZDO, nothing saved: plain local
-/// scene objects with no collider, so neither the aim ray nor the object scan can meet them. Aiming, setting corners,
-/// changing depth or moving changes nothing in the world: this class only draws.</para>
+/// scene objects with no collider, so neither the aim ray nor the object scan can meet them. Aiming, choosing a size
+/// or moving changes nothing in the world: this class only draws.</para>
 ///
 /// <para><b>Not observed in game.</b> The look, the line visibility through terrain, the HUD placement and the controller
 /// buttons are OWNER GO-AROUND PENDING; controller: CONTROLLER HARDWARE BLOCKED.</para></summary>
@@ -106,9 +106,9 @@ internal sealed class ExcavationPreview : IDisposable
                (chat != null && chat.HasFocus()) || ZCursor.LockState != CursorLockMode.Locked;
     }
 
-    /// <summary>True while the preview is up at a stage where the wheel is the shovel's (#567: the first stage chooses a
-    /// ready-made cube, the depth stage sets the depth): the camera must not zoom with the same turn.</summary>
-    internal bool SettingDepth => _shownLastFrame && (_runtime.Session.Stage == DigStage.Depth || _runtime.Session.Stage == DigStage.FirstCorner);
+    /// <summary>True while the preview is up: the wheel chooses the hole's size then (#574), and the camera must not zoom
+    /// with the same turn.</summary>
+    internal bool UsingWheel => _shownLastFrame;
 
     /// <summary>Called every frame after the runtime's own update.</summary>
     internal void Update()
@@ -128,8 +128,7 @@ internal sealed class ExcavationPreview : IDisposable
                 return;
             }
 
-            if (_runtime.Session.Stage == DigStage.Depth) _runtime.ChangeDepth(DepthSteps());
-            else if (_runtime.Session.Stage == DigStage.FirstCorner) _runtime.ChangePreset(DepthSteps());
+            _runtime.ChangeSize(WheelSteps());
             bool refreshed = _runtime.RefreshPreview(player!, shovel!, Time.frameCount, Time.realtimeSinceStartup);
             bool created = EnsureLines();
             if (refreshed || created || !_shownLastFrame) DrawLines();
@@ -145,17 +144,17 @@ internal sealed class ExcavationPreview : IDisposable
         }
     }
 
-    /// <summary>This frame's depth change: wheel down (or the controller's zoom-out) is a metre deeper, wheel up (zoom-in) a
-    /// metre shallower; one step per frame however far the wheel turned.</summary>
-    private static int DepthSteps()
+    /// <summary>This frame's size change (#574): wheel up (or the controller's zoom-in) is the next larger size, wheel down
+    /// (zoom-out) the next smaller; one step per frame however far the wheel turned.</summary>
+    private static int WheelSteps()
     {
         float wheel = ZInput.GetMouseScrollWheel();
-        if (wheel < 0f) return 1;
-        if (wheel > 0f) return -1;
+        if (wheel > 0f) return 1;
+        if (wheel < 0f) return -1;
         if (ZInput.GetButton("JoyAltKeys") && !Hud.InRadial())
         {
-            if (ZInput.GetButtonDown("JoyCamZoomOut")) return 1;
-            if (ZInput.GetButtonDown("JoyCamZoomIn")) return -1;
+            if (ZInput.GetButtonDown("JoyCamZoomIn")) return 1;
+            if (ZInput.GetButtonDown("JoyCamZoomOut")) return -1;
         }
 
         return 0;
