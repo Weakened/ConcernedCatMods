@@ -17,8 +17,8 @@ internal static class RailingSettings
 
     internal const string Description =
         "UNFINISHED (#556): adds railings to the hammer's Building tab in eight materials (wood, copper, iron, darkwood, " +
-        "ashwood, flametal, dvergr and log): level, for the game's stairs (26.57 degrees), for the step ladder (45 degrees), " +
-        "for the left and right spiral stairs, and a newel post - none of it yet tested in game. " +
+        "ashwood, flametal, dvergr and log): level (2 m and 1 m), for the game's stairs (26.57 degrees), for the step ladder " +
+        "(45 degrees), and a newel post - none of it yet tested in game. " +
         "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed railing the next time a " +
         "world loads, with no refund. In multiplayer every player and the host or server must have the same value. " +
         "Restart after changing it.";
@@ -48,10 +48,9 @@ internal sealed class RailingPiece
     internal string English => Family.Name + Angle switch
     {
         RailingAngle.Level => " Railing",
+        RailingAngle.Short => " Short Railing",
         RailingAngle.Stair => " Stair Railing",
         RailingAngle.Steep => " Steep Stair Railing",
-        RailingAngle.SpiralLeft => " Spiral Railing (Left)",
-        RailingAngle.SpiralRight => " Spiral Railing (Right)",
         _ => " Newel Post",
     };
 
@@ -63,9 +62,10 @@ internal sealed class RailingPiece
         {
             if (Family.FollowsDonor) return null;
             bool level = Angle == RailingAngle.Level || Angle == RailingAngle.Newel;
+            bool small = Angle == RailingAngle.Short;
             return Family.Family switch
             {
-                BuildFamily.Wood => new[] { new RailingCostLine("Wood", level ? 2 : 3) },
+                BuildFamily.Wood => new[] { new RailingCostLine("Wood", small ? 1 : level ? 2 : 3) },
                 BuildFamily.Copper => new[] { new RailingCostLine("Copper", 1), new RailingCostLine("Wood", 1) },
                 _ => new[] { new RailingCostLine("Iron", 1), new RailingCostLine("Wood", 1) },
             };
@@ -80,7 +80,7 @@ internal static class RailingFamilies
 
     internal static readonly RailingAngle[] Shapes =
     {
-        RailingAngle.Level, RailingAngle.Stair, RailingAngle.Steep, RailingAngle.SpiralLeft, RailingAngle.SpiralRight, RailingAngle.Newel,
+        RailingAngle.Level, RailingAngle.Short, RailingAngle.Stair, RailingAngle.Steep, RailingAngle.Newel,
     };
 
     internal static readonly IReadOnlyList<RailingPiece> All = Build();
@@ -90,7 +90,7 @@ internal static class RailingFamilies
     {
         var english = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [DescriptionToken] = "A railing. Snaps to a stair's side edge, a spiral stair's outer edge, a floor's edge or another railing.",
+            [DescriptionToken] = "A railing. Snaps to a stair's side edge, a floor's edge or another railing.",
         };
         foreach (RailingPiece piece in All) english[piece.Token] = piece.English;
         return english;

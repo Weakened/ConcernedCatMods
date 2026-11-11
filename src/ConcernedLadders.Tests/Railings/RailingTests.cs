@@ -6,8 +6,8 @@ using TheConcernedCat.Ladders;
 
 namespace TheConcernedCat.ConcernedLadders.Tests.Railings;
 
-/// <summary>#556: railings in eight material families at the game's stair shapes. The slopes and the spiral are the
-/// game's stairs' own (measured from their snap points), the railing's snaps land on the stair's, the handrail stays the
+/// <summary>#556, #565: railings in eight material families at the game's stair shapes. The slopes are the game's stairs'
+/// own (measured from their snap points), the railing's snaps land on the stair's, the handrail stays the
 /// same height above the stair, and each family's style is what the owner's references show: plain wood, copper twisted
 /// with a knuckle, iron (and flametal) twisted with scrolls and finials. In game: OWNER GO-AROUND PENDING.</summary>
 public sealed class RailingTests
@@ -15,7 +15,7 @@ public sealed class RailingTests
     private const float Epsilon = 1e-4f;
 
     private static readonly RailingAngle[] Railed =
-        { RailingAngle.Level, RailingAngle.Stair, RailingAngle.Steep, RailingAngle.SpiralLeft, RailingAngle.SpiralRight };
+        { RailingAngle.Level, RailingAngle.Short, RailingAngle.Stair, RailingAngle.Steep };
 
     public static IEnumerable<object[]> StylesAndShapes()
     {
@@ -33,6 +33,8 @@ public sealed class RailingTests
         Assert.Equal(rise, RailingGeometry.Rise(angle));
         Assert.Equal(degrees, RailingGeometry.Degrees(angle), 3);
         Assert.Equal(2f, RailingGeometry.Run);
+        Assert.Equal(1f, RailingGeometry.RunOf(RailingAngle.Short));
+        Assert.Equal(0f, RailingGeometry.Rise(RailingAngle.Short));
     }
 
     [Theory]
@@ -50,36 +52,13 @@ public sealed class RailingTests
     }
 
     [Theory]
-    [InlineData((int)RailingAngle.SpiralLeft)]
-    [InlineData((int)RailingAngle.SpiralRight)]
-    public void ASpiralRailingSnapsExactlyOntoTheSpiralStairsOuterSnaps(int angleValue)
-    {
-        var angle = (RailingAngle)angleValue;
-        (Point3 bottom, Point3 top) = RailingGeometry.StairSideSnaps(angle);
-        // Placed with its bottom snap on the stair's (no turn), its top snap lands on the stair's.
-        Point3 railing = RailingGeometry.TopSnap(angle) - RailingGeometry.BottomSnap;
-        Point3 stair = top - bottom;
-        Assert.Equal(stair.X, railing.X, 4);
-        Assert.Equal(stair.Y, railing.Y, 4);
-        Assert.Equal(stair.Z, railing.Z, 4);
-        // Every point of the base line is on the stair's outer edge, 1.75 m from its centre, rising evenly.
-        for (int i = 0; i <= 20; i++)
-        {
-            Point3 p = RailingGeometry.Base(angle, i / 20f);
-            float fromCentre = (float)Math.Sqrt(p.X * p.X + (p.Z + RailingGeometry.SpiralRadius) * (p.Z + RailingGeometry.SpiralRadius));
-            Assert.Equal(RailingGeometry.SpiralRadius, fromCentre, 4);
-            Assert.Equal(i / 20f * RailingGeometry.SpiralRise, p.Y, 4);
-        }
-    }
-
-    [Theory]
     [MemberData(nameof(StylesAndShapes))]
     public void TheHandrailStaysTheSameHeightAboveTheStairLine(int styleValue, int angleValue)
     {
         var style = (RailingStyle)styleValue;
         var angle = (RailingAngle)angleValue;
         List<RailingPart> rails = RailingDesign.Parts(style, angle).Where(part => part.Kind == RailingPartKind.Handrail).ToList();
-        Assert.Equal(RailingGeometry.IsSpiral(angle) ? RailingGeometry.SpiralSegments : 1, rails.Count);
+        Assert.Single(rails);
         foreach (RailingPart rail in rails)
             foreach (Point3 end in new[] { rail.From, rail.To })
                 Assert.Equal(RailingGeometry.HandrailHeight, end.Y - BaseHeight(angle, end) + rail.Width * 0.5f, 4);
@@ -92,7 +71,7 @@ public sealed class RailingTests
         var style = (RailingStyle)styleValue;
         var angle = (RailingAngle)angleValue;
         List<RailingPart> bars = RailingDesign.Parts(style, angle).Where(part => part.Kind == RailingPartKind.Baluster).OrderBy(part => Along(angle, part.From)).ToList();
-        Assert.True(bars.Count >= 8, "a railing has a row of balusters");
+        Assert.True(bars.Count >= (angle == RailingAngle.Short ? 4 : 8), "a railing has a row of balusters");
         float pitch = Along(angle, bars[1].From) - Along(angle, bars[0].From);
         Assert.True(pitch <= RailingDesign.BalusterPitch + Epsilon);
         for (int i = 0; i < bars.Count; i++)
@@ -128,17 +107,8 @@ public sealed class RailingTests
             Assert.Equal(2, detailed.Count(part => part.Kind == RailingPartKind.Finial));
             List<RailingPart> detailedBars = detailed.Where(part => part.Kind == RailingPartKind.Baluster).ToList();
             int straightBars = detailedBars.Count(bar => bar.TwistDegrees == 0f);
-            if (RailingGeometry.IsStraight(angle))
-            {
-                Assert.True(straightBars >= 1, "the scroll pairs hang on straight bars");
-                Assert.Equal(straightBars * 4 * 10, detailed.Count(part => part.Kind == RailingPartKind.Scroll));
-            }
-            else
-            {
-                // A curve's bars are all twisted; scrolls stay on straight railings, whose plane they lie in.
-                Assert.Equal(0, straightBars);
-                Assert.DoesNotContain(detailed, part => part.Kind == RailingPartKind.Scroll);
-            }
+            Assert.True(straightBars >= 1, "the scroll pairs hang on straight bars");
+            Assert.Equal(straightBars * 4 * 10, detailed.Count(part => part.Kind == RailingPartKind.Scroll));
 
             Assert.True(RailingDesign.Twist(RailingStyle.Detailed) > RailingDesign.Twist(RailingStyle.Decorated));
             Assert.True(detailed.Count > plain.Count && decorated.Count > plain.Count, "more detail than the plain style");
@@ -240,13 +210,14 @@ public sealed class RailingTests
 
     [Theory]
     [InlineData((int)RailingAngle.Level)]
+    [InlineData((int)RailingAngle.Short)]
     [InlineData((int)RailingAngle.Stair)]
     [InlineData((int)RailingAngle.Steep)]
     public void AStraightRailingsColliderCoversItsWholeSlope(int angleValue)
     {
         var angle = (RailingAngle)angleValue;
         RailingCollider collider = Assert.Single(RailingGeometry.Colliders(angle));
-        float cos = RailingGeometry.Run / RailingGeometry.Length(angle);
+        float cos = RailingGeometry.RunOf(angle) / RailingGeometry.Length(angle);
         Assert.Equal(RailingGeometry.Length(angle), collider.Size.Z, 4);
         Assert.Equal(RailingGeometry.Length(angle) * 0.5f, collider.Centre.Z, 4);
         Assert.Equal(RailingGeometry.HandrailHeight * cos, collider.Centre.Y * 2f - 0.05f * cos, 3);
@@ -255,38 +226,20 @@ public sealed class RailingTests
         Assert.Equal(RailingGeometry.ColliderThickness, collider.Size.X);
     }
 
-    [Theory]
-    [InlineData((int)RailingAngle.SpiralLeft)]
-    [InlineData((int)RailingAngle.SpiralRight)]
-    public void ASpiralsCollidersFollowItsCurveChordByChord(int angleValue)
-    {
-        var angle = (RailingAngle)angleValue;
-        IReadOnlyList<RailingCollider> colliders = RailingGeometry.Colliders(angle);
-        Assert.Equal(RailingGeometry.SpiralSegments, colliders.Count);
-        for (int i = 0; i < colliders.Count; i++)
-        {
-            Point3 start = RailingGeometry.Base(angle, i / (float)colliders.Count), end = RailingGeometry.Base(angle, (i + 1) / (float)colliders.Count);
-            Assert.Equal(start.X, colliders[i].Origin.X, 4);
-            Assert.Equal(start.Z, colliders[i].Origin.Z, 4);
-            Assert.Equal((end - start).Length, colliders[i].Size.Z, 4);
-            Assert.True(colliders[i].Pitch < 0f, "rising");
-        }
-
-        Assert.Single(RailingGeometry.Colliders(RailingAngle.Newel));
-    }
-
     [Fact]
     public void EveryFamilyHasEveryShapeWithStableIdsAndTheFirstNineKeepTheirs()
     {
         Assert.Equal(BuildFamilies.All.Count * RailingFamilies.Shapes.Length, RailingFamilies.All.Count);
-        Assert.Equal(48, RailingFamilies.All.Count);
+        Assert.Equal(40, RailingFamilies.All.Count);
+        // #565: the spiral railings are gone; the short railing joins.
+        Assert.DoesNotContain(RailingFamilies.All, piece => piece.Prefab.Contains("spiral", StringComparison.Ordinal));
         Assert.Equal(RailingFamilies.All.Count, RailingFamilies.All.Select(piece => piece.Prefab).Distinct().Count());
         // #561's nine, unchanged.
         foreach (string family in new[] { "wood", "copper", "iron" })
             foreach (string shape in new[] { "level", "stair", "steep" })
                 Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_" + family + "_" + shape);
         Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_wood_level" && piece.English == "Wood Railing");
-        Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_darkwood_spiralleft" && piece.English == "Darkwood Spiral Railing (Left)");
+        Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_darkwood_short" && piece.English == "Darkwood Short Railing");
         Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_flametal_newel" && piece.English == "Flametal Newel Post");
         Dictionary<string, string> english = RailingFamilies.English();
         Assert.All(RailingFamilies.All, piece => Assert.Equal(piece.English, english[piece.Token]));
@@ -328,31 +281,17 @@ public sealed class RailingTests
 
     /// <summary>The base line's height under a point of a railing.</summary>
     private static float BaseHeight(RailingAngle angle, Point3 p) =>
-        RailingGeometry.IsSpiral(angle) ? RailingGeometry.SpiralRise * SpiralT(angle, p) : RailingGeometry.BaseAt(angle, Math.Clamp(p.Z, 0f, RailingGeometry.Run));
+        RailingGeometry.BaseAt(angle, Math.Clamp(p.Z, 0f, RailingGeometry.RunOf(angle)));
 
-    /// <summary>How far along the ground a point is: z for a straight railing, the arc for a spiral.</summary>
-    private static float Along(RailingAngle angle, Point3 p) =>
-        RailingGeometry.IsSpiral(angle) ? SpiralT(angle, p) * RailingGeometry.PlanLength(angle) : p.Z;
+    /// <summary>How far along the ground a point is.</summary>
+    private static float Along(RailingAngle angle, Point3 p) => p.Z;
 
     /// <summary>How far a point is, in plan, from the railing's line.</summary>
     private static float OffLine(RailingAngle angle, Point3 p)
     {
-        if (!RailingGeometry.IsSpiral(angle))
-        {
-            float beyond = p.Z < 0f ? -p.Z : p.Z > RailingGeometry.Run ? p.Z - RailingGeometry.Run : 0f;
-            return Math.Max(Math.Abs(p.X), beyond);
-        }
-
-        float fromCentre = (float)Math.Sqrt(p.X * p.X + (p.Z + RailingGeometry.SpiralRadius) * (p.Z + RailingGeometry.SpiralRadius));
-        return Math.Abs(fromCentre - RailingGeometry.SpiralRadius);
-    }
-
-    /// <summary>The share of a spiral's quarter turn at a point.</summary>
-    private static float SpiralT(RailingAngle angle, Point3 p)
-    {
-        float x = angle == RailingAngle.SpiralLeft ? p.X : -p.X;
-        double theta = Math.Atan2(p.Z + RailingGeometry.SpiralRadius, x);
-        return Math.Clamp((float)(theta / (Math.PI / 2) - 1), 0f, 1f);
+        float run = RailingGeometry.RunOf(angle);
+        float beyond = p.Z < 0f ? -p.Z : p.Z > run ? p.Z - run : 0f;
+        return Math.Max(Math.Abs(p.X), beyond);
     }
 
     private static string RepoRoot

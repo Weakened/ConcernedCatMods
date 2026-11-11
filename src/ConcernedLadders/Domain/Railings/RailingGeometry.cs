@@ -4,12 +4,12 @@ using TheConcernedCat.ConcernedLadders.Domain.Families;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Railings;
 
-/// <summary>The shape of a railing piece (#556). Measured from the installed game's stair pieces (Valheim 1.0.21, their
-/// snap points, read by <c>cl-ladders-devtools/doors/stairs.py</c>): every straight stair - <c>wood_stair</c>,
+/// <summary>The shape of a railing piece (#556, #565). Measured from the installed game's stair pieces (Valheim 1.0.21,
+/// their snap points, read by <c>cl-ladders-devtools/doors/stairs.py</c>): every straight stair - <c>wood_stair</c>,
 /// <c>stone_stair</c>, <c>ashwood_stair</c>, the black marble and grausten stairs, <c>dvergrprops_wood_stair</c> - rises
-/// 1 m over 2 m (26.57°), <c>wood_stepladder</c> rises 2 m over 2 m (45°), and the Dvergr spiral stairs
-/// (<c>piece_dvergr_spiralstair</c>, <c>_right</c>) rise 1 m over a quarter turn with their outer edge 1.75 m from their
-/// centre. The owner asked for "33 and 45 degrees"; the railings follow the stairs the game has.</summary>
+/// 1 m over 2 m (26.57°), and <c>wood_stepladder</c> rises 2 m over 2 m (45°). The owner asked for "33 and 45 degrees";
+/// the railings follow the stairs the game has. The spiral-stair railings of #563 were removed at the owner's request
+/// (2026-11-11) and a short straight railing added.</summary>
 internal enum RailingAngle
 {
     /// <summary>A level railing for floors, landings and the top of a stairwell: 2 m long.</summary>
@@ -21,11 +21,8 @@ internal enum RailingAngle
     /// <summary>The step ladder: 2 m up over 2 m.</summary>
     Steep = 2,
 
-    /// <summary>The outer edge of <c>piece_dvergr_spiralstair</c>: a quarter turn to the left, 1 m up.</summary>
-    SpiralLeft = 3,
-
-    /// <summary>The outer edge of <c>piece_dvergr_spiralstair_right</c>: the left one mirrored.</summary>
-    SpiralRight = 4,
+    /// <summary>A short level railing, 1 m long (#565): for a 1 m gap, a landing's end, or beside a 1 m dig.</summary>
+    Short = 3,
 
     /// <summary>A newel post on its own, for corners and the ends of a run.</summary>
     Newel = 5,
@@ -38,14 +35,14 @@ internal enum RailingAngle
 /// defaults; in game, OWNER GO-AROUND PENDING.</summary>
 internal static class RailingGeometry
 {
-    /// <summary>Every straight railing is 2 m along the ground (the floor grid and both stair runs).</summary>
+    /// <summary>A full railing is 2 m along the ground (the floor grid and both stair runs).</summary>
     internal const float Run = 2f;
 
-    /// <summary>The Dvergr spiral stair's outer edge, from its centre (its outer snap points).</summary>
-    internal const float SpiralRadius = 1.75f;
+    /// <summary>A short railing is half that.</summary>
+    internal const float ShortRun = 1f;
 
-    /// <summary>The spiral stair's rise over its quarter turn.</summary>
-    internal const float SpiralRise = 1f;
+    /// <summary>A railing's length along the ground.</summary>
+    internal static float RunOf(RailingAngle angle) => angle == RailingAngle.Short ? ShortRun : angle == RailingAngle.Newel ? 0f : Run;
 
     internal const float HandrailHeight = 0.95f;
 
@@ -58,57 +55,35 @@ internal static class RailingGeometry
 
     internal const float ColliderThickness = 0.12f;
 
-    /// <summary>A spiral railing's handrail, bottom rail and collider follow its curve in this many straight pieces.</summary>
-    internal const int SpiralSegments = 12;
-
-    internal static bool IsSpiral(RailingAngle angle) => angle == RailingAngle.SpiralLeft || angle == RailingAngle.SpiralRight;
-
-    internal static bool IsStraight(RailingAngle angle) => angle == RailingAngle.Level || angle == RailingAngle.Stair || angle == RailingAngle.Steep;
+    internal static bool IsStraight(RailingAngle angle) =>
+        angle == RailingAngle.Level || angle == RailingAngle.Short || angle == RailingAngle.Stair || angle == RailingAngle.Steep;
 
     internal static float Rise(RailingAngle angle) => angle switch
     {
         RailingAngle.Level => 0f,
         RailingAngle.Stair => 1f,
         RailingAngle.Steep => 2f,
-        RailingAngle.SpiralLeft or RailingAngle.SpiralRight => SpiralRise,
+        RailingAngle.Short => 0f,
         RailingAngle.Newel => 0f,
         _ => throw new ArgumentOutOfRangeException(nameof(angle)),
     };
 
-    internal static float Slope(RailingAngle angle) => IsStraight(angle) ? Rise(angle) / Run : 0f;
+    internal static float Slope(RailingAngle angle) => IsStraight(angle) ? Rise(angle) / RunOf(angle) : 0f;
 
-    internal static float Degrees(RailingAngle angle) => IsStraight(angle) ? (float)(Math.Atan2(Rise(angle), Run) * 180.0 / Math.PI) : 0f;
+    internal static float Degrees(RailingAngle angle) => IsStraight(angle) ? (float)(Math.Atan2(Rise(angle), RunOf(angle)) * 180.0 / Math.PI) : 0f;
 
     /// <summary>A straight railing's base line length along the slope.</summary>
-    internal static float Length(RailingAngle angle) => (float)Math.Sqrt(Run * Run + Rise(angle) * Rise(angle));
+    internal static float Length(RailingAngle angle) => (float)Math.Sqrt(RunOf(angle) * RunOf(angle) + Rise(angle) * Rise(angle));
 
     /// <summary>A straight railing's base line height at <paramref name="z"/>.</summary>
     internal static float BaseAt(RailingAngle angle, float z) => Slope(angle) * z;
 
-    /// <summary>The base line at <paramref name="t"/> from its bottom (0) to its top (1). A spiral turns a quarter round
-    /// the stair's centre, which lies <see cref="SpiralRadius"/> behind the bottom snap (-z): to the left (-x) for the left
-    /// stair, to the right for the right one.</summary>
-    internal static Point3 Base(RailingAngle angle, float t)
-    {
-        if (IsStraight(angle)) return new Point3(0f, Rise(angle) * t, Run * t);
-        if (!IsSpiral(angle)) return new Point3(0f, 0f, 0f);
-        double theta = Math.PI / 2 * (1 + t);
-        float side = angle == RailingAngle.SpiralLeft ? 1f : -1f;
-        return new Point3(side * (float)(SpiralRadius * Math.Cos(theta)), SpiralRise * t, (float)(SpiralRadius * Math.Sin(theta)) - SpiralRadius);
-    }
-
-    /// <summary>The base line's length: the slope for a straight railing, the helix for a spiral.</summary>
-    internal static float PathLength(RailingAngle angle)
-    {
-        if (IsStraight(angle)) return Length(angle);
-        if (!IsSpiral(angle)) return 0f;
-        float arc = (float)(Math.PI / 2 * SpiralRadius);
-        return (float)Math.Sqrt(arc * arc + SpiralRise * SpiralRise);
-    }
+    /// <summary>The base line at <paramref name="t"/> from its bottom (0) to its top (1).</summary>
+    internal static Point3 Base(RailingAngle angle, float t) =>
+        IsStraight(angle) ? new Point3(0f, Rise(angle) * t, RunOf(angle) * t) : new Point3(0f, 0f, 0f);
 
     /// <summary>The base line's length in plan (what the balusters are spaced along).</summary>
-    internal static float PlanLength(RailingAngle angle) =>
-        IsStraight(angle) ? Run : IsSpiral(angle) ? (float)(Math.PI / 2 * SpiralRadius) : 0f;
+    internal static float PlanLength(RailingAngle angle) => RunOf(angle);
 
     internal static Point3 BottomSnap => new Point3(0f, 0f, 0f);
 
@@ -119,20 +94,18 @@ internal static class RailingGeometry
     {
         RailingAngle.Stair => (new Point3(1f, 0f, 1f), new Point3(1f, 1f, -1f)),
         RailingAngle.Steep => (new Point3(0.5f, 0f, 1f), new Point3(0.5f, 2f, -1f)),
-        RailingAngle.SpiralLeft => (new Point3(0f, 0f, 1.75f), new Point3(-1.75f, 1f, 0f)),
-        RailingAngle.SpiralRight => (new Point3(0f, 0f, 1.75f), new Point3(1.75f, 1f, 0f)),
         _ => (new Point3(1f, 0f, 1f), new Point3(1f, 0f, -1f)),
     };
 
-    /// <summary>The colliders: thin boxes from just above the base line to the handrail, one along a straight railing,
-    /// one per chord of a spiral, one round a newel. Each in its own frame: turned by <see cref="RailingCollider.Yaw"/>
+    /// <summary>The colliders: a thin box from just above the base line to the handrail along a straight railing, or one
+    /// round a newel. Each in its own frame: turned by <see cref="RailingCollider.Yaw"/>
     /// about y, then <see cref="RailingCollider.Pitch"/> about x (Unity's <c>Quaternion.Euler(pitch, yaw, 0)</c>).</summary>
     internal static IReadOnlyList<RailingCollider> Colliders(RailingAngle angle)
     {
         const float bottom = 0.05f;
         if (angle == RailingAngle.Newel)
             return new[] { new RailingCollider(new Point3(0f, NewelHeight / 2f, 0f), new Point3(0.16f, NewelHeight, 0.16f), 0f, 0f, new Point3(0f, 0f, 0f)) };
-        int segments = IsSpiral(angle) ? SpiralSegments : 1;
+        const int segments = 1;
         var colliders = new List<RailingCollider>(segments);
         for (int index = 0; index < segments; index++)
         {
@@ -253,8 +226,8 @@ internal readonly struct RailingPart
 
 /// <summary>What each style of railing is made of (#556; owner references 2026-11-10): plain - square posts with a cap, a
 /// handrail and square balusters (wood and the vanilla woods); decorated - twisted balusters with a knuckle half way up and
-/// capped posts (copper); detailed - thinner twisted bars, a pair of scrolls between every few bars on straight railings,
-/// a bottom rail and finials on the posts (iron, flametal). Game-free so every style's parts are tested.</summary>
+/// capped posts (copper); detailed - thinner twisted bars, a pair of scrolls between every few bars, a bottom rail and
+/// finials on the posts (iron, flametal). Game-free so every style's parts are tested.</summary>
 internal static class RailingDesign
 {
     /// <summary>The widest gap between balusters (centre to centre), along the ground.</summary>
@@ -289,7 +262,7 @@ internal static class RailingDesign
         // The handrail and the bottom rail between the posts' inner faces, following the base line.
         float plan = RailingGeometry.PlanLength(angle);
         float inset = post * 0.5f / plan;
-        int segments = RailingGeometry.IsSpiral(angle) ? RailingGeometry.SpiralSegments : 1;
+        const int segments = 1;
         float railCentre = RailingGeometry.HandrailHeight - rail * 0.5f;
         bool bottomRail = style != RailingStyle.Plain || angle == RailingAngle.Level;
         for (int index = 0; index < segments; index++)
