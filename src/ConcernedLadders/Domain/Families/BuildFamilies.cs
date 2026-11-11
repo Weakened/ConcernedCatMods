@@ -5,6 +5,24 @@ using TheConcernedCat.ConcernedLadders.Domain.Doors;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Families;
 
+/// <summary>The family ladders' setting (#558). Off by default, as every 1.1.0 addition is: with it off only the three
+/// shipped ladders are registered, exactly as in 1.0.0.</summary>
+internal static class LadderFamilySettings
+{
+    internal const string Section = "LadderFamilies";
+
+    internal const string Key = "Enabled";
+
+    internal const bool EnabledByDefault = false;
+
+    internal const string Description =
+        "UNFINISHED (#558): adds vertical ladders in the vanilla building materials - darkwood, ashwood, flametal, dvergr and " +
+        "log - each costing what the game's own pole of that material costs, none of it yet tested in game. Leave this off. " +
+        "Turning it off again, or uninstalling, makes the game delete every placed family ladder the next time a world " +
+        "loads, with no refund. In multiplayer every player and the host or server must have the same value. Restart " +
+        "after changing it.";
+}
+
 /// <summary>The building-material families railings and ladders come in (#556, #558; owner 2026-11-10: "we can also
 /// extend the ladders and railings in a similar fashion ... beautifully integrate with vanilla assets"). Wood, Copper
 /// and Iron are the ladders' own three; the rest are the vanilla families the doors already follow (#555), each built

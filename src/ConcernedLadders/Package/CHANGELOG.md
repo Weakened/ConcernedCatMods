@@ -40,6 +40,14 @@ version and the same values for these settings.
   of the door's own texture sheet (the Roundpole doors' bark, for example),
   instead of stretching the whole sheet across every face (#548). Not yet
   observed in game.
+- Ladders in the vanilla materials (#558), behind `LadderFamilies` /
+  `Enabled` (off by default): Vertical Darkwood, Ashwood, Flametal, Dvergr
+  and Log Ladders, each made from the game's own pole of that material and
+  costing what that pole costs. They climb exactly as the other ladders do.
+  The Vertical Iron Ladder now shows only the iron part of its texture
+  sheet, as the iron railing does. Turning the setting off again makes the
+  game delete placed family ladders when a world loads. Not yet observed in
+  game.
 - Railings (#556), behind `Railings` / `Enabled` (off by default). Adds
   railings in eight materials - wood, copper, iron, darkwood, ashwood,
   flametal, dvergr and log - each level, for the game's stairs (26.57
