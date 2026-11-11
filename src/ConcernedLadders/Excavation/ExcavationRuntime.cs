@@ -43,6 +43,8 @@ internal sealed class ExcavationRuntime : IDisposable
     private readonly DigHistory _history = new DigHistory();
     private readonly DigPreviewState _shown = new DigPreviewState();
     private readonly DigPreviewShape _shape = new DigPreviewShape();
+    private readonly List<GameObject> _pick = new List<GameObject>();
+    private readonly List<GameObject> _remove = new List<GameObject>();
     private DigStage _lastStage;
     private DigFootprint _lastFootprint;
     private float _lastPreviewRead = float.NaN;
@@ -129,6 +131,13 @@ internal sealed class ExcavationRuntime : IDisposable
         if (_session.ChangeDepth(steps)) _lastPreviewRead = float.NaN;
     }
 
+    /// <summary>The wheel at the first stage (#567): the next or previous ready-made cube, or the free size. Changes nothing
+    /// but the size shown.</summary>
+    internal void ChangePreset(int steps)
+    {
+        if (_session.ChangePreset(steps)) _lastPreviewRead = float.NaN;
+    }
+
     /// <summary>Refreshes what the preview shows. <b>Read-only</b>: it aims, reads the terrain into the preview's own grid,
     /// plans, and asks every gate question a dig would ask (the shovel, the stamina, the ward without flashing it, no-build
     /// areas, the object scan) without committing, charging, flashing or spawning anything. The terrain is re-read at most
@@ -142,7 +151,8 @@ internal sealed class ExcavationRuntime : IDisposable
         float groundY = float.NaN;
         if (available && _session.FollowsAim)
         {
-            aim = Aim(player, out int x, out int z, out groundY, out blocker);
+            float reach = _session.Stage == DigStage.SecondCorner ? ExcavationLimits.CornerReach : ExcavationLimits.Reach;
+            aim = Aim(player, reach, out int x, out int z, out groundY, out blocker);
             if (aim == ExcavationAim.Ok) _session.Aim(x, z);
             else _session.LoseAim();
         }
@@ -180,10 +190,12 @@ internal sealed class ExcavationRuntime : IDisposable
         }
 
         ExcavationCommitRefusal refusal = Evaluate(footprint, player, shovel, committing: false, _previewSamples, out DigPlan plan,
-            out ExcavationReadFault fault, out _, out string? obstruction, out _, out _, out bool planned);
+            out ExcavationReadFault fault, out _, out string? obstruction, out _, out _, out bool planned, out int cleared);
         if (planned) _shape.Build(plan, WaterLevel());
         else _shape.BuildFootprint(footprint, groundY);
-        _shown.Show(_session.Stage, footprint, planned, plan, refusal, Line(refusal, fault, plan, obstruction), frame, now);
+        string line = Line(refusal, fault, plan, obstruction);
+        if (refusal == ExcavationCommitRefusal.None) line = DigText.WithClearing(line, cleared);
+        _shown.Show(_session.Stage, footprint, planned, plan, refusal, line, frame, now);
         return true;
     }
 
@@ -199,7 +211,7 @@ internal sealed class ExcavationRuntime : IDisposable
         }
 
         // Nothing to dig, or a ready floor below the water, says so; otherwise the stage's prompt.
-        return DigText.Plan(plan) ?? DigText.Prompt(_session.Stage, _session.Footprint);
+        return DigText.Plan(plan) ?? DigText.Prompt(_session.Stage, _session.Footprint, _session.Preset);
     }
 
     /// <summary>The Attack press: sets a corner, or digs what the preview shows. Runs inside the game's own attack-input
@@ -260,7 +272,7 @@ internal sealed class ExcavationRuntime : IDisposable
         ExcavationCommitRefusal refusal = _shown.Confirm(Time.frameCount, Time.realtimeSinceStartup);
         if (refusal != ExcavationCommitRefusal.None) return DigText.Refusal(refusal, ExcavationReadFault.None, default, null);
         refusal = Evaluate(_shown.Footprint, player, shovel, committing: true, _samples, out DigPlan plan, out ExcavationReadFault fault,
-            out int pieces, out string? obstruction, out float staminaCost, out float durabilityCost, out _);
+            out int pieces, out string? obstruction, out float staminaCost, out float durabilityCost, out _, out _);
         if (refusal != ExcavationCommitRefusal.None) return DigText.Refusal(refusal, fault, plan, obstruction);
         if (!_shown.Matches(plan))
         {
@@ -281,13 +293,16 @@ internal sealed class ExcavationRuntime : IDisposable
     /// preview asks the same questions quietly, so what it shows is what the press would decide.</summary>
     private ExcavationCommitRefusal Evaluate(DigFootprint footprint, Player player, ItemDrop.ItemData shovel, bool committing,
         DigSamples samples, out DigPlan plan, out ExcavationReadFault fault, out int pieces, out string? obstruction,
-        out float staminaCost, out float durabilityCost, out bool planned)
+        out float staminaCost, out float durabilityCost, out bool planned, out int cleared)
     {
         fault = ExcavationReadFault.None;
         plan = default;
         pieces = 0;
         obstruction = null;
         planned = false;
+        cleared = 0;
+        _pick.Clear();
+        _remove.Clear();
         bool registered = _ops.IsRegistered();
         bool readable = Available && registered && !TerrainOp.m_forceDisableTerrainOps && !_inFlight.IsActive;
         if (readable)
@@ -318,9 +333,12 @@ internal sealed class ExcavationRuntime : IDisposable
         bool ward = committing ? ExcavationWorldChecks.WardAllows(footprint, plan.Datum) : ExcavationWorldChecks.WardAllowsQuietly(footprint, plan.Datum);
         bool noBuild = ward && _world.InNoBuildArea(footprint, plan.Datum);
         bool overflow = false;
+        // What stands on the ground (#567): pickables and other world objects are cleared by the dig, not refused; only what
+        // may never be removed (carts, ships, moving bodies) or cannot be (static props) still blocks it.
         int obstructions = ward && !noBuild
-            ? _world.Obstructions(footprint, plan.Bottom, Math.Max(HighestGround(samples), plan.Datum), out pieces, out overflow, out obstruction, out _)
+            ? _world.Survey(footprint, plan.Bottom, Math.Max(HighestGround(samples), plan.Datum), _pick, _remove, out pieces, out overflow, out obstruction)
             : 0;
+        cleared = _pick.Count + _remove.Count;
         return DigGate.WorldChecks(ward, noBuild, obstructions, overflow);
     }
 
@@ -382,6 +400,8 @@ internal sealed class ExcavationRuntime : IDisposable
             durabilityCost *= share;
         }
 
+        // The ground is cleared only now that the game has placed the dig (#567): what this press's survey found.
+        int removed = ExcavationClearing.Clear(player, _pick, _remove);
         // The charge, once (EXCAVATION.md 7.3). The operations have been handed to every tile owner, so whatever the
         // read-back later reports, this dig has been paid for and is never paid for again: the in-flight slot refuses a
         // second commit until it resolves, and a repeat of a completed plan is NothingToDig, which is free.
@@ -390,6 +410,7 @@ internal sealed class ExcavationRuntime : IDisposable
         _shown.Invalidate();
         _lastPreviewRead = float.NaN;
         string text = "Digging " + N(placed.Vertices.Count) + " of " + N(record.Vertices.Count) + " point(s) to " + F(plan.Bottom) + " m.";
+        if (removed > 0) text += " Cleared " + N(removed) + " object(s) from the ground.";
         if (pieces > 0) text += " " + N(pieces) + " building-piece collider(s) stand on the changed ground; their support is the game's own.";
         _log("Excavation committed: " + text);
         return string.Empty;
@@ -421,9 +442,12 @@ internal sealed class ExcavationRuntime : IDisposable
 
         if (!ExcavationWorldChecks.WardAllows(record.Footprint, top)) return DigText.Refusal(ExcavationCommitRefusal.Protected, ExcavationReadFault.None, default, null);
         if (_world.InNoBuildArea(record.Footprint, top)) return DigText.Refusal(ExcavationCommitRefusal.NoBuildArea, ExcavationReadFault.None, default, null);
-        int obstructions = _world.Obstructions(record.Footprint, floor, top, out int pieces, out bool overflow, out string? obstruction, out _);
+        int obstructions = _world.Survey(record.Footprint, floor, top, _pick, _remove, out int pieces, out bool overflow, out _);
+        bool occupied = overflow || obstructions > 0 || pieces > 0 || _pick.Count > 0 || _remove.Count > 0;
+        _pick.Clear();
+        _remove.Clear();
         // Raising the ground back would bury whatever stands in the hole now, a building piece as much as anything else.
-        if (overflow || obstructions > 0 || pieces > 0) return DigText.Undo(UndoRefusal.PieceInside);
+        if (occupied) return DigText.Undo(UndoRefusal.PieceInside);
         DigRecord? placed = Place(DigFlightKind.Undo, record, out ExcavationCommitRefusal refused);
         if (placed == null) return DigText.Refusal(refused, ExcavationReadFault.None, default, null);
         _shown.Invalidate();
@@ -544,7 +568,7 @@ internal sealed class ExcavationRuntime : IDisposable
     /// triggers ignored. The first thing it meets must be terrain - so the shovel never digs through a wall, a floor or a rock
     /// it cannot reach - and that point must be within <see cref="ExcavationLimits.Reach"/> of the player's eyes. The point
     /// is snapped to the nearest lattice vertex; rectangles follow the world axes.</summary>
-    private ExcavationAim Aim(Player? player, out int x, out int z, out float groundY, out Collider? blocker)
+    private ExcavationAim Aim(Player? player, float reach, out int x, out int z, out float groundY, out Collider? blocker)
     {
         x = 0;
         z = 0;
@@ -571,7 +595,7 @@ internal sealed class ExcavationRuntime : IDisposable
             return ExcavationAim.Blocked;
         }
 
-        if (Vector3.Distance(player.m_eye.position, hit.point) > ExcavationLimits.Reach) return ExcavationAim.TooFar;
+        if (Vector3.Distance(player.m_eye.position, hit.point) > reach) return ExcavationAim.TooFar;
         x = ExcavationGeometry.SnapToVertex(hit.point.x);
         z = ExcavationGeometry.SnapToVertex(hit.point.z);
         groundY = hit.point.y;

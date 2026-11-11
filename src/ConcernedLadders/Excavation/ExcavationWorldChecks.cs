@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using TheConcernedCat.ConcernedLadders.Domain.Excavation;
 using UnityEngine;
@@ -20,10 +21,14 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// <item><b>No-build locations.</b> Each no-build location is asked <c>IsInside(centre, AccessCheckRadius, buildCheck:
 /// true)</c>, which covers the whole rectangle. The location list is private, so it is found once by reflection; when it
 /// cannot be found the feature is unavailable rather than half-checked.</item>
-/// <item><b>Objects.</b> A terrain op leaves rocks, trees, ore, items, carts and ships where they are, floating over a dig
-/// or buried by an undo (claim 11). Any such collider in the changed rectangle, from below the floor to just above the
-/// highest ground, refuses. Structural building pieces (with WearNTear) are counted, not refused, for a dig - digging
-/// beside your own house is the point - and refuse an undo, which would bury them.</item>
+/// <item><b>Objects</b> (#567, owner playtest 2026-11-11: "digging should ignore pickable objects and others and just destroy
+/// them ... unless there's a more graceful way"). A terrain op leaves whatever stands on the ground where it is, floating
+/// over a dig. <see cref="Survey"/> sorts what is in the changed rectangle: building pieces (counted, never touched - digging
+/// beside your own house is the point); pickables (picked, so their items drop for the player, then removed: the graceful
+/// way); loose items (left to fall onto the new floor); other networked world objects - rocks, stumps, bushes, logs, trees
+/// (removed through <see cref="ExcavationClearing"/>, the one place that does it); and what may never be removed or cannot
+/// be removed persistently - carts, ships, anything on a moving body, static props with no network object - which still
+/// refuse, by name. An undo refuses whatever stands in the hole, a piece included, since raising the ground would bury it.</item>
 /// </list></summary>
 internal sealed class ExcavationWorldChecks
 {
@@ -90,13 +95,53 @@ internal sealed class ExcavationWorldChecks
         return false;
     }
 
-    /// <summary>Scans the changed rectangle from <paramref name="bottom"/> to <paramref name="top"/>. Returns how many
-    /// colliders belong to something other than a building piece (the first one's prefab name in
-    /// <paramref name="firstObstruction"/>), counts building-piece colliders into <paramref name="pieces"/> (the first one's
-    /// name in <paramref name="firstPiece"/>), and sets <paramref name="overflow"/> when the buffer filled, so the scan could
-    /// not see everything (which refuses).</summary>
-    internal int Obstructions(DigFootprint footprint, float bottom, float top, out int pieces, out bool overflow,
-        out string? firstObstruction, out string? firstPiece)
+    private readonly HashSet<GameObject> _seen = new HashSet<GameObject>();
+
+    /// <summary>Sorts everything in the changed rectangle from <paramref name="bottom"/> to <paramref name="top"/> (#567).
+    /// Fills <paramref name="toPick"/> with pickables and <paramref name="toRemove"/> with other networked world objects
+    /// (each object once, by its network root), counts building pieces into <paramref name="pieces"/>, and returns how many
+    /// objects block the dig (carts, ships, moving bodies, static props), the first one's name in
+    /// <paramref name="blocker"/>. <paramref name="overflow"/> is set when the buffer filled, so the scan could not see
+    /// everything (which refuses). Read-only: it never touches what it finds.</summary>
+    internal int Survey(DigFootprint footprint, float bottom, float top, List<GameObject> toPick, List<GameObject> toRemove,
+        out int pieces, out bool overflow, out string? blocker)
+    {
+        toPick.Clear();
+        toRemove.Clear();
+        _seen.Clear();
+        int count = Overlap(footprint, bottom, top, out overflow);
+        pieces = 0;
+        blocker = null;
+        int blocking = 0;
+        for (int i = 0; i < count; i++)
+        {
+            Collider hit = _hits[i];
+            _hits[i] = null!;
+            if (hit == null) continue;
+            Rigidbody body = hit.attachedRigidbody;
+            bool vehicle = hit.GetComponentInParent<Vagon>() != null || hit.GetComponentInParent<Ship>() != null;
+            // A structural building piece (it has WearNTear, so the game's own support and collapse govern it): never touched.
+            if (!vehicle && hit.GetComponentInParent<WearNTear>() != null) { pieces++; continue; }
+            // A loose item falls onto the new floor by itself.
+            if (!vehicle && hit.GetComponentInParent<ItemDrop>() != null) continue;
+            ZNetView? view = hit.GetComponentInParent<ZNetView>();
+            bool moving = body != null && !body.isKinematic;
+            if (vehicle || moving || view == null || !view.IsValid())
+            {
+                blocking++;
+                blocker ??= NameOf(hit);
+                continue;
+            }
+
+            if (!_seen.Add(view.gameObject)) continue;
+            if (view.GetComponent<Pickable>() != null) toPick.Add(view.gameObject);
+            else toRemove.Add(view.gameObject);
+        }
+
+        return blocking;
+    }
+
+    private int Overlap(DigFootprint footprint, float bottom, float top, out bool overflow)
     {
         if (_mask == 0)
         {
@@ -112,33 +157,7 @@ internal sealed class ExcavationWorldChecks
         var extents = new Vector3(halfX, (high - low) * 0.5f, halfZ);
         int count = Physics.OverlapBoxNonAlloc(centre, extents, _hits, Quaternion.identity, _mask, QueryTriggerInteraction.Ignore);
         overflow = count >= _hits.Length;
-        pieces = 0;
-        firstObstruction = null;
-        firstPiece = null;
-        int obstructions = 0;
-        for (int i = 0; i < count; i++)
-        {
-            Collider hit = _hits[i];
-            _hits[i] = null!;
-            if (hit == null) continue;
-            // A structural building piece (it has WearNTear, so the game's own support and collapse govern it). Carts and
-            // ships carry WearNTear too but are vehicles, and anything on a moving rigidbody could be left hanging; they
-            // refuse first. A planted crop or sapling is a Piece without WearNTear and would float, so it refuses too.
-            Rigidbody body = hit.attachedRigidbody;
-            bool vehicle = hit.GetComponentInParent<Vagon>() != null || hit.GetComponentInParent<Ship>() != null ||
-                           (body != null && !body.isKinematic);
-            if (!vehicle && hit.GetComponentInParent<WearNTear>() != null)
-            {
-                pieces++;
-                firstPiece ??= NameOf(hit);
-                continue;
-            }
-
-            obstructions++;
-            firstObstruction ??= NameOf(hit);
-        }
-
-        return obstructions;
+        return count;
     }
 
     private static string NameOf(Collider hit)

@@ -128,9 +128,10 @@ internal sealed class DigPreviewState
 }
 
 /// <summary>The preview's outlines (#551), flat rather than draped over the ground (owner playtest: the old wireframe bent
-/// over uneven ground and was hard to read): the top edge of the hole at the datum (where the walls start, one cell outside
-/// the floor), the floor at its own height, four lines from the top corners down to the floor corners (the walls' slope),
-/// and the water surface when the floor would flood. Before the terrain has been read only the footprint is drawn, at the
+/// over uneven ground and was hard to read), drawn as a perfect box since #567 (owner: "show them as a perfect cube"): the
+/// hole's footprint at the datum, the floor at its own height, four vertical edges between them, and the water surface
+/// when the floor would flood. The ground slopes over one more cell outside the box (the engine's limit); a basement wall
+/// piece covers it. Before the terrain has been read only the footprint is drawn, at the
 /// aimed height. Fixed buffers, so it is refilled every refresh without allocating.</summary>
 internal sealed class DigPreviewShape
 {
@@ -174,14 +175,13 @@ internal sealed class DigPreviewShape
         float top = plan.Datum + lift;
         float floor = plan.Bottom + lift;
         float s = ExcavationGeometry.VertexSpacing;
-        Rectangle(Top, (footprint.MinX - 1) * s, (footprint.MinZ - 1) * s, (footprint.MaxX + 1) * s, (footprint.MaxZ + 1) * s, top);
+        Rectangle(Top, footprint.MinX * s, footprint.MinZ * s, footprint.MaxX * s, footprint.MaxZ * s, top);
         Rectangle(Floor, footprint.MinX * s, footprint.MinZ * s, footprint.MaxX * s, footprint.MaxZ * s, floor);
         for (int corner = 0; corner < 4; corner++)
         {
             bool east = corner == 1 || corner == 2, north = corner >= 2;
-            float topX = (east ? footprint.MaxX + 1 : footprint.MinX - 1) * s, topZ = (north ? footprint.MaxZ + 1 : footprint.MinZ - 1) * s;
-            float floorX = (east ? footprint.MaxX : footprint.MinX) * s, floorZ = (north ? footprint.MaxZ : footprint.MinZ) * s;
-            Segment(FirstWall + corner, topX, top, topZ, floorX, floor, floorZ);
+            float x = (east ? footprint.MaxX : footprint.MinX) * s, z = (north ? footprint.MaxZ : footprint.MinZ) * s;
+            Segment(FirstWall + corner, x, top, z, x, floor, z);
         }
 
         if (plan.Floods && waterLevel.HasValue && LadderRules.Finite(waterLevel.Value))

@@ -21,9 +21,10 @@ internal static class DigText
     internal const int MaximumLength = 64;
 
     /// <summary>The prompt for a stage, with the size so far.</summary>
-    internal static string Prompt(DigStage stage, DigFootprint footprint) => stage switch
+    internal static string Prompt(DigStage stage, DigFootprint footprint, DigPreset preset = DigPreset.Free) => stage switch
     {
-        DigStage.FirstCorner => "Aim at the ground and set a corner.",
+        DigStage.FirstCorner when preset != DigPreset.Free => Volume(footprint) + " m cube: click to dig, scroll for size.",
+        DigStage.FirstCorner => "Set a corner, or scroll for a 1, 2 or 4 m cube.",
         DigStage.SecondCorner => Size(footprint) + " m: set the opposite corner.",
         _ => Volume(footprint) + " m: scroll for depth, then dig.",
     };
@@ -90,6 +91,14 @@ internal static class DigText
         ExcavationAim.TooFar => "Too far: move closer.",
         _ => "Aim at the ground.",
     };
+
+    /// <summary>The line with what a dig will clear from the ground (#567), when it still fits on one short line.</summary>
+    internal static string WithClearing(string line, int cleared)
+    {
+        if (cleared <= 0) return line;
+        string longer = line + " Clears " + N(cleared) + ".";
+        return longer.Length <= MaximumLength ? longer : line;
+    }
 
     internal static string Dug(DigFootprint footprint) => "Dug " + Volume(footprint) + " m.";
 

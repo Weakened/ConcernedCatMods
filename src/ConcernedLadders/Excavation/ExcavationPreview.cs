@@ -106,8 +106,9 @@ internal sealed class ExcavationPreview : IDisposable
                (chat != null && chat.HasFocus()) || ZCursor.LockState != CursorLockMode.Locked;
     }
 
-    /// <summary>True while the preview is up in the depth stage: the wheel sets depth then, and the camera must not zoom.</summary>
-    internal bool SettingDepth => _shownLastFrame && _runtime.Session.Stage == DigStage.Depth;
+    /// <summary>True while the preview is up at a stage where the wheel is the shovel's (#567: the first stage chooses a
+    /// ready-made cube, the depth stage sets the depth): the camera must not zoom with the same turn.</summary>
+    internal bool SettingDepth => _shownLastFrame && (_runtime.Session.Stage == DigStage.Depth || _runtime.Session.Stage == DigStage.FirstCorner);
 
     /// <summary>Called every frame after the runtime's own update.</summary>
     internal void Update()
@@ -128,6 +129,7 @@ internal sealed class ExcavationPreview : IDisposable
             }
 
             if (_runtime.Session.Stage == DigStage.Depth) _runtime.ChangeDepth(DepthSteps());
+            else if (_runtime.Session.Stage == DigStage.FirstCorner) _runtime.ChangePreset(DepthSteps());
             bool refreshed = _runtime.RefreshPreview(player!, shovel!, Time.frameCount, Time.realtimeSinceStartup);
             bool created = EnsureLines();
             if (refreshed || created || !_shownLastFrame) DrawLines();

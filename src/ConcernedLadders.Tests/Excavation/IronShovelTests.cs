@@ -106,7 +106,9 @@ public sealed class IronShovelTests
     {
         string text = IronShovel.Description();
         Assert.Contains("within 5 m", text);
-        Assert.Contains("Attack sets one corner, then the opposite one (2 to 8 m a side)", text);
+        Assert.Contains("Attack sets one corner, then the opposite one (1 to 8 m a side)", text);
+        Assert.Contains("ready-made 1, 2 or 4 m cube", text);
+        Assert.Contains("are picked or cleared", text);
         Assert.Contains("scroll sets the depth (1 to 7 m)", text);
         Assert.Contains("press it twice to fill your last hole back in", text);
         Assert.Contains("Costs 10 stamina", text);
