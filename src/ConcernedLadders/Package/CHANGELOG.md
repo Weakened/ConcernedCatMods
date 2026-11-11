@@ -94,6 +94,8 @@ version and the same values for these settings.
   fills its own border; undo puts both back. Turning `Excavation` off again,
   or uninstalling, makes the game delete the earth blocks the next time the
   world loads, leaving sloping sides.
+  - While the shovel is held, the bottom panel names the chosen size and
+    what it is for, as the hoe's panel does for its pieces (#587).
   - While the shovel is held, a flat outline shows the hole's top edge, the
     floor and the walls between them (and the water line if the floor would
     flood). It is green when Attack would dig, amber when there is nothing to

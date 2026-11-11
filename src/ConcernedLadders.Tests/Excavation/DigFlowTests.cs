@@ -109,6 +109,22 @@ public sealed class DigFlowTests
     }
 
     [Fact]
+    public void EverySizeHasABuildPanelNameAndOneLineLikeTheHoes()
+    {
+        // #587, owner: "add tool description on the bottom similar to hoe and other ones".
+        Assert.Equal("Hole 4x4x2", DigText.SizeName(new DigSize(4, 2)));
+        var lines = DigSizes.All.Select(DigText.SizeDescription).ToList();
+        Assert.Equal(lines.Count, lines.Distinct().Count());
+        Assert.All(lines, line =>
+        {
+            Assert.InRange(line.Length, 10, DigText.MaximumLength);
+            Assert.EndsWith(".", line);
+            Assert.Equal(1, line.Count(c => c == '.')); // one sentence, as the hoe's
+        });
+        Assert.Equal("A 2 m cube you can stand in: a cellar or a stairwell.", DigText.SizeDescription(new DigSize(2, 2)));
+    }
+
+    [Fact]
     public void SecondaryArmsThenConfirmsUndo()
     {
         var session = new DigSession(new DigHistory());

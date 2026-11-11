@@ -884,3 +884,15 @@ we can have one continuous digout area" and "Pickaxe should also destroy the fil
 
 Not observed in game: OWNER GO-AROUND PENDING.
 
+## 14. The shovel's build panel (#587)
+
+Owner playtest, 2026-11-11: "Can we add tool description on the bottom similar to hoe and other ones?" The panel at the
+bottom of the screen is the game's own build info panel, `Hud.m_buildHud`, which `Hud.UpdateBuild` shows only in place
+mode and fills from the selected piece (read from the installed game). The shovel is not a place-mode tool, so a Harmony
+postfix on that update (`Excavation/ExcavationToolPanel.cs`) shows the panel again while the shovel's outline is up,
+with the shovel's icon, the chosen size's name ("Hole 2x2x2", `DigText.SizeName`) and one line on what it is for
+(`DigText.SizeDescription`), and its requirement and snapping rows hidden. The next update hides it once the outline is
+gone. Display only, pinned in `ExcavationSourceAuditTests.TheToolPanelOnlyShowsTheGamesOwnBuildPanel`.
+
+Not observed in game: OWNER GO-AROUND PENDING.
+

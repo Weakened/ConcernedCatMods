@@ -60,6 +60,7 @@ internal sealed class ExcavationPreview : IDisposable
     private KeyHintConfig? _hint;
     private int _labelVersion = int.MinValue;
     private bool _shownLastFrame;
+    private Sprite? _icon;
     private bool _faulted;
 
     internal ExcavationPreview(Action<string> log, ExcavationRuntime runtime)
@@ -110,6 +111,11 @@ internal sealed class ExcavationPreview : IDisposable
     /// with the same turn.</summary>
     internal bool UsingWheel => _shownLastFrame;
 
+    /// <summary>What the build panel shows while the preview is up (#587): the chosen size's name and line, and the held
+    /// shovel's icon; null while the preview is not up.</summary>
+    internal (string Name, string Description, Sprite? Icon)? PanelInfo =>
+        _shownLastFrame ? (DigText.SizeName(_runtime.Session.Size), DigText.SizeDescription(_runtime.Session.Size), _icon) : null;
+
     /// <summary>Called every frame after the runtime's own update.</summary>
     internal void Update()
     {
@@ -133,6 +139,7 @@ internal sealed class ExcavationPreview : IDisposable
             bool created = EnsureLines();
             if (refreshed || created || !_shownLastFrame) DrawLines();
             UpdateLabel();
+            _icon = shovel!.GetIcon();
             _shownLastFrame = true;
         }
         catch (Exception exception)
