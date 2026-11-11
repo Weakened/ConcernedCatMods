@@ -121,13 +121,32 @@ mesh, `tcc_door_cellar_<prism>_<region>`, is shared by the families with that re
 `HideFlags.DontUnloadUnusedAsset`. Tests check that
 it is closed, outward-facing and convex, and that it encloses exactly the prism's volume (`CellarBlueprintTests`).
 
-### 4a. The Wood Gate's leaf look (#547)
+### 4a. Each family's leaf look (#547, #555)
 
 The Wood Door and the Wood Gate borrow the same three materials (section 5), so until #547 their trapdoors and cellar
-doors were identical but for the name. `LeafPattern` (`Domain/Doors/LeafPattern.cs`) now gives every lid and leaf a
-look. `LeafPattern.For` makes the Wood Gate's a **gate**; the other eight families stay **solid**: the one box visual
-`lid_hinge/lid` or `leaf_left`/`leaf_right` in the rows above, unchanged. The adapters build either through
-`DoorPieceKit.LeafVisuals`.
+doors were identical but for the name. Since #555 (owner 2026-11-10: "any door type we have should have a corresponding
+bulkhead ... beautifully integrate with vanilla assets") every family's lid and leaves read as its own door.
+`LeafPattern.For` chooses the look, and the adapters build it through `DoorPieceKit.LeafVisuals`:
+
+| Donor | Look | Made of |
+|---|---|---|
+| `wood_door` | Planked | planks with 6 mm seams over two braces |
+| `wood_gate` | Gate | the gate below |
+| `wood_fence_gate` | Poles | 0.1 m poles over three rails |
+| `iron_grate` | Bars | a frame of four flat bars and a cross bar, around thin vertical bars, open between them |
+| `darkwood_gate` | Strapped | planks with two iron straps across the top |
+| `stave_gate`, `piece_hexagonal_door`, `ashwood_door` | Panelled | a raised frame around a panel recessed to three fifths of the thickness, showing the door's own panel texture |
+| `flametal_gate` | Plated | two plates with three iron bands |
+
+The roles decide the materials:
+
+- **Boards, poles, bars and panels** use the donor leaf material and its region (section 6a).
+- **Rails and frames** use the frame material.
+- **Straps and bands** use the darkened hinge material (section 6).
+
+Every part stays inside the leaf's collider box, and the collider is unchanged. So the sweep, the clearances, the occupancy
+queries and the ladder rules are exactly as tested for the solid leaf (`LeafPatternTests`). In game, OWNER GO-AROUND
+PENDING.
 
 A gate replaces that one box with box visuals in the same parent and inside the same box, named from it:
 
