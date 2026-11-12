@@ -1,5 +1,9 @@
 # Concerned Ladders: Iron Shovel excavation (#487, CL-006): geometry contract and terrain feasibility
 
+> **Superseded in part by section 10 (#551, owner playtest 2026-11-10).** The player now sizes each hole; the two fixed
+> 2x2x2 / 4x4x4 m sizes, their square operations, the size switch and the long HUD text described in sections 1 and 4 to 8
+> are gone. Section 3 (what the engine can do) still holds, and section 10 adds what the new flow relies on.
+
 **Status: design record, game-free planner (slice 1), the terrain operations, read-only terrain adapter and
 commit gate (slice 2, section 6), the Iron Shovel item that triggers and pays for a dig (slice 3, section 7), and the
 shovel's placement preview, size selection and confirmation (slice 4, section 8), all behind the off-by-default
@@ -667,4 +671,61 @@ The shovel still behaves as sections 7 and 8 describe until slice 3.
 - `DigText`: every line the shovel shows, one line each and no more than 64 characters (tested). Detail goes to the
   log.
 
-Tested in `DigPlannerTests`. Not observed in game; nothing in game uses it until slice 3.
+Tested in `DigPlannerTests`.
+
+**Slices 2 and 3 (one PR: the new flow replaces #487's).** Two flows side by side would break the audited rule that the
+product changes terrain at exactly one site and charges at exactly one, so the fixed-size flow is removed, not kept beside
+the new one. Its square plan, samples, size switch, preview state and shape, reports, gate and in-flight slot are gone with
+their tests. What they proved is proved again for the new flow:
+
+- `DigFlowTests` covers the presses, the confirmation, the outline, the gate, the slot and the engine round trip.
+- `DigPlannerTests` covers the plan.
+- `ExcavationSourceAuditTests` is re-pinned.
+
+The one deliberate change of behaviour is that ground already lower joins instead of refusing, which is the owner's ask.
+
+- **Terrain operations** (`ExcavationTerrainOps`): `tcc_excavate_vertex_lower` (delta -8) and `tcc_excavate_vertex_raise`
+  (delta +8), square with radius 0, level, smooth and paint off, so `GetRadius()` is 0. The op's height is the target plus
+  or minus 8 (`OperationY`). They replace `tcc_excavate_small` and `tcc_excavate_large`. Operations are not saved, so no
+  save is affected.
+- **The flow** (`DigSession`):
+  - **Corners.** Attack sets the first corner; a 2 x 2 m square follows the aim until then. Attack sets the opposite
+    corner, as clamped, so what is dug is what was shown.
+  - **Depth.** The wheel steps the depth. Wheel down is a metre deeper. On a controller, alternate keys plus zoom out or
+    in. Attack then digs.
+  - **Back.** Secondary steps back one stage.
+  - **Undo.** At the first stage, Secondary arms undo (the line says "Press again to fill the last hole back in.") and a
+    second Secondary within 3 s undoes. A double press can only undo after that line has shown.
+  - **Camera.** While the depth is being set, `ExcavationShovelInput` holds `GameCamera.m_distance` across the camera's
+    update (stash before, restore after), so the wheel does not also zoom. If the game does not match, depth still works
+    and the camera zooms too (logged).
+- **A dig** (`ExcavationRuntime.DigWithShovel`, `Commit`, `Place`): the same order as before.
+  - Ladder, the preview confirmation, the evaluation (probe, registration, kill switch, one in flight, a fresh read, the
+    plan, can-pay, ward at the corner radius, no-build, object scan), the shown-plan match.
+  - Then the batch, which takes the slot and then makes one `SpawnOnHitTerrain` per vertex, the product's only spawn site.
+  - Then the charge, once, by the volume removed (`DigCost`), pro rata if the game's own per-vertex re-check refused part
+    of the batch (the slot is narrowed to what was placed).
+  - The read-back runs every frame until the result is Complete, Overshot, Unreadable or TimedOut. Only a Complete dig
+    enters the undo history.
+- **An undo** (`UndoWithShovel`) runs the following checks in order. A completed undo leaves the history.
+  - The ladder, the newest record, and nothing in flight.
+  - The shovel in hand and free.
+  - A fresh read: a rebuilding read says so; otherwise `DigUndo.Check` refuses Unloaded or Changed.
+  - The ward, flashing as a press does, then no-build areas.
+  - The object scan from the floor to the old ground. **Anything** in the hole refuses, a building piece included,
+    because raising the ground would bury it.
+  - Then the batch of raises. No charge and no refund.
+- **A dig that could not be undone exactly is refused** (`DigRefusal.UndoLimit`): one that would lower a point more than 8 m,
+  possible only on ground an earlier edit raised. A raise moves at most 8 m, and a second raise of the same vertex in the
+  same frame reads the stale height and overshoots (proved on the engine model). So an undo is always one raise per vertex.
+- **The HUD**: one line under the crosshair (`DigText`, at most 64 characters, tested), coloured by the outline's tone. The
+  buttons are on the game's key-hint panel: "Set corner / dig" and "Back / fill in (press twice)". Results of a press or a
+  read-back show once, top left, as one line; empty when the preview's line already says it.
+- **Console**: `cl_excavate plan` describes, read-only, the rectangle the held shovel shows, in full: floor, points, volume,
+  what is left lower, walls, cost and flooding. `status` gives the stage, the depth and how many digs can be undone.
+
+**Still OWNER GO-AROUND PENDING:**
+
+- Everything in game: the corners, the wheel, the camera hold, the outline, the line, digging, joining an earlier hole,
+  and undo.
+- The lead defaults: 2 to 8 m a side, 1 to 7 m deep, the cost formula, 10 undoable digs, and the 3 s undo confirmation.

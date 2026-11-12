@@ -128,10 +128,11 @@ public sealed class Plugin : BaseUnityPlugin
     private void InstallExcavation()
     {
         ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", false,
-            "Experimental, off by default (#487): adds the Iron Shovel (Forge: Iron and Wood). While held it previews one " +
-            "measured 2x2x2 m or 4x4x4 m basement hole (secondary attack switches the size); attack digs the hole shown, " +
-            "through the game's own terrain operation. Also adds the read-only cl_excavate console diagnostic. Not yet " +
-            "observed in game. Every player needs the same version " +
+            "Experimental, off by default (#487, #551): adds the Iron Shovel (Forge: Iron and Wood). Attack sets one corner of " +
+            "a hole, then the opposite corner (2 to 8 m a side); the wheel sets the depth (1 to 7 m); attack digs it, through " +
+            "the game's own terrain operations. Secondary attack steps back; with nothing to step back to, pressing it twice " +
+            "fills the last hole back in. Also adds the read-only cl_excavate console diagnostic. Not yet observed in game. " +
+            "Every player needs the same version " +
             "and the same setting. Turning it off again removes the item from the game, and the game discards unknown items " +
             "from inventories and chests when it loads them. Restart after changing.");
         try
@@ -149,6 +150,7 @@ public sealed class Plugin : BaseUnityPlugin
                 _excavation.Faulted = () => _shovel?.DisableRecipe();
                 _preview = _shovelInput != null ? new ExcavationPreview(message => Logger.LogInfo(message), _excavation) : null;
                 _preview?.Install();
+                ExcavationShovelInput.HoldCamera = () => _preview?.SettingDepth == true;
             }
         }
         catch (Exception exception)

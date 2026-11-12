@@ -2,7 +2,8 @@ using TheConcernedCat.ConcernedLadders.Domain.Excavation;
 
 namespace TheConcernedCat.ConcernedLadders.Tests.Excavation;
 
-/// <summary>A transcription, for tests only, of the installed engine's terrain path that the planner relies on
+/// <summary>A transcription, for tests only, of the installed engine's terrain path that the planner relies on (since #551
+/// the mod's single-vertex operations: a square raise of radius 0 changes exactly one vertex)
 /// (assembly_valheim 1.0.21, read from the decompiled source; see EXCAVATION.md section 3). It is not a game
 /// stand-in for the adapter: it exists so a test can show what the one native operation the plan names does
 /// to the lattice, including the clamp and the stale-height double count the runtime must avoid.
@@ -80,9 +81,21 @@ internal sealed class VanillaTerrainModel
         }
     }
 
-    internal void Apply(in ExcavationPlan plan) =>
-        SquareRaise(plan.CentreX * ExcavationGeometry.VertexSpacing, plan.OperationY,
-            plan.CentreZ * ExcavationGeometry.VertexSpacing, plan.OperationRadius, plan.OperationDelta);
+    /// <summary>One of the mod's single-vertex operations (#551): a square raise of radius 0 at the vertex, with the op's
+    /// fixed delta, placed so it reaches <paramref name="target"/> (ExcavationTerrainOps.OperationY).</summary>
+    internal void ApplyVertex(DigFlightKind kind, int x, int z, float target)
+    {
+        float step = DigUndo.RaiseStep;
+        float delta = kind == DigFlightKind.Dig ? -step : step;
+        float opY = kind == DigFlightKind.Dig ? target + step : target - step;
+        SquareRaise(x * ExcavationGeometry.VertexSpacing, opY, z * ExcavationGeometry.VertexSpacing, 0f, delta);
+    }
+
+    /// <summary>A whole batch, as the runtime places it: one operation per recorded vertex.</summary>
+    internal void Apply(DigFlightKind kind, DigRecord record)
+    {
+        foreach (DigVertex vertex in record.Vertices) ApplyVertex(kind, vertex.X, vertex.Z, kind == DigFlightKind.Dig ? vertex.After : vertex.Before);
+    }
 
     /// <summary>The terrain surface (and collider) at a world point: the triangle of its cell, interpolated.</summary>
     internal float Surface(float x, float z)
@@ -97,19 +110,24 @@ internal sealed class VanillaTerrainModel
         return h11 + (h01 - h11) * (1f - u) + (h10 - h11) * (1f - v);
     }
 
-    /// <summary>What the engine adapter would read into the planner: current height and the dig-limit base.</summary>
-    internal ExcavationSamples Sample(ExcavationMode mode, int cx, int cz)
+    /// <summary>What the engine adapter would read into the planner for a rectangle and its ring: current height and the
+    /// dig-limit base.</summary>
+    internal DigSamples Sample(DigFootprint footprint)
     {
-        var samples = new ExcavationSamples(mode);
-        int reach = samples.Reach;
-        for (int dz = -reach; dz <= reach; dz++)
+        var samples = new DigSamples();
+        samples.Begin(footprint);
+        for (int z = footprint.MinZ - 1; z <= footprint.MaxZ + 1; z++)
         {
-            for (int dx = -reach; dx <= reach; dx++)
+            for (int x = footprint.MinX - 1; x <= footprint.MaxX + 1; x++)
             {
-                if (_unloaded.Contains((cx + dx, cz + dz))) { samples.SetUnloaded(dx, dz); continue; }
-                samples.Set(dx, dz, Displayed(cx + dx, cz + dz), _base(cx + dx, cz + dz));
+                if (_unloaded.Contains((x, z))) { samples.SetUnloaded(x, z); continue; }
+                samples.Set(x, z, Displayed(x, z), _base(x, z));
             }
         }
+
         return samples;
     }
+
+    /// <summary>A read-back reader over the displayed heights, as the runtime gives DigPlanner.Progress and DigUndo.</summary>
+    internal float? Read(int x, int z) => _unloaded.Contains((x, z)) ? null : Displayed(x, z);
 }

@@ -93,21 +93,27 @@ public sealed class ExcavationSourceAuditTests
     [Theory]
     [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_raise\s*=\s*true\s*;")]
     [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_square\s*=\s*true\s*;")]
-    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_raiseDelta\s*=\s*-geometry\.Depth\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_raiseDelta\s*=\s*delta\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_raiseRadius\s*=\s*0f\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"if\s*\(\s*op\.GetRadius\s*\(\s*\)\s*!=\s*0f\s*\)\s*throw")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"_lower\s*=\s*Make\s*\(\s*container\.transform\s*,\s*LowerPrefabName\s*,\s*-Step\s*\)\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"_raise\s*=\s*Make\s*\(\s*container\.transform\s*,\s*RaisePrefabName\s*,\s*Step\s*\)\s*;")]
+    [InlineData("Excavation/ExcavationTerrainOps.cs", @"kind\s*==\s*DigFlightKind\.Dig\s*\?\s*target\s*\+\s*Step\s*:\s*target\s*-\s*Step")]
     [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_level\s*=\s*false\s*;")]
     [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_smooth\s*=\s*false\s*;")]
     [InlineData("Excavation/ExcavationTerrainOps.cs", @"settings\.m_paintCleared\s*=\s*false\s*;")]
     [InlineData("Excavation/ExcavationTerrainOps.cs", @"op\.m_spawnOnPlaced\s*=\s*null\s*;")]
-    [InlineData("Excavation/ExcavationWorldChecks.cs", @"CheckAccess\s*\([^;]*AccessCheckRadius\s*,\s*flash\s*:\s*true\s*,\s*wardCheck\s*:\s*true\s*\)")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"CheckAccess\s*\([^;]*AccessCheckRadius\s*\(\s*footprint\s*\)\s*,\s*flash\s*:\s*true\s*,\s*wardCheck\s*:\s*true\s*\)")]
     [InlineData("Excavation/ExcavationWorldChecks.cs", @"IsInside\s*\(\s*centre\s*,\s*radius\s*,\s*buildCheck\s*:\s*true\s*\)")]
-    [InlineData("Excavation/ExcavationWorldChecks.cs", @"float\s+radius\s*=\s*plan\.Geometry\.AccessCheckRadius\s*;")]
+    [InlineData("Excavation/ExcavationWorldChecks.cs", @"float\s+radius\s*=\s*AccessCheckRadius\s*\(\s*footprint\s*\)\s*;")]
     [InlineData("Excavation/ExcavationWorldChecks.cs", @"GetComponentInParent<Vagon>\(\)\s*!=\s*null\s*\|\|\s*hit\.GetComponentInParent<Ship>\(\)\s*!=\s*null")]
     [InlineData("Excavation/ExcavationWorldChecks.cs", @"if\s*\(\s*!vehicle\s*&&\s*hit\.GetComponentInParent<WearNTear>\(\)\s*!=\s*null\s*\)")]
     [InlineData("Excavation/ExcavationTerrainReader.cs", @"if\s*\(\s*!ExcavationTerrainRules\.LatticeSupported\s*\(\s*tile\.m_width\s*,\s*tile\.m_scale\s*,\s*origin\.x\s*,\s*origin\.z\s*\)\s*\)\s*return\s+ExcavationReadFault\.UnsupportedLattice\s*;")]
     [InlineData("Excavation/ExcavationTerrainReader.cs", @"if\s*\(\s*tile\.m_doLateUpdate\s*!=\s*0\s*\)\s*return\s+ExcavationReadFault\.Rebuilding\s*;")]
-    [InlineData("Excavation/ExcavationTerrainReader.cs", @"WriteTo\s*\(\s*samples\s*,\s*dx\s*,\s*dz\s*,\s*ExcavationTerrainRules\.ExpectedCopies\s*\(")]
-    [InlineData("Excavation/ExcavationRuntime.cs", @"if\s*\(\s*op\s*==\s*null\s*\|\|\s*!_inFlight\.TryStart\s*\(\s*plan\s*,\s*Time\.time\s*\)\s*\)")]
-    [InlineData("Excavation/ExcavationRuntime.cs", @"ExcavationPlanner\.Check\s*\(\s*plan\s*,\s*after\s*\)")]
+    [InlineData("Excavation/ExcavationTerrainReader.cs", @"WriteTo\s*\(\s*samples\s*,\s*x\s*,\s*z\s*,\s*ExcavationTerrainRules\.ExpectedCopies\s*\(\s*x\s*,\s*z\s*\)\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"if\s*\(\s*op\s*==\s*null\s*\|\|\s*!_inFlight\.TryStart\s*\(\s*kind\s*,\s*record\s*,\s*Time\.time\s*\)\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"DigPlanner\.Progress\s*\(\s*record\s*,\s*Read\s*\(\s*_check\s*\)\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"DigUndo\.Progress\s*\(\s*record\s*,\s*Read\s*\(\s*_check\s*\)\s*\)")]
     public void TheAdapterPropertiesAreWhereTheyMustBe(string relative, string pattern)
     {
         Assert.Equal(1, Count(SourceText(relative), pattern));
@@ -117,9 +123,14 @@ public sealed class ExcavationSourceAuditTests
     public void TheTerrainToolCallComesAfterTheSlotIsTaken()
     {
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
-        int slot = runtime.IndexOf("_inFlight.TryStart(plan, Time.time)", StringComparison.Ordinal);
-        int spawn = Regex.Match(runtime, @"\bSpawnOnHitTerrain\s*\(").Index;
-        Assert.True(slot > 0 && spawn > slot, "The single SpawnOnHitTerrain call must follow the in-flight slot.");
+        string place = MethodBody(runtime, PlaceSignature);
+        int slot = place.IndexOf("_inFlight.TryStart(kind, record, Time.time)", StringComparison.Ordinal);
+        int spawn = Regex.Match(place, @"\bSpawnOnHitTerrain\s*\(").Index;
+        Assert.True(slot > 0 && spawn > slot, "The single SpawnOnHitTerrain call must be in the batch, after the in-flight slot.");
+        // The batch is reached exactly twice: by a dig's commit and by an undo.
+        Assert.Equal(2, Count(runtime, @"\bPlace\s*\(\s*DigFlightKind\.(Dig|Undo)\s*,\s*record\s*,"));
+        Assert.Equal(1, Count(MethodBody(runtime, CommitSignature), @"\bPlace\s*\(\s*DigFlightKind\.Dig\b"));
+        Assert.Equal(1, Count(MethodBody(runtime, UndoSignature), @"\bPlace\s*\(\s*DigFlightKind\.Undo\b"));
     }
 
     // ---- #487 slice 3: the Iron Shovel ----
@@ -157,7 +168,7 @@ public sealed class ExcavationSourceAuditTests
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
         int spawn = Regex.Match(runtime, @"\bSpawnOnHitTerrain\s*\(").Index;
         // The end of the refusal branch: its return statement and the brace that closes it.
-        Match branch = Regex.Match(runtime, @"return\s+ExcavationReport\.Commit\s*\(\s*ExcavationCommitRefusal\.SpawnRefused[^;]*;\s*\}");
+        Match branch = Regex.Match(runtime, @"refused\s*=\s*ExcavationCommitRefusal\.SpawnRefused\s*;\s*return\s+null\s*;\s*\}");
         int charge = Regex.Match(runtime, ChargeCall).Index;
         int stamina = Regex.Match(runtime, @"\bUseStamina\s*\(").Index;
         int durability = Regex.Match(runtime, DurabilityWrite).Index;
@@ -165,6 +176,13 @@ public sealed class ExcavationSourceAuditTests
         Assert.True(spawn > 0 && branch.Success && branch.Index > spawn && charge >= branch.Index + branch.Length,
             "Charge must follow the spawn and the end of its refusal branch.");
         Assert.True(chargeBody > charge && stamina > chargeBody && durability > stamina, "Stamina, then durability, inside Charge.");
+        // The charge is a dig's: inside Commit, after its batch; an undo charges nothing and refunds nothing.
+        string commit = MethodBody(runtime, CommitSignature);
+        int placed = Regex.Match(commit, @"\bPlace\s*\(").Index;
+        Match charged = Regex.Match(commit, ChargeCall);
+        Assert.True(charged.Success && charged.Index > placed, "Commit charges after its batch.");
+        string undo = MethodBody(runtime, UndoSignature);
+        foreach (string pattern in new[] { ChargeCall, @"\bUseStamina\s*\(", DurabilityWrite, @"\bAddStamina\s*\(" }) Assert.Equal(0, Count(undo, pattern));
     }
 
     /// <summary>No animation is played and no stored attack is reached: a swing clip's attack-trigger event runs whatever
@@ -184,12 +202,22 @@ public sealed class ExcavationSourceAuditTests
     [Fact]
     public void OnlyTheShovelPressReachesTheCommitGate()
     {
-        var calls = Hits(@"\.DigWithShovel\s*\(");
-        Assert.Single(calls);
-        Assert.Equal("Excavation/ExcavationShovelInput.cs", calls[0].Path);
-        Assert.Equal(1, calls[0].N);
+        // The runtime's presses (its own session's are its business) are reached from the input prefix alone.
+        foreach (string press in new[] { @"(?<!_session)\.Primary\s*\(", @"(?<!_session)\.Secondary\s*\(" })
+        {
+            var calls = Hits(press);
+            Assert.True(calls.Count == 1 && calls[0].Path == "Excavation/ExcavationShovelInput.cs" && calls[0].N == 1, press + ": " + string.Join(", ", calls));
+        }
+
+        // The dig and undo gates are reached only from the presses' own session actions, inside the runtime.
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        Assert.Equal(1, Count(runtime, @"(?<![\w.])DigWithShovel\s*\((?!\s*Player\b)"));
+        Assert.Equal(1, Count(MethodBody(runtime, PrimarySignature), @"DigAction\.Dig\s*=>\s*DigWithShovel\s*\(\s*player\s*,\s*shovel\s*\)"));
+        Assert.Equal(1, Count(runtime, @"(?<![\w.])UndoWithShovel\s*\((?!\s*Player\b)"));
+        Assert.Equal(1, Count(MethodBody(runtime, SecondarySignature), @"case\s+DigAction\.Undo\s*:\s*return\s+UndoWithShovel\s*\(\s*player\s*,\s*shovel\s*\)"));
+        Assert.Empty(Hits(@"\.(DigWithShovel|UndoWithShovel)\s*\("));
         string command = SourceText("Excavation/ExcavationCommand.cs");
-        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bDigAtAim\b|\bCommit\s*\(|\bSwitchMode\b|\bRefreshPreview\b", command);
+        Assert.DoesNotMatch(@"\bDigWithShovel\b|\bUndoWithShovel\b|\bPrimary\b|\bSecondary\b|\bCommit\s*\(|\bChangeDepth\b|\bRefreshPreview\b|\bPlace\s*\(", command);
         Assert.Equal(1, Count(command, @"(?<!\w)runtime\.PlanAtAim\s*\("));
         // Slice 4 (slice 2's follow-up): the command never keeps a runtime of its own, so one disposed by an install
         // fault cannot be reached through it; it asks the plugin for the current one on every use.
@@ -203,8 +231,8 @@ public sealed class ExcavationSourceAuditTests
     [Theory]
     [InlineData("Excavation/ExcavationRuntime.cs", @"refusal\s*=\s*IronShovel\.CanPay\s*\(\s*Equipped\s*\(\s*player\s*,\s*shovel\s*\)\s*,\s*Ready\s*\(\s*player\s*\)")]
     [InlineData("Excavation/ExcavationRuntime.cs", @"ReferenceEquals\s*\(\s*player\.GetCurrentWeapon\s*\(\s*\)\s*,\s*shovel\s*\)")]
-    [InlineData("Excavation/ExcavationRuntime.cs", @"player\.HaveStamina\s*\(\s*IronShovel\.StaminaNeeded\s*\(\s*mode\s*,\s*Game\.m_staminaRate\s*\)\s*\)")]
-    [InlineData("Excavation/ExcavationRuntime.cs", @"IronShovel\.DurabilityCost\s*\(\s*mode\s*,\s*Game\.m_durabilityRate\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"player\.HaveStamina\s*\(\s*DigCost\.StaminaNeeded\s*\(\s*plan\.LoweredVolume\s*,\s*Game\.m_staminaRate\s*\)\s*\)")]
+    [InlineData("Excavation/ExcavationRuntime.cs", @"DigCost\.DurabilityCost\s*\(\s*plan\.LoweredVolume\s*,\s*Game\.m_durabilityRate\s*\)")]
     [InlineData("Excavation/ExcavationRuntime.cs", @"!player\.InAttack\(\)\s*&&\s*!player\.InDodge\(\)\s*&&\s*player\.CanMove\(\)\s*&&\s*!player\.IsStaggering\(\)\s*&&\s*!player\.IsKnockedBack\(\)\s*&&\s*!player\.InMinorAction\(\)\s*&&\s*!player\.IsTeleporting\(\)\s*;")]
     [InlineData("Plugin.cs", @"new\s+IronShovelItem\s*\([^;]*craftable\s*:\s*_shovelInput\s*!=\s*null\s*&&\s*_excavation\.Available\s*\)")]
     [InlineData("Items/IronShovelItem.cs", @"Enabled\s*=\s*_craftable\s*,")]
@@ -241,7 +269,7 @@ public sealed class ExcavationSourceAuditTests
     public void TheCostIsAskedBeforeTheWorldChecks()
     {
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
-        int planner = Regex.Match(runtime, @"ExcavationGate\.BeforeWorldChecks\s*\(").Index;
+        int planner = Regex.Match(runtime, @"DigGate\.BeforeWorldChecks\s*\(").Index;
         int pay = Regex.Match(runtime, @"IronShovel\.CanPay\s*\(").Index;
         int ward = Regex.Match(runtime, @"ExcavationWorldChecks\.WardAllows\s*\(").Index;
         Assert.True(planner > 0 && pay > planner && ward > pay, "CanPay must sit between the planner gate and the ward check.");
@@ -306,6 +334,11 @@ public sealed class ExcavationSourceAuditTests
     internal const string RefreshSignature = @"internal\s+bool\s+RefreshPreview\s*\(";
     internal const string EvaluateSignature = @"private\s+ExcavationCommitRefusal\s+Evaluate\s*\(";
     internal const string DigSignature = @"internal\s+string\s+DigWithShovel\s*\(";
+    internal const string UndoSignature = @"internal\s+string\s+UndoWithShovel\s*\(";
+    internal const string CommitSignature = @"private\s+string\s+Commit\s*\(";
+    internal const string PlaceSignature = @"private\s+DigRecord\?\s+Place\s*\(";
+    internal const string PrimarySignature = @"internal\s+string\s+Primary\s*\(";
+    internal const string SecondarySignature = @"internal\s+string\s+Secondary\s*\(";
 
     /// <summary>Aiming, switching size or moving never changes the world: the preview's refresh and the shared evaluation it
     /// uses contain no commit, charge, spawn or durability write, and the preview adapter none either.</summary>
@@ -316,12 +349,15 @@ public sealed class ExcavationSourceAuditTests
     [InlineData(@"\bUseStamina\s*\(")]
     [InlineData(@"\bTryStart\s*\(")]
     [InlineData(@"\bDigWithShovel\b")]
+    [InlineData(@"\bUndoWithShovel\b")]
+    [InlineData(@"\bPlace\s*\(")]
     [InlineData(DurabilityWrite)]
     public void ThePreviewPathNeverCommits(string pattern)
     {
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
         Assert.Equal(0, Count(MethodBody(runtime, RefreshSignature), pattern));
         Assert.Equal(0, Count(MethodBody(runtime, EvaluateSignature), pattern));
+        Assert.Equal(0, Count(MethodBody(runtime, @"internal\s+void\s+ChangeDepth\s*\("), pattern));
         Assert.Equal(0, Count(SourceText("Excavation/ExcavationPreview.cs"), pattern));
     }
 
@@ -336,14 +372,18 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(refresh, @"\bEvaluate\s*\("));
         Assert.Equal(1, Count(dig, @"\bEvaluate\s*\([^;]*committing\s*:\s*true\b"));
         Assert.Equal(1, Count(dig, @"\bEvaluate\s*\("));
-        Assert.Equal(2, Count(runtime, @"\bEvaluate\s*\(\s*mode\b"));
+        Assert.Equal(1, Count(refresh, @"\bEvaluate\s*\(\s*footprint\s*,"));
+        Assert.Equal(1, Count(dig, @"\bEvaluate\s*\(\s*_shown\.Footprint\s*,"));
+        Assert.Equal(2, Count(runtime, @"\bEvaluate\s*\((?!\s*DigFootprint)"));
         // The flashing ward check and the stamina flash happen only when committing.
-        Assert.Equal(1, Count(evaluate, @"committing\s*\?\s*ExcavationWorldChecks\.WardAllows\s*\(\s*plan\s*\)\s*:\s*ExcavationWorldChecks\.WardAllowsQuietly\s*\(\s*plan\s*\)"));
-        Assert.Equal(1, Count(runtime, @"ExcavationWorldChecks\.WardAllows\s*\("));
+        Assert.Equal(1, Count(evaluate, @"committing\s*\?\s*ExcavationWorldChecks\.WardAllows\s*\(\s*footprint\s*,\s*plan\.Datum\s*\)\s*:\s*ExcavationWorldChecks\.WardAllowsQuietly\s*\(\s*footprint\s*,\s*plan\.Datum\s*\)"));
+        // The ward flashes for a press only: the dig's evaluation when committing, and the undo press.
+        Assert.Equal(2, Count(runtime, @"ExcavationWorldChecks\.WardAllows\s*\("));
+        Assert.Equal(1, Count(MethodBody(runtime, UndoSignature), @"ExcavationWorldChecks\.WardAllows\s*\("));
         Assert.Equal(1, Count(runtime, @"\bFlashStamina\s*\(\s*\)\s*;"));
         Assert.Equal(1, Count(evaluate, @"if\s*\(\s*committing\s*&&\s*refusal\s*==\s*ExcavationCommitRefusal\.NotEnoughStamina\s*\)\s*FlashStamina\s*\(\s*\)\s*;"));
         string checks = SourceText("Excavation/ExcavationWorldChecks.cs");
-        Assert.Equal(1, Count(checks, @"WardAllowsQuietly\s*\([^)]*\)\s*=>\s*PrivateArea\.CheckAccess\s*\([^;]*AccessCheckRadius\s*,\s*flash\s*:\s*false\s*,\s*wardCheck\s*:\s*true\s*\)"));
+        Assert.Equal(1, Count(checks, @"WardAllowsQuietly\s*\([^)]*\)\s*=>\s*PrivateArea\.CheckAccess\s*\([^;]*AccessCheckRadius\s*\(\s*footprint\s*\)\s*,\s*flash\s*:\s*false\s*,\s*wardCheck\s*:\s*true\s*\)"));
         Assert.Equal(2, Hits(@"\bCheckAccess\s*\(").Where(h => ExcavationCode(h.Path)).Sum(h => h.N));
         Assert.Empty(Hits(@"\bFlashShield\s*\(").Where(h => ExcavationCode(h.Path)));
     }
@@ -356,24 +396,25 @@ public sealed class ExcavationSourceAuditTests
         string runtime = SourceText("Excavation/ExcavationRuntime.cs");
         string dig = MethodBody(runtime, DigSignature);
         int ladder = Regex.Match(dig, @"if\s*\(\s*OnLadder\s*\(\s*\)\s*\)\s*return").Index;
-        int confirm = Regex.Match(dig, @"refusal\s*=\s*_shown\.Confirm\s*\(\s*mode\s*,").Index;
+        int confirm = Regex.Match(dig, @"refusal\s*=\s*_shown\.Confirm\s*\(\s*Time\.frameCount\s*,").Index;
         int confirmed = Regex.Match(dig, @"if\s*\(\s*refusal\s*!=\s*ExcavationCommitRefusal\.None\s*\)\s*return").Index;
         int evaluate = Regex.Match(dig, @"\bEvaluate\s*\(").Index;
         int matches = Regex.Match(dig, @"if\s*\(\s*!_shown\.Matches\s*\(\s*plan\s*\)\s*\)").Index;
         int commit = Regex.Match(dig, @"return\s+Commit\s*\(\s*plan\b").Index;
         Assert.True(ladder > 0 && confirm > ladder && confirmed > confirm && evaluate > confirmed && matches > evaluate && commit > matches,
             "DigWithShovel must refuse on a ladder, then confirm the preview, then evaluate, then match, then commit.");
-        // The square comes from the preview, never from a fresh aim.
-        Assert.Matches(@"Evaluate\s*\(\s*mode\s*,\s*_shown\.CentreX\s*,\s*_shown\.CentreZ\s*,", dig);
+        // The rectangle comes from the preview, never from a fresh aim.
+        Assert.Matches(@"Evaluate\s*\(\s*_shown\.Footprint\s*,", dig);
         Assert.DoesNotMatch(@"(?<![.\w])Aim\s*\(", dig);
         Assert.Equal(1, Count(runtime, @"\bCommit\s*\(\s*plan\b"));
-        // The size switch only switches.
-        Assert.Equal(1, Count(runtime, @"internal\s+void\s+SwitchMode\s*\(\s*\)\s*=>\s*_selection\.Switch\s*\(\s*\)\s*;"));
-        var switches = Hits(@"\.SwitchMode\s*\(");
-        Assert.True(switches.Count == 1 && switches[0].Path == "Excavation/ExcavationShovelInput.cs" && switches[0].N == 1, string.Join(", ", switches));
+        // The depth change only changes the session's depth (and asks for a fresh read).
+        string depth = MethodBody(runtime, @"internal\s+void\s+ChangeDepth\s*\(");
+        Assert.Matches(@"^\{\s*if\s*\(\s*_session\.ChangeDepth\s*\(\s*steps\s*\)\s*\)\s*_lastPreviewRead\s*=\s*float\.NaN\s*;\s*\}$", depth);
+        var depths = Hits(@"\.ChangeDepth\s*\(");
+        Assert.True(depths.Sum(h => h.N) == 2 && depths.All(h => h.Path == "Excavation/ExcavationRuntime.cs" || h.Path == "Excavation/ExcavationPreview.cs"), string.Join(", ", depths));
         string input = SourceText("Excavation/ExcavationShovelInput.cs");
         Assert.Matches(@"if\s*\(\s*press\s*==\s*ExcavationPress\.None\s*\|\|\s*ExcavationPreview\.UiOpen\s*\(\s*\)\s*\)\s*return\s*;", input);
-        Assert.Matches(@"if\s*\(\s*press\s*==\s*ExcavationPress\.SwitchSize\s*\)\s*\{\s*runtime\.SwitchMode\s*\(\s*\)\s*;\s*return\s*;\s*\}", input);
+        Assert.Matches(@"string\s+line\s*=\s*press\s*==\s*ExcavationPress\.Primary\s*\?\s*runtime\.Primary\s*\(\s*__instance\s*,\s*weapon\s*\)\s*:\s*runtime\.Secondary\s*\(\s*__instance\s*,\s*weapon\s*\)\s*;", input);
         // Only the preview's own refresh (driven by the plugin's frame) reads for the preview.
         var refreshes = Hits(@"\.RefreshPreview\s*\(");
         Assert.True(refreshes.Count == 1 && refreshes[0].Path == "Excavation/ExcavationPreview.cs" && refreshes[0].N == 1, string.Join(", ", refreshes));
@@ -412,7 +453,7 @@ public sealed class ExcavationSourceAuditTests
         Assert.Equal(1, Count(preview, @"\bAddComponent<LineRenderer>\s*\("));
         Assert.Equal(1, Count(preview, @"\bAddComponent<TextMeshProUGUI>\s*\("));
         Assert.Equal(1, Count(preview, @"\bnew\s+Material\s*\("));
-        Assert.Equal(1, Count(preview, @"new\s+LineRenderer\?\[\s*ExcavationPreviewShape\.LineCount\s*\]"));
+        Assert.Equal(1, Count(preview, @"new\s+LineRenderer\?\[\s*DigPreviewShape\.LineCount\s*\]"));
         string ensure = MethodBody(preview, @"private\s+bool\s+EnsureLines\s*\(");
         Assert.Matches(@"^\{\s*if\s*\(\s*_root\s*!=\s*null\s*\)\s*return\s+false\s*;", ensure);
         Assert.Matches(@"for\s*\(\s*int\s+i\s*=\s*0\s*;\s*i\s*<\s*_lines\.Length\s*;\s*i\+\+\s*\)", ensure);
@@ -479,13 +520,46 @@ public sealed class ExcavationSourceAuditTests
         // A pure "any of these" test: no condition can narrow another away.
         Assert.DoesNotContain("&&", ui.Replace("(chat != null && chat.HasFocus())", ""));
         string dig = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), DigSignature);
-        Assert.Matches(@"_shown\.Confirm\s*\(\s*mode\s*,\s*Time\.frameCount\s*,\s*Time\.realtimeSinceStartup\s*\)", dig);
+        Assert.Matches(@"_shown\.Confirm\s*\(\s*Time\.frameCount\s*,\s*Time\.realtimeSinceStartup\s*\)", dig);
         // A stopped session says so before it asks for the outline (review N5).
-        int available = Regex.Match(dig, @"if\s*\(\s*!Available\s*\)\s*return\s+ExcavationReport\.Commit\s*\(\s*ExcavationCommitRefusal\.Unavailable").Index;
+        int available = Regex.Match(dig, @"if\s*\(\s*!Available\s*\)\s*return\s+DigText\.Refusal\s*\(\s*ExcavationCommitRefusal\.Unavailable").Index;
         int confirm = Regex.Match(dig, @"_shown\.Confirm\s*\(").Index;
         Assert.True(available > 0 && confirm > available, "DigWithShovel must refuse Unavailable before the confirmation.");
         // No preview, and so no promise of a dig, when the press could not be installed (review N2).
         Assert.Equal(1, Count(SourceText("Plugin.cs"), @"_preview\s*=\s*_shovelInput\s*!=\s*null\s*\?\s*new\s+ExcavationPreview\s*\("));
+    }
+
+    /// <summary>#551: an undo restores only the ground the dig left, refusing first (in this order) when the ground has
+    /// changed since, a ward or no-build area covers it, or anything - a building piece included - stands in the hole.</summary>
+    [Fact]
+    public void TheUndoChecksEverythingBeforeItsBatch()
+    {
+        string undo = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), UndoSignature);
+        int check = Regex.Match(undo, @"DigUndo\.Check\s*\(\s*record\s*,\s*Read\s*\(\s*_check\s*\)\s*\)").Index;
+        int ward = Regex.Match(undo, @"if\s*\(\s*!ExcavationWorldChecks\.WardAllows\s*\(").Index;
+        int noBuild = Regex.Match(undo, @"if\s*\(\s*_world\.InNoBuildArea\s*\(").Index;
+        Match inside = Regex.Match(undo, @"if\s*\(\s*overflow\s*\|\|\s*obstructions\s*>\s*0\s*\|\|\s*pieces\s*>\s*0\s*\)\s*return\s+DigText\.Undo\s*\(\s*UndoRefusal\.PieceInside\s*\)\s*;");
+        int place = Regex.Match(undo, @"\bPlace\s*\(").Index;
+        Assert.True(check > 0 && ward > check && noBuild > ward && inside.Success && inside.Index > noBuild && place > inside.Index,
+            "UndoWithShovel must check the record, the ward, no-build areas and what stands in the hole, in that order, before its batch.");
+        Assert.Matches(@"DigRecord\?\s+record\s*=\s*_history\.Last\s*;", undo);
+        // Only a completed dig is offered for undo, and only a completed undo takes it off the list.
+        string update = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), @"internal\s+void\s+Update\s*\(");
+        Assert.Matches(@"if\s*\(\s*outcome\s*==\s*ExcavationOutcome\.Complete\s*\)\s*\{\s*if\s*\(\s*kind\s*==\s*DigFlightKind\.Dig\s*\)\s*_history\.Push\s*\(\s*record\s*\)\s*;\s*else\s+_history\.Remove\s*\(\s*record\s*\)\s*;\s*\}", update);
+        Assert.Equal(1, Count(SourceText("Excavation/ExcavationRuntime.cs"), @"_history\.Push\s*\("));
+    }
+
+    /// <summary>#551: the depth stage borrows the wheel by holding the camera's own distance across its update, and writes
+    /// nothing else of the camera's.</summary>
+    [Fact]
+    public void TheCameraHoldRestoresOnlyTheCamerasOwnDistance()
+    {
+        string input = SourceText("Excavation/ExcavationShovelInput.cs");
+        Assert.Equal(1, Count(input, @"AccessTools\.FieldRefAccess<GameCamera,\s*float>\s*\(\s*""m_distance""\s*\)"));
+        Assert.Equal(1, Count(input, @"distance\s*\(\s*__instance\s*\)\s*=\s*__state\s*;"));
+        Assert.Equal(1, Count(input, @"if\s*\(\s*distance\s*!=\s*null\s*&&\s*HoldCamera\?\.Invoke\s*\(\s*\)\s*==\s*true\s*\)\s*__state\s*=\s*distance\s*\(\s*__instance\s*\)\s*;"));
+        Assert.DoesNotMatch(@"GameCamera\s*\.\s*instance\s*\.\s*m_\w+\s*=", input);
+        Assert.Equal(1, Count(SourceText("Plugin.cs"), @"ExcavationShovelInput\.HoldCamera\s*=\s*\(\s*\)\s*=>\s*_preview\?\.SettingDepth\s*==\s*true\s*;"));
     }
 
     [Fact]

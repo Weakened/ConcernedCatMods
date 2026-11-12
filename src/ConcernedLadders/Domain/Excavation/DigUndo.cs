@@ -98,7 +98,9 @@ internal static class DigUndo
         return UndoRefusal.None;
     }
 
-    /// <summary>Raise operations a vertex needs to get back from its floor to its height before.</summary>
+    /// <summary>Raise operations a vertex needs to get back from its floor to its height before. A dig never lowers a
+    /// vertex further than one raise brings back (<see cref="DigRefusal.UndoLimit"/>), so an undo is one raise per vertex:
+    /// two in one frame would read the stale height and overshoot.</summary>
     internal static int RaiseOperations(DigVertex vertex)
     {
         float rise = vertex.Before - vertex.After;
