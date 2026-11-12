@@ -6,6 +6,7 @@ using Jotunn.Managers;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Excavation;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
+using TheConcernedCat.ConcernedLadders.Domain.Families;
 using TheConcernedCat.ConcernedLadders.Domain.Railings;
 using TheConcernedCat.ConcernedLadders.Items;
 using TheConcernedCat.ConcernedLadders.Pieces;
@@ -53,7 +54,9 @@ public sealed class Plugin : BaseUnityPlugin
         // placement is installed (without it the game would put a side-mode ghost 100 m above the aim).
         _snap = new LadderSnapAlignment(message => Logger.LogInfo(message));
         if (!_snap.Install(PluginGuid + ".snap")) { _snap = null; }
-        _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message), sideModes: _snap != null);
+        bool families = Config.Bind(LadderFamilySettings.Section, LadderFamilySettings.Key, LadderFamilySettings.EnabledByDefault,
+            LadderFamilySettings.Description).Value;
+        _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message), sideModes: _snap != null, families: families);
         _pieces.Install();
         // Floor trapdoors (CL-004 #485), unfinished and off by default: with the setting off nothing is cloned or
         // localized and the hammer menu is unchanged. Their failures never touch the ladders.

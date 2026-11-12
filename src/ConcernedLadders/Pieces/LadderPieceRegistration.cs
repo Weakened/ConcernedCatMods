@@ -6,6 +6,8 @@ using Jotunn.Entities;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedLadders.Domain;
 using TheConcernedCat.ConcernedLadders.Runtime;
+using TheConcernedCat.ConcernedLadders.Domain.Doors;
+using TheConcernedCat.ConcernedLadders.Domain.Families;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Ladders;
 using UnityEngine;
@@ -19,21 +21,31 @@ internal sealed class LadderPieceRegistration : IDisposable
 {
     private readonly Action<string> _log;
     private readonly bool _sideModes;
+    private readonly bool _families;
     private readonly Dictionary<string, Mesh> _meshes = new Dictionary<string, Mesh>(StringComparer.Ordinal);
     private readonly HashSet<string> _registered = new HashSet<string>(StringComparer.Ordinal);
     private bool _subscribed;
     private bool _failed;
 
-    internal bool IsReady => !_failed && _registered.Count == 3;
+    /// <summary>The three shipped ladders are registered. The optional family ladders (#558) never count: with them the
+    /// set is larger, and one of them failing must not stop climbing.</summary>
+    internal bool IsReady => !_failed && Array.TrueForAll(Shipped, _registered.Contains);
+
+    /// <summary>The ladders 1.0.0 shipped: a save contract.</summary>
+    internal static readonly string[] Shipped = { "tcc_ladder_wood", "tcc_ladder_copper", "tcc_ladder_iron" };
 
     /// <param name="log">Startup log.</param>
     /// <param name="sideModes">Add the Left side / Right side snap points. Only when the placement adapter is
     /// installed: the game alone would put a side-mode ghost 100 m above the aimed point (see
     /// <see cref="LadderSnapPoints"/>).</param>
-    internal LadderPieceRegistration(Action<string> log, bool sideModes)
+    /// <param name="families">Also register the ladders of the vanilla building families (#558, <see cref="LadderFamilySettings"/>,
+    /// off by default). They are optional: one that fails is skipped and logged, and never stops the three shipped
+    /// ladders.</param>
+    internal LadderPieceRegistration(Action<string> log, bool sideModes, bool families = false)
     {
         _log = log;
         _sideModes = sideModes;
+        _families = families;
     }
 
     internal void Install()
@@ -58,14 +70,52 @@ internal sealed class LadderPieceRegistration : IDisposable
             LadderStyle.Copper, new Color(1f, 0.84f, 0.7f, 1f));
         Add("tcc_ladder_iron", "woodiron_pole", "woodiron_pole", "Ironbeam_mat", 800f,
             "$cl_ladder_iron", "forge", new[] { new RequirementConfig("Iron", 2, 0, true), new RequirementConfig("Wood", 1, 0, true) },
-            LadderStyle.Iron, new Color(0.8f, 0.84f, 0.9f, 1f));
-        if (_registered.Count == 3) Dispose();
+            LadderStyle.Iron, new Color(0.8f, 0.84f, 0.9f, 1f), BuildFamilies.Of(BuildFamily.Iron).Region);
+        if (_families && !_failed)
+        {
+            // The vanilla families (#558): each the game's own pole of its material, keeping its recipe, station and
+            // health, sampling its texture region. Optional: a family that fails is logged and skipped.
+            foreach (BuildFamilyInfo family in BuildFamilies.All)
+            {
+                if (!family.FollowsDonor) continue;
+                AddFamily(family);
+            }
+        }
+
+        if (IsReady) Dispose();
+    }
+
+    /// <summary>One vanilla family's ladder (#558): its donor pole's recipe and station, read from the installed game, its
+    /// health left as the donor's, the wood ladder's shape for the woods and the iron ladder's for flametal.</summary>
+    private void AddFamily(BuildFamilyInfo family)
+    {
+        string id = "tcc_ladder_" + family.Word;
+        try
+        {
+            Piece? donor = PrefabManager.Instance.GetPrefab(family.Donor)?.GetComponent<Piece>();
+            if (donor == null) throw new InvalidOperationException("Donor piece unavailable: " + family.Donor);
+            RequirementConfig[] cost = (donor.m_resources ?? Array.Empty<Piece.Requirement>())
+                .Where(entry => entry?.m_resItem != null && entry.m_amount > 0)
+                .Select(entry => new RequirementConfig(entry.m_resItem.name, entry.m_amount, 0, entry.m_recover)).ToArray();
+            if (cost.Length == 0) throw new InvalidOperationException("The donor has no recipe.");
+            string? station = donor.m_craftingStation != null ? donor.m_craftingStation.name : null;
+            LadderStyle style = family.Style == RailingStyle.Detailed ? LadderStyle.Iron : LadderStyle.Wood;
+            Add(id, family.Donor, family.MaterialPrefab, family.Material, null, "$cl_ladder_" + family.Word, station, cost, style,
+                new Color(family.Tint.R, family.Tint.G, family.Tint.B, 1f), family.Region, essential: false);
+        }
+        catch (Exception exception)
+        {
+            _log("Concerned Ladders family ladder " + id + " NOT registered: " + SafeFailure.Brief(exception) + ". The other ladders are unaffected.");
+        }
     }
 
     private void Add(string id, string donorName, string materialPrefab, string materialName,
-        float health, string token, string station, RequirementConfig[] cost, LadderStyle style, Color tint)
+        float? health, string token, string? station, RequirementConfig[] cost, LadderStyle style, Color tint,
+        UvRegion region = default, bool essential = true)
     {
         if (_failed || _registered.Contains(id)) return;
+        // A default region is the shipped wood and copper ladders' whole-texture mapping.
+        if (!region.Tiles && region.U1 <= region.U0) region = UvRegion.Tiling;
         GameObject? prefab = null;
         try
         {
@@ -109,12 +159,12 @@ internal sealed class LadderPieceRegistration : IDisposable
             if (layer < 0) throw new InvalidOperationException("The game's piece collision layer is absent.");
             prefab.layer = layer;
             prefab.transform.localScale = Vector3.one;
-            wear.m_health = health;
+            if (health.HasValue) wear.m_health = health.Value;
             // Both metal variants intentionally inherit the iron-pole support
             // class. No support bypass, no roof-wear override, no zero-cost path.
-            wear.m_new = Visual(prefab.transform, "new", material, tint, 1f, style, layer);
-            wear.m_worn = Visual(prefab.transform, "worn", material, tint, 0.82f, style, layer);
-            wear.m_broken = Visual(prefab.transform, "broken", material, tint, 0.65f, style, layer);
+            wear.m_new = Visual(prefab.transform, "new", material, tint, 1f, style, region, layer);
+            wear.m_worn = Visual(prefab.transform, "worn", material, tint, 0.82f, style, region, layer);
+            wear.m_broken = Visual(prefab.transform, "broken", material, tint, 0.65f, style, region, layer);
             // These are real serialized WearNTear fields in the installed game.
             // No references into the removed donor hierarchy may survive on the clone.
             wear.m_wet = null;
@@ -194,6 +244,12 @@ internal sealed class LadderPieceRegistration : IDisposable
             _registered.Add(id);
             _log("Registered Concerned Ladders prefab " + id + ".");
         }
+        catch (Exception exception) when (!essential)
+        {
+            // An optional family ladder (#558): logged and skipped; the shipped three are untouched.
+            _log("Concerned Ladders family ladder " + id + " NOT registered: " + SafeFailure.Brief(exception) +
+                 ". Placed ones are deleted by the game if a world is loaded in this session; restart after repair.");
+        }
         catch (Exception exception)
         {
             // Jotunn's AssetManager remembers a clone before AddPiece. Retrying
@@ -222,7 +278,7 @@ internal sealed class LadderPieceRegistration : IDisposable
         return original;
     }
 
-    private GameObject Visual(Transform parent, string name, Material basis, Color tint, float shade, LadderStyle style, int layer)
+    private GameObject Visual(Transform parent, string name, Material basis, Color tint, float shade, LadderStyle style, UvRegion region, int layer)
     {
         var root = new GameObject(name);
         root.transform.SetParent(parent, false);
@@ -231,26 +287,39 @@ internal sealed class LadderPieceRegistration : IDisposable
         if (material.HasProperty("_Color")) material.color *= new Color(tint.r * shade, tint.g * shade, tint.b * shade, 1f);
         if (style.RailProfile == LadderProfile.Box && style.RungProfile == LadderProfile.Box)
         {
-            // Wood: the original box rails and rungs, unchanged.
-            Bar(root.transform, "left_rail", new Vector3(-style.RailCentre, 1f, LadderStyle.RailPlane),
-                new Vector3(style.RailWidth, LadderEdgeSnap.SectionHeight, style.RailDepth), material, layer);
-            Bar(root.transform, "right_rail", new Vector3(style.RailCentre, 1f, LadderStyle.RailPlane),
-                new Vector3(style.RailWidth, LadderEdgeSnap.SectionHeight, style.RailDepth), material, layer);
+            // Wood: the original box rails and rungs, unchanged; a family whose texture is an atlas (#558) draws the same
+            // boxes as generated meshes sampling its region (#548's rule), never the whole sheet.
+            Box(root.transform, "left_rail", new Vector3(-style.RailCentre, 1f, LadderStyle.RailPlane),
+                new Vector3(style.RailWidth, LadderEdgeSnap.SectionHeight, style.RailDepth), material, region, layer);
+            Box(root.transform, "right_rail", new Vector3(style.RailCentre, 1f, LadderStyle.RailPlane),
+                new Vector3(style.RailWidth, LadderEdgeSnap.SectionHeight, style.RailDepth), material, region, layer);
             for (int i = 0; i < RungShape.PerSection; ++i)
-                Bar(root.transform, "rung_" + i, new Vector3(0f, LadderStyle.RungHeight(i), RungShape.Plane),
-                    new Vector3(2f * style.RungHalfLength, 2f * style.RungHalfHeight, 2f * style.RungHalfDepth), material, layer);
+                Box(root.transform, "rung_" + i, new Vector3(0f, LadderStyle.RungHeight(i), RungShape.Plane),
+                    new Vector3(2f * style.RungHalfLength, 2f * style.RungHalfHeight, 2f * style.RungHalfDepth), material, region, layer);
             return root;
         }
 
         // Metal: procedural slim rails along y and round rungs along x (the rung mesh is built along y and turned).
-        Mesh rail = Extruded(style.RailProfile, style.RailWidth, style.RailDepth, LadderEdgeSnap.SectionHeight);
-        Mesh rung = Extruded(style.RungProfile, 2f * style.RungHalfHeight, 2f * style.RungHalfDepth, 2f * style.RungHalfLength);
+        Mesh rail = Extruded(style.RailProfile, style.RailWidth, style.RailDepth, LadderEdgeSnap.SectionHeight, region);
+        Mesh rung = Extruded(style.RungProfile, 2f * style.RungHalfHeight, 2f * style.RungHalfDepth, 2f * style.RungHalfLength, region);
         Part(root.transform, "left_rail", rail, new Vector3(-style.RailCentre, 1f, LadderStyle.RailPlane), Quaternion.identity, material, layer);
         Part(root.transform, "right_rail", rail, new Vector3(style.RailCentre, 1f, LadderStyle.RailPlane), Quaternion.identity, material, layer);
         for (int i = 0; i < RungShape.PerSection; ++i)
             Part(root.transform, "rung_" + i, rung, new Vector3(0f, LadderStyle.RungHeight(i), RungShape.Plane),
                 Quaternion.Euler(0f, 0f, 90f), material, layer);
         return root;
+    }
+
+    /// <summary>A box: the built-in cube for a tiling texture (the shipped ladders, unchanged), or a region-mapped mesh.</summary>
+    private static void Box(Transform parent, string name, Vector3 centre, Vector3 size, Material material, UvRegion region, int layer)
+    {
+        if (region.Tiles)
+        {
+            Bar(parent, name, centre, size, material, layer);
+            return;
+        }
+
+        DoorPieceKit.VisualBox(parent, name, new ClimbPoint(centre.x, centre.y, centre.z), new ClimbPoint(size.x, size.y, size.z), material, region, layer);
     }
 
     private static void Bar(Transform parent, string name, Vector3 centre, Vector3 size, Material material, int layer)
@@ -277,9 +346,9 @@ internal sealed class LadderPieceRegistration : IDisposable
 
     /// <summary>A closed prism along local y, centred on the origin: the profile ring (a on x, b on z) swept over
     /// <paramref name="length"/>, with flat end caps. One mesh per shape, shared by every state and section.</summary>
-    private Mesh Extruded(LadderProfile profile, float width, float depth, float length)
+    private Mesh Extruded(LadderProfile profile, float width, float depth, float length, UvRegion region)
     {
-        string key = profile + ":" + width.ToString("R") + ":" + depth.ToString("R") + ":" + length.ToString("R");
+        string key = profile + ":" + width.ToString("R") + ":" + depth.ToString("R") + ":" + length.ToString("R") + ":" + region.Key;
         if (_meshes.TryGetValue(key, out Mesh cached) && cached != null) return cached;
         IReadOnlyList<ProfileVertex> ring = LadderProfiles.Ring(profile, width, depth);
         float half = length * 0.5f;
@@ -288,13 +357,19 @@ internal sealed class LadderPieceRegistration : IDisposable
         var uvs = new List<Vector2>();
         var triangles = new List<int>();
         int count = ring.Count;
+        float perimeter = ring[count - 1].Distance;
         foreach (float y in new[] { -half, half })
         {
             foreach (ProfileVertex v in ring)
             {
                 vertices.Add(new Vector3(v.A, y, v.B));
                 normals.Add(new Vector3(v.NormalA, 0f, v.NormalB));
-                uvs.Add(new Vector2(v.Distance * 2f, y / 2f + 0.5f));
+                if (region.Tiles) uvs.Add(new Vector2(v.Distance * 2f, y / 2f + 0.5f));
+                else
+                {
+                    CellarUv uv = region.Map(y, v.Distance, -half, half, 0f, perimeter);
+                    uvs.Add(new Vector2(uv.U, uv.V));
+                }
             }
         }
 
@@ -314,13 +389,13 @@ internal sealed class LadderPieceRegistration : IDisposable
             int centre = vertices.Count;
             vertices.Add(new Vector3(0f, y, 0f));
             normals.Add(new Vector3(0f, up, 0f));
-            uvs.Add(new Vector2(0.5f, 0.5f));
+            uvs.Add(region.Tiles ? new Vector2(0.5f, 0.5f) : Cap(region, 0f, 0f, width, depth));
             int first = vertices.Count;
             foreach (ProfileVertex v in ring)
             {
                 vertices.Add(new Vector3(v.A, y, v.B));
                 normals.Add(new Vector3(0f, up, 0f));
-                uvs.Add(new Vector2(v.A * 2f + 0.5f, v.B * 2f + 0.5f));
+                uvs.Add(region.Tiles ? new Vector2(v.A * 2f + 0.5f, v.B * 2f + 0.5f) : Cap(region, v.A, v.B, width, depth));
             }
 
             for (int i = 0; i + 1 < count; ++i)
@@ -341,6 +416,12 @@ internal sealed class LadderPieceRegistration : IDisposable
         mesh.RecalculateTangents();
         _meshes[key] = mesh;
         return mesh;
+    }
+
+    private static Vector2 Cap(UvRegion region, float a, float b, float width, float depth)
+    {
+        CellarUv uv = region.Map(a, b, -width / 2f, width / 2f, -depth / 2f, depth / 2f);
+        return new Vector2(uv.U, uv.V);
     }
 
     private static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);

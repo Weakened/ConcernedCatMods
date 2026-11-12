@@ -14,6 +14,12 @@ internal static class LadderLocalization
             ["cl_ladder_wood"] = "Vertical Wood Ladder",
             ["cl_ladder_copper"] = "Vertical Copper Ladder",
             ["cl_ladder_iron"] = "Vertical Iron Ladder",
+            // The vanilla families' ladders (#558), registered only with [LadderFamilies] Enabled on.
+            ["cl_ladder_darkwood"] = "Vertical Darkwood Ladder",
+            ["cl_ladder_ashwood"] = "Vertical Ashwood Ladder",
+            ["cl_ladder_flametal"] = "Vertical Flametal Ladder",
+            ["cl_ladder_dvergr"] = "Vertical Dvergr Ladder",
+            ["cl_ladder_log"] = "Vertical Log Ladder",
             ["cl_ladder_description"] = "A vertical 2 m ladder. Snap sections end to end, then interact to climb.",
             ["cl_ladder_climb"] = "Climb",
             ["cl_ladder_dismount"] = "Dismount",
