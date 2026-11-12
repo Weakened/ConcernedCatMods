@@ -17,6 +17,13 @@ internal sealed class DigRecord
     internal DigFootprint Footprint { get; }
 
     internal IReadOnlyList<DigVertex> Vertices { get; }
+
+    /// <summary>The earth blocks this dig placed around itself (#577): what its undo takes away again.</summary>
+    internal List<FillBlock> FillPlaced { get; } = new List<FillBlock>();
+
+    /// <summary>The earth blocks of earlier holes that stood inside this one's floor and were taken out by it (#577): what
+    /// its undo puts back.</summary>
+    internal List<FillBlock> FillRemoved { get; } = new List<FillBlock>();
 }
 
 /// <summary>The digs this player made in this world, newest last, for undo (#551). Owner decision 2026-11-10: undo

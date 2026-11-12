@@ -6,6 +6,7 @@ using Jotunn.Managers;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Excavation;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
+using TheConcernedCat.ConcernedLadders.Domain.Excavation;
 using TheConcernedCat.ConcernedLadders.Domain.Families;
 using TheConcernedCat.ConcernedLadders.Domain.Railings;
 using TheConcernedCat.ConcernedLadders.Items;
@@ -45,6 +46,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ExcavationShovelInput? _shovelInput;
     private IronShovelItem? _shovel;
     private ExcavationPreview? _preview;
+    private EarthFillPieceRegistration? _earthFill;
 
     private void Awake()
     {
@@ -148,13 +150,14 @@ public sealed class Plugin : BaseUnityPlugin
     private void InstallExcavation()
     {
         ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", false,
-            "Experimental, off by default (#487, #551): adds the Iron Shovel (Forge: Iron and Wood). Attack sets one corner of " +
-            "a hole, then the opposite corner (2 to 8 m a side); the wheel sets the depth (1 to 7 m); attack digs it, through " +
-            "the game's own terrain operations. Secondary attack steps back; with nothing to step back to, pressing it twice " +
-            "fills the last hole back in. Also adds the read-only cl_excavate console diagnostic. Not yet observed in game. " +
+            "Experimental, off by default (#487, #551, #574): adds the Iron Shovel (Forge: Iron and Wood). The wheel chooses a " +
+            "ready-made hole (1x1x1 to 4x4x4 m), and attack digs it through the game's own terrain operations; a hole lines up " +
+            "with the holes just dug beside it. Pressing secondary attack twice fills the last hole back in. Also adds the read-only cl_excavate console diagnostic. Not yet observed in game. " +
             "Every player needs the same version " +
             "and the same setting. Turning it off again removes the item from the game, and the game discards unknown items " +
             "from inventories and chests when it loads them. Restart after changing.");
+        ConfigEntry<bool> earthFill = Config.Bind(EarthFillSettings.Section, EarthFillSettings.Key, EarthFillSettings.EnabledByDefault,
+            EarthFillSettings.Description);
         try
         {
             _excavation = new ExcavationRuntime(message => Logger.LogInfo(message), enabled.Value);
@@ -162,6 +165,12 @@ public sealed class Plugin : BaseUnityPlugin
             if (enabled.Value)
             {
                 _excavation.Report = Announce;
+                // Earth sides (#577): the block prefab exists whenever excavation does, so every player sees placed blocks;
+                // the setting says only whether this player's digs place them.
+                _earthFill = new EarthFillPieceRegistration(message => Logger.LogInfo(message));
+                _earthFill.Install();
+                _excavation.FillPrefab = () => _earthFill?.Prefab;
+                _excavation.FillEnabled = earthFill.Value;
                 CommandManager.Instance.AddConsoleCommand(new ExcavationCommand(() => _excavation));
                 _shovelInput = new ExcavationShovelInput(message => Logger.LogInfo(message));
                 if (!_shovelInput.Install(PluginGuid + ".excavation", _excavation)) _shovelInput = null;
@@ -177,11 +186,13 @@ public sealed class Plugin : BaseUnityPlugin
         {
             Logger.LogInfo("Excavation unavailable (" + SafeFailure.Brief(exception) + "); ladders are unaffected.");
             try { _preview?.Dispose(); } catch { /* Cleanup only. */ }
+            try { _earthFill?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.DisableRecipe(); } catch { /* Cleanup only. */ }
             try { _shovelInput?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.Dispose(); } catch { /* Cleanup only. */ }
             try { _excavation?.Dispose(); } catch { /* Cleanup only. */ }
             _preview = null;
+            _earthFill = null;
             _shovelInput = null;
             _shovel = null;
             _excavation = null;
@@ -198,10 +209,12 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         try { _preview?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        try { _earthFill?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovelInput?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovel?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _excavation?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         _preview = null;
+        _earthFill = null;
         _shovelInput = null;
         _shovel = null;
         _excavation = null;

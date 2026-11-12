@@ -99,15 +99,17 @@ internal sealed class ExcavationWorldChecks
 
     /// <summary>Sorts everything in the changed rectangle from <paramref name="bottom"/> to <paramref name="top"/> (#567).
     /// Fills <paramref name="toPick"/> with pickables and <paramref name="toRemove"/> with other networked world objects
-    /// (each object once, by its network root), counts building pieces into <paramref name="pieces"/>, and returns how many
+    /// (each object once, by its network root), <paramref name="fills"/> with earth blocks (#577; which of them a dig takes
+    /// out is the runtime's to decide), counts building pieces into <paramref name="pieces"/>, and returns how many
     /// objects block the dig (carts, ships, moving bodies, static props), the first one's name in
     /// <paramref name="blocker"/>. <paramref name="overflow"/> is set when the buffer filled, so the scan could not see
     /// everything (which refuses). Read-only: it never touches what it finds.</summary>
     internal int Survey(DigFootprint footprint, float bottom, float top, List<GameObject> toPick, List<GameObject> toRemove,
-        out int pieces, out bool overflow, out string? blocker)
+        List<GameObject> fills, out int pieces, out bool overflow, out string? blocker)
     {
         toPick.Clear();
         toRemove.Clear();
+        fills.Clear();
         _seen.Clear();
         int count = Overlap(footprint, bottom, top, out overflow);
         pieces = 0;
@@ -125,6 +127,13 @@ internal sealed class ExcavationWorldChecks
             // A loose item falls onto the new floor by itself.
             if (!vehicle && hit.GetComponentInParent<ItemDrop>() != null) continue;
             ZNetView? view = hit.GetComponentInParent<ZNetView>();
+            // An earth block (#577): never cleared as a world object, never counted as a building piece.
+            if (!vehicle && view != null && view.IsValid() && EarthFillPlacement.IsFill(view.gameObject))
+            {
+                if (_seen.Add(view.gameObject)) fills.Add(view.gameObject);
+                continue;
+            }
+
             bool moving = body != null && !body.isKinematic;
             if (vehicle || moving || view == null || !view.IsValid())
             {

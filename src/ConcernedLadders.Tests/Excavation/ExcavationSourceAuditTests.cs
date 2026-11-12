@@ -70,6 +70,8 @@ public sealed class ExcavationSourceAuditTests
         {
             // #567: the one object-removal site claims ownership before the game's own destroy; pinned below.
             if (path == "Excavation/ExcavationClearing.cs" && pattern == @"\bClaimOwnership\s*\(") continue;
+            // #577: the one object-creation site places earth blocks; pinned in TheEarthFillIsTheOneCreationSite.
+            if (path == "Excavation/EarthFillPlacement.cs" && pattern == @"\bInstantiate\s*\(") continue;
             Assert.True(Count(text, pattern) == 0, path + " uses " + pattern + ".");
         }
         foreach ((string path, string text) in Sources("Domain/Excavation"))
@@ -116,6 +118,54 @@ public sealed class ExcavationSourceAuditTests
         int listed = Regex.Match(survey, @"toRemove\.Add\s*\(").Index;
         Assert.True(piece > 0 && item > piece && block > item && listed > block, "Pieces, items and blockers are sorted out before anything is listed.");
         Assert.Matches(@"bool\s+vehicle\s*=\s*hit\.GetComponentInParent<Vagon>\(\)\s*!=\s*null\s*\|\|\s*hit\.GetComponentInParent<Ship>\(\)\s*!=\s*null\s*;", survey);
+    }
+
+    /// <summary>#577 (owner 2026-11-11: "I want to implement the earth fill idea"): the one place a world object is created.
+    /// One instantiation of the block prefab and one scale through the game's own sync, and nothing else of the world's;
+    /// reached only through the dig commit's fill (after its batch was placed, before the charge) and the undo's (after
+    /// its batch was placed). The blocks are removed only through the pinned clearing site, which removes nothing but
+    /// blocks on that path. The survey sorts the blocks out before anything is listed for clearing.</summary>
+    [Fact]
+    public void TheEarthFillIsTheOneCreationSite()
+    {
+        string placement = SourceText("Excavation/EarthFillPlacement.cs");
+        Assert.Equal(1, Count(placement, @"\bInstantiate\s*\("));
+        Assert.Equal(1, Count(placement, @"GameObject\s+spawned\s*=\s*Object\.Instantiate\s*\(\s*prefab\s*,\s*new\s+Vector3\s*\(\s*x\s*,\s*y\s*,\s*z\s*\)\s*,\s*Quaternion\.identity\s*\)\s*;"));
+        Assert.Equal(1, Count(placement, @"view\.SetLocalScale\s*\(\s*new\s+Vector3\s*\(\s*1f\s*,\s*block\.Height\s*,\s*1f\s*\)\s*\)\s*;"));
+        Assert.DoesNotMatch(@"\bDestroy\w*\s*\(|ClaimOwnership|SetOwner|InvokeRPC|InvokeRoutedRPC|GetZDO|\.Damage\s*\(|SetCreator|AddComponent|\.Set\s*\(|SpawnOnHitTerrain|\.Interact\s*\(", placement);
+        string runtime = SourceText("Excavation/ExcavationRuntime.cs");
+        // Placing: once in the dig's fill, once in the undo's; nowhere else in the product.
+        var places = Hits(@"EarthFillPlacement\.Place\s*\(");
+        Assert.True(places.Count == 1 && places[0].Path == "Excavation/ExcavationRuntime.cs" && places[0].N == 2, string.Join(", ", places));
+        Assert.Equal(1, Count(MethodBody(runtime, @"private\s+int\s+Fill\s*\("), @"EarthFillPlacement\.Place\s*\("));
+        Assert.Equal(1, Count(MethodBody(runtime, @"private\s+void\s+Unfill\s*\("), @"EarthFillPlacement\.Place\s*\("));
+        // Removing blocks: once in each, through the clearing site.
+        var removes = Hits(@"ExcavationClearing\.RemoveFill\s*\(");
+        Assert.True(removes.Count == 1 && removes[0].Path == "Excavation/ExcavationRuntime.cs" && removes[0].N == 2, string.Join(", ", removes));
+        Assert.Equal(1, Count(MethodBody(runtime, @"private\s+int\s+Fill\s*\("), @"ExcavationClearing\.RemoveFill\s*\("));
+        Assert.Equal(1, Count(MethodBody(runtime, @"private\s+void\s+Unfill\s*\("), @"ExcavationClearing\.RemoveFill\s*\("));
+        string removeFill = MethodBody(SourceText("Excavation/ExcavationClearing.cs"), @"internal\s+static\s+int\s+RemoveFill\s*\(");
+        Assert.Matches(@"if\s*\(\s*block\s*!=\s*null\s*&&\s*EarthFillPlacement\.IsFill\s*\(\s*block\s*\)\s*\)\s*removed\s*\+=\s*Remove\s*\(\s*block\s*\)\s*;", removeFill);
+        // The dig fills once, from its commit, after its batch was placed and before the charge; with the fill off it does nothing.
+        Assert.Equal(1, Count(runtime, @"(?<!\bint\s+)\bFill\s*\(\s*placed\s*\)"));
+        string commit = MethodBody(runtime, CommitSignature);
+        int placedAt = Regex.Match(commit, @"if\s*\(\s*placed\s*==\s*null\s*\)\s*return").Index;
+        int filledAt = Regex.Match(commit, @"int\s+filled\s*=\s*Fill\s*\(\s*placed\s*\)\s*;").Index;
+        int chargedAt = Regex.Match(commit, ChargeCall).Index;
+        Assert.True(placedAt > 0 && filledAt > placedAt && chargedAt > filledAt, "Fill only after the batch was placed, and before the charge.");
+        Assert.Matches(@"^\{\s*GameObject\?\s+prefab\s*=\s*FillPrefab\?\.Invoke\s*\(\s*\)\s*;\s*if\s*\(\s*!FillEnabled\s*\|\|\s*prefab\s*==\s*null\s*\)\s*\{\s*_fills\.Clear\s*\(\s*\)\s*;\s*return\s+0\s*;\s*\}", MethodBody(runtime, @"private\s+int\s+Fill\s*\("));
+        // The undo unfills once, after its own batch was placed.
+        Assert.Equal(1, Count(runtime, @"(?<!\bvoid\s+)\bUnfill\s*\(\s*record\s*\)"));
+        string undo = MethodBody(runtime, UndoSignature);
+        int undonePlaced = Regex.Match(undo, @"DigRecord\?\s+placed\s*=\s*Place\s*\(\s*DigFlightKind\.Undo").Index;
+        int unfilled = Regex.Match(undo, @"Unfill\s*\(\s*record\s*\)\s*;").Index;
+        Assert.True(undonePlaced > 0 && unfilled > undonePlaced, "Unfill only after the undo's batch was placed.");
+        // The survey sorts blocks out before blockers and anything listed for clearing.
+        string survey = MethodBody(SourceText("Excavation/ExcavationWorldChecks.cs"), @"internal\s+int\s+Survey\s*\(");
+        int item = Regex.Match(survey, @"GetComponentInParent<ItemDrop>\(\)\s*!=\s*null\s*\)\s*continue\s*;").Index;
+        int fill = Regex.Match(survey, @"EarthFillPlacement\.IsFill\s*\(\s*view\.gameObject\s*\)\s*\)\s*\{\s*if\s*\(\s*_seen\.Add\s*\(\s*view\.gameObject\s*\)\s*\)\s*fills\.Add\s*\(\s*view\.gameObject\s*\)\s*;\s*continue\s*;\s*\}").Index;
+        int block = Regex.Match(survey, @"if\s*\(\s*vehicle\s*\|\|\s*moving\s*\|\|\s*view\s*==\s*null").Index;
+        Assert.True(item > 0 && fill > item && block > fill, "Earth blocks are sorted out after items and before blockers and the clearing lists.");
     }
 
     private static string SourceText(string relative) => Sources().Single(s => s.Path == relative).Text;
@@ -570,7 +620,7 @@ public sealed class ExcavationSourceAuditTests
         int check = Regex.Match(undo, @"DigUndo\.Check\s*\(\s*record\s*,\s*Read\s*\(\s*_check\s*\)\s*\)").Index;
         int ward = Regex.Match(undo, @"if\s*\(\s*!ExcavationWorldChecks\.WardAllows\s*\(").Index;
         int noBuild = Regex.Match(undo, @"if\s*\(\s*_world\.InNoBuildArea\s*\(").Index;
-        Match inside = Regex.Match(undo, @"bool\s+occupied\s*=\s*overflow\s*\|\|\s*obstructions\s*>\s*0\s*\|\|\s*pieces\s*>\s*0\s*\|\|\s*_pick\.Count\s*>\s*0\s*\|\|\s*_remove\.Count\s*>\s*0\s*;[^}]*?if\s*\(\s*occupied\s*\)\s*return\s+DigText\.Undo\s*\(\s*UndoRefusal\.PieceInside\s*\)\s*;");
+        Match inside = Regex.Match(undo, @"bool\s+occupied\s*=\s*overflow\s*\|\|\s*obstructions\s*>\s*0\s*\|\|\s*pieces\s*>\s*0\s*\|\|\s*_pick\.Count\s*>\s*0\s*\|\|\s*_remove\.Count\s*>\s*0\s*\|\|\s*FillInside\s*\(\s*record\.Footprint\s*\)\s*;[^}]*?if\s*\(\s*occupied\s*\)\s*return\s+DigText\.Undo\s*\(\s*UndoRefusal\.PieceInside\s*\)\s*;");
         int place = Regex.Match(undo, @"\bPlace\s*\(").Index;
         Assert.True(check > 0 && ward > check && noBuild > ward && inside.Success && inside.Index > noBuild && place > inside.Index,
             "UndoWithShovel must check the record, the ward, no-build areas and what stands in the hole, in that order, before its batch.");

@@ -790,3 +790,40 @@ and section 11's cube presets.
   walls.
 
 Not observed in game: OWNER GO-AROUND PENDING.
+
+## 13. Earth fill: straight earth sides (#577)
+
+Owner, 2026-11-11: "Is it possible bury an invisible perfect cube that can be walked through and surrounded sloped area
+are filled with ground material?", then "I want to implement the earth fill idea", because the ground around can be
+made dirt (cultivator, hoe) and the sides will be covered with vanilla building materials anyway, so a plain dirt
+texture is enough. It replaces the dropped basement wall pieces (#568).
+
+- **What.** Each 1 m cell of the ring around a dug hole (every cell with a floor vertex at one or more of its corners
+  but not all four) gets one earth block, standing on the floor's level and reaching the highest of its corners that
+  are not floor vertices, read before the dig (`EarthFill.Plan`). On flat ground every block is exactly the hole's
+  depth; on a slope the top covers the ground. A cell whose ground is less than 0.25 m above the floor gets none (the
+  neighbouring cell is another hole of the same depth), and a cell with an unreadable corner gets none.
+- **The block** (`Pieces/EarthFillPieceRegistration.cs`, prefab `tcc_earth_fill`): a networked piece, never in a build
+  menu, a 1 m column scaled to its height through the game's own scale sync (`ZNetView.m_syncInitialScale`, read
+  from the installed game), wearing the vanilla mud pile's material, which is mapped by world position and so does not
+  stretch. No health, no cost, no creator, never a monster's target; the hammer removes it through the game's own path
+  for a piece without WearNTear (empty resources, so no refund). Eight corner snap points. Registered whenever
+  excavation is on, so every player sees placed blocks; `Excavation/EarthFill` (on by default) says only whether this
+  player's digs place them.
+- **Neighbours.** A new hole takes out the blocks whose cell its floor covers, and the blocks in its ring that stand
+  on a higher floor (the same spot dug deeper), which `EarthFill.TakesOut` decides; any other block found marks its
+  cell as filled. Two holes meeting edge to edge at the same depth therefore open into each other with no wall between.
+- **Undo** removes the blocks the dig placed (found again by cell, floor and top, so a neighbour's block in a shared
+  cell stays) and puts back the blocks it took out. An earth block standing inside the hole refuses the undo, as
+  anything else there does.
+- **Sites.** `Excavation/EarthFillPlacement.cs` is the product's one object-creation site (one instantiation, one
+  scale), reached only from the dig commit's fill (after its batch was placed, before the charge) and the undo's
+  (after its batch was placed). Blocks are removed only through `ExcavationClearing.RemoveFill`, the existing pinned
+  removal path. The survey sorts blocks out before blockers and clearing lists. All pinned in
+  `ExcavationSourceAuditTests.TheEarthFillIsTheOneCreationSite`.
+- **Limits.** Blocks are objects, not ground: the hoe, the pickaxe or another dig changing the ground next to one does
+  not move it. A block whose undo never came (the world closed first) stays, and the hammer removes it. Where a
+  deeper hole meets a shallower one, the step inside the deeper hole's floor is not filled.
+
+Not observed in game: OWNER GO-AROUND PENDING.
+
