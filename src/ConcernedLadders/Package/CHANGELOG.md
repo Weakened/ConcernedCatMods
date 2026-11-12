@@ -40,12 +40,15 @@ version and the same values for these settings.
   of the door's own texture sheet (the Roundpole doors' bark, for example),
   instead of stretching the whole sheet across every face (#548). Not yet
   observed in game.
-- Railings (#556), behind `Railings` / `Enabled` (off by default). Adds nine
-  2 m railings to the hammer: wood, copper and iron, each level, for the
-  game's stairs (26.57 degrees) and for the step ladder (45 degrees). They
-  snap along a stair's side edge, a floor's edge or another railing. Wood is
-  plain, copper has twisted balusters with a knuckle, and iron has twisted
-  bars, scrolls and finials. Turning the setting off again, or uninstalling,
+- Railings (#556), behind `Railings` / `Enabled` (off by default). Adds
+  railings in eight materials - wood, copper, iron, darkwood, ashwood,
+  flametal, dvergr and log - each level, for the game's stairs (26.57
+  degrees), for the step ladder (45 degrees), for the left and right spiral
+  stairs, and as a newel post. They snap along a stair's side edge, a spiral
+  stair's outer edge, a floor's edge or another railing. Wood and the
+  vanilla woods are plain, copper has twisted balusters with a knuckle, and
+  iron and flametal have twisted bars, scrolls and finials. The vanilla
+  materials cost what the game's own pole of that material costs. Turning the setting off again, or uninstalling,
   makes the game delete placed railings, with no refund, the next time the
   world loads. Not yet observed in game.
 - Iron Shovel and measured basement excavation (CL-006, #487), behind

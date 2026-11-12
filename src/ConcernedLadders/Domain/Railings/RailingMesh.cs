@@ -17,9 +17,13 @@ internal static class RailingMesh
 
     internal const int MinimumTwistSegments = 6;
 
-    internal static CellarMesh Build(string name, IReadOnlyList<RailingPart> parts)
+    internal static CellarMesh Build(string name, IReadOnlyList<RailingPart> parts) => Build(name, parts, UvRegion.Tiling);
+
+    /// <summary>The mesh with every face sampling <paramref name="region"/> of the material's texture (#548's rule: a face
+    /// is stretched over an atlas region, its long side along the region's long side; a tiling texture keeps metric UVs).</summary>
+    internal static CellarMesh Build(string name, IReadOnlyList<RailingPart> parts, UvRegion region)
     {
-        var builder = new Builder();
+        var builder = new Builder(region);
         foreach (RailingPart part in parts)
         {
             switch (part.Kind)
@@ -43,6 +47,9 @@ internal static class RailingMesh
         private readonly List<ClimbPoint> _normals = new List<ClimbPoint>();
         private readonly List<CellarUv> _uvs = new List<CellarUv>();
         private readonly List<int> _triangles = new List<int>();
+        private readonly UvRegion _region;
+
+        internal Builder(UvRegion region) => _region = region;
 
         internal void Bar(Point3 from, Point3 to, float width, float twistDegrees)
         {
@@ -80,12 +87,12 @@ internal static class RailingMesh
                 {
                     int next = (edge + 1) % 4;
                     Quad(new[] { rings[ring][edge], rings[ring][next], rings[ring + 1][next], rings[ring + 1][edge] }, middle,
-                        new[] { Uv(along0, edge * width), Uv(along0, (edge + 1) * width), Uv(along1, (edge + 1) * width), Uv(along1, edge * width) });
+                        new[] { (along0, edge * width), (along0, (edge + 1) * width), (along1, (edge + 1) * width), (along1, edge * width) });
                 }
             }
 
-            Quad(rings[0], from + axis * 0.5f, new[] { Uv(0f, 0f), Uv(width, 0f), Uv(width, width), Uv(0f, width) });
-            Quad(rings[segments], from + axis * 0.5f, new[] { Uv(0f, 0f), Uv(width, 0f), Uv(width, width), Uv(0f, width) });
+            Quad(rings[0], from + axis * 0.5f, new[] { (0f, 0f), (width, 0f), (width, width), (0f, width) });
+            Quad(rings[segments], from + axis * 0.5f, new[] { (0f, 0f), (width, 0f), (width, width), (0f, width) });
         }
 
         /// <summary>An octahedron of radius <paramref name="radius"/> at <paramref name="centre"/>, its top point
@@ -108,20 +115,32 @@ internal static class RailingMesh
             }
         }
 
-        private static CellarUv Uv(float u, float v) => new CellarUv(u / UvRegion.UvMetres, v / UvRegion.UvMetres);
-
-        private void Quad(Point3[] quad, Point3 inside, CellarUv[] uv)
+        /// <summary>The UVs of a face from its points' coordinates along its two in-plane axes, through the region.</summary>
+        private CellarUv[] Map((float A, float B)[] at)
         {
-            int first = Add(quad, inside, uv, out bool outward);
+            float minA = float.MaxValue, maxA = float.MinValue, minB = float.MaxValue, maxB = float.MinValue;
+            foreach ((float a, float b) in at)
+            {
+                minA = Math.Min(minA, a); maxA = Math.Max(maxA, a); minB = Math.Min(minB, b); maxB = Math.Max(maxB, b);
+            }
+
+            var uv = new CellarUv[at.Length];
+            for (int i = 0; i < at.Length; i++) uv[i] = _region.Map(at[i].A, at[i].B, minA, maxA, minB, maxB);
+            return uv;
+        }
+
+        private void Quad(Point3[] quad, Point3 inside, (float A, float B)[] at)
+        {
+            int first = Add(quad, inside, Map(at), out bool outward);
             if (outward) _triangles.AddRange(new[] { first, first + 1, first + 2, first, first + 2, first + 3 });
             else _triangles.AddRange(new[] { first, first + 2, first + 1, first, first + 3, first + 2 });
         }
 
         private void Triangle(Point3[] triangle, Point3 inside)
         {
-            var uv = new CellarUv[3];
-            for (int i = 0; i < 3; i++) uv[i] = Uv(triangle[i].X + triangle[i].Z, triangle[i].Y);
-            int first = Add(triangle, inside, uv, out bool outward);
+            var at = new (float A, float B)[3];
+            for (int i = 0; i < 3; i++) at[i] = (triangle[i].X + triangle[i].Z, triangle[i].Y);
+            int first = Add(triangle, inside, Map(at), out bool outward);
             if (outward) _triangles.AddRange(new[] { first, first + 1, first + 2 });
             else _triangles.AddRange(new[] { first, first + 2, first + 1 });
         }

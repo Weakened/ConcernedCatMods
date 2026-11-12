@@ -5,15 +5,16 @@ using Jotunn.Configs;
 using Jotunn.Entities;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedLadders.Domain.Doors;
+using TheConcernedCat.ConcernedLadders.Domain.Families;
 using TheConcernedCat.ConcernedLadders.Domain.Railings;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Pieces;
 
-/// <summary>The nine railings (#556): each a Jötunn clone of its tier's vanilla donor (the ladders' own: <c>woodwall</c>
-/// for wood, <c>woodiron_pole</c> for copper and iron), so its health class, support, damage, repair and refunds stay
-/// native. The donor's geometry is stripped from the inactive clone and replaced by the railing's one procedural mesh
+/// <summary>The railings (#556): each a Jötunn clone of its family's vanilla donor (<see cref="BuildFamilies"/>: the ladders'
+/// own for wood, copper and iron, and the game's own pole for each vanilla family, whose recipe, station and health it then
+/// keeps), so its health class, support, damage, repair and refunds stay native. The donor's geometry is stripped from the inactive clone and replaced by the railing's one procedural mesh
 /// (<see cref="RailingMesh"/>) in the tier's borrowed material, tinted as the ladder of that tier is, in each wear state; a
 /// thin box collider along the slope; and bottom and top snap points on the base line, spaced as the game's stairs' side
 /// snaps are, so a railing snaps along a stair's edge, a floor's edge or another railing. Installed only when
@@ -53,8 +54,19 @@ internal sealed class RailingPieceRegistration : IDisposable
 
     private void Add(RailingPiece railing)
     {
+        BuildFamilyInfo family = railing.Family;
         try
         {
+            // A vanilla family costs what its donor pole costs, at the donor's station: read from the installed game.
+            Piece? donorPiece = PrefabManager.Instance.GetPrefab(family.Donor)?.GetComponent<Piece>();
+            if (donorPiece == null) throw new InvalidOperationException("Donor piece unavailable: " + family.Donor);
+            RequirementConfig[] cost = railing.Costs != null
+                ? railing.Costs.Select(line => new RequirementConfig(line.Item, line.Amount, 0, true)).ToArray()
+                : (donorPiece.m_resources ?? Array.Empty<Piece.Requirement>())
+                    .Where(entry => entry?.m_resItem != null && entry.m_amount > 0)
+                    .Select(entry => new RequirementConfig(entry.m_resItem.name, entry.m_amount, 0, entry.m_recover)).ToArray();
+            if (cost.Length == 0) throw new InvalidOperationException("No recipe for " + railing.Prefab);
+            string? station = family.Station ?? (donorPiece.m_craftingStation != null ? donorPiece.m_craftingStation.name : null);
             var config = new PieceConfig
             {
                 Name = "$" + railing.Token,
@@ -63,10 +75,10 @@ internal sealed class RailingPieceRegistration : IDisposable
                 Category = "Building",
                 // Public Jötunn 2.30.2 usage tags, as the ladders use.
                 Usage = new[] { "Building", "Stairs" },
-                CraftingStation = railing.Station,
-                Requirements = railing.Costs.Select(cost => new RequirementConfig(cost.Item, cost.Amount, 0, true)).ToArray(),
+                CraftingStation = station,
+                Requirements = cost,
             };
-            var custom = new CustomPiece(railing.Prefab, railing.Donor, config);
+            var custom = new CustomPiece(railing.Prefab, family.Donor, config);
             GameObject prefab = custom.PiecePrefab;
             if (prefab == null || prefab.activeInHierarchy)
                 throw new InvalidOperationException("Expected an inactive-parent custom prefab clone.");
@@ -75,7 +87,7 @@ internal sealed class RailingPieceRegistration : IDisposable
             if (piece == null || wear == null || prefab.GetComponent<ZNetView>() == null)
                 throw new InvalidOperationException("The structural donor is missing Piece, WearNTear or ZNetView.");
 
-            Material basis = FindMaterial(railing.MaterialPrefab, railing.Material);
+            Material basis = FindMaterial(family.MaterialPrefab, family.Material);
             // DestroyImmediate is confined to the inactive prefab clone, so RenderManager never sees donor geometry.
             foreach (LODGroup lod in prefab.GetComponentsInChildren<LODGroup>(true)) UnityEngine.Object.DestroyImmediate(lod);
             foreach (Collider collider in prefab.GetComponents<Collider>()) UnityEngine.Object.DestroyImmediate(collider);
@@ -87,11 +99,11 @@ internal sealed class RailingPieceRegistration : IDisposable
             if (layer < 0) throw new InvalidOperationException("The game's piece collision layer is absent.");
             prefab.layer = layer;
             prefab.transform.localScale = Vector3.one;
-            wear.m_health = railing.Health;
+            if (family.Health.HasValue) wear.m_health = family.Health.Value;
 
-            Mesh mesh = DoorPieceKit.UnityMesh("railing_" + railing.Tier + "_" + railing.Angle,
-                () => RailingMesh.Build(railing.Prefab, RailingDesign.Parts(railing.Tier, railing.Angle)));
-            var tint = new Color(railing.Tint.R, railing.Tint.G, railing.Tint.B, 1f);
+            Mesh mesh = DoorPieceKit.UnityMesh("railing_" + railing.Style + "_" + railing.Angle + "_" + family.Region.Key,
+                () => RailingMesh.Build(railing.Prefab, RailingDesign.Parts(railing.Style, railing.Angle), family.Region));
+            var tint = new Color(family.Tint.R, family.Tint.G, family.Tint.B, 1f);
             wear.m_new = Visual(prefab.transform, "new", mesh, basis, tint, 1f, layer);
             wear.m_worn = Visual(prefab.transform, "worn", mesh, basis, tint, 0.82f, layer);
             wear.m_broken = Visual(prefab.transform, "broken", mesh, basis, tint, 0.65f, layer);
@@ -106,25 +118,30 @@ internal sealed class RailingPieceRegistration : IDisposable
             wear.m_worn.SetActive(false);
             wear.m_broken.SetActive(false);
 
-            // One thin box along the slope, on its own child (the placement ghost's blocked-by-player test skips the
+            // Thin boxes along the base line, each on its own child (the placement ghost's blocked-by-player test skips the
             // ghost root's colliders): what keeps a player from walking off the stair's side, and the support and hammer
-            // geometry WearNTear measures with.
-            var collision = new GameObject("collision") { layer = layer };
-            collision.transform.SetParent(prefab.transform, false);
-            collision.transform.localRotation = Quaternion.Euler(-RailingGeometry.Degrees(railing.Angle), 0f, 0f);
-            (Point3 centre, Point3 size) = RailingGeometry.Collider(railing.Angle);
-            BoxCollider box = collision.AddComponent<BoxCollider>();
-            box.center = new Vector3(centre.X, centre.Y, centre.Z);
-            box.size = new Vector3(size.X, size.Y, size.Z);
+            // geometry WearNTear measures with. One for a straight railing, one per chord of a spiral, one round a newel.
+            IReadOnlyList<RailingCollider> colliders = RailingGeometry.Colliders(railing.Angle);
+            for (int index = 0; index < colliders.Count; index++)
+            {
+                RailingCollider part = colliders[index];
+                var collision = new GameObject("collision_" + index) { layer = layer };
+                collision.transform.SetParent(prefab.transform, false);
+                collision.transform.localPosition = new Vector3(part.Origin.X, part.Origin.Y, part.Origin.Z);
+                collision.transform.localRotation = Quaternion.Euler(part.Pitch, part.Yaw, 0f);
+                BoxCollider box = collision.AddComponent<BoxCollider>();
+                box.center = new Vector3(part.Centre.X, part.Centre.Y, part.Centre.Z);
+                box.size = new Vector3(part.Size.X, part.Size.Y, part.Size.Z);
+            }
 
             Snap(prefab.transform, "$hud_snappoint_bottom", RailingGeometry.BottomSnap, layer);
-            Snap(prefab.transform, "$hud_snappoint_top", RailingGeometry.TopSnap(railing.Angle), layer);
+            if (railing.Angle != RailingAngle.Newel) Snap(prefab.transform, "$hud_snappoint_top", RailingGeometry.TopSnap(railing.Angle), layer);
 
             DoorPieceKit.Icon(prefab, piece, railing.Prefab, "railing", _log);
             if (!PieceManager.Instance.AddPiece(custom))
                 throw new InvalidOperationException("Jotunn rejected the custom piece registration.");
             _registered.Add(railing.Prefab);
-            _log("Registered Concerned Ladders prefab " + railing.Prefab + " from " + railing.Donor + ".");
+            _log("Registered Concerned Ladders prefab " + railing.Prefab + " from " + family.Donor + ".");
         }
         catch (Exception exception)
         {
