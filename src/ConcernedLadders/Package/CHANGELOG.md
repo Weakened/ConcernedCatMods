@@ -1,22 +1,22 @@
 # Changelog
 
-## 1.1.0
+## 1.0.0
 
-**Concerned Ladders is now Concerned Builder** (#590): a new Thunderstore
-package, `ConcernedBuilder`, for a mod that now builds more than ladders.
-It is the same plugin: its ID and config file are unchanged, so settings,
-placed ladders and the Climbing skill carry over. Install ConcernedBuilder
-and uninstall ConcernedLadders; do not keep both. It has a new icon (#592).
+First release as **Concerned Builder**, formerly Concerned Ladders (#590): a
+new Thunderstore package, `ConcernedBuilder`, for a mod that now builds more
+than ladders, with a new icon (#592). It is the same plugin as Concerned
+Ladders 1.0.0: its ID and config file are unchanged, so settings, placed
+ladders and the Climbing skill carry over. Install ConcernedBuilder and
+uninstall ConcernedLadders; do not keep both.
 
-Experimental additions for building basements, each behind its own
-setting that is **off by default**. They have been played only in
-development builds, so treat them as experimental. With all of them off, the ladders, the climb and the
-Climbing skill are the same as in 1.0.0, and nothing new appears in the hammer
-or crafting menus. Every player and the host or server must use the same
-version and the same values for these settings.
+Everything below is new since Concerned Ladders 1.0.0, tested in game, and
+**on by default**. Each part has its own setting to turn it off; with all of
+them off, the ladders, the climb and the Climbing skill are the same as in
+Concerned Ladders 1.0.0, and nothing new appears in the hammer or crafting
+menus. Every player and the host or server must use the same version and the
+same values for these settings.
 
-- Floor trapdoors (CL-004, #485), behind `Trapdoors` / `Enabled` (off by
-  default). Adds nine trapdoor pieces to the hammer. A trapdoor's lid opens and
+- Floor trapdoors (CL-004, #485), behind `Trapdoors` / `Enabled` (on by default). Adds nine trapdoor pieces to the hammer. A trapdoor's lid opens and
   closes with the door's own Use, over the matching door's swing time, and
   waits instead of moving into anyone or anything on or under it. A ladder
   aimed at a trapdoor's frame in Auto or Top hangs inside its opening; a
@@ -25,9 +25,8 @@ version and the same values for these settings.
   Turning the setting off again, or uninstalling, makes the game delete placed
   trapdoors, with no refund, the next time the world loads. Each trapdoor's
   lid reads as its own door (#547, #555): planks, a gate, poles, iron bars,
-  iron-strapped planks, a panel, or flametal plates. Not yet observed in game.
-- Sloped cellar doors (CL-005, #486), behind `CellarDoors` / `Enabled` (off by
-  default). Adds nine sloped 2 m cellar doors to the hammer, at twice the
+  iron-strapped planks, a panel, or flametal plates.
+- Sloped cellar doors (CL-005, #486), behind `CellarDoors` / `Enabled` (on by default). Adds nine sloped 2 m cellar doors to the hammer, at twice the
   matching door's cost. Both leaves open and close together with the door's
   own Use, over the matching door's swing time, and wait instead of moving into
   a player, a creature, an item, a cart or another building piece. A ladder
@@ -41,21 +40,18 @@ version and the same values for these settings.
   stands 1.76 m tall with a beam across it and is open below, so a stair built
   down from the low end passes under it (#549), and the low end is a
   threshold you walk over, not a ledge (#566). Each cellar door's leaves read
-  as its own door, as the trapdoors' lids do (#547, #555). Not yet
-  observed in game.
+  as its own door, as the trapdoors' lids do (#547, #555).
 - Trapdoor and cellar door surfaces take their texture from the matching part
   of the door's own texture sheet (the Roundpole doors' bark, for example),
-  instead of stretching the whole sheet across every face (#548). Not yet
-  observed in game.
+  instead of stretching the whole sheet across every face (#548).
 - Ladders in the vanilla materials (#558), behind `LadderFamilies` /
-  `Enabled` (off by default): Vertical Darkwood, Ashwood, Flametal, Dvergr
+  `Enabled` (on by default): Vertical Darkwood, Ashwood, Flametal, Dvergr
   and Log Ladders, each made from the game's own pole of that material and
   costing what that pole costs. They climb exactly as the other ladders do.
   The Vertical Iron Ladder now shows only the iron part of its texture
   sheet, as the iron railing does. Turning the setting off again makes the
-  game delete placed family ladders when a world loads. Not yet observed in
-  game.
-- Railings (#556), behind `Railings` / `Enabled` (off by default). Adds
+  game delete placed family ladders when a world loads.
+- Railings (#556), behind `Railings` / `Enabled` (on by default). Adds
   railings in eight materials - wood, copper, iron, darkwood, ashwood,
   flametal, dvergr and log - each level (2 m and 1 m), for the game's
   stairs (26.57 degrees), for the step ladder (45 degrees), and as a newel
@@ -68,9 +64,9 @@ version and the same values for these settings.
   iron and flametal have twisted bars, scrolls and finials. The vanilla
   materials cost what the game's own pole of that material costs. Turning the setting off again, or uninstalling,
   makes the game delete placed railings, with no refund, the next time the
-  world loads. Not yet observed in game.
+  world loads.
 - Iron Shovel and measured basement excavation (CL-006, #487), behind
-  `Excavation` / `Enabled` (off by default). Adds the Iron Shovel, crafted at
+  `Excavation` / `Enabled` (on by default). Adds the Iron Shovel, crafted at
   the Forge from 10 Iron and 4 Wood once you have found Iron (Iron Scrap alone
   does not unlock it) and repaired there. The mouse wheel chooses a
   ready-made hole (#574): 1x1x1, 2x2x1, 2x2x2, 4x4x1, 4x4x2 or 4x4x4 m, and
@@ -130,10 +126,13 @@ version and the same values for these settings.
     console diagnostic plans a dig without digging.
   - Turning the setting off again, or uninstalling, removes the shovel from
     the game, and the game discards crafted shovels when their inventory or
-    chest loads. The mod does not undo holes already dug. Not yet observed
-    in game.
+    chest loads. The mod does not undo holes already dug.
 
-## 1.0.0
+## Concerned Ladders
+
+The package before the rename, `TheConcernedCat-ConcernedLadders`.
+
+### Concerned Ladders 1.0.0
 
 First public release.
 
@@ -156,7 +155,7 @@ First public release.
 The entries below are internal development candidates. None of them was
 published.
 
-## 0.2.7
+### Concerned Ladders 0.2.7
 
 Internal owner playtest candidate. Not a release.
 
@@ -199,7 +198,7 @@ Internal owner playtest candidate. Not a release.
   rails and a cooler colour. The Wood Ladder is unchanged. Height, rung
   spacing, recipes, durability and placed ladders are unchanged.
 
-## 0.2.6
+### Concerned Ladders 0.2.6
 
 Internal owner test candidate. Not a release.
 
@@ -220,7 +219,7 @@ Internal owner test candidate. Not a release.
   edge (Top). Aimed at a ladder, it extends that column. Any hammer rotation.
 - The two wall-corner snap modes are removed.
 
-## 0.2.5
+### Concerned Ladders 0.2.5
 
 Internal owner test candidate. Not a release.
 
@@ -241,19 +240,19 @@ Internal owner test candidate. Not a release.
 - Fixed: the game's own foot placement pulled the climber's feet to the
   ground under the ladder.
 
-## 0.2.4
+### Concerned Ladders 0.2.4
 
 Internal development builds for in-game checks (several, one version number).
 Superseded by 0.2.5.
 
-## 0.2.3
+### Concerned Ladders 0.2.3
 
 Internal animation checkpoint, replacing 0.2.2 before any gameplay use.
 
 - Fixed: 0.2.2 let go of every ladder the moment you mounted. It called a
   game method that is not accessible at runtime (found in game).
 
-## 0.2.2
+### Concerned Ladders 0.2.2
 
 Internal animation checkpoint for the owner test lane. Not a release.
 
@@ -268,13 +267,13 @@ Internal animation checkpoint for the owner test lane. Not a release.
 - Building a new ladder section above you while climbing extends the climb
   without getting off. Removing the section you are holding lets you fall
   normally.
-## 0.2.1
+### Concerned Ladders 0.2.1
 
 - Pressing Use partway up now steps off onto a landing beside the ladder. In
   0.2.0 the safe-dismount search looked only 0.75 m to the side, where a standing
   footprint still overlapped the rails, so a real side landing was refused.
 
-## 0.2.0
+### Concerned Ladders 0.2.0
 
 Owner-test candidate implementing the owner revision of 25 October 2026.
 
@@ -292,7 +291,7 @@ Owner-test candidate implementing the owner revision of 25 October 2026.
 - Wood Ladder, Copper Ladder and Iron Ladder names; readable Cycle Snap labels.
 - Custom procedural climbing animation on the native rig.
 
-## 0.1.1
+### Concerned Ladders 0.1.1
 
 - Owner-test candidate built against Valheim 1.0.20, BepInExPack 5.4.2351 and
   Jotunn 2.30.2; implements the 1.0.20 hover interface.
@@ -309,7 +308,7 @@ Owner-test candidate implementing the owner revision of 25 October 2026.
 - Development status: single-player only. Multiplayer, dedicated server and
   controller play are not yet verified.
 
-## 0.1.0
+### Concerned Ladders 0.1.0
 
 - Initial independent Concerned Ladders source candidate.
 - Original runtime-built vertical wood, copper and iron pieces, 2 m snaps and

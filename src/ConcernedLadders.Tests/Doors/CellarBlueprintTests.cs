@@ -57,13 +57,15 @@ public sealed class CellarBlueprintTests
     [Fact]
     public void TheSettingSaysTheLeavesOpenButTheLaddersDoNotKnowThemYet()
     {
-        Assert.False(CellarDoorSettings.EnabledByDefault);
-        Assert.Contains("UNFINISHED", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.True(CellarDoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
+        Assert.DoesNotContain("UNFINISHED", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("Both leaves open and close together", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("hangs inside its opening and climbs through it only while both leaves are open", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("never treat one as a floor", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.DoesNotContain("Ladders do not work with them yet", CellarDoorSettings.Description, StringComparison.Ordinal);
-        Assert.Contains("Leave this off", CellarDoorSettings.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain("Leave this off", CellarDoorSettings.Description, StringComparison.Ordinal);
+        // On by default now, so what turning it off costs must still be said.
+        Assert.Contains("makes the game delete every placed cellar door", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.DoesNotContain("do not open yet", CellarDoorSettings.Description, StringComparison.Ordinal);
     }
 

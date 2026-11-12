@@ -3,9 +3,9 @@ using System.Collections.Generic;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
-/// <summary>The cellar-door setting (CL-005 #486). Its own switch, off by default, separate from
-/// <see cref="TrapdoorSettings"/> (lead default pending owner confirmation): turning trapdoors on must not also add a
-/// second unfinished family whose placed pieces the game deletes when the switch goes off again. Bound by the plugin
+/// <summary>The cellar-door setting (CL-005 #486). Its own switch, on by default from Concerned Builder 1.0.0 (owner
+/// 2026-11-12, after testing it in game), separate from <see cref="TrapdoorSettings"/>, so either family can be turned
+/// off alone; the game deletes a family's placed pieces when its switch goes off again. Bound by the plugin
 /// (slice 2); with it off the piece adapter is never constructed, so nothing is cloned, localized or registered.</summary>
 internal static class CellarDoorSettings
 {
@@ -13,15 +13,15 @@ internal static class CellarDoorSettings
 
     internal const string Key = "Enabled";
 
-    internal const bool EnabledByDefault = false;
+    internal const bool EnabledByDefault = true;
 
     internal const string Description =
-        "UNFINISHED (CL-005): adds the nine sloped cellar doors to the hammer's Building tab, none of it yet tested in game. " +
+        "Adds the nine sloped cellar doors to the hammer's Building tab. " +
         "Both leaves open and close together with the door's Use, and wait instead of moving into a player, a creature, " +
         "an item, a cart or another building piece. " +
-        "A Concerned Ladders ladder aimed at one in Auto or Top hangs inside its opening and climbs through it only " +
+        "A Concerned Builder ladder aimed at one in Auto or Top hangs inside its opening and climbs through it only " +
         "while both leaves are open; ladders never treat one as a floor. " +
-        "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed cellar door the next " +
+        "Turning it off again, or uninstalling, makes the game delete every placed cellar door the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
         "value: a host or server with it off deletes the cellar doors other players place, during the session. " +
         "Restart after changing it.";

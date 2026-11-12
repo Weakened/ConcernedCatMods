@@ -5,19 +5,19 @@ using TheConcernedCat.ConcernedLadders.Domain.Doors;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Families;
 
-/// <summary>The family ladders' setting (#558). Off by default, as every 1.1.0 addition is: with it off only the three
-/// shipped ladders are registered, exactly as in 1.0.0.</summary>
+/// <summary>The family ladders' setting (#558). On by default from Concerned Builder 1.0.0 (owner 2026-11-12): with it
+/// off only the three original ladders are registered, exactly as in Concerned Ladders 1.0.0.</summary>
 internal static class LadderFamilySettings
 {
     internal const string Section = "LadderFamilies";
 
     internal const string Key = "Enabled";
 
-    internal const bool EnabledByDefault = false;
+    internal const bool EnabledByDefault = true;
 
     internal const string Description =
-        "UNFINISHED (#558): adds vertical ladders in the vanilla building materials - darkwood, ashwood, flametal, dvergr and " +
-        "log - each costing what the game's own pole of that material costs, none of it yet tested in game. Leave this off. " +
+        "Adds vertical ladders in the vanilla building materials - darkwood, ashwood, flametal, dvergr and " +
+        "log - each costing what the game's own pole of that material costs. " +
         "Turning it off again, or uninstalling, makes the game delete every placed family ladder the next time a world " +
         "loads, with no refund. In multiplayer every player and the host or server must have the same value. Restart " +
         "after changing it.";
