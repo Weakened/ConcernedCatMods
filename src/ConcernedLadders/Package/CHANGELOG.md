@@ -71,8 +71,9 @@ version and the same values for these settings.
     plants, dropped items, carts or ships, which it never removes. Your own
     building pieces in the square are not protected: their support is the
     game's, so a piece standing on dug ground can fall.
-  - The shovel has no attack and plays no animation yet, and it looks like a
-    darker iron pickaxe for now. It raises no skill. A read-only `cl_excavate`
+  - The shovel has its own model, a wooden shaft and T-grip with an iron
+    blade (#550). It has no attack and plays no animation yet. It raises no
+    skill. A read-only `cl_excavate`
     console diagnostic plans a dig without digging.
   - Turning the setting off again, or uninstalling, removes the shovel from
     the game, and the game discards crafted shovels when their inventory or

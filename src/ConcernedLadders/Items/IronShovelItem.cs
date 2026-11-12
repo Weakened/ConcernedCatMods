@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Jotunn.Configs;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedLadders.Domain.Doors;
 using TheConcernedCat.ConcernedLadders.Domain.Excavation;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
@@ -14,8 +16,10 @@ namespace TheConcernedCat.ConcernedLadders.Items;
 /// off (the default) this class is never constructed and nothing is added to the game.
 ///
 /// <para>An inactive Jötunn clone of the vanilla <c>PickaxeIron</c> prefab (<see cref="IronShovel.DonorPrefab"/>), read
-/// from the installed game at start-up: no game asset ships, and no live Player or BaseAI is ever instantiated. The
-/// clone keeps the donor's model (tinted, so it reads apart from the pickaxe), equip slot and hand, weight,
+/// from the installed game at start-up: no game asset ships, and no live Player or BaseAI is ever instantiated. Since
+/// #550 the clone shows its own shovel (<see cref="ShovelModel"/>, built in code from the donor's own texture sheet) in
+/// place of the pickaxe's model; if the donor is not as measured it falls back to the tinted pickaxe and says so. It
+/// keeps the donor's equip slot and hand, weight,
 /// durability and repair behaviour; the game's normal item and recipe lifecycle carries it through world changes and
 /// reloads. It is crafted and repaired at the Forge from refined Iron and Wood, so the game's own known-material
 /// discovery unlocks the recipe once the player has held Iron, never on Iron Scrap alone
@@ -117,7 +121,7 @@ internal sealed class IronShovelItem : IDisposable
             if (item.HavePrimaryAttack() || item.HaveSecondaryAttack())
                 throw new InvalidOperationException("the clone still has a vanilla attack");
 
-            Tint(prefab);
+            if (!ReplaceModel(prefab)) Tint(prefab);
             RenderIcon(prefab, shared);
             if (!ItemManager.Instance.AddItem(custom))
                 throw new InvalidOperationException("Jötunn rejected the item registration");
@@ -139,7 +143,56 @@ internal sealed class IronShovelItem : IDisposable
         }
     }
 
-    /// <summary>Gives every renderer of the clone (the dropped model and the held "attach" model) its own tinted copy of
+    /// <summary>Replaces the pickaxe's model under the clone's <c>attach</c> (shown in the hand and on the ground) with
+    /// the shovel (#550): the pickaxe's own child, on the inactive clone only, is given <see cref="ShovelModel.Mesh"/>
+    /// and the donor's own <c>weapons1</c> material (shared, never edited) and its transform reset to the attach's space. False, changing
+    /// nothing, when the donor is not as measured (no <c>attach/pickaxe</c>, no such material, or another renderer
+    /// under <c>attach</c>), so the caller keeps the tinted pickaxe rather than a half-built model.</summary>
+    private bool ReplaceModel(GameObject prefab)
+    {
+        try
+        {
+            Transform? attach = prefab.transform.Find(ShovelModel.DonorAttach);
+            Transform? model = attach != null ? attach.Find(ShovelModel.DonorModel) : null;
+            MeshRenderer? renderer = model != null ? model.GetComponent<MeshRenderer>() : null;
+            Material? material = renderer != null ? Array.Find(renderer.sharedMaterials, m => m != null && m.name == ShovelModel.DonorMaterial) : null;
+            if (attach == null || model == null || material == null)
+                throw new InvalidOperationException("the donor has no " + ShovelModel.DonorAttach + "/" + ShovelModel.DonorModel + " drawn with " + ShovelModel.DonorMaterial);
+            foreach (Renderer other in attach.GetComponentsInChildren<Renderer>(true))
+            {
+                if (other != renderer && !(other is ParticleSystemRenderer))
+                    throw new InvalidOperationException("the donor's attach draws more than the pickaxe (" + other.name + ")");
+            }
+
+            CellarMesh shape = ShovelModel.Mesh();
+            var mesh = new Mesh { name = "tcc_iron_shovel", hideFlags = HideFlags.DontUnloadUnusedAsset };
+            mesh.vertices = shape.Vertices.Select(p => new Vector3(p.X, p.Y, p.Z)).ToArray();
+            mesh.normals = shape.Normals.Select(p => new Vector3(p.X, p.Y, p.Z)).ToArray();
+            mesh.uv = shape.Uvs.Select(uv => new Vector2(uv.U, uv.V)).ToArray();
+            mesh.triangles = shape.Triangles.ToArray();
+            mesh.RecalculateBounds();
+            mesh.RecalculateTangents();
+
+            MeshFilter? filter = model.GetComponent<MeshFilter>();
+            if (filter == null) throw new InvalidOperationException("the donor's " + ShovelModel.DonorModel + " has no mesh filter");
+            // The pickaxe's own child carries the shovel: its mesh and materials are replaced and its transform reset
+            // to the attach's space, which the shovel is built in. Nothing is created or destroyed.
+            model.name = ShovelModel.Child;
+            model.localPosition = Vector3.zero;
+            model.localRotation = Quaternion.identity;
+            model.localScale = Vector3.one;
+            filter.sharedMesh = mesh;
+            renderer!.sharedMaterials = new[] { material };
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _log("Iron Shovel model fallback: " + SafeFailure.Brief(exception) + ". The tinted pickaxe model is shown.");
+            return false;
+        }
+    }
+
+    /// <summary>The fallback when <see cref="ReplaceModel"/> refuses: gives every renderer of the clone (the dropped model and the held "attach" model) its own tinted copy of
     /// each material, so the shovel reads apart from the donor pickaxe. The donor's materials are never edited.</summary>
     private static void Tint(GameObject prefab)
     {
