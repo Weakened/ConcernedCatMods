@@ -27,6 +27,24 @@ installed.
 
 ## In action
 
+**Dig a basement.** Scroll for a size, then dig: the hole gets straight earth sides and the bottom panel names the size.
+
+![A character holding the Iron Shovel scrolls the outline from a 2x2x2 to a 4x4x2 hole, digs, and a square pit with straight earth sides opens in the meadow](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/68c90691ab09444b618933e21866b05a86a75235/docs/media/concerned-builder/dig.gif)
+
+**Dig sideways into the earth.** Aim at an earth wall and dig: the next room opens flush beside the last one.
+
+![From inside the pit, the character aims at the earth wall; the wall disappears and the pit becomes a longer trench](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/68c90691ab09444b618933e21866b05a86a75235/docs/media/concerned-builder/sideways.gif)
+
+**Rooms line up.** Two holes dug side by side make one straight-sided trench.
+
+![Seen from above, a straight 4 by 8 metre trench edged with earth blocks](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/68c90691ab09444b618933e21866b05a86a75235/docs/media/concerned-builder/overview.gif)
+
+**Cellar doors and railings.** Every door has a sloped cellar door, and railings come in eight materials.
+
+![The character opens a wooden cellar door; both leaves swing up](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/68c90691ab09444b618933e21866b05a86a75235/docs/media/concerned-builder/cellar.gif)
+
+![A row of iron, copper and wood railings, with an open cellar door and the trench behind](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/68c90691ab09444b618933e21866b05a86a75235/docs/media/concerned-builder/railings.gif)
+
 **Climb out of the water onto a dock.** Swim up to a ladder, press Interact, climb out.
 
 ![A character swims up to a wooden ladder hanging off the end of a dock, grabs it, climbs out of the water and walks onto the dock](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/48a6c59fc199de2078a31004de3ab7c9feabe2e3/docs/media/concerned-ladders/water-to-dock.gif)
