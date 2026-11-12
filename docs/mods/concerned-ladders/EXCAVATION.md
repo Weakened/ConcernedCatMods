@@ -851,3 +851,14 @@ normal holes ... topped with flattened earth dirt?"
 
 Not observed in game: OWNER GO-AROUND PENDING.
 
+### 13.2 Rock tops (#583)
+
+Owner playtest of #581, 2026-11-11: the blocks' tops were black (they were black with the mud look of #578 too), "replace
+those black sections with similar texture you used on sides". The world-mapped rock shader (`Custom/Trilinearmap`)
+draws the generated box's upward faces black; the cause inside the shader is not established. The thin top is now drawn
+in a copy of the vanilla wood wall's UV-mapped piece material, the one the doors and railings use on generated meshes,
+carrying the same terrain cliff slice and cliff normal map as the sides, one whole tile per metre so neighbouring tops
+join without a seam. The cleared-dirt slice is no longer used. Before a world loads the top shows the mud texture.
+
+Not observed in game: OWNER GO-AROUND PENDING.
+

@@ -89,18 +89,15 @@ internal static class EarthFill
     /// neighbouring cell is another hole of the same depth, say). Lead default.</summary>
     internal const float MinimumHeight = 0.25f;
 
-    /// <summary>The terrain's own textures the block wears (#579, owner: "another lighter stone like normal holes ...
-    /// topped with flattened earth dirt"): slices of the terrain's diffuse array <c>terrain_d_array</c>, identified from a
-    /// decoded contact sheet of its 16 slices (<c>cl-ladders-devtools/out/terrain/terrain_d_array_sheet_579.png</c>).
-    /// Slice 4 is the grey rock the terrain shows on a steep side, such as a pickaxe hole's; slice 3 the cleared dirt of a
-    /// hoe's path.</summary>
+    /// <summary>The terrain's own texture the block wears (#579, owner: "another lighter stone like normal holes"; #583, the
+    /// top too: "replace those black sections with similar texture you used on sides"): a slice of the terrain's diffuse
+    /// array <c>terrain_d_array</c>, identified from a decoded contact sheet of its 16 slices
+    /// (<c>cl-ladders-devtools/out/terrain/terrain_d_array_sheet_579.png</c>). Slice 4 is the grey rock the terrain shows
+    /// on a steep side, such as a pickaxe hole's.</summary>
     internal const int TerrainCliffSlice = 4;
 
-    /// <summary>See <see cref="TerrainCliffSlice"/>.</summary>
-    internal const int TerrainDirtSlice = 3;
-
-    /// <summary>The share of a block's height its dirt top takes, the rest being its rock body: thin, so the top reads as a
-    /// surface, and inside the block's own height so it stays flush with the ground.</summary>
+    /// <summary>The share of a block's height its top takes, the rest being its body: thin, so the top reads as a surface,
+    /// and inside the block's own height so it stays flush with the ground.</summary>
     internal const float TopShare = 0.01f;
 
     /// <summary>How closely a block found in the world must match a remembered one to be the same block.</summary>
