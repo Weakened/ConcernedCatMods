@@ -610,3 +610,61 @@ planned from:
 2. **A tool animation** that cannot reach a stored attack, and a shovel-shaped model, once the owner chooses them (7.4).
 3. **Packaging**: the 1.1.0 changelog entry and a candidate ZIP with its provenance are done (PR #544, `STATUS.md`
    "1.1.0 candidate provenance"); installing and smoking it, and any release, are the owner's.
+
+## 10. The reworked dig (#551): player-sized holes, joins and undo
+
+**Why.** The owner's playtest on 2026-11-10 found four problems with sections 1 to 8:
+
+- The fixed 2x2x2 and 4x4x4 holes were confusing.
+- The preview bent over uneven ground.
+- The HUD carried two- and three-line warnings.
+- A hole beside or over an earlier one was refused (`FloorAlreadyDeeper`).
+
+**Owner decisions:**
+
+- The player sizes the hole: the ground footprint first, then the depth.
+- Undo exists. It restores the last dig's ground exactly, newest first, with no refund. It refuses if the ground has
+  changed since, if a piece stands in the hole, or if the area is not loaded.
+- Messages are short.
+
+The full design is on #551. It is built in three slices.
+
+**What the engine allows** (decompiled `TerrainComp.RaiseTerrain` and `Heightmap.IsPointInside`, Valheim 1.0.21):
+
+- A square raise changes `2·ceil(r)+1` vertices on a side, so **radius 0 changes exactly one vertex**.
+- With a negative delta it only lowers, to the op's height plus delta, however large the delta is.
+- With a positive delta it only raises, by at most delta.
+- The settings travel as the prefab hash, so only the position varies per operation.
+- A radius-0 search finds both tiles at a tile edge, because the bounds test is inclusive on both sides.
+
+So two inert single-vertex prefabs, one lowering and one raising by up to 8 m, can make any rectangle and any exact
+undo. They go through the same vanilla path as today. That is slice 2.
+
+**Slice 1 (game-free, this PR), in `src/ConcernedLadders/Domain/Excavation/`.** Nothing here is wired to the game yet.
+The shovel still behaves as sections 7 and 8 describe until slice 3.
+
+- `DigFootprint`: the rectangle from the corner the player set to the one they aim at. The anchor is always a corner.
+  Each side is 2 to 8 m, and the depth is 1 to **7** m in whole metres, default 2 (lead defaults).
+  - Why 7: the engine never takes ground more than 8 m below its natural surface. The planner refuses a floor within
+    1 cm of that clamp, so an 8 m dig on natural ground could never be made.
+- `DigSamples`: the floor and its ring, sampled once at the largest size (11 x 11 vertices) and refilled each frame
+  without allocating.
+- `DigPlanner.Plan`:
+  - The datum is the highest ring vertex, and the floor is the datum minus the depth.
+  - **Ground already lower is left as it is, and counted (`AlreadyLower`).** So a dig beside or over an earlier hole
+    joins it. An adjacent dig of the same depth lands on the same floor (tested).
+  - It still refuses unloaded ground, non-finite ground and the engine clamp.
+- `DigPlanner.Lowered` lists each vertex to lower, with its height before. That is both the slice-2 batch and the undo
+  record.
+- `DigPlanner.Progress` reads a dig back. Overshot and Unreadable are reported, never repaired blind.
+- `DigRecord`, `DigHistory` and `DigUndo`:
+  - `DigHistory` keeps the newest 10 digs in memory, per world and never saved.
+  - Only the newest can be undone.
+  - `DigUndo.Check` refuses Nothing, Unloaded or Changed, where Changed means any vertex is no longer at the floor the
+    dig left.
+  - `DigUndo.RaiseOperations` counts the raise operations a vertex needs (8 m each).
+  - `DigUndo.Progress` reads an undo back.
+- `DigText`: every line the shovel shows, one line each and no more than 64 characters (tested). Detail goes to the
+  log.
+
+Tested in `DigPlannerTests`. Not observed in game; nothing in game uses it until slice 3.
