@@ -16,7 +16,7 @@ public sealed class TrapdoorBlueprintTests
     [Fact]
     public void TrapdoorsAreOffByDefault()
     {
-        Assert.True(TrapdoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
+        Assert.True(TrapdoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.1.0.
         Assert.Equal("Trapdoors", TrapdoorSettings.Section);
         Assert.Equal("Enabled", TrapdoorSettings.Key);
         Assert.Contains("delete", TrapdoorSettings.Description, StringComparison.Ordinal);

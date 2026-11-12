@@ -114,7 +114,7 @@ public sealed class CellarDoorsTests
     [Fact]
     public void TheSettingIsItsOwnAndOffByDefault()
     {
-        Assert.True(CellarDoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
+        Assert.True(CellarDoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.1.0.
         Assert.Equal("CellarDoors", CellarDoorSettings.Section);
         Assert.Equal("Enabled", CellarDoorSettings.Key);
         Assert.NotEqual(TrapdoorSettings.Section, CellarDoorSettings.Section);

@@ -7,8 +7,16 @@ ladders in every vanilla building material; and an Iron Shovel that digs straigh
 has its own setting, on by default.
 
 Built against Valheim **1.0.21** with BepInExPack Valheim 5.4.2351 and Jötunn 2.30.2. The ladders, the climb and the
-Climbing skill were tested in game on Valheim 1.0.20 as Concerned Ladders 1.0.0; everything Concerned Builder 1.0.0
+Climbing skill were tested in game on Valheim 1.0.20 as Concerned Ladders 1.0.0; everything Concerned Builder 1.1.0
 adds was tested in game in November 2026.
+
+**What it adds**
+
+- **Vertical ladders** in eight materials, with an animated climb and a Climbing skill.
+- **Floor trapdoors** and **sloped bulkhead cellar doors**, one for every door in the game, that a ladder climbs through.
+- **Railings** for floors, the game's stairs and the step ladder, in eight materials.
+- **The Iron Shovel**, which digs basements of ready-made sizes with straight earth sides, joins holes edge to edge,
+  digs sideways into its own earth, and fills a hole back in on request.
 
 ## Moving from Concerned Ladders
 
@@ -55,8 +63,9 @@ discovery: each one appears once you have found its materials.
 | Vertical Wood Ladder | 4 Wood | Workbench | 200 |
 | Vertical Copper Ladder | 2 Copper, 1 Wood | Forge | 400 |
 | Vertical Iron Ladder | 2 Iron, 1 Wood | Forge | 800 |
+| Vertical Darkwood, Ashwood, Flametal, Dvergr and Log Ladders | what the game's own pole of that material costs | that pole's station | that pole's |
 
-All three climb exactly the same. Placement, support, wards, repair, damage and refunds are the
+All of them climb exactly the same. Placement, support, wards, repair, damage and refunds are the
 game's own. A free-standing stack follows the game's structural support, so a tall wooden stack
 needs bracing against the building (an unbraced wood stack holds about five sections).
 
@@ -105,6 +114,70 @@ Concerned Builder adds a **Climbing** skill to the game's skill screen.
 
 **Falling.** While you hold on, you take no fall damage. When you let go or jump, the game's normal
 fall damage is measured from where you let go.
+
+## Trapdoors and cellar doors
+
+Every door and gate the game lets you build has a matching **trapdoor** (a 2 m floor hatch) and a sloped
+**cellar door** (a 2 m bulkhead, like a house's storm-cellar door), in the Hammer's Building tab next to the
+ladders. Each reads as its own door: planks, a gate, poles, iron bars, iron-strapped planks, a panel or flametal plates.
+
+| Door | Trapdoor | Cellar door |
+|---|---|---|
+| Wood Door, Wood Gate, Roundpole Gate, Iron Gate, Darkwood Gate, Timberwood Gate, Hexagonal Gate, Ashwood Door, Flametal Gate | the door's own cost and station | twice the door's cost, same station |
+
+- **Opening:** Use opens and closes it, at the matching door's speed and with its sound. A lid or leaf waits instead
+  of swinging into a player, a creature, an item, a cart or a building piece.
+- **With a ladder:** aim a ladder at the frame in Auto or Top and it hangs inside the opening. You can open and close
+  the lid from the ladder without letting go, and climb out only while it is open; a closed one holds you below.
+- **The cellar door** is low at the front and 1.76 m tall at the back, open underneath, so a stair built down from
+  the front passes under it, and the front is a step you walk over.
+
+## Railings
+
+Railings snap along a stair's side edge, a floor's edge or another railing, in **wood, copper, iron, darkwood,
+ashwood, flametal, dvergr and log**. Wood and the other woods are plain, copper has twisted balusters with a knuckle,
+and iron and flametal have twisted bars, scrolls and finials.
+
+| Piece | Fits |
+|---|---|
+| Half … Railing | 1 m of level floor, a landing's end |
+| … Railing | 2 m of level floor |
+| 27 … Stair Railing | the game's stairs (26.57 degrees) |
+| 45 … Stair Railing | the step ladder (45 degrees) |
+| … Newel Post | corners and the ends of a run |
+
+Wood railings cost 1 Wood (half), 2 (level) or 3 (stair) at the Workbench; copper 1 Copper and 1 Wood, iron 1 Iron
+and 1 Wood, at the Forge; the other materials cost what the game's own pole of that material costs.
+
+## The Iron Shovel: digging basements
+
+Craft the **Iron Shovel** at the Forge from 10 Iron and 4 Wood, once you have found Iron. Equip it like a weapon.
+
+| Action | Default key | What it does |
+|---|---|---|
+| Choose a size | **Mouse wheel** | 1x1x1, 2x2x1, 2x2x2, 4x4x1, 4x4x2 or 4x4x4 m. The camera does not zoom while you choose. |
+| Dig | **Left mouse** (Attack) | Digs the hole the outline shows. |
+| Fill back in | **Middle mouse** (Secondary attack), twice | Fills your last hole back in, exactly as the ground was, newest first, free. |
+
+- **The outline** shows the hole before you dig: green when it will dig, amber when there is nothing to dig, red with
+  the reason when it cannot. The bottom panel names the size and what it is for, as the hoe's does.
+- **Lining up:** a hole lines up edge to edge with the holes you just dug beside it, so a row of rooms stays straight
+  even with mixed sizes; with none beside it, it snaps to a grid of its own size.
+- **Straight earth sides:** the ground cannot be cut vertically, so each hole's sloping 1 m border is filled with
+  earth blocks in the terrain's own rock, up to the ground beside it. Build a wall against the face; the blocks have
+  corner snap points.
+- **Digging sideways:** aim at an earth block and dig: the new hole opens flush beside the old one and takes the
+  blocks it covers out, so you can tunnel out rooms one hole at a time.
+- **Clearing earth:** the hoe's Level and Raise and the pickaxe's dig remove the blocks they reach, so separate holes
+  can be joined into one dug-out area; a pickaxe breaks a block in one hit, and the hammer removes it. No refund.
+- **What it clears:** plants and stones in the way are picked for you; rocks, stumps, bushes, logs and trees are
+  removed. Carts, ships and fixed scenery stop a dig; building pieces are left alone.
+- **Rules:** the ground must be within 8 m and the first thing you see; no digging from a ladder, inside a ward that
+  does not grant you access, or in no-build areas. A dig costs stamina and durability by the ground it removes: 10
+  stamina plus 0.3 per cubic metre (at most 60) and 0.16 durability per cubic metre. The game stops 8 m below
+  natural ground, so the deepest floor is 7 m down.
+- **Filling back in** is refused once the ground has changed or something stands in the hole. Up to 10 holes can be
+  filled back in, until you leave the world.
 
 ## Multiplayer
 

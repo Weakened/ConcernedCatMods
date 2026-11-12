@@ -5,7 +5,7 @@ using TheConcernedCat.ConcernedLadders.Domain.Doors;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Families;
 
-/// <summary>The family ladders' setting (#558). On by default from Concerned Builder 1.0.0 (owner 2026-11-12): with it
+/// <summary>The family ladders' setting (#558). On by default from Concerned Builder 1.1.0 (owner 2026-11-12): with it
 /// off only the three original ladders are registered, exactly as in Concerned Ladders 1.0.0.</summary>
 internal static class LadderFamilySettings
 {

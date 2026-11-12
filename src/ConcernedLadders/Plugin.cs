@@ -27,10 +27,10 @@ namespace TheConcernedCat.ConcernedLadders;
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
-    // The display name (#590): "Concerned Builder" from its 1.0.0. The GUID above keeps its 1.0 value on purpose, so the
+    // The display name (#590): "Concerned Builder" from 1.1.0, its first version. The GUID above keeps its 1.0 value on purpose, so the
     // config file and every setting carry over, and an old and a new package side by side cannot load the plugin twice.
     public const string PluginName = "Concerned Builder";
-    public const string PluginVersion = "1.0.0";
+    public const string PluginVersion = "1.1.0";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
@@ -150,7 +150,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     /// <summary>Iron Shovel excavation (#487 slices 2 to 4). The terrain operations register on every peer, because the
     /// tile owner applies them. The Iron Shovel item, its attack input, its placement preview and the read-only console
-    /// diagnostic exist only when its switch is on (on by default from Concerned Builder 1.0.0); with it off nothing is added. A fault here never stops
+    /// diagnostic exist only when its switch is on (on by default from Concerned Builder 1.1.0); with it off nothing is added. A fault here never stops
     /// the ladders.</summary>
     private void InstallExcavation()
     {

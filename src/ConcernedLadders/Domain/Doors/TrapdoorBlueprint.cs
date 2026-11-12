@@ -4,7 +4,7 @@ using TheConcernedCat.Ladders;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
-/// <summary>The trapdoor setting (CL-004 #485, slice 2). On by default from Concerned Builder 1.0.0 (owner 2026-11-12,
+/// <summary>The trapdoor setting (CL-004 #485, slice 2). On by default from Concerned Builder 1.1.0 (owner 2026-11-12,
 /// after testing it in game): with it off no trapdoor is cloned, no token is added and the hammer menu is exactly as
 /// before. The lid follows the native door state (slice 3); a ladder hangs in a hatch and climbs through an open one
 /// (slice 4).</summary>
