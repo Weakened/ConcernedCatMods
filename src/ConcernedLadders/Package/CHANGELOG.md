@@ -50,10 +50,10 @@ version and the same values for these settings.
   game.
 - Railings (#556), behind `Railings` / `Enabled` (off by default). Adds
   railings in eight materials - wood, copper, iron, darkwood, ashwood,
-  flametal, dvergr and log - each level, for the game's stairs (26.57
-  degrees), for the step ladder (45 degrees), for the left and right spiral
-  stairs, and as a newel post. They snap along a stair's side edge, a spiral
-  stair's outer edge, a floor's edge or another railing. Wood and the
+  flametal, dvergr and log - each level (2 m and 1 m), for the game's
+  stairs (26.57 degrees), for the step ladder (45 degrees), and as a newel
+  post. They snap along a stair's side edge, a floor's edge or another
+  railing. Wood and the
   vanilla woods are plain, copper has twisted balusters with a knuckle, and
   iron and flametal have twisted bars, scrolls and finials. The vanilla
   materials cost what the game's own pole of that material costs. Turning the setting off again, or uninstalling,
