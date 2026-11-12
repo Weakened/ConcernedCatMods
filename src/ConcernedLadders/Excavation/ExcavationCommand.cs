@@ -56,7 +56,7 @@ internal sealed class ExcavationCommand : ConsoleCommand
         ExcavationRuntime? runtime = _current();
         if (runtime == null) return "Excavation is unavailable this session (it stopped during start-up; see the log). Nothing is changed.";
         if (verb == "status") return runtime.Status();
-        if (verb == "dig") return "The console cannot dig. Equip the Iron Shovel: attack sets the corners, the wheel the depth, and attack digs.";
+        if (verb == "dig") return "The console cannot dig. Equip the Iron Shovel: the wheel chooses the size, and attack digs.";
         if (verb != "plan") return Help;
         return runtime.PlanAtAim();
     }

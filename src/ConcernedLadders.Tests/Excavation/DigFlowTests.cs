@@ -2,133 +2,118 @@ using TheConcernedCat.ConcernedLadders.Domain.Excavation;
 
 namespace TheConcernedCat.ConcernedLadders.Tests.Excavation;
 
-/// <summary>#551 slices 2 and 3, the reworked dig end to end in game-free form: the presses (corner, corner, depth, dig;
-/// back; undo armed then confirmed), the preview's confirmation rule and flat outline, the single batch in flight, the
+/// <summary>#551 slices 2 and 3 and #574, the dig end to end in game-free form: the presses (a size on the wheel, dig; undo
+/// armed then confirmed), where a hole snaps, the preview's confirmation rule and flat outline, the single batch in flight, the
 /// planner gate, and - on the transcribed engine (<see cref="VanillaTerrainModel"/>) - that the single-vertex batch makes
 /// exactly the planned floor and its undo restores exactly the ground before. In game: OWNER GO-AROUND PENDING.</summary>
 public sealed class DigFlowTests
 {
     private const float Ground = 50f;
 
+    private static readonly DigSize Size = new DigSize(2, 2);
+
+    private static (int, int, int, int, int) Hole(DigFootprint footprint) =>
+        (footprint.MinX, footprint.MinZ, footprint.MaxX, footprint.MaxZ, footprint.Depth);
+
     // ---- The presses ----
 
     [Fact]
-    public void CornerThenCornerThenDepthThenDig()
+    public void TheSizesAreTheOwnersSixSmallestFirstAndTheWheelWrapsThroughThem()
     {
-        var session = new DigSession();
+        // #574, owner 2026-11-11: the three cubes and three shallower ones.
+        Assert.Equal(new[] { "1x1x1", "2x2x1", "2x2x2", "4x4x1", "4x4x2", "4x4x4" }, DigSizes.All.Select(size => size.Name));
+        Assert.All(DigSizes.All, size =>
+        {
+            Assert.InRange(size.Side, DigFootprint.MinimumSide, DigFootprint.MaximumSide);
+            Assert.InRange(size.Depth, DigFootprint.MinimumDepth, DigFootprint.MaximumDepth);
+        });
+        var session = new DigSession(new DigHistory());
+        Assert.Equal("2x2x2", session.Size.Name);
+        Assert.False(session.ChangeSize(0));
+        Assert.True(session.ChangeSize(1));
+        Assert.Equal("4x4x1", session.Size.Name);
+        session.ChangeSize(3);
+        Assert.Equal("1x1x1", session.Size.Name); // wrapped past 4x4x4
+        session.ChangeSize(-1);
+        Assert.Equal("4x4x4", session.Size.Name);
+        // The size is kept when the shovel is put away.
+        session.Reset();
+        Assert.Equal("4x4x4", session.Size.Name);
+    }
+
+    [Fact]
+    public void OnePressDigsTheSizeShownAndNothingWithoutAnAim()
+    {
+        var session = new DigSession(new DigHistory());
         Assert.Equal(DigAction.None, session.Primary()); // nothing aimed at yet
-        session.Aim(10, 20);
-        Assert.Equal((10, 20, 12, 22), Box(session.Footprint)); // a 2 x 2 m square follows the aim
-        Assert.Equal(DigAction.Advanced, session.Primary());
-        Assert.Equal(DigStage.SecondCorner, session.Stage);
-        session.Aim(15, 17);
-        Assert.Equal((10, 17, 15, 20), Box(session.Footprint)); // stretched from the corner to the aim
-        Assert.Equal(DigAction.Advanced, session.Primary());
-        Assert.Equal(DigStage.Depth, session.Stage);
-        session.Aim(0, 0); // the aim no longer moves the rectangle
-        Assert.Equal((10, 17, 15, 20), Box(session.Footprint));
-        Assert.False(session.FollowsAim);
-        Assert.Equal(DigAction.Dig, session.Primary());
-        session.Dug();
-        Assert.Equal(DigStage.FirstCorner, session.Stage);
-    }
-
-    [Fact]
-    public void TheSecondCornerIsSetAsClampedSoWhatIsDugIsWhatWasShown()
-    {
-        var session = new DigSession();
-        session.Aim(0, 0);
-        session.Primary();
-        session.Aim(30, -30); // beyond 8 m on both sides
-        DigFootprint shown = session.Footprint;
-        session.Primary();
-        Assert.Equal(shown, session.Footprint);
-        Assert.Equal((0, -8, 8, 0), Box(session.Footprint));
-    }
-
-    [Fact]
-    public void ReadyMadeCubesAreTheirSizeDeepSnapToTheirOwnGridAndDigAtOnce()
-    {
-        var session = new DigSession();
-        Assert.Equal(DigPreset.Free, session.Preset);
-        Assert.True(session.ChangePreset(1));
-        Assert.Equal(DigPreset.Cube1, session.Preset);
-        session.ChangePreset(1);
-        Assert.Equal(DigPreset.Cube2, session.Preset);
         session.Aim(7, -3);
-        // A 2 m cube on the 2 m grid: whatever vertex is aimed in a cell, the cube is that cell's.
-        Assert.Equal((6, -4, 8, -2), Box(session.Footprint));
-        Assert.Equal(2, session.Footprint.Depth);
-        session.Aim(6, -4);
-        Assert.Equal((6, -4, 8, -2), Box(session.Footprint));
-        session.Aim(8, -4);
-        Assert.Equal((8, -4, 10, -2), Box(session.Footprint)); // the neighbouring cube shares the edge x 8: they tile
+        // A 2x2x2 on the world's 2 m grid: whatever vertex is aimed in a cell, the hole is that cell's.
+        Assert.Equal((6, -4, 8, -2, 2), Hole(session.Footprint));
         Assert.Equal(DigAction.Dig, session.Primary());
-        Assert.Equal(DigStage.FirstCorner, session.Stage);
-        session.ChangePreset(1);
-        Assert.Equal(DigPreset.Cube4, session.Preset);
-        session.Aim(-1, 5);
-        Assert.Equal((-4, 4, 0, 8, 4), (session.Footprint.MinX, session.Footprint.MinZ, session.Footprint.MaxX, session.Footprint.MaxZ, session.Footprint.Depth));
-        session.ChangePreset(1);
-        Assert.Equal(DigPreset.Free, session.Preset);
-        session.ChangePreset(-1);
-        Assert.Equal(DigPreset.Cube4, session.Preset);
-        // The size is chosen only at the first stage.
-        session.ChangePreset(1);
-        session.Primary();
-        Assert.False(session.ChangePreset(1));
-        Assert.Equal((1, 1, 1), (DigSession.Cube(0, 0, 1).Width, DigSession.Cube(0, 0, 1).Length, DigSession.Cube(0, 0, 1).Depth));
-    }
-
-    [Fact]
-    public void TheCubePromptAndTheClearingFitOnOneLine()
-    {
-        DigFootprint cube = DigSession.Cube(0, 0, 4);
-        string prompt = DigText.Prompt(DigStage.FirstCorner, cube, DigPreset.Cube4);
-        Assert.Equal("4x4x4 m cube: click to dig, scroll for size.", prompt);
-        Assert.Equal("4x4x4 m cube: click to dig, scroll for size. Clears 3.", DigText.WithClearing(prompt, 3));
-        Assert.Equal(prompt, DigText.WithClearing(prompt, 0));
-        string longest = DigText.Prompt(DigStage.Depth, DigFootprint.FromCorners(0, 0, 8, 8, 7));
-        Assert.True(DigText.WithClearing(longest, 120).Length <= DigText.MaximumLength);
-        Assert.Equal("Set a corner, or scroll for a 1, 2 or 4 m cube.", DigText.Prompt(DigStage.FirstCorner, cube));
-    }
-
-    [Fact]
-    public void TheWheelSetsTheDepthOnlyInTheDepthStageAndWithinItsRange()
-    {
-        var session = new DigSession();
-        Assert.False(session.ChangeDepth(1)); // not in the depth stage yet
-        session.Aim(0, 0);
-        session.Primary();
-        session.Aim(3, 3);
-        session.Primary();
-        Assert.Equal(DigFootprint.DefaultDepth, session.Depth);
-        Assert.True(session.ChangeDepth(1));
-        Assert.Equal(3, session.Footprint.Depth);
-        for (int i = 0; i < 20; i++) session.ChangeDepth(1);
-        Assert.Equal(DigFootprint.MaximumDepth, session.Depth);
-        Assert.False(session.ChangeDepth(1));
-        for (int i = 0; i < 20; i++) session.ChangeDepth(-1);
-        Assert.Equal(DigFootprint.MinimumDepth, session.Depth);
-        // The depth is kept for the next hole.
-        session.ChangeDepth(2);
         session.Dug();
-        Assert.Equal(3, session.Depth);
+        Assert.Equal(DigAction.Dig, session.Primary()); // the next hole needs no other press
+        session.LoseAim();
+        Assert.Equal(DigAction.None, session.Primary());
     }
 
     [Fact]
-    public void SecondaryStepsBackAndOnlyFromTheStartArmsThenConfirmsUndo()
+    public void WithNoHoleNearAHoleSnapsToTheWorldGridOfItsOwnSide()
     {
-        var session = new DigSession();
+        var none = new List<DigFootprint>();
+        Assert.Equal((6, -4, 8, -2, 2), Hole(DigSnap.Place(6, -4, new DigSize(2, 2), none)));
+        Assert.Equal((8, -4, 10, -2, 2), Hole(DigSnap.Place(8, -4, new DigSize(2, 2), none))); // shares the edge x 8: they tile
+        Assert.Equal((-4, 4, 0, 8, 4), Hole(DigSnap.Place(-1, 5, new DigSize(4, 4), none)));
+        Assert.Equal((5, 5, 6, 6, 1), Hole(DigSnap.Place(5, 5, new DigSize(1, 1), none)));
+        Assert.Equal((4, 4, 8, 8, 1), Hole(DigSnap.Place(7, 7, new DigSize(4, 1), none)));
+    }
+
+    [Fact]
+    public void AHoleNearOneAlreadyDugLinesUpWithItEdgeToEdge()
+    {
+        // A 4x4 dug off the world's 4 m grid, at x 1..5, z 1..5 (as a 1 m hole and its neighbours could leave one).
+        var dug = new List<DigFootprint> { DigFootprint.FromCorners(1, 1, 5, 5, 2) };
+        // A 4x4 aimed just east of it lands flush against its east edge, in the same row: not on the world grid at 4..8.
+        Assert.Equal((5, 1, 9, 5, 2), Hole(DigSnap.Place(6, 2, new DigSize(4, 2), dug)));
+        // A 2x2 aimed north of it lands flush against its north edge, lined up with its west edge.
+        Assert.Equal((1, 5, 3, 7, 2), Hole(DigSnap.Place(2, 6, new DigSize(2, 2), dug)));
+        // Inside it, a deeper hole takes the same lattice (a 4x4x4 aimed inside is exactly the hole there).
+        Assert.Equal((1, 1, 5, 5, 4), Hole(DigSnap.Place(3, 3, new DigSize(4, 4), dug)));
+        // Farther than one hole-width away it falls back to the world grid.
+        Assert.Equal((12, 0, 14, 2, 2), Hole(DigSnap.Place(12, 0, new DigSize(2, 2), dug)));
+    }
+
+    [Fact]
+    public void TheNewestNearHoleWinsAndTheSessionSnapsToWhatTheHistoryRemembers()
+    {
+        var dug = new List<DigFootprint> { DigFootprint.FromCorners(0, 0, 2, 2, 2), DigFootprint.FromCorners(3, 0, 5, 2, 2) };
+        // Both are within 2 m of (2, 0); the newer one, at x 3, sets the lattice.
+        Assert.Equal((1, 0, 3, 2, 2), Hole(DigSnap.Place(2, 0, new DigSize(2, 2), dug)));
+        var history = new DigHistory();
+        var session = new DigSession(history);
+        session.Aim(6, 1);
+        Assert.Equal((6, 0, 8, 2, 2), Hole(session.Footprint)); // nothing remembered: the world grid
+        history.Push(new DigRecord(DigFootprint.FromCorners(3, 0, 5, 2, 2), new[] { new DigVertex(3, 0, Ground, Ground - 2f) }));
+        Assert.Equal((5, 0, 7, 2, 2), Hole(session.Footprint)); // now flush against the remembered hole
+        history.Clear();
+        Assert.Equal((6, 0, 8, 2, 2), Hole(session.Footprint));
+    }
+
+    [Fact]
+    public void ThePromptAndTheClearingFitOnOneLine()
+    {
+        string prompt = DigText.Prompt(new DigSize(4, 4));
+        Assert.Equal("4x4x4 m: click to dig, scroll for size.", prompt);
+        Assert.Equal("4x4x4 m: click to dig, scroll for size. Clears 3.", DigText.WithClearing(prompt, 3));
+        Assert.Equal(prompt, DigText.WithClearing(prompt, 0));
+        Assert.All(DigSizes.All, size => Assert.True(DigText.WithClearing(DigText.Prompt(size), 120).Length <= DigText.MaximumLength));
+    }
+
+    [Fact]
+    public void SecondaryArmsThenConfirmsUndo()
+    {
+        var session = new DigSession(new DigHistory());
         session.Aim(0, 0);
-        session.Primary();
-        session.Aim(4, 4);
-        session.Primary();
-        Assert.Equal(DigAction.SteppedBack, session.Secondary(10f));
-        Assert.Equal(DigStage.SecondCorner, session.Stage);
-        Assert.Equal(DigAction.SteppedBack, session.Secondary(10.1f));
-        Assert.Equal(DigStage.FirstCorner, session.Stage);
-        // Spamming back from the depth stage reaches the start, and the next press only arms: the line says so first.
+        // The first press only arms: the line says what the second will do.
         Assert.Equal(DigAction.UndoArmed, session.Secondary(10.2f));
         Assert.True(session.UndoArmed(11f));
         Assert.Equal(DigAction.Undo, session.Secondary(11f));
@@ -138,18 +123,17 @@ public sealed class DigFlowTests
     [Fact]
     public void AnArmedUndoExpiresAndAnyOtherPressDisarmsIt()
     {
-        var session = new DigSession();
+        var session = new DigSession(new DigHistory());
         Assert.Equal(DigAction.UndoArmed, session.Secondary(5f));
         Assert.Equal(DigAction.UndoArmed, session.Secondary(5f + DigSession.UndoConfirmSeconds + 0.01f)); // too late: armed again
         Assert.Equal(DigAction.Undo, session.Secondary(6f + DigSession.UndoConfirmSeconds));
         Assert.Equal(DigAction.UndoArmed, session.Secondary(20f));
         session.Aim(0, 0);
-        session.Primary(); // a corner disarms
-        session.Secondary(20.5f); // back to the start
+        session.Primary(); // a dig press disarms
         Assert.Equal(DigAction.UndoArmed, session.Secondary(20.6f));
         session.Reset(); // the shovel put away disarms
         Assert.Equal(DigAction.UndoArmed, session.Secondary(20.7f));
-        Assert.Equal(DigAction.None, new DigSession().Secondary(float.NaN));
+        Assert.Equal(DigAction.None, new DigSession(new DigHistory()).Secondary(float.NaN));
     }
 
     [Theory]
@@ -197,15 +181,15 @@ public sealed class DigFlowTests
         DigPlan plan = Ready(out _);
         var shown = new DigPreviewState();
         Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(100, 10f));
-        shown.Show(DigStage.Depth, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 100, 10f);
+        shown.Show(Size, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 100, 10f);
         Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(100, 10f + ExcavationPreviewRules.ConfirmDwellSeconds / 2f));
         Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(101, 10f + ExcavationPreviewRules.ConfirmDwellSeconds + 0.01f));
         Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(100 + ExcavationPreviewRules.MaximumFrameAge + 1, 20f));
         // The same plan drawn again keeps the dwell; a different depth restarts it.
-        shown.Show(DigStage.Depth, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 110, 11f);
+        shown.Show(Size, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 110, 11f);
         Assert.Equal(ExcavationCommitRefusal.None, shown.Confirm(110, 11f));
         DigPlan deeper = Ready(out _, depth: 3);
-        shown.Show(DigStage.Depth, deeper.Footprint, true, deeper, ExcavationCommitRefusal.None, "line", 111, 11.01f);
+        shown.Show(Size, deeper.Footprint, true, deeper, ExcavationCommitRefusal.None, "line", 111, 11.01f);
         Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(111, 11.02f));
         shown.Hide();
         Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(112, 30f));
@@ -216,14 +200,14 @@ public sealed class DigFlowTests
     {
         DigPlan plan = Ready(out _);
         var shown = new DigPreviewState();
-        shown.Show(DigStage.Depth, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 1, 1f);
+        shown.Show(Size, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 1, 1f);
         Assert.True(shown.Matches(Ready(out _)));
         Assert.False(shown.Matches(Ready(out _, depth: 3)));
         Assert.False(shown.Matches(Ready(out _, ground: Ground + 0.5f)));
         Assert.False(shown.Matches(Plan(DigFootprint.FromCorners(0, 0, 4, 3, 2), (x, z) => Ground, out _)));
-        shown.Show(DigStage.Depth, plan.Footprint, false, default, ExcavationCommitRefusal.TerrainUnreadable, "line", 2, 2f);
+        shown.Show(Size, plan.Footprint, false, default, ExcavationCommitRefusal.TerrainUnreadable, "line", 2, 2f);
         Assert.False(shown.Matches(plan), "Nothing planned was shown.");
-        shown.ShowNoTarget(DigStage.FirstCorner, ExcavationAim.TooFar, "line", 3, 3f);
+        shown.ShowNoTarget(Size, ExcavationAim.TooFar, "line", 3, 3f);
         Assert.False(shown.HasTarget);
         Assert.Equal(ExcavationCommitRefusal.NoPreview, shown.Confirm(3, 9f));
     }
@@ -233,7 +217,7 @@ public sealed class DigFlowTests
     {
         DigPlan plan = Ready(out _);
         var shown = new DigPreviewState();
-        shown.Show(DigStage.Depth, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 1, 1f);
+        shown.Show(Size, plan.Footprint, true, plan, ExcavationCommitRefusal.None, "line", 1, 1f);
         int version = shown.Version;
         shown.Say("other");
         Assert.True(shown.Version > version);

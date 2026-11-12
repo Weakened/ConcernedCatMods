@@ -33,6 +33,9 @@ internal sealed class DigHistory
 
     internal DigRecord? Last => _records.Count == 0 ? null : _records[_records.Count - 1];
 
+    /// <summary>The remembered digs, oldest first: what a new hole snaps to (#574).</summary>
+    internal IReadOnlyList<DigRecord> Records => _records;
+
     internal void Push(DigRecord record)
     {
         if (record == null) throw new ArgumentNullException(nameof(record));

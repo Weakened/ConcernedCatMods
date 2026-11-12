@@ -15,9 +15,9 @@ namespace TheConcernedCat.ConcernedLadders.Excavation;
 /// no height, delta, ZDO or RPC of its own and removes nothing.
 ///
 /// <para>The only triggers are the equipped Iron Shovel's own Attack and Secondary Attack presses
-/// (<see cref="ExcavationShovelInput"/>) and the wheel in the depth stage (<see cref="ExcavationPreview"/>), driving the
-/// game-free <see cref="DigSession"/>: corner, corner, depth, dig; Secondary steps back, and with nothing to step back to
-/// arms and then confirms an undo of the last dig. A dig charges the shovel's durability and the player's stamina once, here
+/// (<see cref="ExcavationShovelInput"/>) and the wheel choosing a size (<see cref="ExcavationPreview"/>), driving the
+/// game-free <see cref="DigSession"/> (#574): choose a size, aim, dig; Secondary arms and then confirms an undo of the last
+/// dig. A dig charges the shovel's durability and the player's stamina once, here
 /// and nowhere else, scaled by the ground it removes (<see cref="DigCost"/>); an undo charges and refunds nothing.</para>
 ///
 /// <para>The order of a dig: switch, ladder, the preview confirmation, then (in <see cref="Evaluate"/>) start-up probe,
@@ -39,13 +39,13 @@ internal sealed class ExcavationRuntime : IDisposable
     private readonly DigSamples _check = new DigSamples();
     private readonly DigSamples _previewSamples = new DigSamples();
     private readonly DigInFlight _inFlight = new DigInFlight();
-    private readonly DigSession _session = new DigSession();
     private readonly DigHistory _history = new DigHistory();
+    private readonly DigSession _session;
     private readonly DigPreviewState _shown = new DigPreviewState();
     private readonly DigPreviewShape _shape = new DigPreviewShape();
     private readonly List<GameObject> _pick = new List<GameObject>();
     private readonly List<GameObject> _remove = new List<GameObject>();
-    private DigStage _lastStage;
+    private DigSize _lastSize;
     private DigFootprint _lastFootprint;
     private float _lastPreviewRead = float.NaN;
     private long _previewReads;
@@ -58,6 +58,7 @@ internal sealed class ExcavationRuntime : IDisposable
         _log = log;
         Enabled = enabled;
         _ops = new ExcavationTerrainOps(log);
+        _session = new DigSession(_history);
     }
 
     /// <summary>The opt-in switch, read once at start-up.</summary>
@@ -96,8 +97,7 @@ internal sealed class ExcavationRuntime : IDisposable
     {
         string probe = _reader.Missing ?? _world.Missing ?? (_disposed ? "stopped" : _faulted ? "faulted" : "ok");
         string state = "Excavation is " + (Enabled ? "enabled" : "off") + "; probe " + probe + "; terrain ops " +
-                       (_ops.IsRegistered() ? "registered" : "NOT registered") + "; stage " + _session.Stage + ", depth " +
-                       N(_session.Depth) + " m; " + N(_history.Count) + " dig(s) can be undone; preview terrain reads " +
+                       (_ops.IsRegistered() ? "registered" : "NOT registered") + "; size " + _session.Size.Name + " m; " + N(_history.Count) + " dig(s) can be undone; preview terrain reads " +
                        _previewReads.ToString(CultureInfo.InvariantCulture) + ".";
         if (_inFlight.IsActive) state += " Waiting on a " + (_inFlight.Kind == DigFlightKind.Dig ? "dig" : "fill") + ".";
         return state;
@@ -125,17 +125,10 @@ internal sealed class ExcavationRuntime : IDisposable
         _session.Reset();
     }
 
-    /// <summary>The wheel in the depth stage: deeper (positive) or shallower. Changes nothing but the depth shown.</summary>
-    internal void ChangeDepth(int steps)
+    /// <summary>The wheel (#574): the next or previous ready-made size. Changes nothing but the size shown.</summary>
+    internal void ChangeSize(int steps)
     {
-        if (_session.ChangeDepth(steps)) _lastPreviewRead = float.NaN;
-    }
-
-    /// <summary>The wheel at the first stage (#567): the next or previous ready-made cube, or the free size. Changes nothing
-    /// but the size shown.</summary>
-    internal void ChangePreset(int steps)
-    {
-        if (_session.ChangePreset(steps)) _lastPreviewRead = float.NaN;
+        if (_session.ChangeSize(steps)) _lastPreviewRead = float.NaN;
     }
 
     /// <summary>Refreshes what the preview shows. <b>Read-only</b>: it aims, reads the terrain into the preview's own grid,
@@ -149,17 +142,16 @@ internal sealed class ExcavationRuntime : IDisposable
         ExcavationAim aim = ExcavationAim.Ok;
         Collider? blocker = null;
         float groundY = float.NaN;
-        if (available && _session.FollowsAim)
+        if (available)
         {
-            float reach = _session.Stage == DigStage.SecondCorner ? ExcavationLimits.CornerReach : ExcavationLimits.Reach;
-            aim = Aim(player, reach, out int x, out int z, out groundY, out blocker);
+            aim = Aim(player, out int x, out int z, out groundY, out blocker);
             if (aim == ExcavationAim.Ok) _session.Aim(x, z);
             else _session.LoseAim();
         }
 
         DigFootprint footprint = _session.Footprint;
-        bool changed = !_shown.Visible || _session.Stage != _lastStage || !footprint.Equals(_lastFootprint) ||
-                       (_session.FollowsAim && _shown.HasTarget != _session.HasAim);
+        bool changed = !_shown.Visible || !_session.Size.Equals(_lastSize) || !footprint.Equals(_lastFootprint) ||
+                       _shown.HasTarget != _session.HasAim;
         if (!ExcavationPreviewRules.ShouldRefresh(changed, now - _lastPreviewRead))
         {
             _shown.Touch(frame);
@@ -167,25 +159,25 @@ internal sealed class ExcavationRuntime : IDisposable
         }
 
         _lastPreviewRead = now;
-        _lastStage = _session.Stage;
+        _lastSize = _session.Size;
         _lastFootprint = footprint;
         _previewReads++;
         _shape.Clear();
         if (!available)
         {
-            _shown.ShowNoTarget(_session.Stage, ExcavationAim.NoPlayer, DigText.Refusal(ExcavationCommitRefusal.Unavailable, ExcavationReadFault.None, default, null), frame, now);
+            _shown.ShowNoTarget(_session.Size, ExcavationAim.NoPlayer, DigText.Refusal(ExcavationCommitRefusal.Unavailable, ExcavationReadFault.None, default, null), frame, now);
             return true;
         }
 
         if (OnLadder())
         {
-            _shown.ShowNoTarget(_session.Stage, ExcavationAim.Ok, DigText.Refusal(ExcavationCommitRefusal.OnLadder, ExcavationReadFault.None, default, null), frame, now);
+            _shown.ShowNoTarget(_session.Size, ExcavationAim.Ok, DigText.Refusal(ExcavationCommitRefusal.OnLadder, ExcavationReadFault.None, default, null), frame, now);
             return true;
         }
 
-        if (_session.FollowsAim && !_session.HasAim)
+        if (!_session.HasAim)
         {
-            _shown.ShowNoTarget(_session.Stage, aim, DigText.Aim(aim, NameOf(blocker)), frame, now);
+            _shown.ShowNoTarget(_session.Size, aim, DigText.Aim(aim, NameOf(blocker)), frame, now);
             return true;
         }
 
@@ -195,26 +187,23 @@ internal sealed class ExcavationRuntime : IDisposable
         else _shape.BuildFootprint(footprint, groundY);
         string line = Line(refusal, fault, plan, obstruction);
         if (refusal == ExcavationCommitRefusal.None) line = DigText.WithClearing(line, cleared);
-        _shown.Show(_session.Stage, footprint, planned, plan, refusal, line, frame, now);
+        _shown.Show(_session.Size, footprint, planned, plan, refusal, line, frame, now);
         return true;
     }
 
-    /// <summary>The line the HUD shows for a stage: the refusal if there is one, otherwise the plan's warning or the
-    /// prompt.</summary>
+    /// <summary>The line the HUD shows: the refusal if there is one, otherwise the plan's warning or the prompt.</summary>
     private string Line(ExcavationCommitRefusal refusal, ExcavationReadFault fault, in DigPlan plan, string? obstruction)
     {
-        // Before the last stage a refusal is only a hint about this spot: the corner can still be set and moved.
-        if (refusal != ExcavationCommitRefusal.None && refusal != ExcavationCommitRefusal.NothingToDig &&
-            !(refusal == ExcavationCommitRefusal.NotEnoughStamina && _session.Stage != DigStage.Depth))
+        if (refusal != ExcavationCommitRefusal.None && refusal != ExcavationCommitRefusal.NothingToDig)
         {
             return DigText.Refusal(refusal, fault, plan, obstruction);
         }
 
-        // Nothing to dig, or a ready floor below the water, says so; otherwise the stage's prompt.
-        return DigText.Plan(plan) ?? DigText.Prompt(_session.Stage, _session.Footprint, _session.Preset);
+        // Nothing to dig, or a ready floor below the water, says so; otherwise the prompt.
+        return DigText.Plan(plan) ?? DigText.Prompt(_session.Size);
     }
 
-    /// <summary>The Attack press: sets a corner, or digs what the preview shows. Runs inside the game's own attack-input
+    /// <summary>The Attack press: digs what the preview shows. Runs inside the game's own attack-input
     /// step, which the game gives no press while chat, the console, a menu, the inventory or the map has the input.</summary>
     internal string Primary(Player player, ItemDrop.ItemData shovel)
     {
@@ -227,7 +216,6 @@ internal sealed class ExcavationRuntime : IDisposable
             return action switch
             {
                 DigAction.Dig => DigWithShovel(player, shovel),
-                DigAction.Advanced => string.Empty,
                 _ => DigText.Aim(_shown.Aim, null),
             };
         }
@@ -237,8 +225,7 @@ internal sealed class ExcavationRuntime : IDisposable
         }
     }
 
-    /// <summary>The Secondary Attack press: one stage back; with nothing to step back to, arms an undo, and a second press
-    /// within <see cref="DigSession.UndoConfirmSeconds"/> fills the last hole back in.</summary>
+    /// <summary>The Secondary Attack press: arms an undo, and a second press within <see cref="DigSession.UndoConfirmSeconds"/> fills the last hole back in.</summary>
     internal string Secondary(Player player, ItemDrop.ItemData shovel)
     {
         try
@@ -568,7 +555,7 @@ internal sealed class ExcavationRuntime : IDisposable
     /// triggers ignored. The first thing it meets must be terrain - so the shovel never digs through a wall, a floor or a rock
     /// it cannot reach - and that point must be within <see cref="ExcavationLimits.Reach"/> of the player's eyes. The point
     /// is snapped to the nearest lattice vertex; rectangles follow the world axes.</summary>
-    private ExcavationAim Aim(Player? player, float reach, out int x, out int z, out float groundY, out Collider? blocker)
+    private ExcavationAim Aim(Player? player, out int x, out int z, out float groundY, out Collider? blocker)
     {
         x = 0;
         z = 0;
@@ -595,7 +582,7 @@ internal sealed class ExcavationRuntime : IDisposable
             return ExcavationAim.Blocked;
         }
 
-        if (Vector3.Distance(player.m_eye.position, hit.point) > reach) return ExcavationAim.TooFar;
+        if (Vector3.Distance(player.m_eye.position, hit.point) > ExcavationLimits.Reach) return ExcavationAim.TooFar;
         x = ExcavationGeometry.SnapToVertex(hit.point.x);
         z = ExcavationGeometry.SnapToVertex(hit.point.z);
         groundY = hit.point.y;

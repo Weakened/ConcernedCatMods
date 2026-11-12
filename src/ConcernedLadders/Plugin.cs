@@ -170,7 +170,7 @@ public sealed class Plugin : BaseUnityPlugin
                 _excavation.Faulted = () => _shovel?.DisableRecipe();
                 _preview = _shovelInput != null ? new ExcavationPreview(message => Logger.LogInfo(message), _excavation) : null;
                 _preview?.Install();
-                ExcavationShovelInput.HoldCamera = () => _preview?.SettingDepth == true;
+                ExcavationShovelInput.HoldCamera = () => _preview?.UsingWheel == true;
             }
         }
         catch (Exception exception)

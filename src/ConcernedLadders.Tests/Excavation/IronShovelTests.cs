@@ -105,16 +105,18 @@ public sealed class IronShovelTests
     public void TheDescriptionStatesTheFlowAndTheNumbersTheGateUses()
     {
         string text = IronShovel.Description();
-        Assert.Contains("within 5 m", text);
-        Assert.Contains("Attack sets one corner, then the opposite one (1 to 8 m a side)", text);
-        Assert.Contains("ready-made 1, 2 or 4 m cube", text);
+        Assert.Contains("within 8 m", text);
+        // #574: the ready-made sizes, read from the same list the wheel steps through, and the snapping.
+        Assert.Contains("Scroll to choose its size (1x1x1, 2x2x1, 2x2x2, 4x4x1, 4x4x2, 4x4x4 m), and attack to dig it.", text);
+        Assert.Contains("lines up with the last holes you dug beside it", text);
         Assert.Contains("are picked or cleared", text);
-        Assert.Contains("scroll sets the depth (1 to 7 m)", text);
-        Assert.Contains("press it twice to fill your last hole back in", text);
+        Assert.DoesNotContain("corner", text);
+        Assert.Contains("Press secondary attack twice to fill your last hole back in", text);
+        Assert.Contains("Never removes anything built", text);
         Assert.Contains("Costs 10 stamina", text);
         Assert.Contains("at most 60", text);
         Assert.Contains("Filling a hole back in is free", text);
-        Assert.Equal("Set corner / dig", IronShovel.DigHintText);
-        Assert.Equal("Back / fill in (press twice)", IronShovel.SizeHintText);
+        Assert.Equal("Dig", IronShovel.DigHintText);
+        Assert.Equal("Fill in (press twice)", IronShovel.SizeHintText);
     }
 }

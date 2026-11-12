@@ -2,9 +2,8 @@ using System;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Excavation;
 
-/// <summary>The player-sized hole (#551, owner playtest 2026-11-10: "let the player define the size, first the ground
-/// cover and depth"): a rectangle of floor vertices on the 1 m lattice, from one corner the player set to the other,
-/// and a depth in whole metres. Floor vertices run from <see cref="MinX"/> to <see cref="MaxX"/> and
+/// <summary>A hole (#551; since #574 always one of the ready-made <see cref="DigSizes"/>, placed by <see cref="DigSnap"/>):
+/// a rectangle of floor vertices on the 1 m lattice, from one corner to the other, and a depth in whole metres. Floor vertices run from <see cref="MinX"/> to <see cref="MaxX"/> and
 /// <see cref="MinZ"/> to <see cref="MaxZ"/> inclusive, so the flat floor is <see cref="Width"/> by
 /// <see cref="Length"/> metres; the untouched ring the datum is read from is one vertex outside it.</summary>
 internal readonly struct DigFootprint : IEquatable<DigFootprint>
