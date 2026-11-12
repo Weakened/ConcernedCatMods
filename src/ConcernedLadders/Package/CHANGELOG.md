@@ -6,7 +6,7 @@
 package, `ConcernedBuilder`, for a mod that now builds more than ladders.
 It is the same plugin: its ID and config file are unchanged, so settings,
 placed ladders and the Climbing skill carry over. Install ConcernedBuilder
-and uninstall ConcernedLadders; do not keep both.
+and uninstall ConcernedLadders; do not keep both. It has a new icon (#592).
 
 Experimental additions for building basements, each behind its own
 setting that is **off by default**. They have been played only in
