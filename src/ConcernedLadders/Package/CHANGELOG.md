@@ -17,9 +17,9 @@ version and the same values for these settings.
   climber can open and close the lid from the ladder without letting go,
   climbs out through an open lid, and is held below a closed or closing one.
   Turning the setting off again, or uninstalling, makes the game delete placed
-  trapdoors, with no refund, the next time the world loads. The Wood Gate
-  trapdoor's lid is a gate of boards and rails, so it no longer looks the same
-  as the Wood trapdoor (#547). Not yet observed in game.
+  trapdoors, with no refund, the next time the world loads. Each trapdoor's
+  lid reads as its own door (#547, #555): planks, a gate, poles, iron bars,
+  iron-strapped planks, a panel, or flametal plates. Not yet observed in game.
 - Sloped cellar doors (CL-005, #486), behind `CellarDoors` / `Enabled` (off by
   default). Adds nine sloped 2 m cellar doors to the hammer, at twice the
   matching door's cost. Both leaves open and close together with the door's
@@ -33,8 +33,8 @@ version and the same values for these settings.
   uninstalling, makes the game delete placed cellar doors, with no refund, the
   next time the world loads. Shaped like a house's bulkhead door: the high end
   stands 1.76 m tall with a beam across it and is open below, so a stair built
-  down from the low end passes under it (#549). The Wood Gate cellar door's leaves are boards
-  and rails, unlike the Wood cellar door's solid leaves (#547). Not yet
+  down from the low end passes under it (#549). Each cellar door's leaves read
+  as its own door, as the trapdoors' lids do (#547, #555). Not yet
   observed in game.
 - Trapdoor and cellar door surfaces take their texture from the matching part
   of the door's own texture sheet (the Roundpole doors' bark, for example),

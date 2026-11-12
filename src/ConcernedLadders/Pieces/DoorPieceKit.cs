@@ -233,12 +233,12 @@ internal static class DoorPieceKit
     /// and region, rails in the donor frame's (#548). Visual only; the leaf's collider is built separately and is the
     /// same for every look.</summary>
     internal static void LeafVisuals(Transform parent, string name, ClimbPoint centre, ClimbPoint size, LeafLook look,
-        Material board, Material rail, DoorSurface surface, int layer)
+        Material board, Material rail, Material strap, DoorSurface surface, int layer)
     {
         foreach (LeafPiece piece in LeafPattern.Parts(name, centre, size, look))
         {
-            bool isRail = piece.Role == LeafPieceRole.Rail;
-            VisualBox(parent, piece.Name, piece.Centre, piece.Size, isRail ? rail : board, isRail ? surface.Frame : surface.Leaf, layer);
+            Material material = piece.Role == LeafPieceRole.Rail ? rail : piece.Role == LeafPieceRole.Strap ? strap : board;
+            VisualBox(parent, piece.Name, piece.Centre, piece.Size, material, piece.Role == LeafPieceRole.Rail ? surface.Frame : surface.Leaf, layer);
         }
     }
 

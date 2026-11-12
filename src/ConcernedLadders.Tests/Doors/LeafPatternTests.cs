@@ -26,18 +26,92 @@ public sealed class LeafPatternTests
     }
 
     [Fact]
-    public void OnlyTheWoodGateIsAGate()
+    public void EveryFamilyReadsAsItsOwnDoor()
     {
-        foreach (DoorFamily family in DoorFamilies.All)
+        // #555 (owner 2026-11-10): every door type has its bulkhead, and each reads as its door.
+        var expected = new Dictionary<string, LeafLook>
         {
-            Assert.Equal(family.Donor == "wood_gate" ? LeafLook.Gate : LeafLook.Solid, LeafPattern.For(family));
-        }
-
-        // The two families that share every donor material now differ in look.
+            ["wood_door"] = LeafLook.Planked,
+            ["wood_gate"] = LeafLook.Gate,
+            ["wood_fence_gate"] = LeafLook.Poles,
+            ["iron_grate"] = LeafLook.Bars,
+            ["darkwood_gate"] = LeafLook.Strapped,
+            ["stave_gate"] = LeafLook.Panelled,
+            ["piece_hexagonal_door"] = LeafLook.Panelled,
+            ["ashwood_door"] = LeafLook.Panelled,
+            ["flametal_gate"] = LeafLook.Plated,
+        };
+        foreach (DoorFamily family in DoorFamilies.All) Assert.Equal(expected[family.Donor], LeafPattern.For(family));
+        // The two families that share every donor material still differ in look.
         DoorFamily wood = DoorFamilies.All.Single(family => family.Donor == "wood_door");
         DoorFamily gate = DoorFamilies.All.Single(family => family.Donor == "wood_gate");
         Assert.Equal(TrapdoorBlueprint.MaterialsFor(wood).Lid, TrapdoorBlueprint.MaterialsFor(gate).Lid);
         Assert.NotEqual(LeafPattern.For(wood), LeafPattern.For(gate));
+    }
+
+    public static IEnumerable<object[]> LooksAndLeaves()
+    {
+        foreach (LeafLook look in Enum.GetValues(typeof(LeafLook)))
+            foreach (string leaf in new[] { "lid", "left", "right" }) yield return new object[] { (int)look, leaf };
+    }
+
+    [Theory]
+    [MemberData(nameof(LooksAndLeaves))]
+    public void EveryLookStaysInsideTheLeafsColliderBoxWithUniqueParts(int lookValue, string label)
+    {
+        (ClimbPoint centre, ClimbPoint size) = Box(label);
+        IReadOnlyList<LeafPiece> parts = LeafPattern.Parts("leaf", centre, size, (LeafLook)lookValue);
+        Assert.NotEmpty(parts);
+        Assert.Equal(parts.Count, parts.Select(part => part.Name).Distinct().Count());
+        foreach (LeafPiece part in parts)
+        {
+            Assert.True(part.Size.X > 0f && part.Size.Y > 0f && part.Size.Z > 0f, part.Name);
+            Inside(label + " " + part.Name, part.Centre.X - part.Size.X / 2f, part.Centre.X + part.Size.X / 2f, centre.X, size.X);
+            Inside(label + " " + part.Name, part.Centre.Y - part.Size.Y / 2f, part.Centre.Y + part.Size.Y / 2f, centre.Y, size.Y);
+            Inside(label + " " + part.Name, part.Centre.Z - part.Size.Z / 2f, part.Centre.Z + part.Size.Z / 2f, centre.Z, size.Z);
+        }
+    }
+
+    [Theory]
+    [InlineData("lid")]
+    [InlineData("left")]
+    public void EachLookHasItsDefiningFeature(string label)
+    {
+        (ClimbPoint centre, ClimbPoint size) = Box(label);
+        IReadOnlyList<LeafPiece> Of(LeafLook look) => LeafPattern.Parts("leaf", centre, size, look);
+        float top = centre.Y + size.Y / 2f;
+
+        // Planks: tight seams, more and wider than the gate's gaps would allow; poles: narrower still.
+        int planks = Of(LeafLook.Planked).Count(part => part.Role == LeafPieceRole.Board);
+        int poles = Of(LeafLook.Poles).Count(part => part.Role == LeafPieceRole.Board);
+        Assert.True(poles > planks, "poles are narrower than planks");
+        Assert.Equal(3, Of(LeafLook.Poles).Count(part => part.Role == LeafPieceRole.Rail));
+
+        // Bars: a frame of four, a cross bar, and bars that do not reach the top: the leaf is open between them.
+        IReadOnlyList<LeafPiece> bars = Of(LeafLook.Bars);
+        Assert.Equal(5, bars.Count(part => part.Role == LeafPieceRole.Rail));
+        Assert.All(bars.Where(part => part.Role == LeafPieceRole.Board), bar =>
+        {
+            Assert.True(bar.Centre.Y + bar.Size.Y / 2f < top - 1e-4f);
+            Assert.True(bar.Size.X < 0.05f);
+        });
+
+        // Straps and bands are iron hardware on top of the boards or plates.
+        foreach (LeafLook look in new[] { LeafLook.Strapped, LeafLook.Plated })
+        {
+            List<LeafPiece> hardware = Of(look).Where(part => part.Role == LeafPieceRole.Strap).ToList();
+            Assert.True(hardware.Count >= 2, look + " has its iron hardware");
+            Assert.All(hardware, strap => Assert.Equal(top, strap.Centre.Y + strap.Size.Y / 2f, 4));
+            Assert.All(Of(look).Where(part => part.Role == LeafPieceRole.Board), board => Assert.True(board.Centre.Y + board.Size.Y / 2f < top - 1e-4f));
+        }
+
+        Assert.Equal(2, Of(LeafLook.Plated).Count(part => part.Role == LeafPieceRole.Board));
+
+        // Panelled: a full-thickness frame around a recessed panel that shows the door's own panel texture.
+        IReadOnlyList<LeafPiece> panelled = Of(LeafLook.Panelled);
+        LeafPiece panel = Assert.Single(panelled, part => part.Role == LeafPieceRole.Board);
+        Assert.True(panel.Centre.Y + panel.Size.Y / 2f < top - 0.01f);
+        Assert.Equal(4, panelled.Count(part => part.Role == LeafPieceRole.Rail && Math.Abs(part.Size.Y - size.Y) < 1e-4f));
     }
 
     [Theory]
@@ -127,7 +201,7 @@ public sealed class LeafPatternTests
         foreach (string file in new[] { "Pieces/TrapdoorPieceRegistration.cs", "Pieces/CellarDoorPieceRegistration.cs" })
         {
             string code = File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", file));
-            Assert.Single(Regex.Matches(code, @"LeafVisuals\s*\([^;]*LeafPattern\s*\.\s*For\s*\(\s*family\s*\)"));
+            Assert.Single(Regex.Matches(code, @"LeafVisuals\s*\([^;]*LeafPattern\s*\.\s*For\s*\(\s*family\s*\)\s*,[^;]*,\s*(strapMaterial|markMaterial)\s*,\s*surface\s*,\s*layer\s*\)"));
             Assert.DoesNotMatch(new Regex(@"VisualBox\s*\([^;]*visual\s*\.\s*Name"), code);
             Assert.DoesNotMatch(new Regex(@"Visual\s*\(\s*hinge\s*\.\s*transform\s*,\s*TrapdoorBlueprint\s*\.\s*LidVisual"), code);
         }
