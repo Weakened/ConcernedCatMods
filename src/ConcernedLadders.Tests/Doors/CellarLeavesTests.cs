@@ -124,14 +124,15 @@ public sealed class CellarLeavesTests
     {
         // Feet resting on the right leaf's top face, the box's bottom at the slope's height under its rear edge: the
         // skin makes the closed pose clear, so the cover settles closed under them; opening lifts the leaf into them
-        // within the skin, so it holds a few degrees open at most, never a passage.
+        // within the skin, so it holds a few degrees open at most, never a passage. Since #566 steepened the cover to
+        // 40.6 degrees the level foot box meets the rising leaf one check-step later (6.7 degrees, not under 5).
         float v = CellarGeometry.LeafStartV + CellarGeometry.LeafLength / 2f;
         ClimbPoint centre = CellarGeometry.ToPiece(0.4f, 0f, v);
         float bottom = CellarGeometry.TopAt(centre.Z + 0.15f);
         var feet = new Obstacle(new ClimbPoint(0.25f, bottom, centre.Z - 0.15f), new ClimbPoint(0.55f, bottom + 1.8f, centre.Z + 0.15f), mover: true);
         Assert.Equal(0f, Settle(feet, false));
         float held = Run(feet, open: true, from: 0f);
-        Assert.InRange(HatchMotion.Angle(held), 0f, HatchMotion.MaximumAngleStepDegrees);
+        Assert.InRange(HatchMotion.Angle(held), 0f, 2f * HatchMotion.MaximumAngleStepDegrees);
         Assert.False(HatchMotion.IsPassage(held, true));
         Assert.Contains(feet.Asked, pose => pose.Occupied);
     }

@@ -245,26 +245,26 @@ public sealed class CellarLadderTests
         Assert.Equal(CellarGeometry.TopAt(CellarGeometry.ApertureFrontZ), panelTop, 5);
         Assert.Equal(panelTop + CellarLadder.PanelClearance, CellarLadder.OverPanelY, 5);
         Assert.True(CellarLadder.PanelClearance > 0f);
-        // 0.40 to 0.47 m above the snap plane, where the anchored ladder's top is.
-        Assert.InRange(panelTop - CellarGeometry.SnapPlaneY, 0.47f, 0.48f);
+        // 0.15 to 0.28 m above the snap plane, where the anchored ladder's top is (0.40 to 0.47 m before #566 lowered it).
+        Assert.InRange(panelTop - CellarGeometry.SnapPlaneY, 0.27f, 0.28f);
     }
 
     [Fact]
-    public void TheStandardStepLiftWouldPassTheQueryButLetTheBodyMeetThePanel()
+    public void SinceTheSillWasLoweredTheStandardStepClearsItAndThePanelLiftStillDoes()
     {
-        // Why the standard lifts are not offered over the frame. From the floor in front, a 0.3 m step leaves the feet
-        // below the panel's top; the query capsule floats over the feet and is swept thinner, so it passes over the
-        // panel, while the real body's bottom, at the feet, would meet the panel's inner edge.
+        // #566 lowered the front panel to a walkable threshold. Before it, a 0.3 m step from the floor in front left the
+        // feet below the panel's top (the query capsule would have passed while the body met the panel's inner edge), which
+        // is why the panel lift exists. Now the standard step itself carries the feet over the panel, and the panel lift,
+        // still offered over the frame, does too.
         float panelTop = CellarGeometry.TopAt(CellarGeometry.ApertureFrontZ);
         float stepped = FloorFeet + LadderRules.StepLift;
-        Assert.True(stepped < panelTop, "The real body's bottom would be below the panel's top.");
-        Assert.True(stepped + GroundClearance + QuerySkin > panelTop, "Yet the query capsule would clear it.");
-        Assert.True(panelTop - stepped > 0.05f, "By more than a graze.");
+        Assert.True(stepped > panelTop, "The standard step clears the lowered sill.");
+        Assert.True(panelTop - FloorFeet < LadderRules.StepLift, "The sill is less than one step above the floor.");
         // The panel lift from the same floor puts the real body's bottom over the panel.
         Assert.True(CellarLadder.TryPanelLift(FloorFeet, CellarLadder.OverPanelY, out float lift));
         Assert.Equal(CellarLadder.OverPanelY, FloorFeet + lift, 5);
         Assert.True(FloorFeet + lift > panelTop);
-        Assert.True(lift > LadderRules.StepLift);
+        Assert.True(lift > 0f);
     }
 
     [Fact]
@@ -347,8 +347,9 @@ public sealed class CellarLadderTests
     [Fact]
     public void ADescendingEntrysHandsReachOverThePanelNotThroughIt()
     {
-        // LadderRuntime's mount: from the chest to the ladder's mid-depth. At the run's top + 0.2 m (the floor lip rule)
-        // the line from someone standing at the front panel passes through the panel; at the panel lift it clears it.
+        // LadderRuntime's mount: from the chest to the ladder's mid-depth. Before #566 lowered the sill, at the run's top +
+        // 0.2 m (the floor lip rule) the line from someone standing at the front panel passed through the panel; now it
+        // clears it, and so does the panel lift.
         ClimbPoint rung(float y) => new ClimbPoint(0f, y, CellarGeometry.PlannedLadderOrigin.Z +
             (LadderFootprint.Section.Back + LadderFootprint.Section.Front) * 0.5f);
         CellarPrism panel = CellarGeometry.Frame.Single(prism => prism.Name == "front_panel");
@@ -368,7 +369,7 @@ public sealed class CellarLadderTests
         }
 
         float nearest = -CellarGeometry.HalfModule - Radius;
-        Assert.True(Blocked(nearest, CellarGeometry.SnapPlaneY + 0.2f), "The floor's lip rule would aim through the panel.");
+        Assert.False(Blocked(nearest, CellarGeometry.SnapPlaneY + 0.2f), "The floor's lip rule clears the lowered sill.");
         foreach (float standZ in new[] { nearest, nearest - 0.2f, nearest - 0.5f })
         {
             Assert.False(Blocked(standZ, CellarLadder.OverPanelY), "Over the panel at " + standZ);

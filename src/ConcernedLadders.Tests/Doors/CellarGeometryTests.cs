@@ -45,22 +45,23 @@ public sealed class CellarGeometryTests
         // DOOR_DONOR_MATRIX.md is CL-004's; CELLAR_DOORS.md section 2 lists these values.
         // #549: the high end raised to a bulkhead's height and the low end lowered so the front panel's top stays where
         // the ladder exit over it was measured (0.375 m above the floor top).
-        Assert.Equal(0.2625f, CellarGeometry.FrontTopY - CellarGeometry.FloorTopY, 4);
+        // #566: the front lowered to a walkable threshold, the slope steepened so the high end stays at #549's height.
+        Assert.Equal(0.05f, CellarGeometry.FrontTopY - CellarGeometry.FloorTopY, 4);
         Assert.Equal(1.7625f, CellarGeometry.RearTopY - CellarGeometry.FloorTopY, 4);
-        Assert.Equal(36.870, CellarGeometry.SlopeDegrees, 3);
-        Assert.Equal(0.375f, CellarGeometry.TopAt(CellarGeometry.ApertureFrontZ) - CellarGeometry.FloorTopY, 4);
-        Assert.Equal(1.3125f, CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY, 4);
+        Assert.Equal(40.572, CellarGeometry.SlopeDegrees, 3);
+        Assert.Equal(0.1784f, CellarGeometry.TopAt(CellarGeometry.ApertureFrontZ) - CellarGeometry.FloorTopY, 4);
+        Assert.Equal(1.29125f, CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY, 3);
         Assert.Equal(1.7f, 2f * CellarGeometry.HalfAperture, 4);
         Assert.Equal(1.65f, CellarGeometry.ApertureRearZ - CellarGeometry.ApertureFrontZ, 4);
         Assert.Equal(1.56f, 2f * CellarGeometry.ClearHalfWidth, 4);
         Assert.Equal(0.84f, CellarGeometry.HingeU, 4);
         Assert.Equal(0.835f, CellarGeometry.LeafWidth, 4);
-        Assert.Equal(1.9925, CellarGeometry.LeafLength, 3);
+        Assert.Equal(2.0945, CellarGeometry.LeafLength, 4);
         Assert.Equal(0.8372, CellarGeometry.LeafReach, 3);
         HatchBox sweep = CellarGeometry.SweepInPiece(CellarLeaf.Right);
-        Assert.Equal(-1.341, sweep.Min.Z, 3);
+        Assert.Equal(-1.3831, sweep.Min.Z, 3);
         Assert.Equal(0.79, sweep.Max.Z, 3);
-        Assert.Equal(2.3428, sweep.Max.Y, 3);
+        Assert.Equal(2.2804, sweep.Max.Y, 3);
     }
 
     [Fact]
@@ -101,13 +102,14 @@ public sealed class CellarGeometryTests
 
         // The game's own stair pieces are shallower: wood_stair, stone_stair, ashwood_stair, the black marble and grausten
         // stairs all rise 1 m over 2 m (26.57 degrees, measured from their snap points); only wood_stepladder is 45. On
-        // the shallow one the head still clears the beam at its inner face by 2.14 m.
+        // the shallow one the head still clears the beam at its inner face by 2.12 m.
         float shallow = CellarGeometry.FloorTopY - 0.5f * (CellarGeometry.ApertureRearZ - CellarGeometry.ApertureFrontZ);
-        Assert.InRange(CellarGeometry.RearBeamBottomY - shallow, 2.137f, 2.138f);
+        Assert.InRange(CellarGeometry.RearBeamBottomY - shallow, 2.116f, 2.117f);
         Assert.True(CellarGeometry.RearBeamBottomY - shallow > Player);
 
-        // And the beam is above a standing player's knees at the top of the stair, so it is never a step to trip on.
-        Assert.True(CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY > 1.3f);
+        // And the beam's underside (1.29 m above the floor top since #566) is far above a standing player's knees at the
+        // top of the stair, so it is never a step to trip on.
+        Assert.True(CellarGeometry.RearBeamBottomY - CellarGeometry.FloorTopY > 1.2f);
     }
 
     [Fact]
