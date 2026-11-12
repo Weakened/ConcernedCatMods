@@ -272,7 +272,7 @@ public sealed class RailingTests
         Assert.Matches(new Regex(@"Config\.Bind\s*\(\s*RailingSettings\.Section\s*,\s*RailingSettings\.Key\s*,\s*RailingSettings\.EnabledByDefault\s*,"), plugin);
         Assert.Single(Regex.Matches(plugin, @"new\s+RailingPieceRegistration\s*\("));
         Assert.Matches(new Regex(@"if\s*\(\s*_railingsEnabled\.Value\s*\)\s*\{\s*_railings\s*=\s*new\s+RailingPieceRegistration\s*\("), plugin);
-        Assert.True(RailingSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
+        Assert.True(RailingSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.1.0.
         // Code only: the class's own documentation names what it does not do.
         string registration = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Pieces", "RailingPieceRegistration.cs")),
             @"/\*.*?\*/|//[^\n]*", " ", RegexOptions.Singleline);

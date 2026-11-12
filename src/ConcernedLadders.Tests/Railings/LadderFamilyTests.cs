@@ -12,7 +12,7 @@ public sealed class LadderFamilyTests
     [Fact]
     public void FamilyLaddersExistOnlyBehindTheirOwnSwitch()
     {
-        Assert.True(LadderFamilySettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
+        Assert.True(LadderFamilySettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.1.0.
         string plugin = Code("Plugin.cs");
         Assert.Matches(new Regex(@"bool\s+families\s*=\s*Config\.Bind\s*\(\s*LadderFamilySettings\.Section\s*,\s*LadderFamilySettings\.Key\s*,\s*LadderFamilySettings\.EnabledByDefault\s*,"), plugin);
         Assert.Matches(new Regex(@"new\s+LadderPieceRegistration\s*\([^;]*families\s*:\s*families\s*\)"), plugin);

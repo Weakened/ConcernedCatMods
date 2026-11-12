@@ -57,7 +57,7 @@ public sealed class CellarBlueprintTests
     [Fact]
     public void TheSettingSaysTheLeavesOpenButTheLaddersDoNotKnowThemYet()
     {
-        Assert.True(CellarDoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
+        Assert.True(CellarDoorSettings.EnabledByDefault); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.1.0.
         Assert.DoesNotContain("UNFINISHED", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("Both leaves open and close together", CellarDoorSettings.Description, StringComparison.Ordinal);
         Assert.Contains("hangs inside its opening and climbs through it only while both leaves are open", CellarDoorSettings.Description, StringComparison.Ordinal);

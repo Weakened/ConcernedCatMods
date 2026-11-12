@@ -1,13 +1,16 @@
 # Changelog
 
-## 1.0.0
+## 1.1.0
 
 First release as **Concerned Builder**, formerly Concerned Ladders (#590): a
 new Thunderstore package, `ConcernedBuilder`, for a mod that now builds more
 than ladders, with a new icon (#592). It is the same plugin as Concerned
 Ladders 1.0.0: its ID and config file are unchanged, so settings, placed
 ladders and the Climbing skill carry over. Install ConcernedBuilder and
-uninstall ConcernedLadders; do not keep both.
+uninstall ConcernedLadders; do not keep both. The version continues from
+Concerned Ladders 1.0.0 and is new on purpose: the game's mod check compares
+version numbers, so a player still on Concerned Ladders 1.0.0 is told to
+update instead of joining with pieces missing.
 
 Everything below is new since Concerned Ladders 1.0.0, tested in game, and
 **on by default**. Each part has its own setting to turn it off; with all of

@@ -5,7 +5,7 @@ using TheConcernedCat.ConcernedLadders.Domain.Families;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Railings;
 
-/// <summary>The railing setting (#556). On by default from Concerned Builder 1.0.0 (owner 2026-11-12): with it off no
+/// <summary>The railing setting (#556). On by default from Concerned Builder 1.1.0 (owner 2026-11-12): with it off no
 /// railing is cloned, no token is added and the hammer menu is unchanged.</summary>
 internal static class RailingSettings
 {

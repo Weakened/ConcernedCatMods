@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
-/// <summary>The cellar-door setting (CL-005 #486). Its own switch, on by default from Concerned Builder 1.0.0 (owner
+/// <summary>The cellar-door setting (CL-005 #486). Its own switch, on by default from Concerned Builder 1.1.0 (owner
 /// 2026-11-12, after testing it in game), separate from <see cref="TrapdoorSettings"/>, so either family can be turned
 /// off alone; the game deletes a family's placed pieces when its switch goes off again. Bound by the plugin
 /// (slice 2); with it off the piece adapter is never constructed, so nothing is cloned, localized or registered.</summary>
