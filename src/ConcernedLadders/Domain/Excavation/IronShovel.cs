@@ -58,6 +58,8 @@ internal static class IronShovel
         "Digs a level-floored basement hole in ground you can see, within " + F0(ExcavationLimits.Reach) + " m, to the size you set. " +
         "Attack sets one corner, then the opposite one (" + F0(DigFootprint.MinimumSide) + " to " + F0(DigFootprint.MaximumSide) +
         " m a side); scroll sets the depth (" + F0(DigFootprint.MinimumDepth) + " to " + F0(DigFootprint.MaximumDepth) + " m); attack digs. " +
+        "Or, before setting a corner, scroll for a ready-made 1, 2 or 4 m cube that snaps to its own grid, and attack to dig it. " +
+        "Ground objects in the way - stones, branches, bushes, rocks, stumps - are picked or cleared. " +
         "Secondary attack steps back; with nothing to step back to, press it twice to fill your last hole back in. " +
         "Costs " + F0(DigCost.BaseStamina) + " stamina plus a little per cubic metre (at most " + F0(DigCost.MaximumStamina) + "), and durability by the " +
         "ground removed, charged once when a dig goes ahead. Filling a hole back in is free. Never removes rocks, trees or anything built.";
@@ -78,6 +80,11 @@ internal static class ExcavationLimits
     /// (Player.m_maxPlaceDistance, 5 m), the narrowest native rule. Slices 2 and 3 used 10 m from the feet as a harness
     /// bound. A lead default pending owner confirmation (EXCAVATION.md section 8.6).</summary>
     internal const float Reach = 5f;
+
+    /// <summary>How far from the player's eyes the opposite corner may be aimed once the first is set (#567, owner playtest:
+    /// "I can't place longer holes than 3 m since it starts to say too far"). The first corner keeps the building reach; the
+    /// second may be across the hole. Lead default.</summary>
+    internal const float CornerReach = 12f;
 
     /// <summary>The aim ray's length, as the game's own placement ray.</summary>
     internal const float AimRayLength = 50f;

@@ -729,3 +729,39 @@ The one deliberate change of behaviour is that ground already lower joins instea
 - Everything in game: the corners, the wheel, the camera hold, the outline, the line, digging, joining an earlier hole,
   and undo.
 - The lead defaults: 2 to 8 m a side, 1 to 7 m deep, the cost formula, 10 undoable digs, and the 3 s undo confirmation.
+
+## 11. Clearing, reach and ready-made cubes (#567)
+
+These come from the owner's playtest on 2026-11-11.
+
+**Objects no longer block a dig.** "Digging should ignore pickable objects and others and just destroy them ... unless
+there's a more graceful way."
+
+`ExcavationWorldChecks.Survey` sorts what stands in the changed rectangle:
+
+- **Building pieces** are counted and never touched.
+- **Loose items** are left to fall onto the new floor.
+- **Pickables** are picked through the game's own `Pickable.Interact`, so their items drop for the player (the graceful
+  way), then removed.
+- **Other networked world objects** (rocks, stumps, bushes, logs, trees) are removed.
+- **Carts, ships, moving bodies and static props** still refuse, by name. The first three may never be removed. Static
+  props have no network object and cannot be removed persistently.
+
+Removal is the game's own: ownership claimed, then `ZNetScene.Destroy`, which deletes the saved object only for its owner.
+It happens in one file, `Excavation/ExcavationClearing.cs`, reached only from the dig's commit. That is after every gate,
+after the game placed the batch, and before the charge. The preview line says how many objects a dig will clear.
+`ExcavationSourceAuditTests` pins the site, the call order and the survey's sorting. An undo does not bring a removed
+object back, and still refuses while anything stands in the hole.
+
+**Reach.** The first corner keeps the 5 m building reach. Once it is set, the opposite corner may be aimed up to 12 m away
+(`ExcavationLimits.CornerReach`, lead default), so a long hole is set from one place.
+
+**Ready-made cubes.** At the first stage the wheel cycles through Free, 1x1x1, 2x2x2 and 4x4x4. A cube:
+
+- snaps to a world grid of its own size, so cubes laid side by side tile (`DigSession.Cube`);
+- is dug by one Attack;
+- is as deep as it is wide.
+
+The free size's minimum side is now 1 m. The outline is drawn as a **perfect box**: the footprint at the ground, the floor
+and four vertical edges. The ground still slopes over one cell outside it (section 3); the basement wall pieces (#568)
+cover that.

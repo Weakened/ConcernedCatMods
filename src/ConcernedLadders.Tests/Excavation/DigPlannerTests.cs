@@ -17,10 +17,10 @@ public sealed class DigPlannerTests
     [Theory]
     [InlineData(10, 20, 14, 23, 10, 20, 14, 23)]   // toward +x +z: the anchor is the min corner
     [InlineData(10, 20, 7, 16, 7, 16, 10, 20)]     // toward -x -z: the anchor is the max corner
-    [InlineData(10, 20, 10, 20, 10, 20, 12, 22)]   // aim on the anchor: the smallest floor, toward +x +z
-    [InlineData(10, 20, 11, 19, 10, 18, 12, 20)]   // one metre away: still 2 m, in the aimed direction
+    [InlineData(10, 20, 10, 20, 10, 20, 11, 21)]   // aim on the anchor: the smallest floor (1 m since #567), toward +x +z
+    [InlineData(10, 20, 11, 19, 10, 19, 11, 20)]   // one metre away: 1 m, in the aimed direction
     [InlineData(10, 20, 40, -40, 10, 12, 18, 20)]  // far away: 8 m at most
-    public void TheAnchorIsAlwaysACornerAndEachSideIsTwoToEightMetres(int ax, int az, int bx, int bz, int minX, int minZ, int maxX, int maxZ)
+    public void TheAnchorIsAlwaysACornerAndEachSideIsOneToEightMetres(int ax, int az, int bx, int bz, int minX, int minZ, int maxX, int maxZ)
     {
         DigFootprint footprint = DigFootprint.FromCorners(ax, az, bx, bz, 3);
         Assert.Equal((minX, minZ, maxX, maxZ), (footprint.MinX, footprint.MinZ, footprint.MaxX, footprint.MaxZ));

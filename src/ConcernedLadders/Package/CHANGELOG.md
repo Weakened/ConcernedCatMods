@@ -64,8 +64,14 @@ version and the same values for these settings.
   `Excavation` / `Enabled` (off by default). Adds the Iron Shovel, crafted at
   the Forge from 10 Iron and 4 Wood once you have found Iron (Iron Scrap alone
   does not unlock it) and repaired there. You size each hole yourself (#551):
-  Attack sets one corner, then the opposite corner (2 to 8 m a side, on the
-  world grid); the mouse wheel sets the depth (1 to 7 m); Attack digs it. The
+  Attack sets one corner, then the opposite corner (1 to 8 m a side, on the
+  world grid, up to 12 m away); the mouse wheel sets the depth (1 to 7 m);
+  Attack digs it. Or, before setting a corner, scroll for a ready-made
+  1x1x1, 2x2x2 or 4x4x4 m cube that snaps to its own grid so cubes tile, and
+  dig it with one Attack (#567). Stones, branches, berries and other
+  pickables in the way are picked for you, and rocks, stumps, bushes, logs
+  and trees are cleared; only carts, ships and fixed scenery still stop a
+  dig. The
   floor is level, measured from the highest ground at the hole's edge, so it
   stays level on a slope. Ground that is already lower, such as an earlier
   hole, is left as it is, so a new hole beside or over an old one joins it.
@@ -91,8 +97,7 @@ version and the same values for these settings.
     before the world's stamina and durability settings, charged once and only
     when the dig is placed. It is refused inside a ward that does not grant
     you access, in no-build areas, below the terrain's dig limit, and over
-    rocks, trees, ore, plants, dropped items, carts or ships, which it never
-    removes. Your own building pieces beside a hole are not protected: their
+    carts, ships or fixed scenery, which it never removes (#567). Your own building pieces beside a hole are not protected: their
     support is the game's, so a piece standing on dug ground can fall.
   - The shovel has its own model, a wooden shaft and T-grip with an iron
     blade (#550). It has no attack and plays no animation yet. It raises no

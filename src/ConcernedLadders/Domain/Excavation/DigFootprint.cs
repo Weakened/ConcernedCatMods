@@ -9,8 +9,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Excavation;
 /// <see cref="Length"/> metres; the untouched ring the datum is read from is one vertex outside it.</summary>
 internal readonly struct DigFootprint : IEquatable<DigFootprint>
 {
-    /// <summary>The shortest side of a floor, metres: a 2 m floor piece fits (lead default, the old small hole's).</summary>
-    internal const int MinimumSide = 2;
+    /// <summary>The shortest side of a floor, metres: one lattice cell (#567, owner: a 1x1x1 cube).</summary>
+    internal const int MinimumSide = 1;
 
     /// <summary>The longest side of a floor, metres (lead default): one dig stays a bounded batch of single-vertex
     /// operations, at most 81 vertices.</summary>

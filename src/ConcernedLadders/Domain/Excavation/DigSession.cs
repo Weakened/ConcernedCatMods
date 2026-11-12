@@ -25,6 +25,17 @@ internal enum DigAction
     Undo = 5,
 }
 
+/// <summary>A ready-made hole size (#567, owner: "introduce 1x1x1, 2x2x2 and 4x4x4 options and show them as a perfect cube.
+/// Those cubes should also auto-snap for easier placement"). A cube snaps to a world grid of its own size, so cubes laid
+/// side by side tile without a gap or an overlap.</summary>
+internal enum DigPreset
+{
+    Free = 0,
+    Cube1 = 1,
+    Cube2 = 2,
+    Cube4 = 4,
+}
+
 /// <summary>The shovel's dig flow (#551, owner playtest 2026-11-10: "the player defines the size, first the ground cover
 /// and depth ... allow people to undo steps"), game-free so every press is tested:
 /// <list type="number">
@@ -61,13 +72,38 @@ internal sealed class DigSession
 
     internal int Depth { get; private set; } = DigFootprint.DefaultDepth;
 
+    /// <summary>The ready-made size, chosen with the wheel at the first stage; Free sizes the hole corner to corner.</summary>
+    internal DigPreset Preset { get; private set; } = DigPreset.Free;
+
+    private static readonly DigPreset[] Presets = { DigPreset.Free, DigPreset.Cube1, DigPreset.Cube2, DigPreset.Cube4 };
+
+    /// <summary>The wheel at the first stage: the next (positive) or previous ready-made size. Returns whether it changed.</summary>
+    internal bool ChangePreset(int steps)
+    {
+        if (Stage != DigStage.FirstCorner || steps == 0) return false;
+        int index = Array.IndexOf(Presets, Preset);
+        int next = ((index + steps) % Presets.Length + Presets.Length) % Presets.Length;
+        Preset = Presets[next];
+        return true;
+    }
+
+    /// <summary>A cube of <paramref name="size"/> metres on the world grid of that size, at the aimed vertex.</summary>
+    internal static DigFootprint Cube(int x, int z, int size)
+    {
+        int minX = FloorDiv(x, size) * size, minZ = FloorDiv(z, size) * size;
+        return DigFootprint.FromCorners(minX, minZ, minX + size, minZ + size, size);
+    }
+
+    private static int FloorDiv(int value, int divisor) => (int)Math.Floor(value / (double)divisor);
+
     /// <summary>True while an undo waits for its confirming press.</summary>
     internal bool UndoArmed(float now) => LadderRules.Finite(_undoArmedAt) && now - _undoArmedAt <= UndoConfirmSeconds && now >= _undoArmedAt;
 
     /// <summary>The rectangle shown now: a 2 x 2 m square at the aim, the rectangle to the aim, or the one set.</summary>
     internal DigFootprint Footprint => Stage switch
     {
-        DigStage.FirstCorner => DigFootprint.FromCorners(AimX, AimZ, AimX + DigFootprint.MinimumSide, AimZ + DigFootprint.MinimumSide, Depth),
+        DigStage.FirstCorner when Preset != DigPreset.Free => Cube(AimX, AimZ, (int)Preset),
+        DigStage.FirstCorner => DigFootprint.FromCorners(AimX, AimZ, AimX + 2, AimZ + 2, Depth),
         DigStage.SecondCorner => DigFootprint.FromCorners(AnchorX, AnchorZ, AimX, AimZ, Depth),
         _ => DigFootprint.FromCorners(AnchorX, AnchorZ, CornerX, CornerZ, Depth),
     };
@@ -92,6 +128,8 @@ internal sealed class DigSession
         {
             case DigStage.FirstCorner:
                 if (!HasAim) return DigAction.None;
+                // A ready-made cube is dug at once: its size and depth are already set.
+                if (Preset != DigPreset.Free) return DigAction.Dig;
                 AnchorX = AimX;
                 AnchorZ = AimZ;
                 Stage = DigStage.SecondCorner;

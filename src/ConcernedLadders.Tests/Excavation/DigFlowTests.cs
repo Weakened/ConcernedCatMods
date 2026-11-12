@@ -47,6 +47,53 @@ public sealed class DigFlowTests
     }
 
     [Fact]
+    public void ReadyMadeCubesAreTheirSizeDeepSnapToTheirOwnGridAndDigAtOnce()
+    {
+        var session = new DigSession();
+        Assert.Equal(DigPreset.Free, session.Preset);
+        Assert.True(session.ChangePreset(1));
+        Assert.Equal(DigPreset.Cube1, session.Preset);
+        session.ChangePreset(1);
+        Assert.Equal(DigPreset.Cube2, session.Preset);
+        session.Aim(7, -3);
+        // A 2 m cube on the 2 m grid: whatever vertex is aimed in a cell, the cube is that cell's.
+        Assert.Equal((6, -4, 8, -2), Box(session.Footprint));
+        Assert.Equal(2, session.Footprint.Depth);
+        session.Aim(6, -4);
+        Assert.Equal((6, -4, 8, -2), Box(session.Footprint));
+        session.Aim(8, -4);
+        Assert.Equal((8, -4, 10, -2), Box(session.Footprint)); // the neighbouring cube shares the edge x 8: they tile
+        Assert.Equal(DigAction.Dig, session.Primary());
+        Assert.Equal(DigStage.FirstCorner, session.Stage);
+        session.ChangePreset(1);
+        Assert.Equal(DigPreset.Cube4, session.Preset);
+        session.Aim(-1, 5);
+        Assert.Equal((-4, 4, 0, 8, 4), (session.Footprint.MinX, session.Footprint.MinZ, session.Footprint.MaxX, session.Footprint.MaxZ, session.Footprint.Depth));
+        session.ChangePreset(1);
+        Assert.Equal(DigPreset.Free, session.Preset);
+        session.ChangePreset(-1);
+        Assert.Equal(DigPreset.Cube4, session.Preset);
+        // The size is chosen only at the first stage.
+        session.ChangePreset(1);
+        session.Primary();
+        Assert.False(session.ChangePreset(1));
+        Assert.Equal((1, 1, 1), (DigSession.Cube(0, 0, 1).Width, DigSession.Cube(0, 0, 1).Length, DigSession.Cube(0, 0, 1).Depth));
+    }
+
+    [Fact]
+    public void TheCubePromptAndTheClearingFitOnOneLine()
+    {
+        DigFootprint cube = DigSession.Cube(0, 0, 4);
+        string prompt = DigText.Prompt(DigStage.FirstCorner, cube, DigPreset.Cube4);
+        Assert.Equal("4x4x4 m cube: click to dig, scroll for size.", prompt);
+        Assert.Equal("4x4x4 m cube: click to dig, scroll for size. Clears 3.", DigText.WithClearing(prompt, 3));
+        Assert.Equal(prompt, DigText.WithClearing(prompt, 0));
+        string longest = DigText.Prompt(DigStage.Depth, DigFootprint.FromCorners(0, 0, 8, 8, 7));
+        Assert.True(DigText.WithClearing(longest, 120).Length <= DigText.MaximumLength);
+        Assert.Equal("Set a corner, or scroll for a 1, 2 or 4 m cube.", DigText.Prompt(DigStage.FirstCorner, cube));
+    }
+
+    [Fact]
     public void TheWheelSetsTheDepthOnlyInTheDepthStageAndWithinItsRange()
     {
         var session = new DigSession();
@@ -198,7 +245,7 @@ public sealed class DigFlowTests
     // ---- The outline ----
 
     [Fact]
-    public void TheOutlineIsFlatTheTopEdgeAtTheGroundAndTheFloorAtItsHeight()
+    public void TheOutlineIsAPerfectBoxFromTheGroundToTheFloor()
     {
         DigPlan plan = Ready(out _);
         var shape = new DigPreviewShape();
@@ -213,18 +260,21 @@ public sealed class DigFlowTests
             Assert.Equal(plan.Bottom + lift, shape.Y(DigPreviewShape.Floor, p), 4);
         }
 
-        // The top edge is the ring, one cell outside the floor: where the walls start.
+        // #567: a perfect box. The top rectangle is the floor's own, at the ground; the four edges are vertical.
         DigFootprint footprint = plan.Footprint;
-        Assert.Equal(footprint.MinX - 1, shape.X(DigPreviewShape.Top, 0), 4);
-        Assert.Equal(footprint.MaxZ + 1, shape.Z(DigPreviewShape.Top, 2), 4);
+        for (int p = 0; p < 4; p++)
+        {
+            Assert.Equal(shape.X(DigPreviewShape.Floor, p), shape.X(DigPreviewShape.Top, p), 4);
+            Assert.Equal(shape.Z(DigPreviewShape.Floor, p), shape.Z(DigPreviewShape.Top, p), 4);
+        }
+
         Assert.Equal(footprint.MinX, shape.X(DigPreviewShape.Floor, 0), 4);
         Assert.Equal(footprint.MaxZ, shape.Z(DigPreviewShape.Floor, 2), 4);
-        // Four wall lines from the top corners to the floor corners; no water when it stays dry.
         for (int wall = DigPreviewShape.FirstWall; wall < DigPreviewShape.FirstWall + 4; wall++)
         {
             Assert.Equal(2, shape.Count(wall));
-            Assert.Equal(1f, System.Math.Abs(shape.X(wall, 0) - shape.X(wall, 1)), 4);
-            Assert.Equal(1f, System.Math.Abs(shape.Z(wall, 0) - shape.Z(wall, 1)), 4);
+            Assert.Equal(shape.X(wall, 0), shape.X(wall, 1), 4);
+            Assert.Equal(shape.Z(wall, 0), shape.Z(wall, 1), 4);
             Assert.Equal(plan.Footprint.Depth, shape.Y(wall, 0) - shape.Y(wall, 1), 4);
         }
 

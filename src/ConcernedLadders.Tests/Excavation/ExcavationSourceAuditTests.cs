@@ -68,6 +68,8 @@ public sealed class ExcavationSourceAuditTests
     {
         foreach ((string path, string text) in Sources("Excavation"))
         {
+            // #567: the one object-removal site claims ownership before the game's own destroy; pinned below.
+            if (path == "Excavation/ExcavationClearing.cs" && pattern == @"\bClaimOwnership\s*\(") continue;
             Assert.True(Count(text, pattern) == 0, path + " uses " + pattern + ".");
         }
         foreach ((string path, string text) in Sources("Domain/Excavation"))
@@ -77,13 +79,43 @@ public sealed class ExcavationSourceAuditTests
     }
 
     [Fact]
-    public void OnlyTheAdaptersOwnContainerIsEverDestroyed()
+    public void OnlyTheAdaptersOwnContainerAndTheClearedGroundAreEverDestroyed()
     {
-        var hits = Sources("Excavation").Select(s => (s.Path, N: Count(s.Text, @"\bDestroy\s*\("))).Where(h => h.N > 0).ToList();
-        Assert.Single(hits);
-        Assert.Equal("Excavation/ExcavationTerrainOps.cs", hits[0].Path);
-        Assert.Equal(1, hits[0].N);
-        Assert.Matches(@"Object\.Destroy\s*\(\s*_container\s*\)", Sources("Excavation").Single(s => s.Path == hits[0].Path).Text);
+        var hits = Sources("Excavation").Select(s => (s.Path, N: Count(s.Text, @"\bDestroy\s*\("))).Where(h => h.N > 0).OrderBy(h => h.Path).ToList();
+        Assert.Equal(2, hits.Count);
+        Assert.Equal(("Excavation/ExcavationClearing.cs", 1), hits[0]);
+        Assert.Equal(("Excavation/ExcavationTerrainOps.cs", 1), hits[1]);
+        Assert.Matches(@"Object\.Destroy\s*\(\s*_container\s*\)", SourceText("Excavation/ExcavationTerrainOps.cs"));
+    }
+
+    /// <summary>#567 (owner 2026-11-11: objects should not prevent digging): the one place a world object is removed. Ownership
+    /// is claimed right before the game's own destroy; pickables are picked first through the game's own pick; and the
+    /// clearing is reached once, from the dig's commit, after its batch was placed and before the charge, with the lists the
+    /// survey made. The survey sends building pieces, loose items, carts, ships, moving bodies and anything without a network
+    /// object away before anything is listed.</summary>
+    [Fact]
+    public void TheClearingIsTheOneRemovalSiteAndOnlyTheDigReachesIt()
+    {
+        string clearing = SourceText("Excavation/ExcavationClearing.cs");
+        Assert.Equal(1, Count(clearing, @"view\.ClaimOwnership\s*\(\s*\)\s*;\s*scene\.Destroy\s*\(\s*target\s*\)\s*;"));
+        Assert.Equal(1, Count(clearing, @"\bClaimOwnership\s*\("));
+        Assert.Equal(1, Count(clearing, @"if\s*\(\s*pickable\s*!=\s*null\s*&&\s*pickable\.CanBePicked\s*\(\s*\)\s*\)\s*pickable\.Interact\s*\(\s*player\s*,\s*false\s*,\s*false\s*\)\s*;"));
+        Assert.Equal(1, Count(clearing, @"\.Interact\s*\("));
+        Assert.DoesNotMatch(@"\bInstantiate\s*\(|WearNTear|ItemDrop|Vagon|\bShip\b|\.Damage\s*\(", clearing);
+        var calls = Hits(@"ExcavationClearing\.Clear\s*\(");
+        Assert.True(calls.Count == 1 && calls[0].Path == "Excavation/ExcavationRuntime.cs" && calls[0].N == 1, string.Join(", ", calls));
+        string commit = MethodBody(SourceText("Excavation/ExcavationRuntime.cs"), CommitSignature);
+        int placed = Regex.Match(commit, @"if\s*\(\s*placed\s*==\s*null\s*\)\s*return").Index;
+        int cleared = Regex.Match(commit, @"ExcavationClearing\.Clear\s*\(\s*player\s*,\s*_pick\s*,\s*_remove\s*\)").Index;
+        int charged = Regex.Match(commit, ChargeCall).Index;
+        Assert.True(placed > 0 && cleared > placed && charged > cleared, "Clear only after the batch was placed, and before the charge.");
+        string survey = MethodBody(SourceText("Excavation/ExcavationWorldChecks.cs"), @"internal\s+int\s+Survey\s*\(");
+        int piece = Regex.Match(survey, @"GetComponentInParent<WearNTear>\(\)\s*!=\s*null\s*\)\s*\{\s*pieces\+\+\s*;\s*continue\s*;").Index;
+        int item = Regex.Match(survey, @"GetComponentInParent<ItemDrop>\(\)\s*!=\s*null\s*\)\s*continue\s*;").Index;
+        int block = Regex.Match(survey, @"if\s*\(\s*vehicle\s*\|\|\s*moving\s*\|\|\s*view\s*==\s*null\s*\|\|\s*!view\.IsValid\s*\(\s*\)\s*\)").Index;
+        int listed = Regex.Match(survey, @"toRemove\.Add\s*\(").Index;
+        Assert.True(piece > 0 && item > piece && block > item && listed > block, "Pieces, items and blockers are sorted out before anything is listed.");
+        Assert.Matches(@"bool\s+vehicle\s*=\s*hit\.GetComponentInParent<Vagon>\(\)\s*!=\s*null\s*\|\|\s*hit\.GetComponentInParent<Ship>\(\)\s*!=\s*null\s*;", survey);
     }
 
     private static string SourceText(string relative) => Sources().Single(s => s.Path == relative).Text;
@@ -426,7 +458,8 @@ public sealed class ExcavationSourceAuditTests
     [InlineData(@"_aimMask\s*=\s*LayerMask\.GetMask\s*\(\s*""Default""\s*,\s*""static_solid""\s*,\s*""Default_small""\s*,\s*""piece""\s*,\s*""piece_nonsolid""\s*,\s*""terrain""\s*,\s*""vehicle""\s*\)\s*;")]
     [InlineData(@"Physics\.Raycast\s*\(\s*eye\.position\s*,\s*eye\.forward\s*,\s*out\s+RaycastHit\s+hit\s*,\s*ExcavationLimits\.AimRayLength\s*,\s*_aimMask\s*,\s*QueryTriggerInteraction\.Ignore\s*\)")]
     [InlineData(@"if\s*\(\s*collider\s*==\s*null\s*\|\|\s*collider\.GetComponent<Heightmap>\s*\(\s*\)\s*==\s*null\s*\)")]
-    [InlineData(@"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*ExcavationLimits\.Reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;")]
+    [InlineData(@"if\s*\(\s*Vector3\.Distance\s*\(\s*player\.m_eye\.position\s*,\s*hit\.point\s*\)\s*>\s*reach\s*\)\s*return\s+ExcavationAim\.TooFar\s*;")]
+    [InlineData(@"float\s+reach\s*=\s*_session\.Stage\s*==\s*DigStage\.SecondCorner\s*\?\s*ExcavationLimits\.CornerReach\s*:\s*ExcavationLimits\.Reach\s*;")]
     [InlineData(@"private\s+static\s+bool\s+OnLadder\s*\(\s*\)\s*=>\s*LadderRuntime\.Current\?\.IsClimbing\s*==\s*true\s*;")]
     public void TheTargetingRuleIsWhereItMustBe(string pattern)
     {
@@ -538,7 +571,7 @@ public sealed class ExcavationSourceAuditTests
         int check = Regex.Match(undo, @"DigUndo\.Check\s*\(\s*record\s*,\s*Read\s*\(\s*_check\s*\)\s*\)").Index;
         int ward = Regex.Match(undo, @"if\s*\(\s*!ExcavationWorldChecks\.WardAllows\s*\(").Index;
         int noBuild = Regex.Match(undo, @"if\s*\(\s*_world\.InNoBuildArea\s*\(").Index;
-        Match inside = Regex.Match(undo, @"if\s*\(\s*overflow\s*\|\|\s*obstructions\s*>\s*0\s*\|\|\s*pieces\s*>\s*0\s*\)\s*return\s+DigText\.Undo\s*\(\s*UndoRefusal\.PieceInside\s*\)\s*;");
+        Match inside = Regex.Match(undo, @"bool\s+occupied\s*=\s*overflow\s*\|\|\s*obstructions\s*>\s*0\s*\|\|\s*pieces\s*>\s*0\s*\|\|\s*_pick\.Count\s*>\s*0\s*\|\|\s*_remove\.Count\s*>\s*0\s*;[^}]*?if\s*\(\s*occupied\s*\)\s*return\s+DigText\.Undo\s*\(\s*UndoRefusal\.PieceInside\s*\)\s*;");
         int place = Regex.Match(undo, @"\bPlace\s*\(").Index;
         Assert.True(check > 0 && ward > check && noBuild > ward && inside.Success && inside.Index > noBuild && place > inside.Index,
             "UndoWithShovel must check the record, the ward, no-build areas and what stands in the hole, in that order, before its batch.");
