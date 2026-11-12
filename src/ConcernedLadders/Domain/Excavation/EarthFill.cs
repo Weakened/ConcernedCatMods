@@ -89,6 +89,20 @@ internal static class EarthFill
     /// neighbouring cell is another hole of the same depth, say). Lead default.</summary>
     internal const float MinimumHeight = 0.25f;
 
+    /// <summary>The terrain's own textures the block wears (#579, owner: "another lighter stone like normal holes ...
+    /// topped with flattened earth dirt"): slices of the terrain's diffuse array <c>terrain_d_array</c>, identified from a
+    /// decoded contact sheet of its 16 slices (<c>cl-ladders-devtools/out/terrain/terrain_d_array_sheet_579.png</c>).
+    /// Slice 4 is the grey rock the terrain shows on a steep side, such as a pickaxe hole's; slice 3 the cleared dirt of a
+    /// hoe's path.</summary>
+    internal const int TerrainCliffSlice = 4;
+
+    /// <summary>See <see cref="TerrainCliffSlice"/>.</summary>
+    internal const int TerrainDirtSlice = 3;
+
+    /// <summary>The share of a block's height its dirt top takes, the rest being its rock body: thin, so the top reads as a
+    /// surface, and inside the block's own height so it stays flush with the ground.</summary>
+    internal const float TopShare = 0.01f;
+
     /// <summary>How closely a block found in the world must match a remembered one to be the same block.</summary>
     internal const float MatchTolerance = 0.05f;
 
@@ -149,6 +163,12 @@ internal static class EarthFill
             if (readable && top - bottom >= MinimumHeight) into.Add(new FillBlock(cell, bottom, top));
         }
     }
+
+    /// <summary>The lattice vertex a shovel aimed at <paramref name="block"/> aims at (#579, owner: "we should dig sideways
+    /// as well, imagine minecraft"): the block's cell's smaller corner. <see cref="DigSnap"/> then places the new hole on the
+    /// lattice of the hole the block belongs to, on the block's side of it, so the new hole covers the block's cell and
+    /// takes the block out.</summary>
+    internal static (int X, int Z) AimVertex(in FillBlock block) => (block.Cell.X, block.Cell.Z);
 
     /// <summary>The cell a block stands on, from its position: a block's origin is its cell's centre at floor level.</summary>
     internal static FillCell CellAt(float x, float z) =>

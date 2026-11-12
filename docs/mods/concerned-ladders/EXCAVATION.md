@@ -827,3 +827,27 @@ texture is enough. It replaces the dropped basement wall pieces (#568).
 
 Not observed in game: OWNER GO-AROUND PENDING.
 
+### 13.1 Digging sideways and the terrain's look (#579)
+
+Owner playtest of #578, 2026-11-11: aiming at an earth block said "tcc_earth_fill is in the way"; "we should dig
+sideways as well, imagine minecraft". And: "Can we use something other than swamp mud? Maybe another lighter stone like
+normal holes ... topped with flattened earth dirt?"
+
+- **Sideways.** The aim ray accepts an earth block as well as terrain (nothing else that is not terrain), with the same
+  reach. The aimed vertex is the block's cell's smaller corner (`EarthFill.AimVertex`), and `DigSnap` places the new
+  hole on the lattice of the hole the block belongs to, on the block's side: it lands flush beside that hole and
+  covers the block's cell, so the dig takes the block out (and the blocks beside it that it covers) and fills its own
+  new ring. A block of a hole the history no longer remembers snaps to the world grid instead.
+- **Look.** The terrain draws every ground type from one texture array, `terrain_d_array` (16 slices, 256 px, BC7).
+  Decoded and laid out in `cl-ladders-devtools/out/terrain/terrain_d_array_sheet_579.png`: slice 4 is the grey rock a
+  steep side (a pickaxe hole) shows, slice 3 the cleared dirt of a hoe's path. Once a world is loaded the block's two
+  materials (copies of the mud pile's world-mapped shader: a body and a top 1% of the block's height) take those
+  slices, copied on the GPU from the live terrain material (`Heightmap.m_material`), with the terrain's cliff normal
+  map and its UV scale. The terrain material is only read. Until a world is loaded, or if the terrain does not match,
+  the blocks keep the mud pile's look; the log says which.
+- **Limits.** The terrain shader also tints by biome and blends by vertex colour; a block cannot, so its rock and dirt
+  are the textures' own colours and may read a shade apart from the ground beside it. The tiling is the terrain's UV
+  scale passed to another shader, a lead guess.
+
+Not observed in game: OWNER GO-AROUND PENDING.
+
