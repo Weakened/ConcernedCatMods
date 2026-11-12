@@ -75,10 +75,13 @@ PRODUCTS: dict[str, dict[str, object]] = {
         "dll_name": "TheConcernedCat.ConcernedSteward.dll",
     },
     "ladders": {
-        "display": "Concerned Ladders",
+        "display": "Concerned Builder",
         "project_dir": ROOT / "src" / "ConcernedLadders",
         "csproj": "ConcernedLadders.csproj",
         "package_name": "ConcernedLadders",
+        # #590 (owner 2026-11-12): the Thunderstore package is ConcernedBuilder from 1.1.0. Only the package and display
+        # names moved; "package_name" stays the project's, which the cross-product rules key on (src/<package_name>).
+        "thunderstore_name": "ConcernedBuilder",
         "dll_name": "TheConcernedCat.ConcernedLadders.dll",
         # Independent product: Valheim 1.0's usage-tag menu requires Jotunn
         # 2.30.x. Keep shipped products' older pins and checks unchanged.
@@ -203,7 +206,7 @@ def validate_product(key: str, errors: list[str], require_binary: bool,
 
     expected_identity = {
         "namespace": EXPECTED_NAMESPACE,
-        "name": str(spec["package_name"]),
+        "name": str(spec.get("thunderstore_name", spec["package_name"])),
         "websiteUrl": EXPECTED_WEBSITE,
     }
     for toml_key, expected in expected_identity.items():

@@ -22,6 +22,8 @@ from pathlib import Path
 
 PROFILE_NAME = "TCC-Ladders-Dev"
 PRODUCT_NAME = "ConcernedLadders"
+# The Thunderstore package's name (#590): the project keeps its folder, the package is ConcernedBuilder from 1.1.0.
+PACKAGE_NAME = "ConcernedBuilder"
 DEPENDENCIES = ("denikson-BepInExPack_Valheim", "ValheimModding-Jotunn")
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "src" / PRODUCT_NAME / "Package" / "thunderstore.toml"
@@ -31,8 +33,8 @@ DEFAULT_OUTPUT = ROOT / "artifacts" / "profiles" / f"{PROFILE_NAME}.r2z"
 def describe(manifest: Path) -> dict:
     raw = manifest.read_bytes()
     package = tomllib.loads(raw.decode("utf-8-sig")).get("package", {})
-    if not isinstance(package, dict) or package.get("name") != PRODUCT_NAME or package.get("namespace") != "TheConcernedCat":
-        raise ValueError("Expected the TheConcernedCat ConcernedLadders package manifest.")
+    if not isinstance(package, dict) or package.get("name") != PACKAGE_NAME or package.get("namespace") != "TheConcernedCat":
+        raise ValueError("Expected the TheConcernedCat ConcernedBuilder package manifest.")
     version = package.get("versionNumber", "")
     if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise ValueError("The product needs an exact numeric Major.Minor.Patch version.")
@@ -43,7 +45,7 @@ def describe(manifest: Path) -> dict:
         if not isinstance(pin, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", pin):
             raise ValueError(f"Dependency {name} needs an exact numeric version, received {pin!r}.")
     return {
-        "product": PRODUCT_NAME,
+        "product": PACKAGE_NAME,
         "version": version,
         "profileName": PROFILE_NAME,
         "dependencies": {name: dependencies[name] for name in DEPENDENCIES},

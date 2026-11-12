@@ -29,6 +29,12 @@ $productSlug = @{
 # error instead of on the real cause. Fail here, naming the product.
 if (-not $productSlug) { throw "No validator slug is mapped for product '$Product'. Add it to the table above." }
 
+# The Thunderstore package name, where it is not the project's (#590: Concerned Ladders ships as ConcernedBuilder).
+$packageName = @{
+    ConcernedLadders = "ConcernedBuilder"
+}[$Product]
+if (-not $packageName) { $packageName = $Product }
+
 # Read the version to expect directly from the csproj that was just built,
 # so an RC seal's --expected-version check is enforced on every package
 # build automatically instead of relying on someone typing it by hand.
@@ -48,7 +54,7 @@ try {
 
     # TCLI stamps every entry with the build time. Canonicalize the completed
     # archive so identical source payloads produce identical release bytes.
-    $packagePath = Join-Path $root "artifacts" "thunderstore" "TheConcernedCat-$Product-$expectedVersion.zip"
+    $packagePath = Join-Path $root "artifacts" "thunderstore" "TheConcernedCat-$packageName-$expectedVersion.zip"
     python ./tools/reproducible_zip.py $packagePath
     if ($LASTEXITCODE -ne 0) { throw "Reproducible ZIP canonicalization failed." }
 

@@ -15,7 +15,7 @@ from prepare_ladders_profile import describe, main, profile_bytes, write_profile
 
 MANIFEST = '''[package]
 namespace = "TheConcernedCat"
-name = "ConcernedLadders"
+name = "ConcernedBuilder"
 versionNumber = "0.1.0"
 [package.dependencies]
 denikson-BepInExPack_Valheim = "5.4.2351"
@@ -58,7 +58,7 @@ class LadderProfileTests(unittest.TestCase):
 
     def test_wrong_product_and_unpinned_versions_are_refused(self) -> None:
         for invalid in (
-            MANIFEST.replace('name = "ConcernedLadders"', 'name = "ConcernedForeman"'),
+            MANIFEST.replace('name = "ConcernedBuilder"', 'name = "ConcernedForeman"'),
             MANIFEST.replace('"2.30.2"', '"latest"'),
             MANIFEST.replace('"2.30.2"', '"2.30.*"'),
         ):
@@ -98,7 +98,7 @@ class LadderProfileTests(unittest.TestCase):
         with contextlib.redirect_stdout(capture):
             self.assertEqual(0, main(["--manifest", str(self.manifest), "--output", str(output), "--inspect"]))
         self.assertFalse(output.exists())
-        self.assertEqual("ConcernedLadders", json.loads(capture.getvalue())["product"])
+        self.assertEqual("ConcernedBuilder", json.loads(capture.getvalue())["product"])
         capture = io.StringIO()
         with contextlib.redirect_stdout(capture):
             self.assertEqual(0, main(["--manifest", str(self.manifest), "--output", str(output)]))
