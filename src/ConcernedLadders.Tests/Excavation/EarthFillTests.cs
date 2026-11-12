@@ -162,6 +162,29 @@ public sealed class EarthFillTests
     }
 
     [Fact]
+    public void TerrainToolsThatChangeHeightClearBlocksAndPaintingAndTheShovelDoNot()
+    {
+        // #584, owner: "level grounding or raising should have them go so we can have one continuous digout area".
+        Assert.Equal(2f, EarthFill.ClearRadius("mud_road", level: true, 2f, raise: false, 0f, smooth: false, 0f)); // the hoe's level
+        Assert.Equal(1.5f, EarthFill.ClearRadius("raise", level: false, 0f, raise: true, 1.5f, smooth: true, 1f)); // raise and smooth: the wider
+        Assert.Equal(1f, EarthFill.ClearRadius("digg", level: false, 0f, raise: true, 1f, smooth: false, 0f)); // a pickaxe's dig lowers: raise with a negative delta
+        Assert.Equal(0f, EarthFill.ClearRadius("cultivate", level: false, 4f, raise: false, 4f, smooth: false, 4f)); // painting alone
+        Assert.Equal(0f, EarthFill.ClearRadius("tcc_excavate_vertex_lower", level: false, 0f, raise: true, 0f, smooth: false, 0f)); // the shovel's own
+        Assert.Equal(0f, EarthFill.ClearRadius("tcc_excavate_vertex_raise", level: true, 3f, raise: true, 3f, smooth: true, 3f));
+        Assert.Equal(0f, EarthFill.ClearRadius(null, level: true, float.NaN, raise: false, 0f, smooth: false, 0f));
+        // A pickaxe breaks a block in one hit.
+        Assert.Equal(1f, EarthFill.PickaxeHealth);
+        string registration = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Pieces", "EarthFillPieceRegistration.cs")),
+            @"/\*.*?\*/|//[^\n]*", " ", RegexOptions.Singleline);
+        Assert.Matches(new Regex(@"destructible\.m_health\s*=\s*EarthFill\.PickaxeHealth\s*;"), registration);
+        Assert.Matches(new Regex(@"destructible\.m_damages\s*=\s*PickaxeOnly\s*\(\s*\)\s*;"), registration);
+        Assert.Matches(new Regex(@"m_pickaxe\s*=\s*HitData\.DamageModifier\.Normal\s*,"), registration);
+        Assert.Equal(11, Regex.Matches(registration, @"m_\w+\s*=\s*HitData\.DamageModifier\.\w+\s*,").Count);
+        Assert.Equal(10, Regex.Matches(registration, @"m_\w+\s*=\s*HitData\.DamageModifier\.Immune\s*,").Count);
+        Assert.Matches(new Regex(@"destructible\.m_spawnWhenDestroyed\s*=\s*null\s*;"), registration);
+    }
+
+    [Fact]
     public void ABlockIsFoundAgainByItsCellFloorAndTop()
     {
         var block = new FillBlock(new FillCell(-3, 7), Ground - 2f, Ground);
