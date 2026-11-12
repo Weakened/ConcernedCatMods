@@ -137,7 +137,8 @@ internal sealed class RailingPieceRegistration : IDisposable
             Snap(prefab.transform, "$hud_snappoint_bottom", RailingGeometry.BottomSnap, layer);
             if (railing.Angle != RailingAngle.Newel) Snap(prefab.transform, "$hud_snappoint_top", RailingGeometry.TopSnap(railing.Angle), layer);
 
-            DoorPieceKit.Icon(prefab, piece, railing.Prefab, "railing", _log);
+            (float pitch, float yaw) = railing.IconView;
+            DoorPieceKit.Icon(prefab, piece, railing.Prefab, "railing", _log, Quaternion.Euler(pitch, yaw, 0f));
             if (!PieceManager.Instance.AddPiece(custom))
                 throw new InvalidOperationException("Jotunn rejected the custom piece registration.");
             _registered.Add(railing.Prefab);

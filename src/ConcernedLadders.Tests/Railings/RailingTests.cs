@@ -239,7 +239,7 @@ public sealed class RailingTests
             foreach (string shape in new[] { "level", "stair", "steep" })
                 Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_" + family + "_" + shape);
         Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_wood_level" && piece.English == "Wood Railing");
-        Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_darkwood_short" && piece.English == "Darkwood Short Railing");
+        Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_darkwood_short" && piece.English == "Half Darkwood Railing");
         Assert.Contains(RailingFamilies.All, piece => piece.Prefab == "tcc_railing_flametal_newel" && piece.English == "Flametal Newel Post");
         Dictionary<string, string> english = RailingFamilies.English();
         Assert.All(RailingFamilies.All, piece => Assert.Equal(piece.English, english[piece.Token]));
@@ -277,6 +277,37 @@ public sealed class RailingTests
         string registration = Regex.Replace(File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Pieces", "RailingPieceRegistration.cs")),
             @"/\*.*?\*/|//[^\n]*", " ", RegexOptions.Singleline);
         Assert.DoesNotMatch(new Regex(@"\bZDO\b|GetZDO|ZRoutedRpc|InvokeRPC|ClaimOwnership|SetOwner|\bInstantiate\s*\("), registration);
+    }
+
+    [Fact]
+    public void TheMenuNamesReadBySizeAndAngleInTheOwnersOrder()
+    {
+        // #573, owner 2026-11-11: "Half Wood Railing, Wood Railing, 23 Wood Stair Railing, 45 Wood Stair Railing"; 27 chosen
+        // over 23 because the game's stairs measure 26.57 degrees.
+        Assert.Equal(new[] { "Half Wood Railing", "Wood Railing", "27 Wood Stair Railing", "45 Wood Stair Railing", "Wood Newel Post" },
+            RailingFamilies.All.Where(piece => piece.Family.Family == BuildFamily.Wood).Select(piece => piece.English));
+        Assert.Equal(new[] { "Half Iron Railing", "Iron Railing", "27 Iron Stair Railing", "45 Iron Stair Railing", "Iron Newel Post" },
+            RailingFamilies.All.Where(piece => piece.Family.Family == BuildFamily.Iron).Select(piece => piece.English));
+        // The label is the slope it fits, rounded from the railing's own geometry, not a number typed beside it.
+        Assert.Equal("27", RailingPiece.DegreesLabel(RailingAngle.Stair));
+        Assert.Equal("45", RailingPiece.DegreesLabel(RailingAngle.Steep));
+        Assert.Equal(RailingFamilies.All.Count, RailingFamilies.All.Select(piece => piece.English).Distinct().Count());
+    }
+
+    [Fact]
+    public void StairRailingIconsAreAngledAndLevelOnesStraight()
+    {
+        foreach (RailingPiece piece in RailingFamilies.All)
+        {
+            bool stair = piece.Angle is RailingAngle.Stair or RailingAngle.Steep;
+            Assert.Equal(stair ? (RailingIcons.AngledPitch, RailingIcons.AngledYaw) : (RailingIcons.StraightPitch, RailingIcons.StraightYaw), piece.IconView);
+        }
+
+        // Straight: the railing, which runs along its own z, laid square across the icon. Angled: well off square, and
+        // seen from higher up.
+        Assert.Equal(90f, RailingIcons.StraightYaw);
+        Assert.InRange(Math.Abs(90f - RailingIcons.AngledYaw), 20f, 50f);
+        Assert.True(RailingIcons.AngledPitch > RailingIcons.StraightPitch);
     }
 
     /// <summary>The base line's height under a point of a railing.</summary>

@@ -25,10 +25,10 @@ Measured from the installed game's stair pieces (Valheim 1.0.21), by their snap 
 
 | Stair pieces | Rise / run | Angle | Railing |
 |---|---|---|---|
-| `wood_stair`, `stone_stair`, `ashwood_stair`, `blackmarble_stair` (and corners), `piece_grausten_stonestair`, `dvergrprops_wood_stair` | 1 / 2 m | 26.57° | Stair Railing |
-| `wood_stepladder` | 2 / 2 m | 45° | Steep Stair Railing |
+| `wood_stair`, `stone_stair`, `ashwood_stair`, `blackmarble_stair` (and corners), `piece_grausten_stonestair`, `dvergrprops_wood_stair` | 1 / 2 m | 26.57° | 27 … Stair Railing |
+| `wood_stepladder` | 2 / 2 m | 45° | 45 … Stair Railing |
 | (floors, landings) | 0 / 2 m | 0° | Railing |
-| (a 1 m gap, a landing's end) | 0 / 1 m | 0° | Short Railing |
+| (a 1 m gap, a landing's end) | 0 / 1 m | 0° | Half … Railing |
 | (corners, the ends of a run) | none | none | Newel Post |
 
 No straight stair in the game is 33°, so the railings follow the two slopes the game has.
@@ -74,8 +74,12 @@ reads them from there. So a railing reads as its tier's ladder.
 | Copper | `woodiron_pole` | `copper` (from the Copper item), warm tint | 400 | forge | 1 Copper + 1 Wood |
 | Iron | `woodiron_pole` | `Ironbeam_mat`, cool tint | 800 | forge | 1 Iron + 1 Wood |
 
-The prefab IDs are `tcc_railing_<wood|copper|iron>_<level|stair|steep>`, a save contract once shipped. The names are
-"Wood Railing", "Wood Stair Railing", "Wood Steep Stair Railing", and so on. Costs and health are lead defaults.
+The prefab IDs are `tcc_railing_<wood|copper|iron>_<level|stair|steep>`, a save contract once shipped. The names (#573, owner
+2026-11-11) read by size and angle, in this build-menu order: "Half Wood Railing", "Wood Railing", "27 Wood Stair
+Railing", "45 Wood Stair Railing", "Wood Newel Post", and so on for every family. The number is the slope the railing
+fits, rounded from its own geometry (26.57° shows as 27; the owner chose that over the 23 first written). Stair
+railings' hammer icons are rendered from a three-quarter angle and a little above so the slope reads; level railings
+and newel posts are seen straight from the side. Renaming changes no prefab ID, so placed railings keep. Costs and health are lead defaults.
 
 ## Registration (`Pieces/RailingPieceRegistration.cs`)
 

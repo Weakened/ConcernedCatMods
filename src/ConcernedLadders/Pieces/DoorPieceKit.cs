@@ -263,12 +263,16 @@ internal static class DoorPieceKit
 
     /// <summary>The piece's hammer icon, rendered from the finished clone; on any failure the donor's door icon stays
     /// and the piece is still a stable world prefab. Skipped in batch mode.</summary>
-    internal static void Icon(GameObject prefab, Piece piece, string id, string what, Action<string> log)
+    internal static void Icon(GameObject prefab, Piece piece, string id, string what, Action<string> log) =>
+        Icon(prefab, piece, id, what, log, RenderManager.IsometricRotation);
+
+    /// <summary>As above, seen from <paramref name="rotation"/> instead of the isometric view.</summary>
+    internal static void Icon(GameObject prefab, Piece piece, string id, string what, Action<string> log, Quaternion rotation)
     {
         if (Application.isBatchMode) return;
         try
         {
-            Sprite rendered = RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation);
+            Sprite rendered = RenderManager.Instance.Render(prefab, rotation);
             if (rendered == null || rendered.texture == null || rendered.rect.width <= 0f || rendered.rect.height <= 0f)
                 throw new InvalidOperationException("Jotunn returned no usable " + what + " icon.");
             piece.m_icon = rendered;
