@@ -31,7 +31,9 @@ version and the same values for these settings.
   leaves are open, and is held below a closed or moving pair. Ladders never
   treat a cellar door as a floor. Turning the setting off again, or
   uninstalling, makes the game delete placed cellar doors, with no refund, the
-  next time the world loads. The Wood Gate cellar door's leaves are boards
+  next time the world loads. Shaped like a house's bulkhead door: the high end
+  stands 1.76 m tall with a beam across it and is open below, so a stair built
+  down from the low end passes under it (#549). The Wood Gate cellar door's leaves are boards
   and rails, unlike the Wood cellar door's solid leaves (#547). Not yet
   observed in game.
 - Trapdoor and cellar door surfaces take their texture from the matching part

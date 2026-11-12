@@ -92,11 +92,11 @@ the `piece` layer. The frame is four convex prisms, each one mesh. A frame part'
 | `door` | bare transform | donor's | donor's | none | As on the trapdoor |
 | `new`, `worn` | presentation roots | origin | identity | none | As on the trapdoor. Each holds one mesh renderer per prism, named as below |
 | `cheek_left`, `cheek_right`, `front_panel`, `rear_header` | convex mesh collider | origin | identity | prism | See the prism table |
-| `slope` | transform | (0, 0.3968, −1), the front top edge's centre | `Quaternion.Euler(-26.565, 0, 0)` | none | The slope frame: x along the slope's width, y its upward normal, z up the slope |
-| `slope/leaf_left_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (−0.84, 0, 1.0751) | identity | none | The left leaf's top outer edge, half way along the leaf. Opens by `Quaternion.Euler(0, 0, angle)` |
-| `slope/leaf_right_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0.84, 0, 1.0751) | identity | none | Opens by `Quaternion.Euler(0, 0, -angle)`: the left leaf mirrored |
-| `slope/leaf_left_hinge/leaf_left_collider`, `slope/leaf_right_hinge/leaf_right_collider` | box collider | centre left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0): toward the seam | identity | 0.835 x 0.06 x 1.7924 | |
-| `slope/leaf_left_hinge/leaf_left`, `slope/leaf_right_hinge/leaf_right` | box visual | left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0) | identity | 0.835 x 0.06 x 1.7924 | Donor leaf material |
+| `slope` | transform | (0, 0.3593, −1), the front top edge's centre | `Quaternion.Euler(-36.870, 0, 0)` | none | The slope frame: x along the slope's width, y its upward normal, z up the slope |
+| `slope/leaf_left_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (−0.84, 0, 1.1963) | identity | none | The left leaf's top outer edge, half way along the leaf. Opens by `Quaternion.Euler(0, 0, angle)` |
+| `slope/leaf_right_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0.84, 0, 1.1963) | identity | none | Opens by `Quaternion.Euler(0, 0, -angle)`: the left leaf mirrored |
+| `slope/leaf_left_hinge/leaf_left_collider`, `slope/leaf_right_hinge/leaf_right_collider` | box collider | centre left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0): toward the seam | identity | 0.835 x 0.06 x 1.9925 | |
+| `slope/leaf_left_hinge/leaf_left`, `slope/leaf_right_hinge/leaf_right` | box visual | left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0) | identity | 0.835 x 0.06 x 1.9925 | Donor leaf material |
 | `slope/leaf_left_hinge/hinge_mark_left_front`, `slope/leaf_left_hinge/hinge_mark_left_rear`, `slope/leaf_right_hinge/hinge_mark_right_front`, `slope/leaf_right_hinge/hinge_mark_right_rear` | box visual | x 0.15 on the left leaf, −0.15 on the right (inboard of the hinge); y 0.004; z −0.6 front, 0.6 rear | identity | 0.3 x 0.008 x 0.08 | Hinge material. Thinner than the 1 cm cheek gap. No collider |
 | `$hud_snappoint_corner` (four) | snap point | (±1, 0, ±1) | identity | none | Shared with the trapdoor |
 
@@ -104,10 +104,12 @@ The prisms are four-point profiles in the piece's (z, y) plane, extruded along x
 
 | Prism | x | Profile (z, y), in order |
 |---|---|---|
-| `cheek_left` | −1 to −0.85 | (−1, −0.032905), (1, −0.032905), (1, 1.396845), (−1, 0.396845) |
+| `cheek_left` | −1 to −0.85 | (−1, −0.032905), (1, −0.032905), (1, 1.859345), (−1, 0.359345) |
 | `cheek_right` | 0.85 to 1 | the same profile |
-| `front_panel` | −0.85 to 0.85 | (−1, −0.032905), (−0.85, −0.032905), (−0.85, 0.471845), (−1, 0.396845) |
-| `rear_header` | −0.85 to 0.85 | (0.8, −0.032905), (1, −0.032905), (1, 1.396845), (0.8, 1.296845) |
+| `front_panel` | −0.85 to 0.85 | (−1, −0.032905), (−0.85, −0.032905), (−0.85, 0.471845), (−1, 0.359345) |
+| `rear_header` | −0.85 to 0.85 | (0.8, 1.409345), (1, 1.409345), (1, 1.859345), (0.8, 1.709345) |
+
+The rear header is a beam since #549: its profile starts at its level underside, not the floor's bottom, and the high end is open below it (`CELLAR_DOORS.md` section 2d).
 
 **Mesh build** (`CellarBlueprint.Mesh`). Each prism has six flat faces with four vertices each: 24 vertices and 12
 triangles, every face wound outward and given its own unit normal. A face's position is read in two coordinates: (z, y)

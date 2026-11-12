@@ -20,10 +20,12 @@ in `DOOR_DONOR_MATRIX.md`. This record reuses them and adds only what the sloped
 
 ## 1. What a cellar door is, and what it is not
 
-A sloped cover over an entrance: a fixed frame (two side cheeks, a low front panel, a high rear header) and two
-leaves that meet at a central seam, each hinged at its outer side and opening outward. One Use opens or closes the
-pair. Its base takes a 2 m wood floor tile's place in the floor grid, so it sits in a floor beside an opening that the
-player made, against a wall or foundation edge behind it.
+A sloped cover over an entrance, shaped like a house's bulkhead cellar door: a fixed frame (two side cheeks, a low
+front panel, and a rear header beam at the high end) and two leaves that meet at a central seam, each hinged at its
+outer side and opening outward. One Use opens or closes the pair. Its base takes a 2 m wood floor tile's place in the
+floor grid, so it sits in a floor beside an opening that the player made, its high end against a wall or foundation edge
+behind it. Since #549 the high end is open below its beam, so a stair the player builds down from the low end passes
+under it into whatever is dug behind (section 2d).
 
 Placing one **excavates nothing, removes no floor or wall, generates no stairs, spawns no ladder and promises no
 tunnel.** CL-006 (#487, the Iron Shovel) owns digging. There is one size, 2 m; a larger dig is covered with normal
@@ -41,14 +43,14 @@ rotation formula).
 |---|---|
 | Outside module | 2.0 m x 2.0 m footprint; base flush with wood_floor: frame bottom y -0.0329, floor top y 0.0968 |
 | Snap points | the four wood_floor corners (±1, 0, ±1), native `$hud_snappoint_corner` (the trapdoor's, shared) |
-| Front height | 0.30 m above the floor top at the front edge (cover top y 0.3968) |
-| Rear height | 1.30 m above the floor top at the rear edge (cover top y 1.3968) |
-| Slope | rise 1 m over the 2 m module: tan = 0.5, **26.57°**; slope length over the module 2.236 m |
+| Front height | 0.2625 m above the floor top at the front edge (cover top y 0.3593); chosen with the slope so the front panel's top stays 0.375 m above the floor top, where the ladder exit over it was measured (#549) |
+| Rear height | 1.7625 m above the floor top at the rear edge (cover top y 1.8593); 1.30 m before #549 |
+| Slope | rise 1.5 m over the 2 m module: tan = 0.75, **36.87°**; slope length over the module 2.5 m (26.57° before #549) |
 | Side cheeks | 0.15 m wide (x ±0.85 to ±1.0), full depth, from the frame bottom up to the slope plane |
-| Front panel | 0.15 m deep (z -1.0 to -0.85), between the cheeks, top in the slope plane (0.40 to 0.47 m) |
-| Rear header | 0.20 m deep (z 0.80 to 1.0), between the cheeks, top in the slope plane (1.30 to 1.40 m) |
+| Front panel | 0.15 m deep (z -1.0 to -0.85), between the cheeks, top in the slope plane (0.36 to 0.47 m) |
+| Rear header | a beam 0.20 m deep (z 0.80 to 1.0) and 0.30 m tall (`RearBeamHeight`), between the cheeks, top in the slope plane (1.71 to 1.86 m), level underside at y 1.4093 (1.3125 m above the floor top). Open below (#549); until #549 it was solid down to the floor's bottom |
 | Opening through the floor | 1.70 m (x ±0.85) x 1.65 m (z -0.85 to 0.80) |
-| Leaves | two, 0.835 m wide (hinge to seam), 1.792 m long up the slope, 0.06 m thick, top flush with the frame |
+| Leaves | two, 0.835 m wide (hinge to seam), 1.9925 m long up the slope, 0.06 m thick, top flush with the frame |
 | Gaps | 0.01 m to each cheek, panel and header; 0.01 m at the seam |
 | Hinge axes | up the slope (piece direction (0, 0.447, 0.894)) through each leaf's **top outer edge**, at x ±0.84 |
 | Open angle | 90° about each hinge; the left leaf is the right leaf mirrored in x at the same angle |
@@ -80,11 +82,11 @@ above it (w 0.835); up the slope, the leaf's own length. In piece space (`SweepI
 |---|---|---|
 | x | 0.0028 to 0.84 (right), mirrored (left) | never beside or over the cheeks |
 | z, rear | **0.79** | 0.01 m in front of the rear header's inner face; a wall standing on the grid edge behind the piece, centred on it, up to 0.4 m thick, never meets a leaf |
-| z, front | **-1.213** | an open leaf stands square to the slope, so its top leans **0.21 m forward of the module**, over the low end; below y 0.40 (the front top edge) nothing passes the front of the module |
-| y | 0.42 to **2.03** | the open leaves' top rear corners reach 2.03 m above the snap plane |
+| z, front | **-1.341** | an open leaf stands square to the slope, so its top leans **0.34 m forward of the module**, over the low end; below y 0.36 (the front top edge) nothing passes the front of the module |
+| y | 0.43 to **2.34** | the open leaves' top rear corners reach 2.34 m above the snap plane |
 
 So a piece, rail or wall built **in front of** the low end, above the front panel's height, or a roof lower than
-2.03 m over the entrance, is in the sweep; the leaves stop against it (section 4). Owner go-around pending.
+2.34 m over the entrance, is in the sweep; the leaves stop against it (section 4). Owner go-around pending.
 
 **The rear-wall limit, checked against the installed walls (slice 2).** The sweep ends at z 0.79. A wall standing on
 the rear grid edge (z 1.0) stays out of it while it reaches less than 0.21 m toward the door, which for a wall centred
@@ -104,7 +106,7 @@ of its two facings:
 | `piece_stakewall_blackwood`: bottom snaps at z -0.085 and 0.38, colliders to z -2.97 | up to 2.97 m | not a wall that stands on a floor edge; in or clear by its facing |
 
 A wall that reaches in front of z 0.79 overlaps the closed leaves' rear edge. Their bottom rear edge is the rear-most
-point of the sweep, at about y 1.33. Nothing is pushed and nothing moves into the wall. The header stays 0.20 m (lead
+point of the sweep, at about y 1.63. Nothing is pushed and nothing moves into the wall. The header stays 0.20 m (lead
 default 3), and the thicker walls are an owner question (section 8). Owner go-around pending.
 
 **What the leaf runtime does with each wall (slice 3).** These results come from the game-free model of the runtime's
@@ -134,12 +136,47 @@ skinned closed pose first meets a wall reaching about 0.223 m toward the door. S
   the front panel's inner face, climbing side facing the rear, its top level with the snap plane, exactly as the
   trapdoor's ladder hangs from its front band. A front-lane climber of radius 0.4 m clears the front panel by 0.23 m
   (equal to the trapdoor's, tested), the rear header by 0.62 m and each open leaf by 0.38 m.
-- **Closed leaves** are solid sloped boxes at 26.57°. Whether a player can stand on them without sliding is the
+- **Closed leaves** are solid sloped boxes at 36.87°. Whether a player can stand on them without sliding is the
   game's ground-angle rule, which this record has not read; it is OWNER GO-AROUND PENDING, and the cover is not
   offered as a stair.
 - **The ladder's top exit** (decided in slice 4, section 2c): a climber leaving the planned ladder forward meets the
-  front panel, whose top is 0.40 to 0.47 m above the snap plane, before the floor in front of it. The anchor does not
+  front panel, whose top is 0.36 to 0.47 m above the snap plane, before the floor in front of it. The anchor does not
   move; the exit route rises over the panel instead.
+
+### 2d. The high end and a stair (#549)
+
+Owner playtest, 2026-11-10: the rear header was a solid block from the floor's bottom up to the slope, a 1.3 m wall
+across the back. A player walking down from the low end met it at head height at ground level and could not pass. The
+owner's reference is a house's bulkhead cellar door: the high end stands against the house, the stair goes down from
+the low end toward it, and the passage continues under the high end into the basement.
+
+So the high end is raised (rear height 1.30 to 1.7625 m, slope 26.57 to 36.87°), and the rear header is a **beam**:
+0.20 m deep and 0.30 m tall under the slope, with a level underside 1.3125 m above the floor top. Between the cheeks,
+everything below that underside is open, back to the module's rear edge (`TheHighEndIsOpenBelowItsBeam`). The front
+height is lowered from 0.30 to 0.2625 m, so the front panel's top, 0.375 m above the floor top, stays exactly where the
+ladder exit over it was measured. Section 2c's numbers are therefore unchanged.
+
+A 45° stair started at the front panel's inner face at floor level reaches the beam's inner face 1.65 m down. There it
+has 2.96 m of headroom under the beam, and 3.16 m at the module's rear edge (`AStairDownFromTheLowEndHasHeadroomUnderTheBeam`).
+The game's own stair pieces are shallower. Measured from their snap points, `wood_stair`, `stone_stair`, `ashwood_stair`,
+the black marble and grausten stairs all rise 1 m over 2 m (26.57°); only `wood_stepladder` is 45°. On the shallow
+stair the head clears the beam's inner face by 2.14 m. The cover generates no stair. The player builds it in their dig with ordinary pieces, as they build the dig's walls.
+
+What did not move:
+
+- The sweep's rear edge, z 0.79, so the rear-wall table and the leaf runtime's wall results (section 2a) are unchanged.
+- The opening (1.70 x 1.65 m), the leaf width and the hinge axes.
+- The ladder anchor and its margins.
+
+What did move, and is re-derived above:
+
+- The leaves are 1.9925 m long.
+- They lean 0.34 m over the low end when open, and their top reaches 2.34 m.
+- A roof over the entrance must clear 2.34 m.
+
+The beam is a convex prism like every frame part, its underside is a face of its collider, and the closed leaves still
+stop 0.01 m in front of it. In game, OWNER GO-AROUND PENDING: walking down a stair under the open cover, and the look of
+the taller cover.
 
 ### 2c. Ladder integration (slice 4)
 
@@ -175,9 +212,9 @@ after `IsValid()`, as the leaves already do; no RPC, ZDO field, ownership claim 
   leaf's top, faces up the slope's normal (y 0.89) and so passes the search's slope test (y 0.65 or more); a ray that
   meets one finds no landing at that point at all. The four frame prisms are an ordinary piece. A cover whose hinge
   pivots cannot be found is never a landing. The search's own footprint test (nine points at 0.9 of the radius, 0.15
-  m of step) is expected to refuse the 26.57 degree leaves anyway, since the slope rises about 0.22 m across the
+  m of step) is expected to refuse the 36.87 degree leaves anyway, since the slope rises about 0.33 m across the
   footprint, so in practice no ladder exit stands a climber on the cover.
-- **Over the front panel.** The anchored ladder's top is the snap plane; the front panel's top is 0.40 to 0.47 m above
+- **Over the front panel.** The anchored ladder's top is the snap plane; the front panel's top is 0.36 to 0.47 m above
   it, and the floor in front is at 0.097 m. The exit search's standard lifts (6 cm, then a 0.30 m step over the higher
   end) leave the feet at about 0.42 m, below the panel's 0.47 m inner edge. The clearance query's capsule floats 5 cm
   over the feet and is swept 2 cm thinner, so on the exit (from the floor's top plus the 2 cm landing skin) the 0.30 m
@@ -346,10 +383,11 @@ grid, so:
    the recipe current at that moment, so lowering a cost later only refunds less than was paid, while raising one
    later would refund more and mint material.
 2. Its own `[CellarDoors] Enabled` switch, off by default, separate from the trapdoors.
-3. One 2 m module; the 0.30 m front and 1.30 m rear heights and the 26.57° slope; a 0.20 m rear header so a wall on
-   the rear grid edge stays out of the sweep.
-4. Leaves open 90°, square to the slope (so the leaves reuse the trapdoor's motion unchanged), leaning 0.21 m over the
-   low end at the top.
+3. One 2 m module; the 0.2625 m front and 1.7625 m rear heights and the 36.87° slope (0.30 m, 1.30 m and 26.57° until
+   #549); a 0.20 m deep rear header so a wall on the rear grid edge stays out of the sweep, a 0.30 m beam open below
+   since #549.
+4. Leaves open 90°, square to the slope (so the leaves reuse the trapdoor's motion unchanged), leaning 0.34 m over the
+   low end at the top (0.21 m until #549).
 5. The pair rule: one leaf blocked holds both.
 6. Exclusions: CL-004's, unchanged; no family is dropped for geometry.
 7. Usage tags (for the adapter slice): Building and Doors, as the trapdoors.
@@ -439,7 +477,7 @@ Owner questions (slice 4):
 - The exit and the entry rise about 0.5 m above the ladder's top to clear the panel. Does that look right in game?
   The panel lift also needs about 2.42 m of headroom over the floor in front (the standard step about 2.30 m), so under a
   low ceiling in front of the cover both the exit and the entry are refused.
-- Still open from slice 1: whether a player can stand on the 26.57 degree leaves (the game's ground-angle rule was not
+- Still open from slice 1: whether a player can stand on the 36.87 degree leaves (the game's ground-angle rule was not
   read). The ladders do not stand a climber there in practice (item 25 and section 2c).
 
 ## 9. Remaining #486 slices (each its own PR)
