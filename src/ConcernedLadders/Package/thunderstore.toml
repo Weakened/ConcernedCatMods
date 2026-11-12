@@ -3,9 +3,9 @@ schemaVersion = "0.0.1"
 
 [package]
 namespace = "TheConcernedCat"
-name = "ConcernedLadders"
+name = "ConcernedBuilder"
 versionNumber = "1.1.0"
-description = "Vertical wood, copper and iron ladders with an animated climb, top exits, water and midair grabs, jump-off, slide and a Climbing skill."
+description = "Building for basements and climbs: animated vertical ladders with a Climbing skill, plus trapdoors, bulkhead cellar doors, railings and an Iron Shovel that digs straight-sided basements. Formerly Concerned Ladders."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 

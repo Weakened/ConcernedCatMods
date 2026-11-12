@@ -31,7 +31,7 @@ OPAQUE_DLL = b"Hash-transport fixture, NOT a PE/.NET/Valheim assembly.\n"
 OTHER_DLL = b"Another opaque fixture, NOT a dependency binary.\n"
 MANIFEST = '''[package]
 namespace = "TheConcernedCat"
-name = "ConcernedLadders"
+name = "ConcernedBuilder"
 versionNumber = "0.2.0"
 [package.dependencies]
 denikson-BepInExPack_Valheim = "5.4.2351"
@@ -57,10 +57,10 @@ class LadderCandidateTests(unittest.TestCase):
         self.verified = self.root / "build" / checker.DLL_NAME
         self.verified.parent.mkdir()
         self.plugins = self.root / "TCC-Ladders-Dev" / "BepInEx" / "plugins"
-        self.installed = self.plugins / "TheConcernedCat-ConcernedLadders" / checker.DLL_NAME
+        self.installed = self.plugins / "TheConcernedCat-ConcernedBuilder" / checker.DLL_NAME
         self.installed.parent.mkdir(parents=True)
         (self.plugins / "Jotunn.dll").write_bytes(OTHER_DLL)
-        self.package = self.root / "artifacts" / "TheConcernedCat-ConcernedLadders-0.2.0.zip"
+        self.package = self.root / "artifacts" / "TheConcernedCat-ConcernedBuilder-0.2.0.zip"
         self.package.parent.mkdir()
         self.downloads = self.root / "Downloads" / self.package.name
         self.downloads.parent.mkdir()
@@ -91,7 +91,7 @@ class LadderCandidateTests(unittest.TestCase):
     def entries(self, *, metadata: object | None = None, dll: bytes = OPAQUE_DLL) -> list[tuple[str, bytes]]:
         if metadata is None:
             metadata = {
-                "name": "ConcernedLadders",
+                "name": "ConcernedBuilder",
                 "version_number": VERSION,
                 "dependencies": ["denikson-BepInExPack_Valheim-5.4.2351", "ValheimModding-Jotunn-2.30.2"],
             }
@@ -182,7 +182,7 @@ class LadderCandidateTests(unittest.TestCase):
             {**original, "dependencies": original["dependencies"] + [original["dependencies"][0]]},
             {**original, "dependencies": original["dependencies"] + ["TheConcernedCat-ConcernedNPC-0.4.0"]},
             [],
-            b'{"name":"ConcernedLadders","name":"ConcernedLadders"}',
+            b'{"name":"ConcernedBuilder","name":"ConcernedBuilder"}',
         ]
         for metadata in invalid:
             with self.subTest(metadata=metadata):

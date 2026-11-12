@@ -27,7 +27,9 @@ namespace TheConcernedCat.ConcernedLadders;
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
-    public const string PluginName = "Concerned Ladders";
+    // The display name (#590): "Concerned Builder" since 1.1.0. The GUID above keeps its 1.0 value on purpose, so the
+    // config file and every setting carry over, and an old and a new package side by side cannot load the plugin twice.
+    public const string PluginName = "Concerned Builder";
     public const string PluginVersion = "1.1.0";
 
     private ConfigEntry<bool>? _enabled;

@@ -2,9 +2,15 @@
 
 ## 1.1.0
 
-Three experimental additions for building basements, each behind its own
-setting that is **off by default**. None of the three has been tried in game
-yet, so leave them off. With all three off, the ladders, the climb and the
+**Concerned Ladders is now Concerned Builder** (#590): a new Thunderstore
+package, `ConcernedBuilder`, for a mod that now builds more than ladders.
+It is the same plugin: its ID and config file are unchanged, so settings,
+placed ladders and the Climbing skill carry over. Install ConcernedBuilder
+and uninstall ConcernedLadders; do not keep both.
+
+Experimental additions for building basements, each behind its own
+setting that is **off by default**. They have been played only in
+development builds, so treat them as experimental. With all of them off, the ladders, the climb and the
 Climbing skill are the same as in 1.0.0, and nothing new appears in the hammer
 or crafting menus. Every player and the host or server must use the same
 version and the same values for these settings.

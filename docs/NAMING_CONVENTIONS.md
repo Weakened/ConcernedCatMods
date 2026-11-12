@@ -113,6 +113,16 @@ Each product is fully independent: its own DLL, plugin GUID, package, changelog,
 `concerned-ladders/v0.1.0` / issue keys `CL-###` /
 profile `TCC-Ladders-Dev`. This new product owns custom vertical pieces. It does
 not rename, replace or compile against Foreman's historical ladder implementation.
+
+**Migration #590 (owner 2026-11-12): the product ships as Concerned Builder from 1.1.0.** Two rows
+moved, nothing else: the product/display name is `Concerned Builder` and the Thunderstore
+package name is `ConcernedBuilder` (git tags `concerned-builder/v1.1.0` onward). The project
+folder, C# project, test project, namespace, assembly `TheConcernedCat.ConcernedLadders.dll`,
+plugin GUID `com.theconcernedcat.valheim.concernedladders` (so the config file and settings carry
+over, and the old and new packages side by side cannot load twice), documentation folder, issue
+keys `CL-###` and every prefab ID keep their Ladders names. The published `ConcernedLadders`
+1.0.0 package stays as it is on Thunderstore. `validate_repo.py` carries the package name as the
+product's `thunderstore_name`; `scripts/package.ps1` maps it.
 Cloud work uses an isolated checkout/worktrees named after this repository;
 `C:\code\ConcernedCatMods` remains the canonical BLD integration checkout.
 

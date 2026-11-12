@@ -32,7 +32,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "src/ConcernedLadders/Package/thunderstore.toml"
-PRODUCT = "ConcernedLadders"
+# The Thunderstore package (#590): ConcernedBuilder from 1.1.0; the DLL and the project keep the Ladders name.
+PRODUCT = "ConcernedBuilder"
 NAMESPACE = "TheConcernedCat"
 DLL_NAME = "TheConcernedCat.ConcernedLadders.dll"
 DLL_ENTRY = "plugins/" + DLL_NAME
