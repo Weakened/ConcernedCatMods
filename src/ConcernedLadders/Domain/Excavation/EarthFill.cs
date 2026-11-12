@@ -15,9 +15,9 @@ internal static class EarthFillSettings
     internal const bool EnabledByDefault = true;
 
     internal const string Description =
-        "UNFINISHED (#577), effective only with Excavation/Enabled: each hole the Iron Shovel digs gets straight earth sides. " +
+        "Effective only with Excavation/Enabled: each hole the Iron Shovel digs gets straight earth sides. " +
         "The sloping 1 m border around the hole is filled with earth blocks up to the ground beside it, so a wall built on " +
-        "the floor's edge stands against flat earth. The hammer removes a block (no cost, no refund). Not yet tested in game. " +
+        "the floor's edge stands against flat earth. The hammer removes a block (no cost, no refund). " +
         "Turning Excavation off again, or uninstalling, makes the game delete every earth block the next time a world loads.";
 }
 

@@ -203,7 +203,7 @@ public sealed class EarthFillTests
         Assert.Equal("Excavation", EarthFillSettings.Section);
         string plugin = File.ReadAllText(Path.Combine(RepoRoot, "src", "ConcernedLadders", "Plugin.cs"));
         Assert.Matches(new Regex(@"Config\.Bind\s*\(\s*EarthFillSettings\.Section\s*,\s*EarthFillSettings\.Key\s*,\s*EarthFillSettings\.EnabledByDefault\s*,"), plugin);
-        Assert.Matches(new Regex(@"Config\.Bind\s*\(\s*""Excavation""\s*,\s*""Enabled""\s*,\s*false\s*,"), plugin);
+        Assert.Matches(new Regex(@"Config\.Bind\s*\(\s*""Excavation""\s*,\s*""Enabled""\s*,\s*true\s*,"), plugin); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
         // The block prefab is registered only inside the excavation switch, and handed to the runtime.
         Assert.Single(Regex.Matches(plugin, @"new\s+EarthFillPieceRegistration\s*\("));
         Assert.Matches(new Regex(@"if\s*\(\s*enabled\.Value\s*\)\s*\{[^}]*_earthFill\s*=\s*new\s+EarthFillPieceRegistration\s*\("), plugin);

@@ -4,21 +4,22 @@ using TheConcernedCat.Ladders;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Doors;
 
-/// <summary>The trapdoor setting (CL-004 #485, slice 2). Off by default: with it off no trapdoor is cloned, no token
-/// is added and the hammer menu is exactly as before. The lid follows the native door state (slice 3); a ladder hangs
-/// in a hatch and climbs through an open one (slice 4), none of it yet observed in game.</summary>
+/// <summary>The trapdoor setting (CL-004 #485, slice 2). On by default from Concerned Builder 1.0.0 (owner 2026-11-12,
+/// after testing it in game): with it off no trapdoor is cloned, no token is added and the hammer menu is exactly as
+/// before. The lid follows the native door state (slice 3); a ladder hangs in a hatch and climbs through an open one
+/// (slice 4).</summary>
 internal static class TrapdoorSettings
 {
     internal const string Section = "Trapdoors";
 
     internal const string Key = "Enabled";
 
-    internal const bool EnabledByDefault = false;
+    internal const bool EnabledByDefault = true;
 
     internal const string Description =
-        "UNFINISHED (CL-004): adds the nine floor trapdoors to the hammer's Building tab. Their lids open and close, " +
-        "and a Concerned Ladders ladder hangs in one and climbs through it when it is open, none of it yet tested in game. " +
-        "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed trapdoor the next " +
+        "Adds the nine floor trapdoors to the hammer's Building tab. Their lids open and close, " +
+        "and a Concerned Builder ladder hangs in one and climbs through it when it is open. " +
+        "Turning it off again, or uninstalling, makes the game delete every placed trapdoor the next " +
         "time a world loads, with no refund. In multiplayer every player and the host or server must have the same " +
         "value: a host or server with it off deletes the trapdoors other players place, during the session. " +
         "Restart after changing it.";

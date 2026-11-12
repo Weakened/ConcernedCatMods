@@ -5,21 +5,21 @@ using TheConcernedCat.ConcernedLadders.Domain.Families;
 
 namespace TheConcernedCat.ConcernedLadders.Domain.Railings;
 
-/// <summary>The railing setting (#556). Off by default, as every 1.1.0 addition is: with it off no railing is cloned, no
-/// token is added and the hammer menu is unchanged.</summary>
+/// <summary>The railing setting (#556). On by default from Concerned Builder 1.0.0 (owner 2026-11-12): with it off no
+/// railing is cloned, no token is added and the hammer menu is unchanged.</summary>
 internal static class RailingSettings
 {
     internal const string Section = "Railings";
 
     internal const string Key = "Enabled";
 
-    internal const bool EnabledByDefault = false;
+    internal const bool EnabledByDefault = true;
 
     internal const string Description =
-        "UNFINISHED (#556): adds railings to the hammer's Building tab in eight materials (wood, copper, iron, darkwood, " +
+        "Adds railings to the hammer's Building tab in eight materials (wood, copper, iron, darkwood, " +
         "ashwood, flametal, dvergr and log): half (1 m) and full (2 m) level railings, 27 for the game's stairs (26.57 degrees), " +
-        "45 for the step ladder (45 degrees), and a newel post - none of it yet tested in game. " +
-        "Leave this off. Turning it off again, or uninstalling, makes the game delete every placed railing the next time a " +
+        "45 for the step ladder (45 degrees), and a newel post. " +
+        "Turning it off again, or uninstalling, makes the game delete every placed railing the next time a " +
         "world loads, with no refund. In multiplayer every player and the host or server must have the same value. " +
         "Restart after changing it.";
 }

@@ -27,10 +27,10 @@ namespace TheConcernedCat.ConcernedLadders;
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
-    // The display name (#590): "Concerned Builder" since 1.1.0. The GUID above keeps its 1.0 value on purpose, so the
+    // The display name (#590): "Concerned Builder" from its 1.0.0. The GUID above keeps its 1.0 value on purpose, so the
     // config file and every setting carry over, and an old and a new package side by side cannot load the plugin twice.
     public const string PluginName = "Concerned Builder";
-    public const string PluginVersion = "1.1.0";
+    public const string PluginVersion = "1.0.0";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
@@ -150,14 +150,14 @@ public sealed class Plugin : BaseUnityPlugin
 
     /// <summary>Iron Shovel excavation (#487 slices 2 to 4). The terrain operations register on every peer, because the
     /// tile owner applies them. The Iron Shovel item, its attack input, its placement preview and the read-only console
-    /// diagnostic exist only when the off-by-default switch is on; with it off nothing is added. A fault here never stops
+    /// diagnostic exist only when its switch is on (on by default from Concerned Builder 1.0.0); with it off nothing is added. A fault here never stops
     /// the ladders.</summary>
     private void InstallExcavation()
     {
-        ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", false,
-            "Experimental, off by default (#487, #551, #574): adds the Iron Shovel (Forge: Iron and Wood). The wheel chooses a " +
+        ConfigEntry<bool> enabled = Config.Bind("Excavation", "Enabled", true,
+            "Adds the Iron Shovel (Forge: Iron and Wood). The wheel chooses a " +
             "ready-made hole (1x1x1 to 4x4x4 m), and attack digs it through the game's own terrain operations; a hole lines up " +
-            "with the holes just dug beside it. Pressing secondary attack twice fills the last hole back in. Also adds the read-only cl_excavate console diagnostic. Not yet observed in game. " +
+            "with the holes just dug beside it. Pressing secondary attack twice fills the last hole back in. Also adds the read-only cl_excavate console diagnostic. " +
             "Every player needs the same version " +
             "and the same setting. Turning it off again removes the item from the game, and the game discards unknown items " +
             "from inventories and chests when it loads them. Restart after changing.");

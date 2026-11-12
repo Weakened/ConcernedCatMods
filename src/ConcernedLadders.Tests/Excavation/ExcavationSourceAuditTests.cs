@@ -401,7 +401,7 @@ public sealed class ExcavationSourceAuditTests
         Assert.Matches(@"new\s+ExcavationShovelInput\s*\(", body);
         Assert.Matches(@"new\s+ExcavationCommand\s*\(", body);
         Assert.Matches(@"new\s+ExcavationPreview\s*\(", body);
-        Assert.Matches(@"Config\.Bind\s*\(\s*""Excavation""\s*,\s*""Enabled""\s*,\s*false\s*,", plugin);
+        Assert.Matches(@"Config\.Bind\s*\(\s*""Excavation""\s*,\s*""Enabled""\s*,\s*true\s*,", plugin); // Owner 2026-11-12: finished and on by default for Concerned Builder 1.0.0.
     }
 
     /// <summary>The item folder clones and configures an item; it never changes terrain or the player.</summary>
