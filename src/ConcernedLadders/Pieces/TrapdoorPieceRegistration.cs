@@ -119,7 +119,8 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
             // keeps the lid out of WearNTear's support bounds and out of the build ray (both skip rigidbody colliders).
             KinematicBody(hinge);
             Collider(hinge.transform, TrapdoorBlueprint.LidCollider, layer);
-            Visual(hinge.transform, TrapdoorBlueprint.LidVisual, lid, layer);
+            TrapdoorPart lidVisual = TrapdoorBlueprint.LidVisual;
+            LeafVisuals(hinge.transform, lidVisual.Name, lidVisual.Centre, lidVisual.Size, LeafPattern.For(family), lid, frame, layer);
             Material strapMaterial = HingeMaterial(lid);
             foreach (TrapdoorPart strap in TrapdoorBlueprint.HingeStraps) Visual(hinge.transform, strap, strapMaterial, layer);
             // The lid runtime (slice 3): reads the native door state, never writes it. The swing time is the donor's.

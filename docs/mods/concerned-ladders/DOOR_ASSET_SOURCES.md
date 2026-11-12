@@ -26,6 +26,7 @@ and builds every frame, lid, leaf, collider and snap point from the numbers belo
 | `Domain/Doors/TrapdoorBlueprint.cs` | Trapdoor build plan: object names, the boxes in their parent space, the hinge straps, the donor materials by name |
 | `Domain/Doors/CellarGeometry.cs` | Cellar door dimensions: slope, cheeks, front panel, rear header (as prisms), leaves, hinge axes, open angle |
 | `Domain/Doors/CellarBlueprint.cs` | Cellar door build plan: object names, the slope transform, leaf and mark boxes, the prism meshes (vertices, normals, UVs, triangles) |
+| `Domain/Doors/LeafPattern.cs` | Each family's leaf look (solid, or the Wood Gate's boards and rails) and its parts, section 4a |
 | `Domain/Doors/HatchMotion.cs` | The motion curve (`Ease`), the swing timing, sub-step and skin limits, shared by lid and leaves |
 | `Domain/Doors/DoorFamilies.cs` | The nine donor families, each with its swing time (the donor animator's clip length) |
 | `Domain/Doors/CellarDoors.cs` | The cellar doors' prefab IDs, names and doubled costs |
@@ -113,6 +114,28 @@ same on every face. Unity then recalculates bounds and tangents. The mesh is nam
 all nine families (only the material differs), and kept loaded with `HideFlags.DontUnloadUnusedAsset`. Tests check that
 it is closed, outward-facing and convex, and that it encloses exactly the prism's volume (`CellarBlueprintTests`).
 
+### 4a. The Wood Gate's leaf look (#547)
+
+The Wood Door and the Wood Gate borrow the same three materials (section 5), so until #547 their trapdoors and cellar
+doors were identical but for the name. `LeafPattern` (`Domain/Doors/LeafPattern.cs`) now gives every lid and leaf a
+look. `LeafPattern.For` makes the Wood Gate's a **gate**; the other eight families stay **solid**: the one cube visual
+`lid_hinge/lid` or `leaf_left`/`leaf_right` in the rows above, unchanged. The adapters build either through
+`DoorPieceKit.LeafVisuals`.
+
+A gate replaces that one cube with cube visuals in the same parent and inside the same box, named from it:
+
+- `<leaf>_board_0` to `<leaf>_board_<n-1>`: boards running the leaf's whole length (z), in the donor leaf material.
+  They take the top 55% of the thickness (`BoardShare`). The count is the fewest that keep each no wider than 0.18 m
+  (`BoardWidthMax`), with 0.03 m gaps (`BoardGap`), and the outer boards flush with the leaf's sides: 8 on the trapdoor
+  lid (1.58 m), 5 on each cellar leaf (0.835 m).
+- `<leaf>_rail_0` and `<leaf>_rail_1`: two rails across the full width, in the donor **frame** material, so they read
+  apart from the boards. They take the bottom 45% of the thickness, are 0.12 m wide (`RailWidth`) and are centred 20%
+  of the leaf's length in from each end (`RailInset`).
+
+Every part stays inside the leaf's collider box, and the collider is unchanged. So the sweep, the clearances, the
+occupancy queries and the ladder rules are exactly as tested for the solid leaf. Through the gaps the boards show the
+rails, or what lies under the leaf. Tested in `LeafPatternTests`; in game, OWNER GO-AROUND PENDING.
+
 ## 5. Animation curves and timing
 
 The doors have no animation clip. Each frame, the lid runtime and the leaf runtime turn the hinge transforms from one
@@ -177,7 +200,8 @@ clip would finish while Use is still refused, or still be moving once it is acce
 - **Texture mapping.** The trapdoor's boxes use the built-in cube's UVs, which map the full texture once onto each
   face whatever the box's size. A 2 m frame band and its 0.13 m edge therefore show the texture at different scales.
   The cellar prisms use one UV unit per 2 m on every face (section 4). The cellar's leaves, its hinge marks and all
-  trapdoor parts are built-in cubes. How either looks is OWNER GO-AROUND PENDING.
+  trapdoor parts are built-in cubes, and so are the Wood Gate's boards and rails (section 4a). How either looks is
+  OWNER GO-AROUND PENDING.
 - **No texture or image file** belongs to the doors. The hammer icons are rendered at load from the finished clone
   (`RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation)`, Jötunn 2.30.2). If the render fails, the
   donor's own icon is kept. Rendering is skipped in batch mode.
