@@ -26,11 +26,12 @@ and builds every frame, lid, leaf, collider and snap point from the numbers belo
 | `Domain/Doors/TrapdoorBlueprint.cs` | Trapdoor build plan: object names, the boxes in their parent space, the hinge straps, the donor materials by name |
 | `Domain/Doors/CellarGeometry.cs` | Cellar door dimensions: slope, cheeks, front panel, rear header (as prisms), leaves, hinge axes, open angle |
 | `Domain/Doors/CellarBlueprint.cs` | Cellar door build plan: object names, the slope transform, leaf and mark boxes, the prism meshes (vertices, normals, UVs, triangles) |
+| `Domain/Doors/DoorSurfaces.cs` | Which region of each donor texture every surface samples, or that it tiles (section 6a) |
 | `Domain/Doors/LeafPattern.cs` | Each family's leaf look (solid, or the Wood Gate's boards and rails) and its parts, section 4a |
 | `Domain/Doors/HatchMotion.cs` | The motion curve (`Ease`), the swing timing, sub-step and skin limits, shared by lid and leaves |
 | `Domain/Doors/DoorFamilies.cs` | The nine donor families, each with its swing time (the donor animator's clip length) |
 | `Domain/Doors/CellarDoors.cs` | The cellar doors' prefab IDs, names and doubled costs |
-| `Pieces/DoorPieceKit.cs` | The shared builder: strip the donor, cube visuals, box colliders, snaps, hinge material, icon render |
+| `Pieces/DoorPieceKit.cs` | The shared builder: strip the donor, box visuals (generated meshes), box colliders, snaps, hinge material, icon render, the mesh cache |
 | `Pieces/TrapdoorPieceRegistration.cs`, `Pieces/CellarDoorPieceRegistration.cs` | Walk the blueprints into a clone; build the prism meshes |
 | `Runtime/TrapdoorLid.cs`, `Runtime/CellarLeaves.cs` | Turn the hinge transforms from the native door state every frame |
 
@@ -49,8 +50,9 @@ section 5).
 ## 3. Trapdoor: hierarchy, pivots and rest transforms
 
 The clone keeps the donor root's `Piece`, `ZNetView`, `WearNTear`, `Door` and `Animator`, and adds `TrapdoorLid`.
-Every object the adapter builds is on the game's `piece` layer. "Rest" is the closed pose. A cube visual is Unity's built-in cube with its
-collider removed, scaled to the size given. A box collider sits on its own empty child, with its centre and size set
+Every object the adapter builds is on the game's `piece` layer. "Rest" is the closed pose. A box visual is a generated box mesh at its true size
+(`CellarBlueprint.BoxPrism`, built as a frame prism is), with no collider; until #548 it was Unity's built-in cube,
+scaled. A box collider sits on its own empty child, with its centre and size set
 on the collider itself.
 
 | Path from the root | Kind | Position (parent space) | Rest rotation | Size | Notes |
@@ -58,12 +60,12 @@ on the collider itself.
 | `door` | bare transform | donor's | donor's | none | The donor leaf, kept as a bare transform (its layer is the donor's). The hidden native animator writes it and nothing reads it (`DOOR_DONOR_MATRIX.md` section 4) |
 | `new` | presentation root | origin | identity | none | `WearNTear.m_new`. Holds the four frame visuals in the donor's frame material |
 | `worn` | presentation root | origin | identity | none | `m_worn` and `m_broken`, in the donor's worn material. Absent where the donor has one root: `new` then serves all three states |
-| `new/frame_front`, `new/frame_rear`, `new/frame_left`, `new/frame_right` (and the same under `worn`) | cube visual | see the frame table | identity | see the frame table | No collider |
+| `new/frame_front`, `new/frame_rear`, `new/frame_left`, `new/frame_right` (and the same under `worn`) | box visual | see the frame table | identity | see the frame table | No collider |
 | `frame_front`, `frame_rear`, `frame_left`, `frame_right` | box collider | origin; centre on the collider | identity | see the frame table | Static. `WearNTear` measures support with these |
 | `lid_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0, 0.0968, 0.79) | identity | none | The hinge axis: the lid's top rear edge. Opens by `Quaternion.Euler(angle, 0, 0)`, 0° closed to 90° open |
 | `lid_hinge/lid_collider` | box collider | centre (0, −0.04, −0.79) | identity | 1.58 x 0.08 x 1.58 | Moves with the pivot |
-| `lid_hinge/lid` | cube visual | (0, −0.04, −0.79) | identity | 1.58 x 0.08 x 1.58 | Donor leaf material |
-| `lid_hinge/hinge_strap_left`, `lid_hinge/hinge_strap_right` | cube visual | left (−0.5, 0.006, −0.18), right (0.5, 0.006, −0.18) | identity | 0.08 x 0.012 x 0.36 | Hinge material (section 6). Marks the hinge side on the ghost. No collider |
+| `lid_hinge/lid` | box visual | (0, −0.04, −0.79) | identity | 1.58 x 0.08 x 1.58 | Donor leaf material |
+| `lid_hinge/hinge_strap_left`, `lid_hinge/hinge_strap_right` | box visual | left (−0.5, 0.006, −0.18), right (0.5, 0.006, −0.18) | identity | 0.08 x 0.012 x 0.36 | Hinge material (section 6). Marks the hinge side on the ghost. No collider |
 | `$hud_snappoint_corner` (four) | snap point, tag `snappoint` | (±1, 0, ±1) | identity | none | The wood floor's own corner snaps and token |
 
 The frame bands, from `HatchGeometry.Frame` (minimum and maximum corners; height 0.12975, centre y 0.03197):
@@ -94,8 +96,8 @@ the `piece` layer. The frame is four convex prisms, each one mesh. A frame part'
 | `slope/leaf_left_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (−0.84, 0, 1.0751) | identity | none | The left leaf's top outer edge, half way along the leaf. Opens by `Quaternion.Euler(0, 0, angle)` |
 | `slope/leaf_right_hinge` | pivot, kinematic `Rigidbody` (no gravity) | (0.84, 0, 1.0751) | identity | none | Opens by `Quaternion.Euler(0, 0, -angle)`: the left leaf mirrored |
 | `slope/leaf_left_hinge/leaf_left_collider`, `slope/leaf_right_hinge/leaf_right_collider` | box collider | centre left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0): toward the seam | identity | 0.835 x 0.06 x 1.7924 | |
-| `slope/leaf_left_hinge/leaf_left`, `slope/leaf_right_hinge/leaf_right` | cube visual | left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0) | identity | 0.835 x 0.06 x 1.7924 | Donor leaf material |
-| `slope/leaf_left_hinge/hinge_mark_left_front`, `slope/leaf_left_hinge/hinge_mark_left_rear`, `slope/leaf_right_hinge/hinge_mark_right_front`, `slope/leaf_right_hinge/hinge_mark_right_rear` | cube visual | x 0.15 on the left leaf, −0.15 on the right (inboard of the hinge); y 0.004; z −0.6 front, 0.6 rear | identity | 0.3 x 0.008 x 0.08 | Hinge material. Thinner than the 1 cm cheek gap. No collider |
+| `slope/leaf_left_hinge/leaf_left`, `slope/leaf_right_hinge/leaf_right` | box visual | left (0.4175, −0.03, 0), right (−0.4175, −0.03, 0) | identity | 0.835 x 0.06 x 1.7924 | Donor leaf material |
+| `slope/leaf_left_hinge/hinge_mark_left_front`, `slope/leaf_left_hinge/hinge_mark_left_rear`, `slope/leaf_right_hinge/hinge_mark_right_front`, `slope/leaf_right_hinge/hinge_mark_right_rear` | box visual | x 0.15 on the left leaf, −0.15 on the right (inboard of the hinge); y 0.004; z −0.6 front, 0.6 rear | identity | 0.3 x 0.008 x 0.08 | Hinge material. Thinner than the 1 cm cheek gap. No collider |
 | `$hud_snappoint_corner` (four) | snap point | (±1, 0, ±1) | identity | none | Shared with the trapdoor |
 
 The prisms are four-point profiles in the piece's (z, y) plane, extruded along x (`CellarGeometry.Frame`):
@@ -108,21 +110,24 @@ The prisms are four-point profiles in the piece's (z, y) plane, extruded along x
 | `rear_header` | −0.85 to 0.85 | (0.8, −0.032905), (1, −0.032905), (1, 1.396845), (0.8, 1.296845) |
 
 **Mesh build** (`CellarBlueprint.Mesh`). Each prism has six flat faces with four vertices each: 24 vertices and 12
-triangles, every face wound outward and given its own unit normal. The two end caps take UVs (z/2, y/2). Each of the
-four side faces takes (x/2, distance along its profile edge/2). So one UV unit is 2 m (`CellarBlueprint.UvMetres`), the
-same on every face. Unity then recalculates bounds and tangents. The mesh is named `tcc_cellardoor_<prism>`, shared by
-all nine families (only the material differs), and kept loaded with `HideFlags.DontUnloadUnusedAsset`. Tests check that
+triangles, every face wound outward and given its own unit normal. A face's position is read in two coordinates: (z, y)
+on the two end caps, and (x, distance along its profile edge) on the four sides. Where the family's texture tiles, those
+coordinates become the UVs over 2 m, so one UV unit is 2 m (`CellarBlueprint.UvMetres`), the same on every face. Where
+it is an atlas, the face is stretched over the family's region of it instead (section 6a). Unity then recalculates
+bounds and tangents. The collider mesh, `tcc_door_cellar_<prism>_tile`, is shared by all nine families. Each visual
+mesh, `tcc_door_cellar_<prism>_<region>`, is shared by the families with that region. All are kept loaded with
+`HideFlags.DontUnloadUnusedAsset`. Tests check that
 it is closed, outward-facing and convex, and that it encloses exactly the prism's volume (`CellarBlueprintTests`).
 
 ### 4a. The Wood Gate's leaf look (#547)
 
 The Wood Door and the Wood Gate borrow the same three materials (section 5), so until #547 their trapdoors and cellar
 doors were identical but for the name. `LeafPattern` (`Domain/Doors/LeafPattern.cs`) now gives every lid and leaf a
-look. `LeafPattern.For` makes the Wood Gate's a **gate**; the other eight families stay **solid**: the one cube visual
+look. `LeafPattern.For` makes the Wood Gate's a **gate**; the other eight families stay **solid**: the one box visual
 `lid_hinge/lid` or `leaf_left`/`leaf_right` in the rows above, unchanged. The adapters build either through
 `DoorPieceKit.LeafVisuals`.
 
-A gate replaces that one cube with cube visuals in the same parent and inside the same box, named from it:
+A gate replaces that one box with box visuals in the same parent and inside the same box, named from it:
 
 - `<leaf>_board_0` to `<leaf>_board_<n-1>`: boards running the leaf's whole length (z), in the donor leaf material.
   They take the top 55% of the thickness (`BoardShare`). The count is the fewest that keep each no wider than 0.18 m
@@ -197,14 +202,45 @@ clip would finish while Use is still refused, or still be moving once it is acce
 - **The hinge material** is the one material the mod creates. It is a runtime copy of the leaf material, named
   `<leaf>_tcc_hinge`, with `_Color` multiplied by 0.35 (RGB) where the shader has that property
   (`DoorPieceKit.HingeMaterial`). The shared native material is untouched.
-- **Texture mapping.** The trapdoor's boxes use the built-in cube's UVs, which map the full texture once onto each
-  face whatever the box's size. A 2 m frame band and its 0.13 m edge therefore show the texture at different scales.
-  The cellar prisms use one UV unit per 2 m on every face (section 4). The cellar's leaves, its hinge marks and all
-  trapdoor parts are built-in cubes, and so are the Wood Gate's boards and rails (section 4a). How either looks is
-  OWNER GO-AROUND PENDING.
+- **Texture mapping** (#548). Every surface is a generated mesh whose UVs come from its family's region (section 6a):
+  the leaf region for the lid, the leaves, the gate's boards and the hinge hardware, the frame region for the frame,
+  its prisms and the gate's rails. Until #548 the boxes were Unity's built-in cubes, which map the whole texture onto
+  every face. Seven of the nine leaf textures are atlases, so the Roundpole doors showed bark, ring ends and the pale
+  cut face at once, and the Iron Gate's leaf would have shown the catacombs props sheet. How it looks is OWNER
+  GO-AROUND PENDING.
 - **No texture or image file** belongs to the doors. The hammer icons are rendered at load from the finished clone
   (`RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation)`, Jötunn 2.30.2). If the render fails, the
   donor's own icon is kept. Rendering is skipped in batch mode.
+
+### 6a. Texture regions (#548)
+
+`DoorSurfaces.For` pins, per family, where the leaf and the frame sample their materials. A **region** surface maps each
+face onto one rectangle of the texture: the face's longer side goes along the rectangle's longer side, so the grain
+runs as on the native door. A **tiling** surface repeats the texture once per 2 m (`UvRegion.UvMetres`). Only the
+seamless sheets tile: `Planks5c_low` (the Wood and Wood Gate leaves and frames) and the 32 px `metalwall` (the Iron
+Gate's frame).
+
+Each region is a UV island that the donor's own leaf or frame mesh uses on its largest faces. They were read from the
+installed game (Valheim 1.0.21) by the read-only probe `cl-ladders-devtools/doors/leafuv_islands.py`, which lies outside
+the repository and writes nothing into the game. Each island was then cropped and looked at. The worn textures share
+their fresh texture's layout (compared side by side), so one region serves both. Two islands were **trimmed by eye**,
+and are marked so below. UVs are Unity's: v runs up the image.
+
+| Donor | Leaf region | Frame region | Texture, and where each region comes from |
+|---|---|---|---|
+| `wood_door` | tiles | tiles | `Planks5c_low`, seamless: no region |
+| `wood_gate` | tiles | tiles | `Planks5c_low`, seamless: no region |
+| `wood_fence_gate` | u 0.0672-0.4651, v 0.1824-0.8068 | u 0.0672-0.4651, v 0.1824-0.8068 | `stakewall_d`: the bark region of the gate's poles (`door/high`, the side faces), for leaf and frame alike |
+| `iron_grate` | u 0.4522-0.486, v 0.3633-0.7784 | tiles | `fi_village_catacombs_hd_2`: the bar region of the grate's door; `metalwall` seamless |
+| `darkwood_gate` | u 0.2-0.396, v 0.0895-0.62 | u 0.788-0.8867, v 0.078-0.749 | `DarkWoodGate_d`: the leaf's plank region (`door/low`), **trimmed** from u 0.1552 and v 0.7041 clear of a grey stone; the frame's post region (`New/high`) |
+| `stave_gate` | u 0.2845-0.5415, v 0.6207-0.9746 | u 0.0178-0.2359, v 0.0101-0.8017 | `TimberGate_d`: the leaf's diamond panel region (`door/high`); the frame's plank region (`New/high`) |
+| `piece_hexagonal_door` | u 0.3079-0.8403, v 0.0892-0.6274 | u 0.9033-0.9824, v 0.025-0.9526 | `Hexagonaldoor_d`: the carved panel region (`door/LOD`); the door's edge-strip region for the frame |
+| `ashwood_door` | u 0.0103-0.395, v 0.4158-0.9897 | u 0.4448-0.9248, v 0.25-0.9414 | `ashwooddoor_d`: the leaf's panel region (`door/low`); the frame region (`Frame/high`), **trimmed** from v 0.0657 above a blue patch |
+| `flametal_gate` | u 0.03-0.1815, v 0.0382-0.8328 | u 0.7525-0.7938, v 0.0445-0.8121 | `flametalgate_d`: the leaf's face region (`door/high`); its side-strip region for the frame |
+
+`DoorSurfacesTests` checks this table against the code. It also checks that every surface's UVs stay inside its region
+and that each face spans the region. A long face runs along a long region. The two seamless sheets keep the metric
+mapping, and no door piece draws the built-in cube.
 
 ## 7. Collider definitions (summary)
 
@@ -289,7 +325,7 @@ No purchased, stock or extracted mesh, texture or animation is used for the door
    something holds both, so one leaf can never stand open while the other is shut. Separate per-leaf curves would mean
    giving up that rule or redefining it, so the owner has to decide. Editing the one shared curve (`HatchMotion.Ease`)
    is supported today, and it changes the trapdoor's lid as well.
-3. **Looks.** The texture scale on the built-in cubes (section 6), the hinge-strap and mark contrast, and the icons all
+3. **Looks.** The texture regions and the two trimmed by eye (section 6a), the hinge-strap and mark contrast, and the icons all
    need to be seen in game.
 4. **Candidate provenance.** Someone has to freeze the source, build the package under the lock, record the ZIP and
    DLL hashes, show that the packaged DLL is the verified one, install the package and smoke it. That is the lead's or

@@ -34,6 +34,10 @@ version and the same values for these settings.
   next time the world loads. The Wood Gate cellar door's leaves are boards
   and rails, unlike the Wood cellar door's solid leaves (#547). Not yet
   observed in game.
+- Trapdoor and cellar door surfaces take their texture from the matching part
+  of the door's own texture sheet (the Roundpole doors' bark, for example),
+  instead of stretching the whole sheet across every face (#548). Not yet
+  observed in game.
 - Iron Shovel and measured basement excavation (CL-006, #487), behind
   `Excavation` / `Enabled` (off by default). Adds the Iron Shovel, crafted at
   the Forge from 10 Iron and 4 Wood once you have found Iron (Iron Scrap alone

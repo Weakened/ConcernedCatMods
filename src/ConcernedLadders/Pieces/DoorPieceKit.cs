@@ -193,27 +193,53 @@ internal static class DoorPieceKit
         body.useGravity = false;
     }
 
-    /// <summary>A visual box: the built-in cube with its collider removed.</summary>
-    internal static void VisualBox(Transform parent, string name, ClimbPoint centre, ClimbPoint size, Material material, int layer)
+    /// <summary>Every mesh the door pieces build, by content key: a few dozen small meshes for the whole session, shared
+    /// by every family that has the same shape and texture region. Kept referenced by the clones, which live under
+    /// Jötunn's persistent prefab container, and never swept by an unused-asset unload.</summary>
+    private static readonly Dictionary<string, Mesh> Meshes = new Dictionary<string, Mesh>(StringComparer.Ordinal);
+
+    /// <summary>The Unity mesh of a game-free one, built once per <paramref name="key"/>.</summary>
+    internal static Mesh UnityMesh(string key, Func<CellarMesh> build)
     {
-        GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        UnityEngine.Object.DestroyImmediate(box.GetComponent<Collider>());
-        box.name = name;
-        box.layer = layer;
+        if (Meshes.TryGetValue(key, out Mesh? existing) && existing != null) return existing;
+        CellarMesh shape = build();
+        var mesh = new Mesh { name = "tcc_door_" + key, hideFlags = HideFlags.DontUnloadUnusedAsset };
+        mesh.vertices = shape.Vertices.Select(Vector).ToArray();
+        mesh.normals = shape.Normals.Select(Vector).ToArray();
+        mesh.uv = shape.Uvs.Select(uv => new Vector2(uv.U, uv.V)).ToArray();
+        mesh.triangles = shape.Triangles.ToArray();
+        mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
+        Meshes[key] = mesh;
+        return mesh;
+    }
+
+    /// <summary>A visual box (#548): a generated box mesh at its true size, its faces sampling only
+    /// <paramref name="region"/> of the material's texture, never the built-in cube, whose faces each show the whole
+    /// sheet. No collider.</summary>
+    internal static void VisualBox(Transform parent, string name, ClimbPoint centre, ClimbPoint size, Material material, UvRegion region, int layer)
+    {
+        string key = FormattableString.Invariant($"box_{size.X:0.#####}x{size.Y:0.#####}x{size.Z:0.#####}_{region.Key}");
+        Mesh mesh = UnityMesh(key, () => CellarBlueprint.Mesh(CellarBlueprint.BoxPrism(key, new ClimbPoint(0f, 0f, 0f), size), region));
+        var box = new GameObject(name) { layer = layer };
         box.transform.SetParent(parent, false);
         box.transform.localPosition = Vector(centre);
         box.transform.localRotation = Quaternion.identity;
-        box.transform.localScale = Vector(size);
-        box.GetComponent<Renderer>().sharedMaterial = material;
+        box.AddComponent<MeshFilter>().sharedMesh = mesh;
+        box.AddComponent<MeshRenderer>().sharedMaterial = material;
     }
 
-    /// <summary>A leaf's visual boxes in its look (<see cref="LeafPattern"/>, #547): boards in the donor leaf's material,
-    /// rails in the donor frame's. Visual only; the leaf's collider is built separately and is the same for every look.</summary>
+    /// <summary>A leaf's visual boxes in its look (<see cref="LeafPattern"/>, #547): boards in the donor leaf's material
+    /// and region, rails in the donor frame's (#548). Visual only; the leaf's collider is built separately and is the
+    /// same for every look.</summary>
     internal static void LeafVisuals(Transform parent, string name, ClimbPoint centre, ClimbPoint size, LeafLook look,
-        Material board, Material rail, int layer)
+        Material board, Material rail, DoorSurface surface, int layer)
     {
         foreach (LeafPiece piece in LeafPattern.Parts(name, centre, size, look))
-            VisualBox(parent, piece.Name, piece.Centre, piece.Size, piece.Role == LeafPieceRole.Rail ? rail : board, layer);
+        {
+            bool isRail = piece.Role == LeafPieceRole.Rail;
+            VisualBox(parent, piece.Name, piece.Centre, piece.Size, isRail ? rail : board, isRail ? surface.Frame : surface.Leaf, layer);
+        }
     }
 
     /// <summary>A box collider on its own child, never on the root: the placement ghost's blocked-by-player test

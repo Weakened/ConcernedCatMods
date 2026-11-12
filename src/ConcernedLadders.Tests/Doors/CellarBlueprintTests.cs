@@ -133,10 +133,10 @@ public sealed class CellarBlueprintTests
         }
 
         // The adapter adds only the frame's mesh parts and the leaf runtime (slice 3, pinned in CellarLeavesTests); the
-        // kit only the leaves' bodies and box colliders.
+        // kit only the leaves' bodies and box colliders, and the box visuals' generated meshes (#548).
         Assert.Equal(new[] { "CellarLeaves", "MeshCollider", "MeshFilter", "MeshRenderer" },
             Regex.Matches(Code(Source(Adapter)), @"AddComponent\s*<\s*(\w+)\s*>").Select(m => m.Groups[1].Value).Distinct().OrderBy(n => n, StringComparer.Ordinal));
-        Assert.Equal(new[] { "BoxCollider", "Rigidbody" },
+        Assert.Equal(new[] { "BoxCollider", "MeshFilter", "MeshRenderer", "Rigidbody" },
             Regex.Matches(Code(Source(Kit)), @"AddComponent\s*<\s*(?:UnityEngine\s*\.\s*)?(\w+)\s*>").Select(m => m.Groups[1].Value).Distinct().OrderBy(n => n, StringComparer.Ordinal));
         string adapter = Code(Source(Adapter));
         // Two rotations are set, each once, at build time: the slope's tilt and each pivot's closed pose.
@@ -160,15 +160,37 @@ public sealed class CellarBlueprintTests
         Assert.Matches(new Regex(@"collider\s*\.\s*isTrigger\s*\|\|\s*UnderBody\s*\(\s*holder\s*!\s*,\s*prefab\s*\.\s*transform\s*\)"), adapter);
         Assert.Matches(new Regex(@"for\s*\(\s*Transform\s*\?\s+at\s*=\s*part\s*;\s*at\s*!=\s*null\s*;\s*at\s*=\s*at\s*\.\s*parent\s*\)\s*\{\s*if\s*\(\s*at\s*\.\s*GetComponent\s*<\s*Rigidbody\s*>\s*\(\s*\)\s*!=\s*null\s*\)\s*return\s+true\s*;\s*if\s*\(\s*at\s*==\s*root\s*\)\s*return\s+false\s*;"), adapter);
         Assert.DoesNotMatch(new Regex(@"attachedRigidbody"), adapter);
-        Assert.Matches(new Regex(@"collider\s*\.\s*convex\s*=\s*true\s*;\s*collider\s*\.\s*sharedMesh\s*=\s*FrameMesh\s*\(\s*shape\s*\)\s*;"), adapter);
-        Assert.Matches(new Regex(@"AddComponent\s*<\s*MeshFilter\s*>\s*\(\s*\)\s*\.\s*sharedMesh\s*=\s*FrameMesh\s*\(\s*shape\s*\)\s*;"), adapter);
+        Assert.Matches(new Regex(@"collider\s*\.\s*convex\s*=\s*true\s*;\s*collider\s*\.\s*sharedMesh\s*=\s*ColliderMesh\s*\(\s*shape\s*\)\s*;"), adapter);
+        // The visual is the same prism's mesh in the family's texture region (#548): the same vertices and triangles
+        // as the collider's (TheVisualFrameMeshIsTheColliderGeometryInEveryRegion), only the UVs differ.
+        Assert.Matches(new Regex(@"foreach\s*\(\s*CellarPrism\s+prism\s+in\s+CellarGeometry\s*\.\s*Frame\s*\)"), adapter);
+        Assert.Matches(new Regex(@"AddComponent\s*<\s*MeshFilter\s*>\s*\(\s*\)\s*\.\s*sharedMesh\s*=\s*UnityMesh\s*\([^;]*CellarBlueprint\s*\.\s*Mesh\s*\(\s*prism\s*,\s*region\s*\)\s*\)\s*;"), adapter);
         Assert.Matches(new Regex(@"!\s*collider\s*\.\s*convex"), adapter);
-        Assert.Matches(new Regex(@"mesh\s*\.\s*triangles\s*=\s*shape\s*\.\s*Triangles\s*\.\s*ToArray\s*\(\s*\)\s*;"), adapter);
-        Assert.Matches(new Regex(@"mesh\s*\.\s*vertices\s*=\s*shape\s*\.\s*Vertices\s*\.\s*Select\s*\(\s*Vector\s*\)\s*\.\s*ToArray\s*\(\s*\)\s*;"), adapter);
+        string kit = Code(Source(Kit));
+        Assert.Matches(new Regex(@"mesh\s*\.\s*triangles\s*=\s*shape\s*\.\s*Triangles\s*\.\s*ToArray\s*\(\s*\)\s*;"), kit);
+        Assert.Matches(new Regex(@"mesh\s*\.\s*vertices\s*=\s*shape\s*\.\s*Vertices\s*\.\s*Select\s*\(\s*Vector\s*\)\s*\.\s*ToArray\s*\(\s*\)\s*;"), kit);
         Assert.Matches(new Regex(@"foreach\s*\(\s*ClimbPoint\s+corner\s+in\s+CellarGeometry\s*\.\s*CornerSnaps\s*\)\s*Snap\s*\(\s*prefab\s*\.\s*transform\s*,\s*CellarGeometry\s*\.\s*CornerSnapToken\s*,"), adapter);
     }
 
     // ---- The frame meshes --------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void TheVisualFrameMeshIsTheColliderGeometryInEveryRegion()
+    {
+        foreach (DoorFamily family in DoorFamilies.All)
+        {
+            UvRegion region = DoorSurfaces.For(family).Frame;
+            for (int index = 0; index < CellarGeometry.Frame.Count; ++index)
+            {
+                CellarMesh collider = CellarBlueprint.FrameMeshes[index];
+                CellarMesh visual = CellarBlueprint.Mesh(CellarGeometry.Frame[index], region);
+                Assert.Equal(collider.Name, visual.Name);
+                Assert.Equal(collider.Vertices, visual.Vertices);
+                Assert.Equal(collider.Normals, visual.Normals);
+                Assert.Equal(collider.Triangles, visual.Triangles);
+            }
+        }
+    }
 
     [Fact]
     public void EachFrameMeshIsItsPrismsEightCornersAsSixOutwardFaces()

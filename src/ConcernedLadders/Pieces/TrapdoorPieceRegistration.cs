@@ -66,6 +66,8 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
 
             // The donor's own materials, read before anything is cloned or stripped.
             TrapdoorMaterials names = TrapdoorBlueprint.MaterialsFor(family);
+            // Where each surface samples those materials' textures, most of which are atlases (#548).
+            DoorSurface surface = DoorSurfaces.For(family);
             Material lid = DonorMaterial(donor!, names.Lid);
             Material frame = DonorMaterial(donor!, names.Frame);
             Material? frameWorn = names.FrameWorn == null ? null : DonorMaterial(donor!, names.FrameWorn);
@@ -105,8 +107,8 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
 
             // Presentation roots by wear state (DoorPieceKit.AdoptPresentation): two where the donor has a worn
             // material, one where the donor itself uses one root.
-            GameObject fresh = FrameRoot(prefab.transform, TrapdoorBlueprint.NewRoot, frame, layer);
-            GameObject worn = frameWorn == null ? fresh : FrameRoot(prefab.transform, TrapdoorBlueprint.WornRoot, frameWorn, layer);
+            GameObject fresh = FrameRoot(prefab.transform, TrapdoorBlueprint.NewRoot, frame, surface.Frame, layer);
+            GameObject worn = frameWorn == null ? fresh : FrameRoot(prefab.transform, TrapdoorBlueprint.WornRoot, frameWorn, surface.Frame, layer);
             AdoptPresentation(wear, fresh, worn);
 
             foreach (TrapdoorPart part in TrapdoorBlueprint.FrameColliders) Collider(prefab.transform, part, layer);
@@ -120,9 +122,9 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
             KinematicBody(hinge);
             Collider(hinge.transform, TrapdoorBlueprint.LidCollider, layer);
             TrapdoorPart lidVisual = TrapdoorBlueprint.LidVisual;
-            LeafVisuals(hinge.transform, lidVisual.Name, lidVisual.Centre, lidVisual.Size, LeafPattern.For(family), lid, frame, layer);
+            LeafVisuals(hinge.transform, lidVisual.Name, lidVisual.Centre, lidVisual.Size, LeafPattern.For(family), lid, frame, surface, layer);
             Material strapMaterial = HingeMaterial(lid);
-            foreach (TrapdoorPart strap in TrapdoorBlueprint.HingeStraps) Visual(hinge.transform, strap, strapMaterial, layer);
+            foreach (TrapdoorPart strap in TrapdoorBlueprint.HingeStraps) Visual(hinge.transform, strap, strapMaterial, surface.Leaf, layer);
             // The lid runtime (slice 3): reads the native door state, never writes it. The swing time is the donor's.
             prefab.AddComponent<TrapdoorLid>().SwingSeconds = family.SwingSeconds;
 
@@ -175,15 +177,15 @@ internal sealed class TrapdoorPieceRegistration : IDisposable
                (owner == TrapdoorBlueprint.NewRoot || owner == TrapdoorBlueprint.WornRoot || owner == TrapdoorBlueprint.Hinge);
     }
 
-    private static GameObject FrameRoot(Transform parent, string name, Material material, int layer)
+    private static GameObject FrameRoot(Transform parent, string name, Material material, UvRegion region, int layer)
     {
         GameObject root = PresentationRoot(parent, name, layer);
-        foreach (TrapdoorPart part in TrapdoorBlueprint.FrameVisuals) Visual(root.transform, part, material, layer);
+        foreach (TrapdoorPart part in TrapdoorBlueprint.FrameVisuals) Visual(root.transform, part, material, region, layer);
         return root;
     }
 
-    private static void Visual(Transform parent, TrapdoorPart part, Material material, int layer) =>
-        VisualBox(parent, part.Name, part.Centre, part.Size, material, layer);
+    private static void Visual(Transform parent, TrapdoorPart part, Material material, UvRegion region, int layer) =>
+        VisualBox(parent, part.Name, part.Centre, part.Size, material, region, layer);
 
     private static void Collider(Transform parent, TrapdoorPart part, int layer) =>
         ColliderBox(parent, part.Name, part.Centre, part.Size, layer);
