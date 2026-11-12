@@ -774,7 +774,7 @@ and section 11's cube presets.
 
 - **Sizes** (owner's choice, `DigSizes.All`): 1x1x1, 2x2x1, 2x2x2, 4x4x1, 4x4x2, 4x4x4 m, smallest first. The wheel
   (or the controller's alternate keys plus zoom) steps through them and wraps; it starts on 2x2x2 (lead default) and
-  keeps the size when the shovel is put away. While the outline is up the camera does not zoom with the same turn.
+  keeps the size when the shovel is put away. While the outline is up the camera does not zoom with the same turn. (#580: the camera places itself from its distance inside the same update that applies the wheel, so the held distance is also put back right before `GameCamera.GetCameraPosition`, or one zoomed frame showed.)
 - **One press.** Attack digs the hole shown. There is no corner stage, no depth stage and no stepping back.
 - **Undo** is unchanged: Secondary Attack twice within 3 seconds (owner choice: the wheel picks the size, so undo stays
   on Secondary Attack, the middle mouse button by default).

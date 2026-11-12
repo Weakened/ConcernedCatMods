@@ -36,6 +36,9 @@ internal sealed class ExcavationShovelInput : IDisposable
     private static bool _faultLogged;
     private static AccessTools.FieldRef<GameCamera, float>? _cameraDistance;
 
+    /// <summary>The distance held across the camera's current update (#580), NaN outside one.</summary>
+    private static float _held = float.NaN;
+
     /// <summary>True while the wheel sets the dig's depth (#551): the camera's distance is then held, so the same turn of the
     /// wheel does not also zoom. Set by the plugin from the preview.</summary>
     internal static Func<bool>? HoldCamera { get; set; }
@@ -74,8 +77,10 @@ internal sealed class ExcavationShovelInput : IDisposable
 
     /// <summary>The shovel borrows the wheel to choose a size (#551; #574). GameCamera.UpdateCamera subtracts the wheel from its private
     /// <c>m_distance</c> and clamps it (read from the installed game, 1.0.21); holding that one field across the update while
-    /// <see cref="HoldCamera"/> says so leaves every other camera behaviour alone. If the game does not match, the size still
-    /// changes and the camera also zooms; the log says so.</summary>
+    /// <see cref="HoldCamera"/> says so leaves every other camera behaviour alone. The same update then places the camera from
+    /// that field (<c>GetCameraPosition</c>, its only caller), so the held distance is also put back right before that, or
+    /// one zoomed frame would be drawn before the restore (#580, owner playtest 2026-11-11). If the game does not match, the
+    /// size still changes and the camera also zooms; the log says so.</summary>
     private void InstallCameraHold()
     {
         try
@@ -91,6 +96,15 @@ internal sealed class ExcavationShovelInput : IDisposable
             _cameraDistance = AccessTools.FieldRefAccess<GameCamera, float>("m_distance");
             _harmony!.Patch(update, prefix: new HarmonyMethod(typeof(ExcavationShovelInput), nameof(BeforeCameraUpdate)),
                 postfix: new HarmonyMethod(typeof(ExcavationShovelInput), nameof(AfterCameraUpdate)));
+            MethodInfo? position = AccessTools.Method(typeof(GameCamera), "GetCameraPosition",
+                new[] { typeof(float), typeof(UnityEngine.Vector3).MakeByRefType(), typeof(UnityEngine.Quaternion).MakeByRefType() });
+            if (position == null)
+            {
+                _startupLog("Iron Shovel camera hold is partial: the camera may zoom for one frame when the wheel changes the size.");
+                return;
+            }
+
+            _harmony.Patch(position, prefix: new HarmonyMethod(typeof(ExcavationShovelInput), nameof(BeforeCameraPosition)));
         }
         catch (Exception exception)
         {
@@ -108,6 +122,18 @@ internal sealed class ExcavationShovelInput : IDisposable
             if (distance != null && HoldCamera?.Invoke() == true) __state = distance(__instance);
         }
         catch { __state = float.NaN; }
+        _held = __state;
+    }
+
+    /// <summary>Puts the held distance back before the camera is placed from it, so the wheel's turn never shows.</summary>
+    private static void BeforeCameraPosition(GameCamera __instance)
+    {
+        try
+        {
+            AccessTools.FieldRef<GameCamera, float>? distance = _cameraDistance;
+            if (distance != null && !float.IsNaN(_held)) distance(__instance) = _held;
+        }
+        catch { /* The camera keeps whatever it chose. */ }
     }
 
     private static void AfterCameraUpdate(GameCamera __instance, float __state)
@@ -118,6 +144,7 @@ internal sealed class ExcavationShovelInput : IDisposable
             if (distance != null && !float.IsNaN(__state)) distance(__instance) = __state;
         }
         catch { /* The camera keeps whatever it chose. */ }
+        _held = float.NaN;
     }
 
     private static bool IsBool(string name)
@@ -173,6 +200,7 @@ internal sealed class ExcavationShovelInput : IDisposable
         _attack = null;
         _secondaryAttack = null;
         _cameraDistance = null;
+        _held = float.NaN;
         HoldCamera = null;
         _log = null;
     }
