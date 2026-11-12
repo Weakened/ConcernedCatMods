@@ -48,6 +48,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ExcavationPreview? _preview;
     private EarthFillPieceRegistration? _earthFill;
     private EarthFillTerrainTools? _earthTools;
+    private ExcavationToolPanel? _toolPanel;
 
     private void Awake()
     {
@@ -185,6 +186,10 @@ public sealed class Plugin : BaseUnityPlugin
                 _preview = _shovelInput != null ? new ExcavationPreview(message => Logger.LogInfo(message), _excavation) : null;
                 _preview?.Install();
                 ExcavationShovelInput.HoldCamera = () => _preview?.UsingWheel == true;
+                // The game's build panel shows the chosen size while the shovel is held (#587).
+                _toolPanel = new ExcavationToolPanel();
+                if (_toolPanel.Install(PluginGuid + ".shovelpanel", message => Logger.LogInfo(message))) ExcavationToolPanel.Info = () => _preview?.PanelInfo;
+                else _toolPanel = null;
             }
         }
         catch (Exception exception)
@@ -193,6 +198,7 @@ public sealed class Plugin : BaseUnityPlugin
             try { _preview?.Dispose(); } catch { /* Cleanup only. */ }
             try { _earthFill?.Dispose(); } catch { /* Cleanup only. */ }
             try { _earthTools?.Dispose(); } catch { /* Cleanup only. */ }
+            try { _toolPanel?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.DisableRecipe(); } catch { /* Cleanup only. */ }
             try { _shovelInput?.Dispose(); } catch { /* Cleanup only. */ }
             try { _shovel?.Dispose(); } catch { /* Cleanup only. */ }
@@ -200,6 +206,7 @@ public sealed class Plugin : BaseUnityPlugin
             _preview = null;
             _earthFill = null;
             _earthTools = null;
+            _toolPanel = null;
             _shovelInput = null;
             _shovel = null;
             _excavation = null;
@@ -218,12 +225,14 @@ public sealed class Plugin : BaseUnityPlugin
         try { _preview?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _earthFill?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _earthTools?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
+        try { _toolPanel?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovelInput?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _shovel?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         try { _excavation?.Dispose(); } catch { /* Excavation cleanup never blocks ladder cleanup. */ }
         _preview = null;
         _earthFill = null;
         _earthTools = null;
+        _toolPanel = null;
         _shovelInput = null;
         _shovel = null;
         _excavation = null;

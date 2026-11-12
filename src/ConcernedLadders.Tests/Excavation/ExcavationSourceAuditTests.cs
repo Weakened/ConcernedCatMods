@@ -178,6 +178,22 @@ public sealed class ExcavationSourceAuditTests
         Assert.True(item > 0 && fill > item && block > fill, "Earth blocks are sorted out after items and before blockers and the clearing lists.");
     }
 
+    /// <summary>#587: the shovel's build panel is display only. It takes over the game's build panel only outside place mode,
+    /// only while the preview gives it something to show, and writes nothing but that panel's own text, icon and rows.</summary>
+    [Fact]
+    public void TheToolPanelOnlyShowsTheGamesOwnBuildPanel()
+    {
+        string panel = SourceText("Excavation/ExcavationToolPanel.cs");
+        Assert.Equal(1, Count(panel, @"AccessTools\.Method\s*\(\s*typeof\s*\(\s*Hud\s*\)\s*,\s*""UpdateBuild"""));
+        Assert.Equal(1, Count(panel, @"\.Patch\s*\("));
+        Assert.Matches(@"postfix\s*:\s*new\s+HarmonyMethod\s*\(\s*typeof\s*\(\s*ExcavationToolPanel\s*\)\s*,\s*nameof\s*\(\s*AfterUpdateBuild\s*\)\s*\)", panel);
+        string after = MethodBody(panel, @"private\s+static\s+void\s+AfterUpdateBuild\s*\(");
+        Assert.Matches(@"^\{\s*try\s*\{\s*if\s*\(\s*__instance\s*==\s*null\s*\|\|\s*player\s*==\s*null\s*\|\|\s*player\.InPlaceMode\s*\(\s*\)\s*\)\s*return\s*;", after);
+        Assert.Matches(@"if\s*\(\s*info\s*==\s*null\s*\|\|\s*__instance\.m_buildHud\s*==\s*null\s*\)\s*return\s*;", after);
+        Assert.DoesNotMatch(@"\bplayer\.\w+\s*\(|\bInstantiate\s*\(|\bDestroy\w*\s*\(|ZNetView|ZDO|InvokeRPC|PrivateArea|TerrainOp|m_placementGhost|SetSelectedPiece", after.Replace("player.InPlaceMode", ""));
+        Assert.Matches(@"ExcavationToolPanel\.Info\s*=\s*\(\s*\)\s*=>\s*_preview\?\.PanelInfo\s*;", SourceText("Plugin.cs"));
+    }
+
     private static string SourceText(string relative) => Sources().Single(s => s.Path == relative).Text;
 
     /// <summary>The adapter properties a game-free test cannot see, pinned in the text that sets them. Removing or

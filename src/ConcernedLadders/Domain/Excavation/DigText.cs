@@ -11,6 +11,22 @@ internal static class DigText
 {
     internal const int MaximumLength = 64;
 
+    /// <summary>The build panel's title for a size (#587, owner: "add tool description on the bottom similar to hoe"), as
+    /// the hoe's panel names its piece.</summary>
+    internal static string SizeName(DigSize size) => "Hole " + size.Name;
+
+    /// <summary>The build panel's one line for a size: what it is for, as the hoe's panel says what a piece does.</summary>
+    internal static string SizeDescription(DigSize size) => (size.Side, size.Depth) switch
+    {
+        (1, 1) => "A one-metre pit: a step down, a post hole or a sump.",
+        (2, 1) => "A shallow 2 m square: a sunken floor or a landing.",
+        (2, 2) => "A 2 m cube you can stand in: a cellar or a stairwell.",
+        (4, 1) => "A wide, shallow 4 m square: takes a floor down a metre.",
+        (4, 2) => "A 4 m room you can stand in: a basement.",
+        (4, 4) => "A tall 4 m room: a basement two floors deep.",
+        _ => "A " + size.Name + " m hole with straight earth sides.",
+    };
+
     /// <summary>The prompt: the size shown and what to do (#574).</summary>
     internal static string Prompt(DigSize size) => size.Name + " m: click to dig, scroll for size.";
 
