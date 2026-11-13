@@ -37,8 +37,11 @@ PRODUCT = "ConcernedBuilder"
 NAMESPACE = "TheConcernedCat"
 DLL_NAME = "TheConcernedCat.ConcernedLadders.dll"
 DLL_ENTRY = "plugins/" + DLL_NAME
-FILES = frozenset({"manifest.json", "README.md", "CHANGELOG.md", "LICENSE", "icon.png", DLL_ENTRY})
-COPY_TARGETS = frozenset({"CHANGELOG.md", "LICENSE", DLL_ENTRY})
+# #600 (owner 2026-11-13: "include the gifs into the package"): the five in-game clips ship under media/, an explicit,
+# exact list. Every other loose asset is still refused, and these pass every path, size and compression check.
+MEDIA = frozenset({"media/dig.gif", "media/sideways.gif", "media/overview.gif", "media/cellar.gif", "media/railings.gif"})
+FILES = frozenset({"manifest.json", "README.md", "CHANGELOG.md", "LICENSE", "icon.png", DLL_ENTRY}) | MEDIA
+COPY_TARGETS = frozenset({"CHANGELOG.md", "LICENSE", DLL_ENTRY}) | MEDIA
 DEPENDENCIES = frozenset({"denikson-BepInExPack_Valheim", "ValheimModding-Jotunn"})
 RETIRED_PACKAGE_HASHES = frozenset({"6ab77af980eb29871ca16b2452217d360f999b4d9ddb4d2edfd61295ef419ee9"})
 RETIRED_DLL_HASHES = frozenset({"82a3e45f8ef6938f65ced6c4756b8b1fb569ed281ce2ba5d791388e9260b3649"})
@@ -145,7 +148,7 @@ def read_contract(path: Path, version: str) -> tuple[FileSnapshot, list[str]]:
     targets = [entry.get("target") for entry in copies]
     require(len(targets) == len(COPY_TARGETS) and all(isinstance(item, str) for item in targets) and
             set(targets) == COPY_TARGETS,
-            "Only the existing six-file package is supported; loose assets need an explicit verifier extension.")
+            "Only the package's own files and its listed media are supported; loose assets need an explicit verifier extension.")
     return source, sorted(name + "-" + pin for name, pin in pins.items())
 
 
@@ -156,7 +159,7 @@ def package_dll(archive_file: FileSnapshot, version: str, dependencies: list[str
     seen: set[str] = set()
     with zipfile.ZipFile(io.BytesIO(archive_file.data)) as archive:
         entries = archive.infolist()
-        require(len(entries) <= len(FILES) + 1, "ZIP has extra entries or duplicate payloads.")
+        require(len(entries) <= len(FILES) + 2, "ZIP has extra entries or duplicate payloads.")
         total = 0
         for entry in entries:
             name = entry.orig_filename
@@ -173,8 +176,8 @@ def package_dll(archive_file: FileSnapshot, version: str, dependencies: list[str
             require(kind in (0, stat.S_IFREG, stat.S_IFDIR) and not (entry.flag_bits & 1),
                     "ZIP links, special files and encrypted entries are unsupported.")
             if entry.is_dir():
-                require(name == "plugins/" and entry.file_size == 0 and kind in (0, stat.S_IFDIR),
-                        "ZIP directories may only be the optional plugins/ directory; no wrapper folder.")
+                require(name in ("plugins/", "media/") and entry.file_size == 0 and kind in (0, stat.S_IFDIR),
+                        "ZIP directories may only be the optional plugins/ and media/ directories; no wrapper folder.")
                 continue
             require(kind in (0, stat.S_IFREG) and name in FILES,
                     "ZIP contains an unexpected file; dependency DLLs, source/profile payloads and loose assets are refused.")
@@ -190,7 +193,7 @@ def package_dll(archive_file: FileSnapshot, version: str, dependencies: list[str
                 data = stream.read(entry.file_size + 1)
             require(len(data) == entry.file_size, "ZIP entry size differs from its directory record.")
             payloads[name] = data
-    require(set(payloads) == FILES, "ZIP must contain the six required files at their exact package paths.")
+    require(set(payloads) == FILES, "ZIP must contain the required files and media at their exact package paths.")
     manifest = json.loads(payloads["manifest.json"].decode("utf-8-sig"), object_pairs_hook=unique_object)
     require(isinstance(manifest, dict) and manifest.get("name") == PRODUCT,
             "ZIP manifest names a different product.")

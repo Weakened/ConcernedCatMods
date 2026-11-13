@@ -45,6 +45,21 @@ target = "CHANGELOG.md"
 [[build.copy]]
 source = "LICENSE"
 target = "LICENSE"
+[[build.copy]]
+source = "dig.gif"
+target = "media/dig.gif"
+[[build.copy]]
+source = "sideways.gif"
+target = "media/sideways.gif"
+[[build.copy]]
+source = "overview.gif"
+target = "media/overview.gif"
+[[build.copy]]
+source = "cellar.gif"
+target = "media/cellar.gif"
+[[build.copy]]
+source = "railings.gif"
+target = "media/railings.gif"
 '''
 
 
@@ -102,6 +117,7 @@ class LadderCandidateTests(unittest.TestCase):
             ("CHANGELOG.md", b"# Changelog\n## 0.2.0\nFixture only.\n"),
             ("LICENSE", b"Fixture license text.\n"),
             ("icon.png", b"Opaque icon transport fixture, not artwork.\n"),
+            *[(name, b"GIF transport fixture, not a clip.\n") for name in sorted(checker.MEDIA)],
             (checker.DLL_ENTRY, dll),
         ]
 
@@ -224,7 +240,18 @@ class LadderCandidateTests(unittest.TestCase):
         self.write_package(entries)
         self.refused("ZIP links")
         self.write_package(self.entries()[:-1])
-        self.refused("six required files")
+        self.refused("required files and media")
+
+    def test_the_listed_clips_ship_under_media_and_nothing_else_does(self) -> None:
+        # #600: the five clips are required, at their exact paths, and media/ admits nothing else.
+        self.write_package(self.entries() + [("media/", b"")])
+        self.assertEqual(0, self.run_cli()[0])
+        self.write_package([entry for entry in self.entries() if entry[0] != "media/dig.gif"])
+        self.refused("required files and media")
+        for extra in ("media/extra.gif", "media/climb.bundle", "media/plugin.dll", "media/sub/dig.gif"):
+            with self.subTest(extra=extra):
+                self.write_package(self.entries() + [(extra, b"unlisted fixture")])
+                self.refused("unexpected file")
 
     def test_verified_package_and_installed_dll_mismatches_are_refused(self) -> None:
         self.verified.write_bytes(b"Different build fixture")

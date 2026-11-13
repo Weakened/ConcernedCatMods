@@ -30,6 +30,26 @@ target = "CHANGELOG.md"
 source = "../../../LICENSE"
 target = "LICENSE"
 
+[[build.copy]]
+source = "../../../docs/media/concerned-builder/dig.gif"
+target = "media/dig.gif"
+
+[[build.copy]]
+source = "../../../docs/media/concerned-builder/sideways.gif"
+target = "media/sideways.gif"
+
+[[build.copy]]
+source = "../../../docs/media/concerned-builder/overview.gif"
+target = "media/overview.gif"
+
+[[build.copy]]
+source = "../../../docs/media/concerned-builder/cellar.gif"
+target = "media/cellar.gif"
+
+[[build.copy]]
+source = "../../../docs/media/concerned-builder/railings.gif"
+target = "media/railings.gif"
+
 [publish]
 repository = "https://thunderstore.io"
 communities = ["valheim"]
